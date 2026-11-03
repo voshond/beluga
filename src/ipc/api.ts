@@ -420,6 +420,8 @@ export const API = {
   'projects.suggest': args(),
   // Start a new project: a folder (name, in this folder or your code folder), git and a first commit → { id, path }.
   'projects.create': args(z.string().max(100), opt(path)),
+  'projects.clone': args(z.string().max(2048), path),
+  'projects.cloneProgress': args(path),
   // Where a new project goes unless you pick somewhere.
   'projects.newHome': args(),
   // The icon of a folder that isn't a project yet (one of the suggestions).

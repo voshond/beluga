@@ -383,6 +383,8 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `projects.add` | ✓ Add projects sheet, Choose Folders…, drop folders on the sidebar |
 | `projects.addFolder` | ✓ (a dropped folder of projects is watched) |
 | `projects.suggest` | ✓ "On this Mac" in the Add projects sheet |
+| `projects.clone` | ✓ Add projects sheet › Clone from GitHub |
+| `projects.cloneProgress` | ✓ Clone progress in the Add projects sheet |
 | `projects.create` | ✓ Add projects sheet › Start new, New Project… in the Projects + menu and the palette |
 | `projects.newHome` | ✓ the location a new project goes in, in Add projects › Start new |
 | `projects.icon` | ✓ project icons in the sidebar |

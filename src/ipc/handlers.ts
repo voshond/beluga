@@ -11,6 +11,7 @@ import { statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { findProjects, isMainCheckout } from '../workspaces/discovery.js';
+import { cloneProject, cloneProgress } from '../workspaces/clone-project.js';
 import { createProject, defaultProjectsHome } from '../workspaces/new-project.js';
 import { projectId } from '../workspaces/manager.js';
 import { chooseProjectIcon, readProjectIcon, suggestProjects } from '../core/project-icons.js';
@@ -356,6 +357,14 @@ export const HANDLERS = {
     await ctl(s)?.addProject(dir);
     return { id: projectId(dir), path: dir };
   },
+  'projects.clone': async (s, remote, target) => {
+    if (!ctl(s)) throw new Error('Projects are unavailable.');
+    const dir = await cloneProject(remote, expandHome(target));
+    await ctl(s)?.addProject(dir);
+    if (!s.store.getState().projects.some((project) => project.id === projectId(dir))) throw new Error('The repository was cloned, but could not be added as a project.');
+    return { id: projectId(dir), path: dir };
+  },
+  'projects.cloneProgress': (_s, target) => cloneProgress(expandHome(target)),
   'projects.newHome': () => defaultProjectsHome(),
   'local.listDirs': (s, dir) => {
     const entries = listLocalDirs(dir);

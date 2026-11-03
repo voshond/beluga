@@ -10,6 +10,7 @@ import { useApi, useApp, useBeluga, useUi } from '../lib/beluga.js';
 import { pickFolders } from '../lib/projects.js';
 import s from './add-project.module.css';
 import { thisComputer } from '../lib/os-words.js';
+import { CloneProject } from './CloneProject.js';
 
 interface Found {
   readonly path: string;
@@ -25,7 +26,7 @@ const ago = (ts: number): string => {
   return `${Math.floor(d / (86_400 * 30))}mo ago`;
 };
 
-type Mode = 'add' | 'new';
+type Mode = 'add' | 'new' | 'clone';
 
 /**
  * Add projects the Mac way: drop folders on it, choose them in the Open panel, or pick from the
@@ -130,11 +131,14 @@ export function AddProjectSheet() {
               options={[
                 { value: 'add', label: 'Add existing', icon: 'folder' },
                 { value: 'new', label: 'Start new', icon: 'plus' },
+                { value: 'clone', label: 'Clone from GitHub', icon: 'folder' },
               ]}
             />
           </div>
           {mode === 'new' ? (
             <NewProject onDone={close} />
+          ) : mode === 'clone' ? (
+            <CloneProject onDone={close} />
           ) : (
             <>
               <div
