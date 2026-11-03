@@ -122,6 +122,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.itemError {
+  color: var(--error);
+  font-size: 0.86rem;
+}
+.adding {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  color: var(--text-3);
+  font-size: 0.9rem;
+}
 .added {
   display: inline-flex;
   align-items: center;

@@ -5,7 +5,7 @@ import type { Plan } from '../src/core/plans/model.js';
 import { PlanPilot, plansByChannel } from '../src/core/plans/pilot.js';
 import type { Plans } from '../src/core/plans/plans.js';
 import { Store, initialState } from '../src/core/store.js';
-import { lagLine, watchEventLoop } from '../src/daemon/lag.js';
+import { isSlow, lagLine, summaryLine, watchEventLoop } from '../src/daemon/lag.js';
 
 const plan = (id: string, home: string, issueIds: string[] = []): Plan =>
   ({ id, home, status: 'draft', body: { title: id, milestones: [{ id: 'm', title: 'm', tasks: issueIds.map((issueId, i) => ({ id: `t${i}`, title: issueId, issueId })) }] } }) as unknown as Plan;
@@ -82,9 +82,9 @@ describe('event-loop delay', () => {
     expect(lagLine({ p50: 1.234, p95: 12.5, max: 40 })).toBe('event loop delay: p50 1.2 ms, p95 12.5 ms, max 40.0 ms');
   });
 
-  it('is logged every period', async () => {
+  it('is logged every period when asked for all of them (scripts/perf-lag.mjs)', async () => {
     const lines: string[] = [];
-    const stop = watchEventLoop((l) => void lines.push(l), 60);
+    const stop = watchEventLoop((l) => void lines.push(l), { everyMs: 60, all: true });
     await wait(200);
     stop();
     expect(lines.length).toBeGreaterThanOrEqual(1);
@@ -93,10 +93,44 @@ describe('event-loop delay', () => {
 
   it('reads how late the loop ran, not the sampling interval (an idle loop is near 0)', async () => {
     const lines: string[] = [];
-    const stop = watchEventLoop((l) => void lines.push(l), 300);
+    const stop = watchEventLoop((l) => void lines.push(l), { everyMs: 300, all: true });
     await wait(350);
     stop();
     const p50 = Number(/p50 ([\d.]+) ms/.exec(lines[0] ?? '')?.[1]);
     expect(p50).toBeLessThan(15);
+  });
+
+  it('counts a period as slow when its p95 or one stall is long', () => {
+    expect(isSlow({ p50: 1, p95: 1.3, max: 90 })).toBe(false);
+    expect(isSlow({ p50: 1, p95: 60, max: 90 })).toBe(true);
+    expect(isSlow({ p50: 1, p95: 1.3, max: 1500 })).toBe(true);
+  });
+
+  it('keeps calm periods out of the log and sums them up instead', async () => {
+    const lines: string[] = [];
+    const stop = watchEventLoop((l) => void lines.push(l), { everyMs: 40, summaryEveryMs: 120 });
+    await wait(300);
+    stop();
+    expect(lines.some((l) => l.startsWith('event loop delay: '))).toBe(false);
+    expect(lines.length).toBeGreaterThanOrEqual(1);
+    expect(lines[0]).toMatch(/^event loop delay, last hour: p50 [\d.]+ ms, p95 [\d.]+ ms, max [\d.]+ ms$/);
+  });
+
+  it('logs a slow period on its own', async () => {
+    const lines: string[] = [];
+    const stop = watchEventLoop((l) => void lines.push(l), { everyMs: 1500, summaryEveryMs: 60_000 });
+    // A stall only counts once the loop has ticked (it's the time between two ticks).
+    await wait(100);
+    const until = Date.now() + 1100;
+    while (Date.now() < until) {
+      // A stall a screen would notice.
+    }
+    await wait(1600);
+    stop();
+    expect(lines.find((l) => l.startsWith('event loop delay: '))).toMatch(/max [\d.]+ ms/);
+  });
+
+  it('says the summary apart from a period', () => {
+    expect(summaryLine({ p50: 1, p95: 2, max: 3 })).toBe('event loop delay, last hour: p50 1.0 ms, p95 2.0 ms, max 3.0 ms');
   });
 });

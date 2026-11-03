@@ -17,6 +17,7 @@ import { revealInFinder } from '../lib/files.js';
 import { type SettingsPane, useApi, useApp, useBeluga, useUi } from '../lib/beluga.js';
 import { ACCENTS, type Accent, setPrefs, useChosenPrefs, usePrefs } from '../lib/prefs.js';
 import { EnvironmentSettings } from './EnvironmentSettings.js';
+import { ReportProblemRow } from './ReportProblemRow.js';
 import { ContextSettings } from './ContextSettings.js';
 import { ParallelSettings } from './ParallelSettings.js';
 import { ChatLimitSettings } from './ChatLimitSettings.js';
@@ -590,6 +591,7 @@ function About() {
             {revealLabel()}
           </Button>
         </Row>
+        <ReportProblemRow />
       </Group>
       <Group title="Support Beluga">
         <Row label="Beluga is free, and a passion project" detail={

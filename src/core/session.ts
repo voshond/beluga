@@ -1270,6 +1270,8 @@ export class Session {
         this.files.settle(from, body.reqId, body);
         return;
       case 'fs_changed': {
+        // Previews of it (Changes, Files, Scratch) read it again: a rewritten picture shows the new one.
+        this.store.dispatch({ type: 'file_written', at: { owner: from, share: body.share, path: body.path }, ts: Date.now() });
         const viewer = this.store.getState().viewer;
         if (viewer && viewer.owner === from && viewer.share === body.share && viewer.path === body.path) {
           await this.files.loadViewer(viewer);

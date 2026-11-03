@@ -1,3 +1,8 @@
+import { execFileSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { demoPortrait } from '../../../src/demo-image.js';
+import { demoPdf } from '../../../src/demo-pdf.js';
 import { expect, test, type Page } from './fixtures.js';
 
 /**
@@ -110,4 +115,25 @@ test('the full-size diff has Preview next to Unified and Split', async ({ page }
   await expect(main.getByRole('img', { name: /hero-shot\.png/ })).toBeVisible();
   await expect(main.getByRole('tablist', { name: 'Layout' })).toHaveCount(0);
   await page.keyboard.press('Escape');
+});
+
+test('a picture or a PDF written again shows the new one in Changes, without opening it again (BLG-670)', async ({ page }) => {
+  const root = (await sidebar(page).locator('[title$="/landing"]').first().getAttribute('title'))!;
+  await openHero(page);
+  const trees = execFileSync('git', ['-C', root, 'worktree', 'list', '--porcelain'], { encoding: 'utf8' });
+  const hero = /^worktree (.*\/new-hero)$/m.exec(trees)![1]!;
+  await pickChange(page, /hero-shot\.png/);
+  const shot = panel(page).getByRole('region', { name: 'Changes in hero-shot.png' }).getByRole('img', { name: /hero-shot\.png/ });
+  const width = () => shot.evaluate((img: HTMLImageElement) => img.naturalWidth);
+  await expect.poll(width).toBe(720);
+  // Re-recorded (still "modified", the same +0 −0): the new picture, not the one read before.
+  writeFileSync(path.join(hero, 'public', 'hero-shot.png'), demoPortrait(64));
+  await expect.poll(width, { timeout: 10_000 }).toBe(64);
+  // A PDF too: the brief, cut to one page.
+  await pickChange(page, /brand-brief\.pdf/);
+  const pdf = panel(page).getByRole('region', { name: 'Changes in brand-brief.pdf' });
+  await expect(pdf.getByRole('img', { name: 'Page 2' })).toBeAttached();
+  writeFileSync(path.join(hero, 'docs', 'brand-brief.pdf'), demoPdf(1));
+  await expect(pdf.getByRole('img', { name: 'Page 2' })).toHaveCount(0, { timeout: 10_000 });
+  await expect(pdf.getByRole('img', { name: 'Page 1' })).toBeVisible();
 });

@@ -437,6 +437,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `stripe.connect` | ✓ Connect Stripe… (a project's right-click and ⋯ menus, the Overview's hint and Earnings card): the Connect Stripe sheet checks the key with Stripe and shows the account |
 | `stripe.disconnect` | ✓ the Connect Stripe sheet › Disconnect |
 | `stripe.refresh` | ✓ Refresh in the sheet and the Overview's Earnings card (the daemon also looks for new payments every 10 minutes by itself) |
+| `diagnostics.report` | ✓ Settings › About › Report a Problem: makes the report, shows it in Finder and opens a GitHub issue to attach it to |
 | `support.answer` | ✓ the Star sheet after your first merge (Star on GitHub / Maybe Later) and the coffee sheet after your fifth (an amount, Not Now, Don't Ask Again) |
 | `assistant.newChat` | ✓ Your Mac's tab strip › + (a new empty chat, open now); on the phone, New chat in Your Mac's chats list or ••• |
 | `assistant.openChat` | ✓ clicking one of Your Mac's tabs (or a notification from one of its chats); kept across restarts, and the phone's Ask your Mac follows it |

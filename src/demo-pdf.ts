@@ -16,11 +16,12 @@ function pageStream(title: string, lines: readonly string[], rgb: readonly [numb
   return `${band}\n${head}\n${body}\n`;
 }
 
-export function demoPdf(): Buffer {
+/** The brief, or only its first `count` pages (a shorter one written over it, for tests). */
+export function demoPdf(count = 2): Buffer {
   const pages = [
     pageStream('Launch brand brief', ['Build together: you, your friends, and everyone\'s Claude.', '', 'Voice: plain, warm, a little playful.', 'Never: hype, exclamation marks, jargon.', '', 'Hero: one line, one button, one screenshot.'], [0.36, 0.42, 0.93]),
     pageStream('Colors and type', ['Accent: system blue. Everything else stays neutral.', 'Type: SF Pro for the app, Inter on the web.', '', 'Screenshots: dark mode, 2x, no fake data.'], [0.15, 0.62, 0.47]),
-  ];
+  ].slice(0, count);
   const objects: string[] = [];
   const add = (body: string): number => objects.push(body);
   add('<< /Type /Catalog /Pages 2 0 R >>');

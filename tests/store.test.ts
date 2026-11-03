@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Store, initialState as domainState, peerName, type AppState } from '../src/core/store.js';
+import { Store, WRITTEN_LIMIT, fileKey, initialState as domainState, peerName, type AppState } from '../src/core/store.js';
 import { initialAppState as initialState, reduceApp as reduce } from '../src/client/screen.js';
 import type { PeerInfo } from '../src/protocol.js';
 
@@ -15,6 +15,22 @@ describe('store reducer', () => {
     expect(base().browser.rows.map((r) => r.label)).toEqual(['kay · app', 'bob · api (read-only)']);
     expect(peerName(base(), 'b')).toBe('bob');
     expect(peerName(base(), 'unknown-peer')).toBe('unknow');
+  });
+
+  it('keeps when each watched file was last written, the most recent few hundred', () => {
+    const gif = { owner: 'b', share: 'api', path: 'fire.gif' };
+    const s1 = reduce(base(), { type: 'file_written', at: gif, ts: 10 });
+    expect(base().written).toEqual({});
+    expect(s1.written[fileKey(gif)]).toBe(10);
+    expect(reduce(s1, { type: 'file_written', at: gif, ts: 20 }).written[fileKey(gif)]).toBe(20);
+    let s = s1;
+    for (let i = 0; i < WRITTEN_LIMIT; i++) s = reduce(s, { type: 'file_written', at: { ...gif, path: `f${i}.png` }, ts: i });
+    expect(Object.keys(s.written)).toHaveLength(WRITTEN_LIMIT);
+    expect(s.written[fileKey(gif)]).toBeUndefined();
+    // Written again, it's the newest: kept over older ones.
+    s = reduce(reduce(s, { type: 'file_written', at: { ...gif, path: 'f0.png' }, ts: 99 }), { type: 'file_written', at: gif, ts: 100 });
+    expect(s.written[fileKey({ ...gif, path: 'f0.png' })]).toBe(99);
+    expect(s.written[fileKey({ ...gif, path: 'f1.png' })]).toBeUndefined();
   });
 
   it('adds chat and system lines without mutating', () => {

@@ -474,11 +474,36 @@ describe('WorkspaceController', () => {
     expect(toasts.at(-1)).toMatch(/Project not found/);
   });
 
+  it('adds a project back while its delete is still archiving: the delete can’t take it out again', async () => {
+    const ws = (await ctl.newWorktree(projectId(), 'tidy'))!;
+    const id = projectId();
+    const removing = ctl.removeProject(id);
+    const adding = ctl.addProject(repo);
+    expect(await removing).toBe(true);
+    expect(await adding).toEqual({ project: { id, name: 'app' } });
+    expect(store.getState().projects.find((p) => p.id === id)?.workspaces.find((w) => w.id === ws.id)?.archived).toBe(true);
+    await ctl.refresh();
+    expect(store.getState().projects.filter((p) => p.root).map((p) => p.id)).toEqual([id]);
+  });
+
+  it('says what adding did, or why it couldn’t, and a watched folder brings back what was removed from it', async () => {
+    const id = projectId();
+    expect(await ctl.removeProject(id)).toBe(true);
+    expect(store.getState().projects.filter((p) => p.root)).toEqual([]);
+    expect(await ctl.addFolder(path.dirname(repo))).toEqual({ found: 1 });
+    expect(store.getState().projects.filter((p) => p.root).map((p) => p.id)).toEqual([id]);
+    expect(await ctl.addProject('/definitely/not/here')).toEqual({ error: expect.stringMatching(/isn’t there anymore/) });
+    const plain = mkdtempSync(path.join(os.tmpdir(), 'klaud-plain-'));
+    const session = { workspaces: ctl, toast: (t: string) => void toasts.push(t), store } as unknown as Session;
+    expect(await HANDLERS['projects.add'](session, plain)).toEqual({ error: expect.stringMatching(/isn't a git project/) });
+    expect(await HANDLERS['projects.add'](session, repo)).toEqual({ project: { id, name: 'app' } });
+  });
+
   it('starts chats and adds projects or folders', async () => {
     const chat = (await ctl.newChat(projectId(), 'Question'))!;
     expect(chat.kind).toBe('chat');
     expect(ctl.place(`ws:${chat.id}`)?.autoEdit).toBe(false);
-    await ctl.addProject('/definitely/not/here');
+    await ctl.addProject(mkdtempSync(path.join(os.tmpdir(), 'klaud-plain-')));
     expect(toasts.at(-1)).toMatch(/not a git project/);
     await ctl.addFolder(path.dirname(repo));
     expect(toasts.at(-1)).toMatch(/1 project/);
