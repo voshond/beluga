@@ -19,6 +19,24 @@ apply();
 if (inApp()) document.documentElement.dataset.app = 'tauri';
 watchWindow();
 
+// Beluga in a browser (docs/web.md): a redeploy builds the window again under an open page, and a
+// part it loads later (a view) may be gone. Load the page again, at most once a minute (no loop).
+if (!inApp()) {
+  window.addEventListener('vite:preloadError', (event) => {
+    const KEY = 'beluga.reloadedForBuild';
+    let last = 0;
+    try {
+      last = Number(sessionStorage.getItem(KEY)) || 0;
+      if (Date.now() - last < 60_000) return;
+      sessionStorage.setItem(KEY, String(Date.now()));
+    } catch {
+      // No storage: reload anyway (a loop needs storage to be noticed, and a reload is what fixes it).
+    }
+    event.preventDefault();
+    location.reload();
+  });
+}
+
 /** Attach to Beluga, and keep trying while it starts (or comes back). */
 function Root() {
   const [client, setClient] = useState<SocketClient>();
