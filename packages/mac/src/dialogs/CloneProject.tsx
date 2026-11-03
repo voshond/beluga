@@ -1,3 +1,4 @@
+import { joinPath } from '@beluga/shared/os-path.js';
 import { useEffect, useState } from 'react';
 import { Button } from '../components/ui.js';
 import { inApp } from '../lib/boot.js';
@@ -7,11 +8,20 @@ import s from './add-project.module.css';
 
 export const CloneProject = ({ onDone }: { onDone: () => void }) => {
   const api = useApi();
+  const [repositories, setRepositories] = useState<Awaited<ReturnType<typeof api.projects.github>>>();
+  const [listError, setListError] = useState('');
+  const [filter, setFilter] = useState('');
+  const [home, setHome] = useState('');
   const [remote, setRemote] = useState('');
   const [target, setTarget] = useState('');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    void api.projects.github().then(setRepositories, (err) => setListError(err instanceof Error ? err.message : String(err)));
+    void api.projects.newHome().then(setHome, () => undefined);
+  }, []);
 
   useEffect(() => {
     if (!busy) return;
@@ -42,6 +52,18 @@ export const CloneProject = ({ onDone }: { onDone: () => void }) => {
 
   return (
     <form className={s.newForm} onSubmit={(event) => { event.preventDefault(); void handleClone(); }}>
+      <div className={s.listHead}>
+        <span>Your GitHub repositories</span>
+        <input className={s.filter} value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter" aria-label="Filter GitHub repositories" />
+      </div>
+      <div className={`${s.list} ${s.githubList}`} role="list">
+        {listError ? <div className={s.note} role="alert">{listError} You can still enter a URL below.</div> : !repositories ? <div className={s.note}>Loading GitHub repositories…</div> : repositories.filter((repo) => repo.name.toLowerCase().includes(filter.toLowerCase())).length === 0 ? <div className={s.note}>No repositories found.</div> : repositories.filter((repo) => repo.name.toLowerCase().includes(filter.toLowerCase())).map((repo) => (
+          <div className={s.item} role="listitem" key={repo.name}>
+            <span className={s.itemText}><span className={s.itemName}>{repo.name}</span><span className={s.itemPath}>{repo.private ? 'Private' : 'Public'}{repo.archived ? ' · Archived' : ''}</span></span>
+            <Button size="small" disabled={busy} onClick={() => { setRemote(repo.url); if (home) setTarget(joinPath(home, repo.name.split('/').at(-1) || '')); setError(''); }}>Select</Button>
+          </div>
+        ))}
+      </div>
       <label className={s.field}>
         <span>URL</span>
         <input className={s.nameInput} value={remote} onChange={(event) => setRemote(event.target.value)} placeholder="https://github.com/owner/repo.git" aria-label="GitHub repository URL" disabled={busy} spellCheck={false} />

@@ -131,7 +131,7 @@ export function AddProjectSheet() {
               options={[
                 { value: 'add', label: 'Add existing', icon: 'folder' },
                 { value: 'new', label: 'Start new', icon: 'plus' },
-                { value: 'clone', label: 'Clone from GitHub', icon: 'folder' },
+                { value: 'clone', label: 'GitHub', icon: 'folder' },
               ]}
             />
           </div>
