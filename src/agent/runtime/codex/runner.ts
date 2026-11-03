@@ -108,9 +108,15 @@ export function clampEffort(effort: AgentRunInput['effort'], supported: readonly
  */
 export const TOOL_TIMEOUT_SEC = 3600;
 
-/** Beluga's tool servers as Codex config overrides (`mcp_servers.<name>`), for one thread. */
+/**
+ * Beluga's tool servers as Codex config overrides (`mcp_servers.<name>`), for one thread. Their
+ * calls are approved on Codex's side (`default_tools_approval_mode: approve`): each one already goes
+ * through gateTool in the tool host, the same gate as every other tool, which asks you when it
+ * should. Codex's own ask (an `mcpServer/elicitation/request`, codex-cli 0.166) has no answer in
+ * Beluga, and it came back as "user rejected MCP tool call" (a screenshot, every time).
+ */
 export function mcpConfig(servers: Readonly<Record<string, StdioServerConfig>>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(servers).map(([name, s]) => [`mcp_servers.${name}`, { command: s.command, args: s.args, env: s.env, tool_timeout_sec: TOOL_TIMEOUT_SEC }]));
+  return Object.fromEntries(Object.entries(servers).map(([name, s]) => [`mcp_servers.${name}`, { command: s.command, args: s.args, env: s.env, tool_timeout_sec: TOOL_TIMEOUT_SEC, default_tools_approval_mode: 'approve' }]));
 }
 
 /**

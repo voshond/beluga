@@ -92,7 +92,7 @@ describe('"My agent asks before commands" on Codex', () => {
 describe("Beluga's tools on Codex", () => {
   it('waits long enough for a tool that waits on you or a friend (tool_timeout_sec)', async () => {
     expect(TOOL_TIMEOUT_SEC).toBeGreaterThanOrEqual(900);
-    expect(mcpConfig({ beluga: { type: 'stdio', command: 'node', args: [], env: {} } })['mcp_servers.beluga']).toMatchObject({ tool_timeout_sec: TOOL_TIMEOUT_SEC });
+    expect(mcpConfig({ beluga: { type: 'stdio', command: 'node', args: [], env: {} } })['mcp_servers.beluga']).toMatchObject({ tool_timeout_sec: TOOL_TIMEOUT_SEC, default_tools_approval_mode: 'approve' });
     const codex = new FakeCodex();
     await backend(codex).run(input('hello'));
     const config = codex.sent('thread/start')[0]!.config as Record<string, { tool_timeout_sec?: number }>;
