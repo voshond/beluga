@@ -58,6 +58,26 @@ export async function isGitRepo(dir: string): Promise<boolean> {
   return (await tryGit(dir, ['rev-parse', '--is-inside-work-tree']))?.trim() === 'true';
 }
 
+export interface WorktreeGitDirs {
+  /** The main checkout's .git: refs, objects, every worktree's own folder. */
+  readonly shared: string;
+  /** This worktree's own folder in it (.git/worktrees/<name>): its HEAD and index. */
+  readonly own: string;
+}
+
+/**
+ * Where a linked worktree's git writes go, both outside the worktree itself. Undefined for a main
+ * checkout (its .git is inside it) or no repo.
+ */
+export async function worktreeGitDirs(dir: string): Promise<WorktreeGitDirs | undefined> {
+  const [own, shared] = ((await tryGit(dir, ['rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir'])) ?? '').trim().split('\n');
+  if (!own || !shared) return undefined;
+  const root = path.resolve(dir);
+  const outside = (p: string): boolean => p !== root && !p.startsWith(root + path.sep);
+  const dirs = { shared: path.resolve(fromGit(shared)), own: path.resolve(fromGit(own)) };
+  return outside(dirs.shared) ? dirs : undefined;
+}
+
 /** The main checkout of the repo `dir` belongs to (works from inside a worktree too). */
 export async function mainCheckout(dir: string): Promise<string | undefined> {
   const common = (await tryGit(dir, ['rev-parse', '--path-format=absolute', '--git-common-dir']))?.trim();

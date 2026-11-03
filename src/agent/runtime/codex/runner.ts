@@ -23,6 +23,7 @@ import { findCodex } from './app-server.js';
 import { CodexMcp } from './mcp.js';
 import { type MappedPrompt, mapSlash } from './skills.js';
 import { claudeHome } from '../../../core/claude-code/launch.js';
+import { worktreeGitDirs } from '../../../workspaces/git.js';
 
 export interface CodexBackendOptions {
   readonly cwd: string;
@@ -278,7 +279,8 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
           // A friend's task gets none of your own Codex MCP servers: their names, to switch them off.
           const yourServers = trustRow(origin, input.scope).yourTools ? [] : await rpc.request<{ config?: { mcp_servers?: Record<string, unknown> } }>('config/read', {}).then((r) => Object.keys(r.config?.mcp_servers ?? {}), () => []);
           const writableRoots = planning || !autoEdit ? (fixup ? [fixup] : []) : [cwd, ...extraDirs, ...(fixup ? [fixup] : [])];
-          const confined = codexConfinement(origin, input.scope, { cwd, folders: [...extraDirs, ...(fixup ? [fixup] : [])], writable: writableRoots, yourServers });
+          const gitDirs = writableRoots.includes(cwd) ? await worktreeGitDirs(cwd) : undefined;
+          const confined = codexConfinement(origin, input.scope, { cwd, folders: [...extraDirs, ...(fixup ? [fixup] : [])], writable: writableRoots, yourServers, ...(gitDirs ? { gitDirs } : {}) });
           approval = approvalFor(confined.row, { planning, ...(input.askBeforeCommands ? { askBeforeCommands: true } : {}) });
           if (!settled) {
             settled = true;

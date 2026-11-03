@@ -117,6 +117,8 @@ export interface ConfinementPlace {
   readonly yourServers?: readonly string[];
   readonly home?: string;
   readonly belugaHome?: string;
+  /** A linked worktree's git folders (workspaces/git.ts worktreeGitDirs): your own run commits, branches and merges there. */
+  readonly gitDirs?: { readonly shared: string; readonly own: string };
 }
 
 /**
@@ -160,6 +162,21 @@ export function codexConfinement(origin: RunOrigin, scope: 'folder' | 'full', pl
   denyAt(filesystem, place.belugaHome ?? belugaHomeDir());
   for (const root of roots) filesystem[root] = writable.has(root) ? 'write' : 'read';
   for (const root of roots) for (const glob of SECRET_GLOBS) filesystem[`${root}/**/${glob}`] = 'deny';
+  // A worktree's commits, branches and merges are written to the main checkout's .git, outside it:
+  // without it every git write failed ("Git needed to write its shared metadata"). Your own run only,
+  // and only where it may change the worktree. Hooks and config run code outside the sandbox the
+  // next time you use git: read only.
+  // Codex keeps a writable folder's .git read only, following a worktree's .git file to its own
+  // folder (.git/worktrees/<name>): named here, so its index and HEAD can be written too.
+  if (place.gitDirs && row.yourTools && writable.has(path.resolve(place.cwd))) {
+    const g = path.resolve(place.gitDirs.shared);
+    filesystem[g] = 'write';
+    filesystem[path.resolve(place.gitDirs.own)] = 'write';
+    filesystem[path.join(g, 'hooks')] = 'read';
+    filesystem[path.join(g, 'config')] = 'read';
+    filesystem[path.join(g, 'config.worktree')] = 'read';
+    filesystem[path.join(path.resolve(place.gitDirs.own), 'config.worktree')] = 'read';
+  }
   const config: Record<string, unknown> = {
     default_permissions: PROFILE,
     [`permissions.${PROFILE}`]: { extends: writable.has(path.resolve(place.cwd)) ? ':workspace' : ':read-only', filesystem, network: { enabled: row.network } },

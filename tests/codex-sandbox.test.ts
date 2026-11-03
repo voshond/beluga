@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { findCodex } from '../src/agent/runtime/codex/app-server.js';
+import { worktreeGitDirs } from '../src/workspaces/git.js';
 import { CODEX_TRUST_TABLE, PROFILE, codexConfinement, originOf, sideCallConfinement, trustRow, trustTableMarkdown } from '../src/agent/runtime/codex/sandbox.js';
 
 /** A JSON value as TOML (inline tables), for `codex -c key=value`. */
@@ -136,4 +137,40 @@ describe('a side call on Codex', () => {
     expect(profileOf(sideCallConfinement(cwd, { home, tools: ['Read'] })).filesystem[cwd]).toBe('read');
     expect(profileOf(sideCallConfinement(cwd, { home, tools: ['Read', 'Bash'] })).network.enabled).toBe(true);
   });
+});
+
+// Checked on Linux (bubblewrap); macOS's seatbelt reads the same profile, not run here.
+describe.skipIf(!codex || process.platform !== 'linux')("a worktree's git, in Codex's own sandbox (the real codex binary)", () => {
+  it('your own run commits and moves main; hooks and config stay read only; a friend gets none of it', async () => {
+    mkdirSync(path.join(os.homedir(), '.cache'), { recursive: true });
+    const base = realpathSync(mkdtempSync(path.join(os.homedir(), '.cache', 'beluga-codex-git-')));
+    try {
+      const repo = path.join(base, 'repo');
+      const wt = path.join(base, 'wt');
+      const git = (cwd: string, ...args: string[]): string => spawnSync('git', args, { cwd, encoding: 'utf8' }).stdout;
+      git(base, 'init', '-q', '-b', 'main', repo);
+      git(repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'first');
+      git(repo, 'checkout', '-q', '--detach');
+      git(repo, 'worktree', 'add', '-q', '-b', 'feature', wt);
+      const gitDirs = (await worktreeGitDirs(wt))!;
+      expect(gitDirs.shared).toBe(path.join(repo, '.git'));
+      expect(await worktreeGitDirs(repo)).toBeUndefined();
+      const script = [
+        'git -c user.name=t -c user.email=t@t commit -q --allow-empty -m inside && echo commit-ok',
+        'git update-ref refs/heads/main HEAD && echo main-ok',
+        `(echo x > ${gitDirs.shared}/hooks/post-commit) 2>/dev/null && echo HOOK-WRITTEN`,
+        `(echo x >> ${gitDirs.shared}/config) 2>/dev/null && echo CONFIG-WRITTEN`,
+      ].join('; ');
+      const own = codexConfinement('own', 'folder', { cwd: wt, folders: [], writable: [wt], gitDirs });
+      const out = inCodexSandbox(codex!, own.config, wt, script);
+      expect(out).toContain('commit-ok');
+      expect(out).toContain('main-ok');
+      expect(out).not.toContain('WRITTEN');
+      expect(git(repo, 'log', '-1', '--format=%s', 'main').trim()).toBe('inside');
+      const friend = codexConfinement('friend', 'full', { cwd: wt, folders: [], writable: [wt], gitDirs });
+      expect(inCodexSandbox(codex!, friend.config, wt, script)).not.toMatch(/commit-ok|main-ok/);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  }, 120_000);
 });
