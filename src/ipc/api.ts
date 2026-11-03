@@ -9,6 +9,7 @@ import { type ArgsRuntime, MAX_AGENT_ARGS, MAX_AGENT_ARG_LENGTH, agentArgsProble
 import { NETWORK_API } from './network-api.js';
 import { STRIPE_API } from './stripe-api.js';
 import { SUPPORT_API } from './support-api.js';
+import { WEB_API } from './web-api.js';
 import { DIAGNOSTICS_API } from './diagnostics-api.js';
 import { CLAUDE_CODE_API } from './claude-code-api.js';
 import { STEPS_API } from './steps-api.js';
@@ -431,6 +432,8 @@ export const API = {
 
   // ---- this computer
   'local.listDirs': args(path),
+  // A folder of this computer for a browser's folder picker (BLG-651): where it is, its parent, its folders. → { path, parent?, home, dirs: [{ name, git }] }
+  'local.browse': args(opt(path)),
   'local.openFolder': args(path),
   // Pasted paths: is each a file, a folder, or nothing? (Read-only.) → [{ path, name, kind, size, image }]
   'local.statFiles': args(z.array(path).min(1).max(20)),
@@ -476,6 +479,8 @@ export const API = {
   ...TERMINAL_IMPORT_API,
   // ---- the agent's own terminal on a conversation, and its visuals (agent-term-api.ts)
   ...AGENT_TERM_API,
+  // ---- browsers on the web port: join links, the ones let in, revoking (web-api.ts)
+  ...WEB_API,
 } as const;
 
 export type Api = typeof API;

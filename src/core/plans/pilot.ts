@@ -11,6 +11,8 @@ import type { Plans } from './plans.js';
 import { FINISHED, type MilestoneView, type PlanView, type TaskState, type TaskView, agentTasks, agentsAtWork, liveFrom, planView, startable, tidyOffer, waitingOnYou } from './progress.js';
 import { checkFailedPrompt, checkNudgePrompt, checkPrompt, criteriaNeedCheck, fixupPrompt, mainFixupPrompt, mergeFixupPrompt, milestoneNextPrompt, milestonePrompt, recapPrompt, stuckPrompt } from './prompt.js';
 import { TaskWatchdog } from './watchdog.js';
+import { PLAN_PR_FAST_MS, PLAN_PR_FOCUS_FRESH_MS, planPrCadence } from './pr-cadence.js';
+import { pace } from '../power-saver.js';
 
 /**
  * The scheduler: runs approved plans as far as their autonomy allows. It starts what's ready
@@ -92,8 +94,6 @@ const FIXUP_ASKS = 2;
 const STUCK_RETRY_MS = 30_000;
 /** A check asked before a restart, with nothing running in its conversation this long after: it ended without a verdict. */
 const CHECK_QUIET_MS = 60_000;
-/** How often a plan's pull request is looked at on GitHub. */
-const PR_POLL_MS = 2 * 60_000;
 /** How often started tasks are looked at when nothing else happens (a turn can stall in silence). */
 const HEARTBEAT_MS = 60_000;
 /** Nothing of a plan running, and nothing of it yours, this long: Beluga moves it along (see rescue). */
@@ -241,6 +241,10 @@ export class PlanPilot {
   /** Plans whose pull request is being merged now (a second click waits for the first). */
   private readonly prMerging = new Set<string>();
   private prTimer: ReturnType<typeof setInterval> | undefined;
+  /** When each plan's PR was last looked at, and when Beluga last pushed its branch. */
+  private readonly prChecked = new Map<string, number>();
+  private readonly prPushed = new Map<string, number>();
+  private prPolling = false;
   /** Each plan's tasks as last seen (by plan task id): a task that comes back finished is written down once. */
   private readonly seen = new Map<string, ReadonlyMap<string, TaskState>>();
   private readonly off: () => void;
@@ -294,7 +298,8 @@ export class PlanPilot {
     this.heartbeat = setInterval(() => this.schedule(), HEARTBEAT_MS);
     this.heartbeat.unref?.();
     if (deps.git) {
-      this.prTimer = setInterval(() => void this.pollPrs(), PR_POLL_MS);
+      // Each tick looks only at the plans whose PR is due (see pr-cadence.ts).
+      this.prTimer = setInterval(() => void this.pollPrs('tick'), PLAN_PR_FAST_MS);
       this.prTimer.unref?.();
     }
   }
@@ -1232,6 +1237,7 @@ export class PlanPilot {
       await git.push(plan.projectId, branch).catch((err: unknown) => {
         throw new Error(`Merged ${main} into ${branch}, but couldn’t push it: ${(err instanceof Error ? err.message : String(err)).split('\n')[0]}`);
       });
+      this.pushedPlan(planId);
       const pr = await git.findPr(plan.projectId, branch).catch(() => undefined);
       if (pr) this.prSeen(planId, pr);
       return this.deps.plans.need(planId);
@@ -1403,22 +1409,46 @@ export class PlanPilot {
 
   // ------------------------------------------------------------------ the plan's pull request
 
-  /** Look at every plan's pull request now (also every few minutes): merged → its tasks are Done. */
-  async pollPrs(): Promise<void> {
+  /**
+   * Look at the plans' pull requests: merged → its tasks are Done. `now` (the default): every one;
+   * `tick` (every few seconds): those due (see pr-cadence.ts, slower in Low Power mode); `focus`:
+   * you came back to the window, so any not looked at in the last few seconds.
+   */
+  async pollPrs(reason: 'now' | 'tick' | 'focus' = 'now'): Promise<void> {
     const git = this.deps.git;
-    if (!git || this.stopped) return;
-    for (const plan of this.deps.plans.list()) {
-      if (!plan.branch || plan.shipped) continue;
-      // Only once there's something to ship (or a PR to follow).
-      const waiting = this.deps.store.getState().board.issues.some((i) => i.plan?.id === plan.id && i.status === 'in_plan');
-      if (!waiting && !plan.pr) continue;
-      try {
-        const pr = await git.findPr(plan.projectId, plan.branch);
-        if (pr) this.prSeen(plan.id, pr);
-      } catch {
-        // GitHub couldn't tell (offline): next time.
+    if (!git || this.stopped || (reason !== 'now' && this.prPolling)) return;
+    this.prPolling = true;
+    try {
+      for (const plan of this.deps.plans.list()) {
+        if (!plan.branch || plan.shipped) continue;
+        // Only once there's something to ship (or a PR to follow).
+        const waiting = this.deps.store.getState().board.issues.some((i) => i.plan?.id === plan.id && i.status === 'in_plan');
+        if (!waiting && !plan.pr) continue;
+        const now = this.deps.now?.() ?? Date.now();
+        if (reason !== 'now' && !this.prDue(plan, reason, now)) continue;
+        this.prChecked.set(plan.id, now);
+        try {
+          const pr = await git.findPr(plan.projectId, plan.branch);
+          if (pr) this.prSeen(plan.id, pr);
+        } catch {
+          // GitHub couldn't tell (offline): next time.
+        }
       }
+    } finally {
+      this.prPolling = false;
     }
+  }
+
+  private prDue(plan: Plan, reason: 'tick' | 'focus', now: number): boolean {
+    const since = now - (this.prChecked.get(plan.id) ?? -Infinity);
+    if (reason === 'focus') return since >= PLAN_PR_FOCUS_FRESH_MS;
+    const every = planPrCadence(plan, this.prPushed.get(plan.id), now);
+    return every !== undefined && since >= pace(every, this.deps.store.getState().powerSaving);
+  }
+
+  /** Beluga pushed the plan's branch: its PR is looked at often for a while (GitHub catches up a little after). */
+  private pushedPlan(planId: string): void {
+    this.prPushed.set(planId, this.deps.now?.() ?? Date.now());
   }
 
   private prSeen(planId: string, pr: NonNullable<Plan['pr']>): void {
@@ -1445,6 +1475,7 @@ export class PlanPilot {
       `One pull request for the plan: each milestone was merged into \`${branch}\` when it passed.`,
     ].join('\n');
     const pr = await git.openPr(plan.projectId, branch, view.body?.title ?? branch, body.trim());
+    this.pushedPlan(planId);
     this.prSeen(planId, pr);
     return this.deps.plans.need(planId);
   }
@@ -1466,6 +1497,7 @@ export class PlanPilot {
       if (pr.state === 'CLOSED') throw new Error(`Pull request #${pr.number} was closed on GitHub: open it again first`);
       try {
         await git.push(plan.projectId, branch);
+        this.pushedPlan(planId);
       } catch (err) {
         throw new Error(`Couldn’t push ${branch} to GitHub, so #${pr.number} isn’t merged (it would leave work out): ${(err instanceof Error ? err.message : String(err)).split('\n')[0]}`);
       }

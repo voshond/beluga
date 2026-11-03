@@ -302,6 +302,12 @@ export function taskGraph(board: BoardState, issues: readonly Issue[]): Graph {
   return { title: 'What waits on what', direction: 'right', nodes, edges, steps: [] };
 }
 
+/** The tasks being worked on (in progress, in review), else the ones up next: where a busy graph opens. */
+export function workGoingOn(issues: readonly Issue[]): string[] {
+  const going = issues.filter((i) => i.status === 'in_progress' || i.status === 'in_review');
+  return (going.length ? going : issues.filter((i) => i.status === 'todo')).map((i) => i.id);
+}
+
 /** "just now", "5 min ago", "3 h ago", "Yesterday", "Oct 12". */
 export function ago(ts: number, now = Date.now()): string {
   const s = Math.max(0, Math.round((now - ts) / 1000));

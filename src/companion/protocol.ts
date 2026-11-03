@@ -9,7 +9,7 @@ import { z } from 'zod';
  * ignores what it doesn't know. A breaking change bumps the major, and the Mac keeps answering the
  * previous major for a release.
  */
-export const COMPANION_PROTO = { major: 1, minor: 39 } as const;
+export const COMPANION_PROTO = { major: 1, minor: 40 } as const;
 
 /**
  * What came in which minor, for a phone talking to an older Mac: it subscribes to a topic (and
@@ -102,6 +102,8 @@ export const COMPANION_PROTO = { major: 1, minor: 39 } as const;
  * phone marks them as the Mac does when you open it. An older Mac leaves it out: no marks.
  * 1.39 (BLG-634): the conversation checking a milestone (`PlanView.milestones[].checker`), its own
  * Claude off the sidebar, so you can watch the check. An older Mac leaves it out: no way in.
+ * 1.40 (BLG-688): what a milestone's agent is doing right now (`PlanView.milestones[].agentNow`),
+ * even between tasks, and its conversation. An older Mac leaves it out: the tasks still say theirs.
  */
 export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36 } as const;
 
@@ -626,6 +628,8 @@ export const PlanView = z.object({
         autonomy: PlanAutonomy.optional(),
         /** 1.39: the conversation of its checker (a Claude of its own checking its criteria), once there is one. */
         checker: Topic.optional(),
+        /** 1.40: its agent at work right now (“Working on BLG-12 · Edit README.md”), and its conversation. */
+        agentNow: z.object({ text: z.string().max(300), asking: z.boolean().optional(), topic: Topic.optional() }).optional(),
       }),
     )
     .max(50),

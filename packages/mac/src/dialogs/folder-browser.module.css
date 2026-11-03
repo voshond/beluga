@@ -1,0 +1,86 @@
+/* A browser's folder picker (FolderBrowser.tsx): above Settings and other sheets that ask for it (its z-index is inline). */
+.sheet {
+  height: min(520px, 72vh);
+}
+.where {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 14px 6px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+}
+.up {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--text-2);
+}
+.up:hover:not(:disabled) {
+  background: var(--bg-raised);
+}
+.up:disabled {
+  opacity: 0.4;
+}
+.path {
+  overflow: hidden;
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 2px 8px 8px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 7px;
+  color: var(--text-2);
+  text-align: left;
+}
+.row:hover {
+  background: var(--bg-hover);
+}
+.name {
+  overflow: hidden;
+  flex: 1;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.badge {
+  padding: 0 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+.note {
+  padding: 14px 10px;
+  color: var(--text-3);
+}
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 14px;
+  border-top: 0.5px solid var(--hairline);
+}
+.hint {
+  flex: 1;
+  color: var(--text-3);
+  font-size: 0.82rem;
+}

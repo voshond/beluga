@@ -4,7 +4,7 @@ import { type Action, type DomainState, reduceDomain } from '../core/store.js';
 import type { PtyExit } from '../terminal/pty-host.js';
 import type { PtyLink } from '../terminal/emulator.js';
 import type { Args, Method } from './api.js';
-import { type ApiProxy, type ClientKind, type BelugaClient, type PhoneMirror, type PhoneMirrorStatus, type PhoneTouchData, type PhoneVideoPiece, apiProxy } from './client.js';
+import { type ApiProxy, type ClientKind, type BelugaClient, type HelloKind, type PhoneMirror, type PhoneMirrorStatus, type PhoneTouchData, type PhoneVideoPiece, apiProxy } from './client.js';
 import type { Result } from './handlers.js';
 import { type Cap, type ClientFrame, type DaemonFrame, IPC_VERSION, encodeFrame, parseDaemonFrame } from './protocol.js';
 
@@ -25,7 +25,7 @@ export type Capabilities = Partial<Record<Cap, (...args: never[]) => unknown>>;
 export interface SocketClientOptions {
   readonly url: string;
   readonly token: string;
-  readonly kind: ClientKind;
+  readonly kind: HelloKind;
   readonly version: string;
   readonly launchDir?: string;
   readonly caps?: Capabilities;

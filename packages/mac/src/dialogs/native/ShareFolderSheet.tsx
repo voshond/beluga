@@ -3,7 +3,7 @@ import { useState } from 'react';
 import type { MyShare } from '@beluga/core/store.js';
 import { Icon } from '../../components/Icon.js';
 import { Avatar, Button, cx } from '../../components/ui.js';
-import { inApp } from '../../lib/boot.js';
+import { canPickFolders, inApp } from '../../lib/boot.js';
 import { toast, useApi, useApp, useBeluga } from '../../lib/beluga.js';
 import { pickFolders } from '../../lib/projects.js';
 import type { MenuKind } from '@beluga/ui/menus.js';
@@ -110,8 +110,8 @@ export function ShareFolderSheet({ menu, close }: { readonly menu: Extract<MenuK
             <span className={f.pathIcon}>
               <Icon name="folder" size={14} />
             </span>
-            <input id="share-path" className={cx(s.input, f.path)} value={path} placeholder={inApp() ? 'Choose a folder, or type its path' : '~/path/to/folder'} spellCheck={false} aria-label="Folder path" autoFocus={!inApp()} onChange={(e) => setPath(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), share())} />
-            {inApp() ? <Button onClick={() => void choose()}>Choose…</Button> : null}
+            <input id="share-path" className={cx(s.input, f.path)} value={path} placeholder={canPickFolders() ? 'Choose a folder, or type its path' : '~/path/to/folder'} spellCheck={false} aria-label="Folder path" autoFocus={!inApp()} onChange={(e) => setPath(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), share())} />
+            {canPickFolders() ? <Button onClick={() => void choose()}>Choose…</Button> : null}
           </div>
         ) : (
           <div className={f.folder} aria-label={`Folder: ${path}`}>
@@ -122,7 +122,7 @@ export function ShareFolderSheet({ menu, close }: { readonly menu: Extract<MenuK
               <strong>{baseName(dir)}</strong>
               <span title={path}>{shortPath(path)}</span>
             </span>
-            {inApp() ? (
+            {canPickFolders() ? (
               <Button size="small" onClick={() => void choose()}>
                 Choose…
               </Button>

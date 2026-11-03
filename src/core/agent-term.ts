@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { TerminalLaunch, TerminalSink } from '../agent/types.js';
 import type { StepRecord } from '../shared/steps.js';
+import { runtimeHas } from '../shared/runtime-fallbacks.js';
 import { describeVisual } from '../shared/term-visuals.js';
 import { agentTermId } from '../shared/terminal-keys.js';
 import type { PtyProcess } from '../terminal/pty-host.js';
@@ -110,10 +111,10 @@ export class AgentTerminals {
     return channel.startsWith('ws:') && this.live.has(channel.slice(3));
   }
 
-  /** Whether a conversation can have its agent's terminal: a chat or a worktree of yours, not on Codex. */
+  /** Whether a conversation can have its agent's terminal: a chat or a worktree of yours, on an agent that has one (not Codex or OpenCode). */
   canOpen(wsId: string): boolean {
     const ws = this.deps.find(wsId);
-    return Boolean(ws && !ws.archived && ws.kind !== 'main' && this.deps.agentOf(wsId).runtime !== 'codex');
+    return Boolean(ws && !ws.archived && ws.kind !== 'main' && runtimeHas(this.deps.agentOf(wsId).runtime, 'terminal'));
   }
 
   /**
@@ -143,7 +144,7 @@ export class AgentTerminals {
     if (ws.kind === 'main') throw new Error('A project’s main folder has no conversation of its own: open a chat or a worktree.');
     const channel = `ws:${wsId}`;
     const agent = this.deps.agentOf(wsId);
-    if (agent.runtime === 'codex') throw new Error('Codex conversations stay in the chat: the terminal view is Claude Code’s (and local models’, which run in it).');
+    if (!runtimeHas(agent.runtime, 'terminal')) throw new Error(`${agent.label} conversations stay in the chat: the terminal view is Claude Code’s (and local models’, which run in it).`);
     this.deps.ensureLoaded(wsId);
     this.loadVisuals(wsId, true);
     const launch = await this.deps.launch(channel, this.sink(wsId), prompt);

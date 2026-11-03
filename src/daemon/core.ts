@@ -7,6 +7,8 @@ import type { AgentRuntime, RuntimeId } from '../agent/runtime/types.js';
 import { createMockBackend } from '../agent/mock.js';
 import { createCodexRuntime } from '../agent/runtime/codex/index.js';
 import { ScriptedCodex } from '../agent/runtime/codex/scripted.js';
+import { createOpenCodeRuntime } from '../agent/runtime/opencode/index.js';
+import { ScriptedOpenCode } from '../agent/runtime/opencode/scripted.js';
 import { findConversation } from '../agent/runtime/claude/claude-sessions.js';
 import { otherTools } from '../agent/other-tools.js';
 import { copyNative, pasteText } from '../core/clipboard.js';
@@ -62,6 +64,13 @@ interface Room {
 }
 
 const roomInvite = (room: Room): string | undefined => (room.reach ? encodeInvite({ ...room.reach, secret: room.secret }) : undefined);
+
+/** The demo's OpenCode: ready, with the scripted one's models. */
+function demoOpenCode(): AgentRuntime {
+  const scripted = new ScriptedOpenCode({ stepMs: 600 });
+  const models = scripted.models.map((m) => ({ value: m.value, label: m.name.split('/').at(-1) ?? m.name, description: m.value.split('/')[0] ?? '', ...(m.efforts.length ? { efforts: m.efforts } : {}) }));
+  return createOpenCodeRuntime({ connect: scripted.connect, resolve: async () => undefined, status: async () => ({ state: 'ready', models }) });
+}
 
 let claudeWithStatus: AgentRuntime | undefined;
 /** The runtimes, Claude's saying whether it's signed in (a local model's side calls go to Claude only then, BLG-503). */
@@ -305,8 +314,9 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     createAgent: demo
       ? (bridge) => createMockBackend(bridge, Number(belugaEnv('DEMO_PACE')) || 2.6) // unhurried, so you can watch workspaces run side by side
       : undefined,
-    // The demo's Codex: the real Codex runtime over a scripted app-server, so a worktree can run on it (BLG-462).
-    ...(demo ? { alsoRuntimes: [createCodexRuntime({ connect: new ScriptedCodex({ stepMs: 600 }).connect })] } : {}),
+    // The demo's Codex and OpenCode: the real runtimes over a scripted app-server and a scripted
+    // `opencode acp`, so a worktree can run on either (BLG-462, BLG-686).
+    ...(demo ? { alsoRuntimes: [createCodexRuntime({ connect: new ScriptedCodex({ stepMs: 600 }).connect }), demoOpenCode()] } : {}),
     // Your agent through the runtime seam (agent/runtime): Claude, the only one registered yet.
     ...(!demo && config.agent
       ? {

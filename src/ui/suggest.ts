@@ -50,6 +50,8 @@ export interface SuggestContext {
   readonly skills?: readonly ClaudeSkill[];
   /** How this conversation's agent takes them (its runtime's `skills` capability): 'mapped' (Codex) says what doesn't carry over. */
   readonly skillsOn?: 'native' | 'mapped';
+  /** Beluga's commands this conversation's agent doesn't have (shared/runtime-fallbacks.ts: /btw on Codex), left out of the list. */
+  readonly without?: readonly string[];
   /** The room's agent tags ("@codex", "@bob:codex"; shared/agent-tags.ts roomAgentTags), in the room only (BLG-520). */
   readonly agentTags?: readonly AgentTag[];
 }
@@ -135,7 +137,7 @@ const BELUGA_COMMANDS = new Set(COMMANDS.map((c) => c.name));
  */
 function commandSuggestions(buffer: string, ctx: SuggestContext): Suggestion[] {
   const typed = buffer.slice(1).toLowerCase();
-  const ours = COMMANDS.filter((c) => c.name.startsWith(typed)).map((c) => ({
+  const ours = COMMANDS.filter((c) => c.name.startsWith(typed) && !ctx.without?.includes(c.name)).map((c) => ({
     label: `/${c.name}${c.args ? ` ${c.args}` : ''}`,
     hint: c.desc,
     value: `/${c.name}${c.args ? ' ' : ''}`,

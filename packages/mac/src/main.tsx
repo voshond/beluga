@@ -1,4 +1,5 @@
-// First: Beluga's storage keys become Beluga's before any module reads them.
+// First: zod never probes eval (blocked by the CSP, BLG-672), and Beluga's storage keys become Beluga's before any module reads them.
+import './lib/zod-jitless.js';
 import './lib/storage-rename.js';
 import { Fragment, StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -11,6 +12,7 @@ import { apply, zoom } from './lib/prefs.js';
 import { watchWindow } from './lib/window-active.js';
 import { Button } from './components/ui.js';
 import { UpdateLayer } from './dialogs/UpdateSheet.js';
+import { FolderBrowserHost } from './dialogs/FolderBrowser.js';
 import s from './layout/Shell.module.css';
 import './styles/tokens.css';
 import './styles/base.css';
@@ -87,6 +89,7 @@ function Root() {
     <BelugaProvider client={client}>
       <App />
       <UpdateLayer connected />
+      {inApp() ? null : <FolderBrowserHost />}
     </BelugaProvider>
   );
 }

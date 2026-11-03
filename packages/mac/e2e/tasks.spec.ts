@@ -48,7 +48,12 @@ test('lists the demo’s tasks by status; scopes and the board', async ({ page }
   // What waits on what.
   await page.getByRole('tablist', { name: 'Display' }).getByRole('tab', { name: 'What Waits on What' }).click();
   await expect(main(page).locator('[data-ready="true"]')).toBeVisible({ timeout: 20_000 });
-  await expect(main(page).locator('.react-flow__node').filter({ hasText: 'Refund endpoint' })).toContainText('Blocked');
+  const refund = main(page).locator('.react-flow__node').filter({ hasText: 'Refund endpoint' });
+  await expect(refund).toContainText('Blocked');
+  // Its card has a fill and an edge, as in a conversation's graph.
+  const look = await refund.locator('div[data-kind="task"]').evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, ring: getComputedStyle(el).boxShadow }));
+  expect(look.bg).not.toBe('rgba(0, 0, 0, 0)');
+  expect(look.ring).not.toBe('none');
   await page.getByRole('tablist', { name: 'Display' }).getByRole('tab', { name: 'List' }).click();
 });
 

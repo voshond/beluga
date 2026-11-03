@@ -91,9 +91,9 @@ test('a plan being written: calm, clipped, one status (KLD-28)', async ({ page }
   await expect(chat.getByText(/Read src\/server\.ts|Glob src/).first()).toBeVisible({ timeout: 15_000 });
   expect(await overflowRight(chat)).toEqual([]);
 
-  // No right panel beside a plan (KLD-54): its project is in the toolbar, and the panel's button is off.
+  // No right panel beside a plan (KLD-54): its project is in the toolbar, and the panel's button isn't there.
   await expect(page.locator('aside[aria-label="Panel"]')).toHaveAttribute('aria-hidden', 'true');
-  await expect(page.getByRole('button', { name: /^No panel on a plan/ })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /^(Show|Hide) the panel/ })).toHaveCount(0);
   await expect(page.locator('header').filter({ hasText: 'bob-api' }).first()).toBeVisible();
 
   const dir = process.env.SHOTS;

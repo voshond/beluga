@@ -1,5 +1,6 @@
 import { talkReadOnly } from '../../agent/dialogue-tools.js';
-import type { AgentRef } from '../../protocol.js';
+import { type AgentRef, CLAUDE_AGENT } from '../../protocol.js';
+import { fallbackFor } from '../../shared/runtime-fallbacks.js';
 import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -157,6 +158,18 @@ export function agentForAsk(asked: AgentRef | undefined, mine: AgentRef, listed:
   const found = listed.find((a) => a.runtime === asked.runtime && (!asked.model || a.model === asked.model)) ?? listed.find((a) => a.runtime === asked.runtime);
   if (found && (runs?.(found) ?? false)) return { agent: found };
   return { agent: mine, note: `${asked.label} isn’t set up here, so ${mine.label} does it` };
+}
+
+/**
+ * A friend's task picked for an agent that doesn't take them (OpenCode: shared/runtime-fallbacks.ts
+ * `friends`): handed to one that does and runs here (Claude first), the card saying why. None
+ * here: as it was (the run says it can't).
+ */
+export function agentForFriend(picked: { readonly agent: AgentRef; readonly note?: string }, listed: readonly AgentRef[], runs?: (agent: AgentRef) => boolean): { readonly agent: AgentRef; readonly note?: string } {
+  const why = fallbackFor(picked.agent.runtime, 'friends');
+  if (!why) return picked;
+  const other = [CLAUDE_AGENT, ...listed].find((a) => !fallbackFor(a.runtime, 'friends') && (runs?.(a) ?? false));
+  return other ? { agent: other, note: why } : picked;
 }
 const SKIP: ClaudeAnswer = { kind: 'skip' };
 
@@ -499,7 +512,8 @@ export class TaskServer {
     const found = this.place(task, req);
     const { where, folders } = found;
     // On the agent its card says (your default), or the one they asked for when it runs here (BLG-503).
-    const picked = ctx.agentRef ? agentForAsk(req.agent, ctx.agentRef(), ctx.agents?.() ?? [], ctx.runs) : undefined;
+    // One that can't take a friend's task (OpenCode) hands it on (BLG-686).
+    const picked = ctx.agentRef ? agentForFriend(agentForAsk(req.agent, ctx.agentRef(), ctx.agents?.() ?? [], ctx.runs), ctx.agents?.() ?? [], ctx.runs) : undefined;
     if (picked) this.ranOn.set(task.id, picked.agent);
     // A talk (or cross-reference) dialogue's turn changes nothing, on any agent: no edits, even in a scratch folder.
     const withAgent = picked ? { ...found.place, agent: picked.agent } : found.place;

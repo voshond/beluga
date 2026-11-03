@@ -56,3 +56,9 @@ daemon or the Mac app, check the phone too, in the same change:
 ## Checks
 
 `npm run typecheck`, `npx vitest run`, and in `packages/companion`: `npm run typecheck`.
+
+Run the whole `npx vitest run` after your last change, before you commit. When every test passes on
+a Mac it ends with a `Tested-on: macOS <tree>` line. Put that line, as it is, at the end of the
+commit message, and commit every file it tested (nothing changed since the run). CI then skips its
+macOS run for that commit (`scripts/local-pass.mjs`), and Linux and Windows still run there. No line
+(a failure, part of the suite, a file changed during the run) means don't add one.

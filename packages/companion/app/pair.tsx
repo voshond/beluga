@@ -121,7 +121,7 @@ export default function Pair() {
               </Animated.View>
               <View style={{ gap: 14 }}>
                 <Step n={1} text="Open Beluga on your Mac" delay={260} />
-                <Step n={2} text="Settings › Phone › Pair a Phone" delay={340} />
+                <Step n={2} text="Settings › Phone › Pair a Phone (on a server: beluga pair)" delay={340} />
                 <Step n={3} text="Scan the code, or type it here" delay={420} />
               </View>
             </ScrollView>

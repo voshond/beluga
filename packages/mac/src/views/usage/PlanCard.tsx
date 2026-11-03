@@ -74,8 +74,8 @@ function DefaultChip({ card }: { card: ProviderCard }) {
   );
 }
 
-/** What runs the agent, by name: Claude Code, Codex, or a local model. */
-const runtimeName = (runtime: string): string => (runtime === 'claude' ? 'Claude Code' : runtime === 'codex' ? 'Codex' : 'Local model');
+/** What runs the agent, by name: Claude Code, Codex, OpenCode, or a local model. */
+const runtimeName = (runtime: string): string => (runtime === 'claude' ? 'Claude Code' : runtime === 'codex' ? 'Codex' : runtime === 'opencode' ? 'OpenCode' : 'Local model');
 
 function ProviderBox({ card, now }: { card: ProviderCard; now: number }) {
   const [details, setDetails] = useState(false);

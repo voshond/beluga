@@ -7,8 +7,10 @@
 
 /* ---------- Palette (both themes) ---------- */
 
+/* .palette: for a graph drawn outside a block or its full view (a board's What Waits on What). */
 .block,
-.full {
+.full,
+.palette {
   --graph-bg: var(--bg-sunken);
   --graph-card: var(--bg-raised);
   --graph-ring: rgba(0, 0, 0, 0.11);
@@ -25,7 +27,8 @@
   --graph-teal: #0e8a86;
 }
 :global(:root[data-theme='dark']) .block,
-:global(:root[data-theme='dark']) .full {
+:global(:root[data-theme='dark']) .full,
+:global(:root[data-theme='dark']) .palette {
   --graph-bg: #161618;
   --graph-card: #232326;
   --graph-ring: rgba(255, 255, 255, 0.09);
@@ -248,8 +251,13 @@
     0 0 0 1px var(--graph-ring-hot),
     var(--graph-shadow-hot);
 }
-.nodeDim {
+/* While something is lit (data-lit), everything else fades: only what's lit is marked. */
+.canvas[data-lit='true'] :global(.react-flow__node:not(.react-flow__node-group)):not(.nodeHot) {
   opacity: 0.3;
+}
+/* New to a live graph: measured out of sight until the layout has a place for it. */
+.canvas :global(.react-flow__node).nodePending {
+  visibility: hidden;
 }
 /* What Claude marked important: an accent ring with a soft glow. */
 .emphasis,
@@ -839,8 +847,12 @@
   stroke: var(--accent);
   stroke-width: 2;
 }
-.canvas .edgeDim {
+/* .edgeLit: the wrapper of a lit line (its path is .edgeHot). */
+.canvas[data-lit='true'] :global(.react-flow__edge):not(.edgeLit) .edge {
   opacity: 0.14;
+}
+.canvas[data-lit='true'] :global(.react-flow__edge):not(.edgeLit) .edgeDot {
+  display: none;
 }
 .markPlain,
 .markHot,
@@ -908,7 +920,7 @@
     0 0 0 1px var(--graph-ring-hot),
     0 2px 6px -2px rgba(0, 0, 0, 0.15);
 }
-.edgeLabelDim {
+.canvas[data-lit='true'] .edgeLabel:not(.edgeLabelHot) {
   opacity: 0.2;
 }
 

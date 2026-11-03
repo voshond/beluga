@@ -151,6 +151,10 @@ already cut down for the phone (code stripped, steps in words, paths as opaque r
   the chats and worktrees you started. A project's main checkout has no conversation of its own
   (BLG-70): one from before became an ordinary chat in its project, listed like any other, and
   `conv:ws:<main>` isn't a conversation the phone can send to. Your Mac isn't a project either.
+  Every project of yours is listed, also one with no conversations yet (`conversations: []`, last;
+  BLG-675): one just added with `beluga project add` is where the Ask sheet starts its first
+  worktree. Chats (conversations outside any project) isn't a project and isn't listed. Older
+  phones skipped projects with no conversations, so the change is additive.
 - `conv:<channel>`: one conversation (`conv:mac:assistant` is Your Mac, 1.5): turns (your messages, your agent's answers), what a running turn
   is doing now (`live`: thinking, writing, the step with its tool, time and count) and its steps in
   words with their tools (`trail`), sub-agents (title, status, steps, their own live step, kind,

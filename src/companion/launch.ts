@@ -3,7 +3,9 @@ import { mkdtempSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { claudeCodeOf } from '../core/claude-code/launch.js';
+import { belugaEnv } from '../core/beluga-env.js';
 import { belugaHome } from '../core/home.js';
+import { loadSettings } from '../core/settings.js';
 import type { Session } from '../core/session.js';
 import type { Store } from '../core/store.js';
 import { installedVersion } from '../core/version.js';
@@ -14,7 +16,7 @@ import { assistantOf } from '../core/assistant/registry.js';
 import { ASSISTANT_CHANNEL, isAssistant } from '../shared/assistant.js';
 import { DeviceBook } from './devices.js';
 import { CompanionHost } from './host.js';
-import { macIdleMs } from './push.js';
+import { idleWhenWatched } from './push.js';
 import { attachCompanion, detachCompanion } from './registry.js';
 import type { ConvOutput } from './views.js';
 import { needSentinel } from '../core/sentinel/registry.js';
@@ -134,9 +136,11 @@ export interface CompanionLaunch {
   readonly terminals?: import('../terminal/pty-host.js').TerminalManager;
 }
 
-/** The Mac's name as people know it ("Kayra’s MacBook Pro"): its Sharing name, else its host name. */
+/** The Mac's name as people know it ("Kayra’s MacBook Pro"): the one set in `beluga setup`, its Sharing name, else its host name. */
 let named: string | undefined;
 function macName(): string {
+  if (named) return named;
+  named = loadSettings().computerName;
   if (named) return named;
   try {
     if (process.platform === 'darwin') named = execFileSync('scutil', ['--get', 'ComputerName'], { encoding: 'utf8', timeout: 2_000 }).trim() || undefined;
@@ -145,6 +149,17 @@ function macName(): string {
   }
   named ??= os.hostname().replace(/\.local$/, '').replace(/-/g, ' ') || (process.platform === 'darwin' ? 'Your Mac' : 'Your computer');
   return named;
+}
+
+/**
+ * BELUGA_DHT_BOOTSTRAP="127.0.0.1:49737,…": the phones' network is a local testnet (tests that run
+ * the daemon whole, such as `beluga pair` in a terminal); unset, the public one.
+ */
+export function dhtFromEnv(env: NodeJS.ProcessEnv = process.env): { dht?: { bootstrap: { host: string; port: number }[]; host: string } } {
+  const raw = belugaEnv('DHT_BOOTSTRAP', env);
+  if (!raw) return {};
+  const bootstrap = raw.split(',').map((a) => /^\s*([\w.-]+):(\d+)\s*$/.exec(a)).filter((m): m is RegExpExecArray => Boolean(m)).map((m) => ({ host: m[1]!, port: Number(m[2]) }));
+  return bootstrap.length ? { dht: { bootstrap, host: '127.0.0.1' } } : {};
 }
 
 export function launchCompanion(opts: CompanionLaunch): () => Promise<void> {
@@ -158,6 +173,7 @@ export function launchCompanion(opts: CompanionLaunch): () => Promise<void> {
     devices,
     call: (clientId, method, args) => dispatchCall(opts.session, clientId, method, args),
     macName,
+    ...dhtFromEnv(),
     version: installedVersion(),
     thumbsDir: path.join(dir, 'companion', 'thumbs'),
     macrosFile: path.join(dir, 'phone-macros.json'),
@@ -173,7 +189,7 @@ export function launchCompanion(opts: CompanionLaunch): () => Promise<void> {
       return sn.documentBytes(d.sentinelId, d.metric, d.column, d.value);
     },
     watching: (channels, linked) => outputs.watch(channels, linked),
-    idleMs: macIdleMs,
+    idleMs: idleWhenWatched(() => opts.session.attention.screens),
     ...(opts.terminals ? { terminals: opts.terminals } : {}),
     // The relay through Cloudflare, unless Remote access is set to direct only (or the network only),
     // or it's the demo (nothing leaves the computer).

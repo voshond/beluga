@@ -206,6 +206,8 @@ const QUIT_SETTLE_MS = 2_000;
 /** A message in a conversation its terminal is driving (BLG-534). */
 export const TERMINAL_DRIVING = 'The terminal is driving this conversation: type there, or Take over to talk here.';
 const STOPPED_FOR_YOU = 'Your agent didn’t stop when asked, so its run was stopped for your message';
+/** Said when an agent that can't read a message mid-turn (OpenCode) had its turn stopped to read yours. */
+const STOPPED_TO_READ = 'Stopped to read your message';
 
 
 /**
@@ -679,13 +681,15 @@ export class AgentHost {
     const plan = steer ? planSteer(steer.status?.(), Date.now()) : undefined;
     const emit = (event: BodyOf<'agent_event'>['event'], text = ''): void => this.emitAgent(body.requestId, from, event, text, body.channel);
     if (steer && plan?.kind === 'steer' && this.steerIn(lane, item, steer)) return;
-    if (steer?.interrupt && plan?.kind === 'interrupt') {
+    // An agent that can't take a message into its running turn (OpenCode: one prompt at a time) stops the turn for it instead.
+    const note = plan?.kind === 'interrupt' ? plan.note : plan?.kind === 'steer' && steer?.interrupt && !steer.status?.().between ? STOPPED_TO_READ : undefined;
+    if (steer?.interrupt && note) {
       const run = lane.current;
       const followUp = this.followUp(lane, item);
       // Sent, not read yet: Claude's step is being stopped for it (its turn starts once it is).
       emit('text', STOPPING_FOR);
       const interrupting: Promise<void> = steer
-        .interrupt(followUp, plan.note)
+        .interrupt(followUp, note)
         .catch(() => false)
         .then((ok) => {
           if (lane.interrupting === interrupting) lane.interrupting = undefined;

@@ -115,6 +115,24 @@ test('a milestone’s checker, off the sidebar, opens from its details and its �
   await main(page).getByRole('tablist', { name: 'Show' }).getByRole('tab', { name: 'Canvas' }).click();
 });
 
+test('a milestone itself opens its details: its tasks in its agent’s order, each a click from its own (BLG-688)', async ({ page }, info) => {
+  await page.goto('/');
+  await sidebar(page).getByRole('button', { name: 'Card checkout for launch', exact: true }).click();
+  await expect(main(page).locator('[data-ready="true"]')).toBeVisible({ timeout: 20_000 });
+  const box = main(page).locator('.react-flow__node-milestone').filter({ hasText: 'Safe payments' });
+  // Its header (not a card, not its gate) is the milestone.
+  await box.getByText('Safe payments', { exact: true }).click();
+  const details = page.getByRole('complementary', { name: 'Details' });
+  await expect(details).toContainText('Safe payments');
+  const tasks = details.getByRole('region', { name: 'Its tasks' });
+  await expect(tasks).toContainText('Add auth to the payment routes');
+  await expect(box.locator('[data-milestone="safe-payments"]')).toHaveClass(/msSelected/);
+  await main(page).screenshot({ path: info.outputPath('milestone-picked.png') });
+  await tasks.getByRole('button', { name: /Receipt emails sent once/ }).click();
+  await expect(details).toContainText('Waits on');
+  await details.getByRole('button', { name: 'Close' }).click();
+});
+
 test('opening a passed milestone opens its box in the same frame: never an open header in a folded box', async ({ page }, info) => {
   await page.goto('/');
   await sidebar(page).getByRole('button', { name: 'Card checkout for launch', exact: true }).click();

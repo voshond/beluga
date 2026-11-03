@@ -2,6 +2,8 @@ import type { ITerminalOptions } from '@xterm/xterm';
 import type { UiPrefs } from './prefs.js';
 import { colorsFor, xtermColors } from './terminal-import-model.js';
 import { keyPlatform } from './shortcuts-model.js';
+import { TERMINAL_PRESETS } from './terminal-themes.js';
+import { themeFor } from './themes.js';
 
 export { SCROLLBACK_CHOICES } from './terminal-import-model.js';
 
@@ -68,8 +70,18 @@ export const terminalOptions = (p: UiPrefs): Pick<ITerminalOptions, 'fontFamily'
 /** Whether the window looks dark right now (prefs.ts puts it on the document). */
 export const looksDark = (): boolean => document.documentElement.dataset.theme === 'dark';
 
+/** The colours a terminal draws besides its background and text (those follow the window's). */
+const ANSI_ONLY = new Set(['background', 'foreground', 'cursor', 'cursorAccent', 'selectionBackground', 'selectionForeground']);
+
+/** The terminal colours that go with the window's theme (Dracula's in Dracula), or undefined for one without. */
+export function windowThemeColors(p: UiPrefs, dark: boolean = looksDark()): Record<string, string> | undefined {
+  const name = themeFor(dark ? 'dark' : 'light', p).term;
+  const all = xtermColors(colorsFor(TERMINAL_PRESETS.find((t) => t.name === name), dark));
+  return all ? Object.fromEntries(Object.entries(all).filter(([k]) => !ANSI_ONLY.has(k))) : undefined;
+}
+
 /**
  * The colours you brought from another terminal (Settings › Terminal › Import from…), as xterm
- * wants them, or undefined for Beluga's own (which follow the window's appearance).
+ * wants them; with Beluga's own, the window theme's (which follow the window's appearance), if any.
  */
-export const importedTheme = (p: UiPrefs, dark: boolean = looksDark()): Record<string, string> | undefined => xtermColors(colorsFor(p.termTheme, dark));
+export const importedTheme = (p: UiPrefs, dark: boolean = looksDark()): Record<string, string> | undefined => xtermColors(colorsFor(p.termTheme, dark)) ?? windowThemeColors(p, dark);

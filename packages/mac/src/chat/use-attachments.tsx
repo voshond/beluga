@@ -1,7 +1,7 @@
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../components/Icon.js';
-import { inApp } from '../lib/boot.js';
+import { inApp, webServed } from '../lib/boot.js';
 import { toast, useApi, useBeluga } from '../lib/beluga.js';
 import { type Box, MAX_DROPPED, dropHits, droppedFiles, sameBox } from './drop-model.js';
 import { imageLinksIn } from '@beluga/shared/attachment-links.js';
@@ -58,6 +58,9 @@ function numberIn(channel: string, n: number, words: string): number {
 }
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/** Files that aren't images (a served page uploads them, web-files.ts). */
+const othersOf = (files: FileList | undefined): File[] => [...(files ?? [])].filter((f) => !f.type.startsWith('image/'));
 
 const imagesOf = (items: DataTransferItemList | undefined): File[] =>
   [...(items ?? [])].filter((i) => i.kind === 'file' && i.type.startsWith('image/')).map((i) => i.getAsFile()).filter((f): f is File => Boolean(f));
@@ -193,6 +196,17 @@ export function useAttachments({ channel, box, text, setText }: { channel: strin
       const n = await addImageFile(f);
       if (n !== undefined) cursor = placeRef(n, cursor);
     }
+  };
+
+  /**
+   * Files dropped in a page the web port served: uploaded to the computer Beluga runs on, then
+   * waiting as chips with their path there (the agent reads them from there).
+   */
+  const uploadOthers = async (picked: readonly File[]): Promise<void> => {
+    const { uploadFiles } = await import('../lib/web-files.js');
+    const sent = await uploadFiles(picked.slice(0, MAX_DROPPED), (file, err) => toast(client, `Couldn't upload ${file.name}: ${errorText(err)}`, 'error'));
+    if (sent.length) await addPaths(sent.map((u) => ({ path: u.path, name: u.name, kind: 'file' as const, size: u.size, image: false })));
+    box.current?.focus();
   };
 
   /** Paths dropped from Finder: the files among them go as a paste of their paths would. */
@@ -408,7 +422,7 @@ export function useAttachments({ channel, box, text, setText }: { channel: strin
     dropTarget,
     dropProps: {
       onDragOver: (e) => {
-        if ([...e.dataTransfer.items].some((i) => i.type.startsWith('image/'))) {
+        if ([...e.dataTransfer.items].some((i) => i.type.startsWith('image/')) || (webServed() && [...e.dataTransfer.types].includes('Files'))) {
           e.preventDefault();
           setDropping(true);
         }
@@ -416,10 +430,12 @@ export function useAttachments({ channel, box, text, setText }: { channel: strin
       onDragLeave: () => setDropping(false),
       onDrop: (e) => {
         const dropped = imagesOf(e.dataTransfer.items);
+        const others = webServed() ? othersOf(e.dataTransfer.files) : [];
         setDropping(false);
-        if (!dropped.length) return;
+        if (!dropped.length && !others.length) return;
         e.preventDefault();
-        void attach(dropped);
+        if (dropped.length) void attach(dropped);
+        if (others.length) void uploadOthers(others);
       },
     },
     onPaste: (e) => {

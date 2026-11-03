@@ -1330,7 +1330,8 @@ export class Session {
   /** Make the terminal's text bigger or smaller, without needing a keyboard shortcut. */
   async zoom(dir: ZoomDir): Promise<void> {
     if (!this.opts.zoom) return this.toast('Text size can only be changed from a terminal', 'warn');
-    const result = await this.opts.zoom(dir);
+    // No window open (a server): said, not thrown.
+    const result = await this.opts.zoom(dir).catch((err: unknown) => ({ ok: false, message: err instanceof Error ? err.message : String(err) }));
     this.toast(result.message, result.ok ? 'success' : 'warn');
   }
 

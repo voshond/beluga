@@ -18,8 +18,16 @@ test('a fresh install walks through the welcome, picks a look, and never sees it
 
   // Skip Tour goes straight to the look.
   await welcome.getByRole('button', { name: 'Skip Tour' }).click();
-  await welcome.getByRole('radio', { name: 'Dark' }).click();
+  await welcome.getByRole('radiogroup', { name: 'Appearance' }).getByRole('radio', { name: 'Dark' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  // A theme for the look (BLG-696): the dark ones show, and one picked repaints the window at once.
+  const themes = welcome.getByRole('radiogroup', { name: 'Dark theme' });
+  await expect(themes.getByRole('radio', { name: 'Dark', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await themes.getByRole('radio', { name: 'OLED Black' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-palette', 'oled');
+  await expect(welcome.getByText('OLED Black', { exact: true })).toBeVisible();
+  if (process.env.THEME_SHOTS) await page.waitForTimeout(1200);
+  if (process.env.THEME_SHOTS) await page.screenshot({ path: `${process.env.THEME_SHOTS}/03-onboarding-oled.png` });
   await welcome.getByRole('button', { name: 'Continue', exact: true }).click();
 
   // Another terminal's look (BLG-212): skippable, Beluga's own until you pick one.

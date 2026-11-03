@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { Folder } from 'lucide-react-native';
+import { Folder, Plus } from 'lucide-react-native';
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -54,17 +54,27 @@ export default function Work() {
           </Animated.View>
         ) : (
           <Animated.View entering={FadeIn} style={{ gap: 12 }}>
-            {(work?.data.projects ?? []).filter((p) => p.conversations.length).map((p) => (
+            {(work?.data.projects ?? []).map((p) => (
               <View key={p.id}>
                 <FoldHead
                   folded={fold.folded(p.id)}
                   onToggle={() => fold.toggle(p.id)}
                   lead={p.id === 'asked' || p.id === 'room' ? <Folder color={color.text3} size={18} /> : <ProjectMark name={p.name} icon={p.icon} size={22} />}
                   label={p.name}
-                  count={p.conversations.length}
+                  {...(p.conversations.length ? { count: p.conversations.length } : {})}
                 />
                 {fold.folded(p.id) ? null : (
                 <Card style={{ marginHorizontal: 16, marginTop: 6 }}>
+                  {p.conversations.length ? null : (
+                    // A project with nothing in it yet (just added): one tap to start its first worktree.
+                    <Row
+                      first
+                      Icon={Plus}
+                      label="No conversations yet"
+                      sub="Start the first one here"
+                      onPress={() => router.push({ pathname: '/ask', params: { text: '', to: `project:${p.id}`, how: 'worktree' } })}
+                    />
+                  )}
                   {p.conversations.map((c, i) => {
                     const st = statusIcon(c.needsYou ? 'waiting' : c.status);
                     return (

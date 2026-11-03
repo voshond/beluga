@@ -62,7 +62,10 @@ export interface BelugaClient {
   close(): void;
 }
 
-export type ClientKind = 'mac' | 'test';
+/** The Mac app, a browser on the web port (set by the daemon, never claimed), a command run once (`beluga web`), or a test. */
+export type ClientKind = 'mac' | 'web' | 'cli' | 'test';
+/** What a screen may say it is in its hello. */
+export type HelloKind = Exclude<ClientKind, 'web'>;
 
 type Group<M> = M extends `${infer G}.${string}` ? G : never;
 type NameIn<M, G extends string> = M extends `${G}.${infer N}` ? N : never;

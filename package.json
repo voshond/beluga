@@ -14,6 +14,9 @@
   "author": "Kayra Uckilinc",
   "license": "MIT",
   "type": "module",
+  "bin": {
+    "beluga": "dist/cli.js"
+  },
   "engines": {
     "node": ">=20"
   },
@@ -41,6 +44,7 @@
     "mathjax-full": "^3.2.2",
     "omggif": "^1.0.10",
     "pngjs": "^7.0.0",
+    "qrcode-generator": "^2.0.4",
     "sodium-universal": "^5.0.1",
     "string-width": "^8.3.0",
     "ws": "^8.22.0",

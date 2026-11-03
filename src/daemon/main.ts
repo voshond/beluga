@@ -17,6 +17,10 @@ import { keepLogSmall } from './log-size.js';
 import type { Readable } from 'node:stream';
 import { stopWhenInputEnds } from './stop-on-input.js';
 import { DaemonServer } from './server.js';
+import { type WebArgs, sshWords } from './web.js';
+import { WebAccess, attachWebAccess, readWebConfig } from './web-access.js';
+import { publicWords } from './reach/public.js';
+import { tailscaleWords } from './reach/tailscale.js';
 
 /** How long the daemon waits after the last screen closes before leaving the room. */
 export const LINGER_MS = 3000;
@@ -49,6 +53,12 @@ export interface DaemonOptions {
   readonly record?: Recorder;
   /** Stop once this ends: the app's pipe on Windows, which has no signals (stop-on-input.ts). */
   readonly stopWithInput?: Readable;
+  /** Also serve the UI to browsers on the web port (`beluga web`, daemon/web.ts). */
+  readonly web?: Partial<WebArgs> & { readonly root?: string };
+  /** Where `beluga web` says the link (its terminal). */
+  readonly announce?: (text: string) => void;
+  /** A QR code of a link as lines for that terminal (none when it isn't one): the tailnet address for a phone. */
+  readonly announceQr?: (text: string) => readonly string[];
 }
 
 export interface RunningDaemon {
@@ -56,6 +66,10 @@ export interface RunningDaemon {
   readonly server: DaemonServer;
   readonly port: number;
   readonly token: string;
+  /** Browsers: the web port (open when asked for, or when it was before) and who is let in. */
+  readonly web: WebAccess;
+  /** The web port's address, when it's open. */
+  readonly webUrl?: string;
   /** Leave the room and stop serving. Resolves once everything is closed. */
   stop(reason?: string): Promise<void>;
   /** Resolves when the daemon has stopped (by stop(), a signal, or the last screen leaving). */
@@ -74,6 +88,7 @@ export async function startDaemon(config: Config, opts: DaemonOptions): Promise<
   const token = randomBytes(32).toString('hex');
   let server!: DaemonServer;
   let stopping: Promise<void> | undefined;
+  let web: WebAccess | undefined;
   let resolveDone!: () => void;
   let stopLag = (): void => undefined;
   const done = new Promise<void>((r) => (resolveDone = r));
@@ -84,6 +99,7 @@ export async function startDaemon(config: Config, opts: DaemonOptions): Promise<
       clearTimeout(firstClient);
       stopLag();
       clearDaemonInfo();
+      await web?.close().catch(() => undefined);
       await server.close(reason).catch(() => undefined);
       await core.stop().catch((err: unknown) => log(`stop failed: ${errorText(err)}`));
       resolveDone();
@@ -106,6 +122,23 @@ export async function startDaemon(config: Config, opts: DaemonOptions): Promise<
   }, { network: true });
   server = new DaemonServer({ session: core.session, token, version: opts.version, terminals: core.terminals, log, ...(opts.port ? { port: opts.port } : {}), ...(opts.allowedOrigins ? { allowedOrigins: opts.allowedOrigins } : {}) });
   const port = await server.listen();
+  web = new WebAccess({ door: server, log, ...(opts.web?.root ? { root: opts.web.root } : {}) });
+  attachWebAccess(core.session, web);
+  let webAt: string | undefined;
+  if (opts.web) {
+    webAt = await web.start(opts.web).catch(async (err: unknown) => {
+      await server.close().catch(() => undefined);
+      await core.stop().catch(() => undefined);
+      throw new Error(`The web port couldn't open: ${errorText(err)}`);
+    });
+  } else {
+    // Opened before (`beluga web`, Settings): open again, but a busy port doesn't stop Beluga.
+    const remembered = readWebConfig();
+    if (remembered) webAt = await web.start(remembered).catch((err: unknown) => void log(`web port: ${errorText(err)}`));
+    // The public link too, when it was on: in the background, Cloudflare takes a while.
+    if (remembered?.public && webAt) void web.goPublic().catch((err: unknown) => log(`web: public link: ${errorText(err)}`));
+    if (remembered?.tailscale && webAt) void web.goTailscale().catch((err: unknown) => log(`web: tailscale: ${errorText(err)}`));
+  }
   writeDaemonInfo({ pid: process.pid, port, token, version: opts.version, ipc: IPC_VERSION, room: core.room, roomKey: roomKeyOf(config), startedAt: Date.now(), keepAlive: opts.keepAlive, workspaces: core.workspacesHome });
   log(`listening on 127.0.0.1:${port} for ${core.room}${opts.keepAlive ? ' (kept alive)' : ''}`);
 
@@ -141,14 +174,15 @@ export async function startDaemon(config: Config, opts: DaemonOptions): Promise<
     stopWatch();
     stopActions();
   };
-  return { core, server, port, token, stop, done };
+  return { core, server, port, token, web, ...(webAt ? { webUrl: webAt } : {}), stop, done };
 }
 
 /** Run the daemon as this process: signals stop it, problems are logged and shown, never fatal. */
 export async function runDaemon(config: Config, opts: DaemonOptions): Promise<void> {
   const log = (line: string): void => {
     blackbox.record('log', line);
-    process.stderr.write(`${new Date().toISOString()} ${line}\n`);
+    if (opts.log) opts.log(line);
+    else process.stderr.write(`${new Date().toISOString()} ${line}\n`);
   };
   // Once the terminal or pipe it was started from is gone (EIO, EPIPE), every write fails: drop those lines.
   // Unheard, each failed write was an uncaught error whose log line failed again, spinning a core (BLG-365).
@@ -156,6 +190,24 @@ export async function runDaemon(config: Config, opts: DaemonOptions): Promise<vo
   const box = startBlackbox({ version: opts.version });
   const daemon = await startDaemon(config, { ...opts, log, record: blackbox });
   keepLogSmall(opts.logFd ?? 2, log);
+  if (opts.web && opts.announce && daemon.webUrl) {
+    const { url, expiresAt } = daemon.web.sessions.link(daemon.webUrl);
+    const clear = opts.web.insecureHttp ? `\nCareful: --insecure-http sends this link and the browser's session over plain http on ${opts.web.host}. Anyone on that network can read them and get in.\n` : '';
+    opts.announce(`${clear}Beluga's web UI is on ${daemon.webUrl}\nOpen this link in your browser to let it in (once, until ${new Date(expiresAt).toLocaleTimeString()}):\n\n  ${url}\n\n${sshWords(daemon.webUrl)}More links: beluga web link. Browsers let in: beluga web sessions.\n`);
+    if (opts.web.tailscale) {
+      await daemon.web
+        .goTailscale()
+        .then((t) => opts.announce?.(`\n${tailscaleWords(t, opts.announceQr?.(t.url))}`))
+        .catch((err: unknown) => opts.announce?.(`Not on the tailnet: ${errorText(err)}\n`));
+    }
+    if (opts.web.public) {
+      opts.announce('\nOpening a public link through Cloudflare…\n');
+      await daemon.web
+        .goPublic()
+        .then((pub) => opts.announce?.(`\n${publicWords(pub)}`))
+        .catch((err: unknown) => opts.announce?.(`No public link: ${errorText(err)}\n`));
+    }
+  }
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(signal, () => void daemon.stop(`Got ${signal}`));
   if (opts.stopWithInput) stopWhenInputEnds(opts.stopWithInput, (why) => void daemon.stop(why));
   // The Mac app's word that the Mac is about to sleep (BLG-277, src-tauri/src/power.rs): mail the

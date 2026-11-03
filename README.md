@@ -23,6 +23,7 @@
 - **[Answers you can see](#answers-you-can-see)**: live tables, charts, diagrams and task cards right in the conversation.
 - **[Your agent, and your friends' agents](#your-agent-and-your-friends-agents)**: tag a friend and your agent asks theirs to do it on their Mac, after they click Allow.
 - **[Sentinel](#sentinel)**: work you describe once runs on a schedule or when something happens, and leaves a report.
+- **[Run it on a server](#run-it-on-a-server)**: put it on a computer that stays on, then use it from your phone or any browser.
 
 ## Install
 
@@ -234,9 +235,99 @@ A phone app shows what your Mac's Beluga is doing and lets you answer what needs
 <p align="center"><img src="assets/mac/model.png" alt="Model and thinking picker" width="900"><br><sub><b>Model and thinking</b> per conversation, in plain words.</sub></p>
 </details>
 
+## Run it on a server
+
+Beluga also runs with no window, on a computer that stays on: a Linux server, a home PC or a Mac mini. Your projects and agents live there, and you use them from your phone or open the whole Beluga app in any browser.
+
+### Install and set up
+
+On the server (Linux or macOS, x64 or arm64, with git; no sudo, Node comes with it):
+
+```sh
+curl -fsSL https://github.com/kayraucklnc/beluga/releases/latest/download/install.sh | sh
+beluga setup
+```
+
+`beluga setup` signs Claude in, names the computer, adds a first project (a folder or a git URL), pairs your phone with a QR code, and keeps Beluga running from boot. If the install says `~/.local/bin` isn't on your PATH, run the line it prints, then open a new terminal.
+
+### Ways in
+
+| Way in | Run | Needs | Who gets in |
+| --- | --- | --- | --- |
+| [Phone](#phone) | `beluga pair` on the server | the Beluga phone app | the phones you paired |
+| [Tailscale](#tailscale) | `beluga web --tailscale` on the server | Tailscale on the server and your device | you; others on your tailnet with a link |
+| [SSH](#ssh) | `beluga connect you@your-server` on your laptop | SSH to the server, Beluga on the laptop | you |
+| [Public link](#public-link) | `beluga web --public` on the server | nothing else | whoever opens a join link you give them |
+
+Each browser joins once, with a link that works one time for 10 minutes, and stays signed in. You can see and sign out every browser:
+
+```sh
+beluga web sessions
+beluga web revoke <name>
+```
+
+#### Phone
+
+`beluga setup` already paired one. For another phone, get the app (Android: `Beluga-<version>.apk` from the [latest release](https://github.com/kayraucklnc/beluga/releases/latest)), run this on the server and scan the QR code (or type the code under it):
+
+```sh
+beluga pair
+```
+
+The phone reaches the server directly, end to end encrypted, from any network. No port to open.
+
+#### Tailscale
+
+With Tailscale on the server and on your laptop or phone, logged in to the same tailnet:
+
+```sh
+beluga web --tailscale
+```
+
+It prints `https://<server>.<tailnet>.ts.net` and a QR code for your phone's browser. Your own Tailscale login gets straight in; anyone else on your tailnet needs the join link printed under it. Only your tailnet can reach it.
+
+#### SSH
+
+On your laptop (Linux or macOS), with the `beluga` command there too from the same install line, which starts nothing. Any host from `~/.ssh/config` works:
+
+```sh
+beluga connect you@your-server
+```
+
+Your browser opens on the server's Beluga, through an SSH tunnel. Nothing is opened on the server. Ctrl+C closes it.
+
+Without Beluga on the laptop, run `beluga web` on the server: it prints a join link and the `ssh -N -L …` line to paste on the laptop.
+
+#### Public link
+
+When you have neither SSH nor Tailscale:
+
+```sh
+beluga web --public
+```
+
+It prints a `https://….trycloudflare.com` address and a join link under it, which works from anywhere. Anyone with a join link gets in; the address alone only shows a page that asks for one. To close it, and every other way in by browser:
+
+```sh
+beluga web --off
+```
+
+### Day to day
+
+| Command | What it does |
+| --- | --- |
+| `beluga status` | whether it runs, its version, projects and phones |
+| `beluga project add <folder or git URL>` | add a project (a URL is cloned first) |
+| `beluga phones` | list the paired phones, or remove one |
+| `beluga logs -f` | follow its log |
+| `beluga up` · `beluga stop` | start it, stop it |
+| `beluga update` | the latest version, in place |
+
+Signing Claude in on a server, the service, updating and removing, and what each way in exposes: [docs/headless.md](docs/headless.md).
+
 ## Agents
 
-Your agent is Claude Code, signed in with your own subscription. It can also run on your own models (Ollama, or any Anthropic-compatible address): see [local models](docs/local-models.md). Codex is on the way.
+Your agent is Claude Code, signed in with your own subscription. It can also run on your own models (Ollama, or any Anthropic-compatible address): see [local models](docs/local-models.md). Or make it [OpenCode](docs/opencode.md), on the models you've set up in it. Codex is on the way.
 
 ## How it works
 

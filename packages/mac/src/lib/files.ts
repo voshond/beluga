@@ -3,7 +3,7 @@ import { peerName } from '@beluga/core/store.js';
 import { shareNameOf } from '@beluga/shared/share-names.js';
 import { dirName, joinPath } from '@beluga/shared/os-path.js';
 import type { SocketClient } from '@beluga/ipc/socket-client.js';
-import { inApp } from './boot.js';
+import { inApp, webServed } from './boot.js';
 import { runsWhenOpened } from './runs-when-opened.js';
 
 /**
@@ -32,8 +32,25 @@ export function mentionOf(state: AppState, at: Location): string {
 
 const parentOf = (p: string): string => dirName(p) || '/';
 
-/** Show a file of yours selected in Finder (in development: open its folder). */
+/**
+ * In a page the web port served there's no Finder on this side: a file comes down as a download;
+ * a folder's path is copied, and said.
+ */
+async function downloadOrSay(client: SocketClient, path: string): Promise<void> {
+  const [info] = await client.api.local.statFiles([path]);
+  if (info?.kind === 'file') {
+    const { download } = await import('./web-files.js');
+    await download(client, { path });
+    return;
+  }
+  const { copyText } = await import('./copy.js');
+  await copyText(path).catch(() => undefined);
+  client.store.dispatch({ type: 'toast', text: `It's on the computer Beluga runs on: ${path} (copied)`, level: 'info' });
+}
+
+/** Show a file of yours selected in Finder (in development: open its folder; in a served page: download it). */
 export async function revealInFinder(client: SocketClient, path: string): Promise<void> {
+  if (webServed()) return downloadOrSay(client, path);
   if (inApp()) {
     const { revealItemInDir } = await import('@tauri-apps/plugin-opener');
     await revealItemInDir(path);
@@ -44,6 +61,7 @@ export async function revealInFinder(client: SocketClient, path: string): Promis
 
 /** Open a file of yours the way Finder would (its default app, usually your editor). One that runs something shows in Finder instead. */
 export async function openWithDefaultApp(client: SocketClient, path: string): Promise<void> {
+  if (webServed()) return downloadOrSay(client, path);
   if (runsWhenOpened(path)) return revealInFinder(client, path);
   await client.api.local.openFolder(path);
 }
@@ -57,6 +75,11 @@ const errorText = (err: unknown): string => (err instanceof Error ? err.message 
 export async function saveFile(client: SocketClient, at: Location): Promise<void> {
   const name = at.path.split('/').pop() || 'download';
   try {
+    if (webServed()) {
+      const { download } = await import('./web-files.js');
+      await download(client, { at });
+      return;
+    }
     if (!inApp()) {
       await client.api.files.download(at);
       return;

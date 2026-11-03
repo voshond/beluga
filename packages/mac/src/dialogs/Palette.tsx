@@ -7,7 +7,8 @@ import { Icon, type IconName } from '../components/Icon.js';
 import { useActions } from '../lib/actions.js';
 import { asksBeforeWork } from '../lib/work-confirm.js';
 import { useApp, useBeluga, useUi } from '../lib/beluga.js';
-import { setPrefs, usePrefs, zoom } from '../lib/prefs.js';
+import { pickTheme, setPrefs, usePrefs, zoom } from '../lib/prefs.js';
+import { THEMES } from '../lib/themes.js';
 import { shortcutKeys } from '../lib/shortcuts.js';
 import { showPanelTab, tabsOf, togglePanel, toggleTerminal } from '../lib/panel.js';
 import { PANEL_LABELS, panelFits } from '../lib/panel-model.js';
@@ -100,6 +101,7 @@ export function Palette() {
     { id: 'shortcuts', label: 'Keyboard Shortcuts…', hint: 'Change any key', keywords: ['keys', 'shortcuts', 'remap', 'hotkeys', 'keyboard'], ...keysOf('help-keys'), icon: 'command', run: () => ui.patch({ settings: 'keyboard' }) },
     { id: 'inbox', label: 'Notifications', hint: 'What happened while you were elsewhere', ...keysOf('inbox'), icon: 'bell', run: () => ui.patch({ notices: true }) },
     { id: 'appearance', label: `Appearance: ${prefs.appearance === 'dark' ? 'light' : prefs.appearance === 'light' ? 'system' : 'dark'}`, icon: 'eye', run: () => setPrefs({ appearance: prefs.appearance === 'dark' ? 'light' : prefs.appearance === 'light' ? 'system' : 'dark' }) },
+    ...THEMES.map((th) => ({ id: `theme:${th.id}`, label: `Theme: ${th.name}`, hint: th.base === 'dark' ? 'A dark theme' : 'A light theme', keywords: ['theme', 'colours', 'colors', 'appearance'], icon: 'eye' as IconName, run: () => pickTheme(th.id) })),
     { id: 'sidebar', label: prefs.sidebar ? 'Hide the sidebar' : 'Show the sidebar', ...keysOf('toggle-sidebar'), icon: 'sidebar', run: () => setPrefs({ sidebar: !prefs.sidebar }) },
     ...(panelFits(state.view)
       ? [{ id: 'inspector', label: prefs.inspector ? 'Hide the panel' : 'Show the panel', hint: 'Changes, files, terminal, info', ...keysOf('toggle-inspector'), icon: 'panelRight' as IconName, run: () => togglePanel(state.view) }]

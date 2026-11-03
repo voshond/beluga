@@ -506,3 +506,11 @@
 .planLink:hover {
   text-decoration: underline;
 }
+
+/* Near-black themes (OLED, Super Dark): no shadow shows, so a lit edge; the accent comes into it while you type. */
+:global(:root[data-edges='lit']) .box:not(.asking) {
+  box-shadow: 0 0 0 0.5px var(--hairline-strong), var(--rim);
+}
+:global(:root[data-edges='lit']) .box:not(.asking):focus-within {
+  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--accent) 55%, var(--hairline-strong)), var(--rim);
+}

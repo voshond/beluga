@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { BelugaClient } from '@beluga/ipc/client.js';
-import { inApp } from './boot.js';
+import { inApp, webServed } from './boot.js';
 import { useBeluga } from './beluga.js';
 
 /** A project's icon as an image URL, or null when it has none (it gets its initial instead). */
@@ -51,18 +51,31 @@ export function useProjectIcon(projectId: string): Icon | undefined {
   return icon;
 }
 
-/** Choose folders with the Mac's own Open panel (undefined outside the app, or when cancelled). */
+/**
+ * Choose folders with the Mac's own Open panel; in a page the web port served, the server's
+ * folders in Beluga's own picker (undefined in a development browser, or when cancelled).
+ */
 export async function pickFolders(title: string): Promise<string[] | undefined> {
-  if (!inApp()) return undefined;
+  if (!inApp()) {
+    if (!webServed()) return undefined;
+    const { browseFolder } = await import('../dialogs/FolderBrowser.js');
+    const picked = await browseFolder(title);
+    return picked ? [picked] : undefined;
+  }
   const { open } = await import('@tauri-apps/plugin-dialog');
   const picked = await open({ directory: true, multiple: true, title });
   if (!picked) return undefined;
   return Array.isArray(picked) ? picked : [picked];
 }
 
-/** Choose an image file with the Open panel. */
+/** Choose an image file with the Open panel (in a served page: the browser's, uploaded to the server). */
 export async function pickImage(title: string): Promise<string | undefined> {
-  if (!inApp()) return undefined;
+  if (!inApp()) {
+    if (!webServed()) return undefined;
+    const { chooseLocalFiles, uploadFile } = await import('./web-files.js');
+    const [file] = await chooseLocalFiles({ accept: 'image/png,image/svg+xml,image/jpeg,image/webp,image/x-icon' });
+    return file ? (await uploadFile(file)).path : undefined;
+  }
   const { open } = await import('@tauri-apps/plugin-dialog');
   const picked = await open({ multiple: false, title, filters: [{ name: 'Images', extensions: ['png', 'svg', 'jpg', 'jpeg', 'webp', 'ico'] }] });
   return typeof picked === 'string' ? picked : undefined;

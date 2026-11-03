@@ -79,6 +79,8 @@ const peerKey = z.string().regex(/^[\w-]{8,64}$/);
 /** Choices that persist between runs in ~/.beluga/settings.json. */
 export const Settings = z.object({
   name: z.string().regex(/^[\w.-]{1,32}$/).optional(),
+  /** What your phone calls this computer (`beluga setup`); unset: its own name (Sharing name, else host name). */
+  computerName: z.string().trim().min(1).max(64).optional(),
   theme: z.enum(THEMES).default('calm'),
   /** Default trust for people you haven't chosen a level for. Unset until you answer the welcome screen once. */
   policy: z.enum(['ask', 'auto', 'deny']).optional(),

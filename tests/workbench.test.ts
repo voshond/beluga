@@ -101,7 +101,7 @@ async function solo(dir: string, opts: { findPr?: (d: string, b: string) => Prom
   session.start();
   sessions.push(session);
   await waitFor(() => store.getState().self, 4000);
-  return { session, state: store.getState, screen: screen.store, runs, workspaces, desktop, opened, bench: session.workbench! };
+  return { session, store, state: store.getState, screen: screen.store, runs, workspaces, desktop, opened, bench: session.workbench! };
 }
 
 const projectOf = (w: WorkspaceManager) => w.list.find((p) => p.root)!;
@@ -464,6 +464,24 @@ describe('models, usage, space and search', () => {
     kay.bench.openHit(1);
     expect(kay.screen.getState().view).toMatchObject({ kind: 'workspace', id: b!.id });
     kay.bench.search('nothing like this');
+    expect(kay.state().search.hits).toEqual([]);
+  });
+
+  it("doesn't find a deleted workspace's conversation, even one still open", async () => {
+    hub = await startHub({ keys });
+    const kay = await solo(repo());
+    const ws = await kay.session.workspaces!.newWorktree(projectOf(kay.workspaces).id, 'gone');
+    kay.session.askOwnClaude('the Roberto handoff', `ws:${ws!.id}`);
+    await waitFor(() => kay.runs.length === 1, 4000);
+    kay.bench.search('roberto');
+    expect(kay.state().search.hits.length).toBeGreaterThan(0);
+    await kay.session.workspaces!.remove(ws!.id);
+    expect(kay.state().log.some((l) => l.channel === `ws:${ws!.id}`)).toBe(false);
+    kay.bench.search('roberto');
+    expect(kay.state().search.hits).toEqual([]);
+    // Words left behind for one that's gone some other way (its project removed): not listed either.
+    kay.store.dispatch({ type: 'log_upsert', channel: 'ws:wt-vanished', items: [{ id: 'y', type: 'chat', channel: 'ws:wt-vanished', from: 'z', name: 'bob', text: 'Roberto again', ts: 6, byAgent: false }] });
+    kay.bench.search('roberto');
     expect(kay.state().search.hits).toEqual([]);
   });
 

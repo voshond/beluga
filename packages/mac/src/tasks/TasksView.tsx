@@ -10,11 +10,12 @@ import { TaskBoard } from './TaskBoard.js';
 import { TaskList } from './TaskList.js';
 import { ProjectIcon } from '../components/ProjectIcon.js';
 import { PickMenu } from './PickMenu.js';
-import { type Display, SCOPES, ago, type Scope, assigneesIn, boardChoices, boardRepos, boardToShow, connected, doneCount, pickedRepos, reposLabel, scopeCounts, scoped, statusesFor, taskGraph, untucked } from './tasks-model.js';
+import { type Display, SCOPES, ago, type Scope, assigneesIn, boardChoices, boardRepos, boardToShow, connected, doneCount, pickedRepos, reposLabel, scopeCounts, scoped, statusesFor, taskGraph, untucked, workGoingOn } from './tasks-model.js';
 import { BoardMark, RepoStack, ShowingBoardProvider, useDeleteBoard } from './boards.js';
 import { useTaskFileDrop } from './use-task-drop.js';
 import { revealSubTasks, setTasksPrefs, useBoard, useSelfId, useSolo, useTaskActions, useTasksPrefs } from './use-tasks.js';
 import t from './tasks.module.css';
+import g from '../components/graph/graph.module.css';
 import { TeamOffers } from '../team/Team.js';
 import { NoProjects } from '../work/NoProjects.js';
 import { isShortcut } from '../lib/shortcuts.js';
@@ -83,10 +84,11 @@ export function TasksView() {
   // The Archive is a list: nothing in it moves or waits on anything.
   const display = archive ? 'list' : prefs.display;
   // Only tasks tied to others: the rest have nothing to show there.
-  const graph = useMemo(() => {
-    if (display !== 'graph') return undefined;
+  // It opens on the work going on (a busy board too big to read whole), else what's next.
+  const { graph, going } = useMemo(() => {
+    if (display !== 'graph') return { graph: undefined, going: [] };
     const tied = connected(board, issues);
-    return tied.length ? taskGraph(board, tied) : undefined;
+    return tied.length ? { graph: taskGraph(board, tied), going: workGoingOn(tied) } : { graph: undefined, going: [] };
   }, [display, board, issues]);
   // Linear sync and teams are a repo's: a board of its own has neither.
   const sync = project && here && !here.own ? board.sync?.[project] : undefined;
@@ -274,9 +276,9 @@ export function TasksView() {
         ) : display === 'graph' && !graph ? (
           <Empty icon="graph" title="Nothing waits on anything here" detail="Mark what blocks what, or add sub-tasks, on a task’s page: they show up here as a graph." />
         ) : display === 'graph' && graph ? (
-          <div className={t.graph}>
+          <div className={cx(t.graph, g.palette)}>
             <Suspense fallback={<div className={t.graphNote}>Laying out…</div>}>
-              <FlowGraph graph={graph} mode="full" localImages={false} openLabel="Open Task" onOpen={(id) => open({ id })} />
+              <FlowGraph key={`${project}:${prefs.scope}:${who}:${worktree}:${picked.join(',')}`} graph={graph} mode="full" localImages={false} openLabel="Open Task" onOpen={(id) => open({ id })} live pack startAt={going} />
             </Suspense>
           </div>
         ) : (

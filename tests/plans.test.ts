@@ -1228,6 +1228,22 @@ describe('the plan’s branch: tasks start from it, milestones merge into it, on
     expect(t.plans.need(t.plan.id).activity.map((e) => e.text)).toContain('pull request #9 was closed without merging: its tasks stay merged into the plan');
   });
 
+  it('a tick looks only at a PR that’s due (a conflict seen just now waits its beat); looking now sees it solved', async () => {
+    const t = await running();
+    await t.passSafe();
+    await t.work.openPr(t.plan.id);
+    const open = t.plans.need(t.plan.id).pr!;
+    t.setPr({ ...open, conflicts: true });
+    await t.work.pilot.pollPrs('tick');
+    expect(t.plans.need(t.plan.id).pr?.conflicts).toBe(true);
+    t.setPr({ ...open, conflicts: false });
+    await t.work.pilot.pollPrs('tick');
+    await t.work.pilot.pollPrs('focus');
+    expect(t.plans.need(t.plan.id).pr?.conflicts).toBe(true);
+    await t.work.pilot.pollPrs();
+    expect(t.plans.need(t.plan.id).pr?.conflicts).toBeUndefined();
+  });
+
   it('Merge into main locally: every Merged into Plan task is Done', async () => {
     const t = await running();
     await t.passSafe();

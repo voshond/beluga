@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../components/Icon.js';
 import { cx } from '../components/ui.js';
-import { inApp } from '../lib/boot.js';
+import { inApp, webServed } from '../lib/boot.js';
 import { toast, useApi, useBeluga } from '../lib/beluga.js';
 import { type Box, MAX_DROPPED, droppedFiles, sameBox } from '../chat/drop-model.js';
 import t from './tasks.module.css';
@@ -65,6 +65,42 @@ export function useTaskFileDrop(): ReactNode {
   };
   const latest = useRef(add);
   latest.current = add;
+
+  // In a page the web port served, the browser's own drag and drop: the files are uploaded to the
+  // computer Beluga runs on first, then added by their path there.
+  useEffect(() => {
+    if (inApp() || !webServed()) return;
+    const scale = (): number => window.devicePixelRatio || 1;
+    const hasFiles = (e: DragEvent): boolean => [...(e.dataTransfer?.types ?? [])].includes('Files');
+    const onOver = (e: DragEvent): void => {
+      if (!hasFiles(e)) return;
+      const here = overAt(e.clientX * scale(), e.clientY * scale());
+      if (!here) return setOver(undefined);
+      e.preventDefault();
+      setOver((was) => (was?.id === here.id && sameBox(was.box, here.box) ? was : here));
+    };
+    const onLeave = (e: DragEvent): void => {
+      if (!e.relatedTarget) setOver(undefined);
+    };
+    const onDrop = (e: DragEvent): void => {
+      const here = hasFiles(e) ? overAt(e.clientX * scale(), e.clientY * scale()) : undefined;
+      setOver(undefined);
+      if (!here) return;
+      e.preventDefault();
+      const files = [...(e.dataTransfer?.files ?? [])].slice(0, MAX_DROPPED);
+      void import('../lib/web-files.js')
+        .then(({ uploadFiles }) => uploadFiles(files, (file, err) => toast(client, `Couldn’t upload ${file.name}: ${message(err)}`, 'error')))
+        .then((sent) => (sent.length ? latest.current(here, sent.map((u) => u.path)) : undefined));
+    };
+    document.addEventListener('dragover', onOver);
+    document.addEventListener('dragleave', onLeave);
+    document.addEventListener('drop', onDrop);
+    return () => {
+      document.removeEventListener('dragover', onOver);
+      document.removeEventListener('dragleave', onLeave);
+      document.removeEventListener('drop', onDrop);
+    };
+  }, [client]);
 
   useEffect(() => {
     if (!inApp()) return;

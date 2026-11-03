@@ -27,6 +27,7 @@ export interface RunFailure {
 const WHO: Readonly<Record<string, { readonly agent: string; readonly app: string; readonly vendor: string }>> = {
   claude: { agent: 'Claude', app: 'Claude Code', vendor: 'Anthropic' },
   codex: { agent: 'Codex', app: 'Codex', vendor: 'OpenAI' },
+  opencode: { agent: 'OpenCode', app: 'OpenCode', vendor: 'its model provider' },
 };
 
 /** What Continue (and an automatic resume) sends: the same session goes on. */

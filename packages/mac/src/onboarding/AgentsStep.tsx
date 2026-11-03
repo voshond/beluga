@@ -9,7 +9,7 @@ import { useApi, useApp, useBeluga } from '../lib/beluga.js';
 import { copyText } from '../lib/copy.js';
 import { openExternal } from '../lib/system.js';
 import { everyWhileShown } from '../lib/window-active.js';
-import { AGENT_RECHECK_MS, type AgentRow, CODEX_DOWNLOAD, CODEX_NPM, FIX_LABEL, agentRows, awaitingAgent, pickDefault } from './agent-setup.js';
+import { AGENT_RECHECK_MS, type AgentRow, INSTALLS, agentRows, awaitingAgent, fixLabel, pickDefault } from './agent-setup.js';
 import { EASE_OUT, Rise, SPRING, Words } from './fx.js';
 import { Glass } from './Glass.js';
 import s from './onboarding.module.css';
@@ -21,8 +21,8 @@ export const LOCAL_MODELS_ID = 'settings-local-models';
  * Your agents as this Mac has them (BLG-507): asked when shown, again when you come back to the
  * window (from Terminal's sign-in, say), and every few seconds on their own while one is still
  * missing or signed out (Codex installed from Beluga's own terminal never leaves the window), with
- * Check Again for the rest; and what each row's button does: sign in (in Terminal), get Codex, or
- * set up a local model (Settings › Agent).
+ * Check Again for the rest; and what each row's button does: sign in (in Terminal), get Codex or
+ * OpenCode, or set up a local model (Settings › Agent).
  */
 export function useAgents(): { rows: AgentRow[]; checking: boolean; checked: boolean; check: () => Promise<readonly RuntimeChoice[] | undefined>; act: (row: AgentRow) => void } {
   const api = useApi();
@@ -58,7 +58,7 @@ export function useAgents(): { rows: AgentRow[]; checking: boolean; checked: boo
   useEffect(() => (awaiting ? everyWhileShown(() => void look(true), AGENT_RECHECK_MS) : undefined), [awaiting, look]);
   const act = (row: AgentRow): void => {
     if (row.fix === 'sign_in') void api.workbench.agentSignIn(row.id);
-    else if (row.fix === 'install') void openExternal(CODEX_DOWNLOAD);
+    else if (row.fix === 'install' && INSTALLS[row.id]) void openExternal(INSTALLS[row.id]!.page);
     else if (row.fix === 'set_up') {
       ui.patch({ settings: 'claude' });
       setTimeout(() => document.getElementById(LOCAL_MODELS_ID)?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 120);
@@ -67,21 +67,23 @@ export function useAgents(): { rows: AgentRow[]; checking: boolean; checked: boo
   return { rows, checking, checked, check, act };
 }
 
-/** Codex's npm command, a tap to copy. */
-export function CopyCommand({ className }: { readonly className?: string }) {
+/** An agent's install command (Codex's, OpenCode's npm one), a tap to copy. */
+export function CopyCommand({ className, runtime = 'codex' }: { readonly className?: string; readonly runtime?: string }) {
   const [copied, setCopied] = useState(false);
+  const command = INSTALLS[runtime]?.command;
+  if (!command) return null;
   return (
     <button
       type="button"
       className={className}
-      aria-label={`Copy ${CODEX_NPM}`}
+      aria-label={`Copy ${command}`}
       onClick={() => {
-        void copyText(CODEX_NPM);
+        void copyText(command);
         setCopied(true);
         setTimeout(() => setCopied(false), 1600);
       }}
     >
-      <code>{CODEX_NPM}</code>
+      <code>{command}</code>
       <Icon name={copied ? 'check' : 'copy'} size={11} />
     </button>
   );
@@ -146,10 +148,10 @@ export function AgentsStep() {
                     <span className={s.rowDetail}>{row.detail}</span>
                   </span>
                 </button>
-                {row.fix === 'install' ? <CopyCommand className={s.agentCommand} /> : null}
+                {row.fix === 'install' ? <CopyCommand className={s.agentCommand} runtime={row.id} /> : null}
                 {row.fix ? (
                   <button type="button" className={cx(s.input, s.rowButton)} onClick={() => act(row)}>
-                    {FIX_LABEL[row.fix]}
+                    {fixLabel(row)}
                   </button>
                 ) : null}
               </motion.div>

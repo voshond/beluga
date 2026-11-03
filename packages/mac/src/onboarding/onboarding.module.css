@@ -471,6 +471,33 @@
   border-radius: 50%;
   box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);
 }
+/* A theme: its background, edged by its sidebar, with its accent at the centre (BLG-696). */
+.themeSwatch {
+  width: 24px;
+  height: 24px;
+  box-shadow: inset 0 0 0 1.5px var(--t-edge), inset 0 0 0 2px rgba(127, 127, 127, 0.35);
+}
+.themeSwatch::after {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: var(--t-dot);
+}
+/* The label and the name as wide as each other, so the swatches sit in the middle. */
+.themeLabel {
+  width: 150px;
+  text-align: right;
+}
+.themeName {
+  width: 150px;
+  color: var(--text-2);
+  text-align: left;
+  white-space: nowrap;
+}
+.accentAfter {
+  margin-top: 16px;
+}
 .swatch:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;

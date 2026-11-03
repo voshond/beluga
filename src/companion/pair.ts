@@ -235,10 +235,14 @@ export class DevicePairing {
         return refuse("That pairing couldn't be verified", 'unverified');
       }
       if (msg.proto !== COMPANION_PROTO.major) return refuse(msg.proto > COMPANION_PROTO.major ? 'Update Beluga on your Mac to pair this phone' : 'Update the Beluga app to pair with this Mac', msg.proto > COMPANION_PROTO.major ? 'version-mac' : 'version-app');
-      if (open.waiting) return refuse('Another phone is pairing right now; try again in a moment', 'busy');
       const link = stream.remotePublicKey.toString('hex');
+      const before = open.waiting;
+      if (before && before.link !== link) return refuse('Another phone is pairing right now; try again in a moment', 'busy');
       open.waiting = { socket, hello: msg, link, hh, auth, fingerprint: fingerprint(hh, stream.remotePublicKey, pairingKey) };
       send(socket, { t: 'dev_wait', fingerprint: open.waiting.fingerprint });
+      // The same phone again (its app tried once more with the same keys, or another way won):
+      // the newer stream is the one it waits on; the older one goes quietly (BLG-674).
+      if (before) before.socket.close(1000);
       this.opts.onChange();
     });
   }

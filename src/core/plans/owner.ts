@@ -15,8 +15,11 @@ export interface PlanOwner {
   readonly issue: Issue;
 }
 
-/** Plans that show in the sidebar as one row: being written, or running. */
-export const isLivePlan = (plan: Plan): boolean => plan.status !== 'done';
+/**
+ * Plans that show in the sidebar as one row: being written, running, or every milestone passed
+ * with its branch not in main yet (its pull request still to open or merge): it goes once it ships.
+ */
+export const isLivePlan = (plan: Plan): boolean => plan.status !== 'done' || (Boolean(plan.branch) && !plan.shipped && plan.pr?.state !== 'MERGED');
 
 /** Every worktree that belongs to a running plan (workspace id → its plan's id). */
 export function planWorktrees(plans: PlansState, board: BoardState): ReadonlyMap<string, string> {

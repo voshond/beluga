@@ -237,6 +237,26 @@ export async function dropSession(dir: string, sessionId: string, root: string =
 }
 
 /**
+ * Every folder inside `under` that Claude Code has sessions for, as each transcript says it ran
+ * (folder names can't be read back: "a/b-c" and "a-b/c" are filed alike). For finding the ones a
+ * deleted folder left behind.
+ */
+export async function sessionFoldersUnder(under: string, root: string = claudeConfigDir()): Promise<string[]> {
+  const projects = path.join(root, 'projects');
+  const prefixes = pathVariants(under).map((v) => `${encodeProjectDir(v)}-`);
+  const inside = (cwd: string): boolean => pathVariants(under).some((v) => isUnder(v, cwd) && path.resolve(cwd) !== path.resolve(v));
+  const out = new Set<string>();
+  for (const name of await readdir(projects).catch(() => [] as string[])) {
+    if (!prefixes.some((p) => name.startsWith(p))) continue;
+    for (const file of transcriptsIn(path.join(projects, name))) {
+      const cwd = await cwdOf(file);
+      if (cwd && inside(cwd)) out.add(path.resolve(cwd));
+    }
+  }
+  return [...out];
+}
+
+/**
  * Forget every Claude Code session that ran in a folder being deleted for good (BLG-532): its
  * transcripts, their sub-agent and tool-result folders, and what Claude Code keeps per session
  * elsewhere. A transcript filed alike that ran in another folder ("a/b-c" and "a-b/c" are filed

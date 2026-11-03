@@ -1689,6 +1689,8 @@ export class Workbench {
       if (channel === 'draft') continue;
       const ws = channel.startsWith('ws:') ? this.manager.find(channel.slice(3)) : undefined;
       const shared = channel.startsWith('ws:') ? state.shared.find((w) => w.id === channel.slice(3)) : undefined;
+      // A workspace that's gone (deleted, its project removed): nothing to open, so nothing to find.
+      if (channel.startsWith('ws:') && !ws && !shared) continue;
       sources.push({ channel, place: ws ? placeOf(ws) : shared ? shared.name : channel === 'room' ? (state.peers.length > 1 ? 'Group chat' : 'Chat') : channel, items: state.log.filter((l) => l.channel === channel), archived: ws?.archived });
     }
     for (const ws of this.manager.list.flatMap((p) => p.workspaces)) {

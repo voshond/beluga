@@ -447,3 +447,11 @@ button.rowPr:focus-visible {
 .waiting {
   min-width: 0;
 }
+
+/* Near-black themes: a lit edge in place of the shadow (chat/composer.module.css). */
+:global(:root[data-edges='lit']) .box {
+  box-shadow: 0 0 0 0.5px var(--hairline-strong), var(--rim);
+}
+:global(:root[data-edges='lit']) .box:focus-within {
+  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--accent) 55%, var(--hairline-strong)), var(--rim);
+}

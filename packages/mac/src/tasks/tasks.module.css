@@ -1066,6 +1066,9 @@
   position: relative;
   height: 100%;
   background: var(--bg-sunken);
+}
+/* On the graph itself, so they win over the palette .graph also carries (graph.module.css). */
+.graph > * {
   --graph-bg: var(--bg-sunken);
   --graph-line: color-mix(in srgb, var(--text-3) 78%, transparent);
   --graph-block: color-mix(in srgb, var(--error) 75%, var(--text-3));

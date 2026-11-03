@@ -7,7 +7,7 @@
  * and the phone import it.
  */
 
-export type FallbackId = 'compact' | 'fork' | 'rewind' | 'skills' | 'guests';
+export type FallbackId = 'compact' | 'fork' | 'rewind' | 'skills' | 'guests' | 'friends';
 
 export interface RuntimeFallback {
   /** The RuntimeCapabilities flag it stands in for (runtime/types.ts), when there's one. */
@@ -26,7 +26,32 @@ export const RUNTIME_FALLBACKS: Readonly<Record<string, Readonly<Partial<Record<
     // agent-wording: claude (the way out is the Claude runtime, by name)
   guests: { capability: 'canGateEveryTool', reason: 'Codex can’t check each step, so it can’t answer guests. Switch this conversation to Claude for them.' },
   },
+  opencode: {
+    rewind: { reason: 'On OpenCode, going back puts the files back but starts a new conversation from your edited message.' },
+    // agent-wording: claude (the way out is the Claude runtime, by name)
+    guests: { capability: 'canGateEveryTool', reason: 'Your OpenCode plugins can let a step through without Beluga asking, so OpenCode doesn’t answer guests. Switch this conversation to Claude for them.' },
+    // agent-wording: claude (the way out is the Claude runtime, by name)
+    friends: { capability: 'canGateEveryTool', reason: 'Your OpenCode plugins can let a step through without Beluga asking, so friends’ tasks go to Claude (or Codex) instead.' },
+  },
 };
+
+/**
+ * What a runtime doesn't have at all (BLG-686), so the screens don't offer it there: no control
+ * that only errors. `btw`: a side question about the conversation (/btw), which forks its session;
+ * `terminal`: the agent's own terminal app on a conversation (Claude Code's TUI; a local model
+ * runs in it). docs/parity.md names each as `missing:<id>` in the runtime's column.
+ */
+export type FeatureId = 'btw' | 'terminal';
+
+export const RUNTIME_MISSING: Readonly<Record<string, readonly FeatureId[]>> = {
+  codex: ['btw', 'terminal'],
+  opencode: ['terminal'],
+};
+
+/** Whether `feature` is there on `runtime` (unset: Claude's, which has them all). */
+export function runtimeHas(runtime: string | undefined, feature: FeatureId): boolean {
+  return !runtime || !RUNTIME_MISSING[runtime]?.includes(feature);
+}
 
 type Ref = { readonly runtime: string };
 

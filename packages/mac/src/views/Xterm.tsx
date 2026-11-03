@@ -199,12 +199,12 @@ export function Xterm({ termKey, start, focus = true, gpu = false, extend, onKey
     if (import.meta.env.DEV) ((window as unknown as { __belugaTerms?: Record<string, Terminal> }).__belugaTerms ??= {})[termKey] = term;
     const resize = new ResizeObserver(settleMs > 0 ? settled : refit);
     resize.observe(el);
-    // Follow the appearance (light/dark, accent) as it changes.
+    // Follow the appearance (light/dark, the theme, accent) as it changes.
     const restyle = new MutationObserver(() => {
       term.options.theme = themeNow();
       el.style.background = themeNow().background;
     });
-    restyle.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style', 'class'] });
+    restyle.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-palette', 'style', 'class'] });
     if (focus) term.focus();
     return () => {
       live.current = undefined;

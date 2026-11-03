@@ -10,7 +10,8 @@ import g from './graph.module.css';
  * color. Pointing at a node, or a walkthrough step, darkens its lines and fades the rest.
  */
 
-export type EdgeState = 'hot' | 'dim' | 'none';
+/** Lit or not: the canvas dims the lines that aren't lit while something is (data-lit). */
+export type EdgeState = 'hot' | 'none';
 
 export interface EdgeData extends Record<string, unknown> {
   readonly kind: EdgeKind;
@@ -61,14 +62,14 @@ export const GraphEdge = memo(function GraphEdge({ id, sourceX, sourceY, targetX
   const kind = data?.kind ?? 'flow';
   const state = data?.state ?? 'none';
   const markerName = kind === 'blocks' ? 'blocks' : data?.emphasis ? 'accent' : state === 'hot' ? 'hot' : 'plain';
-  const dot = data?.motion && moving(kind, data.animated) && state !== 'dim';
+  const dot = data?.motion && moving(kind, data.animated);
   return (
     <>
       <BaseEdge
         id={id}
         path={path}
         markerEnd={`url(#${data?.markers}-${markerName})`}
-        className={cx(g.edge, g[`edge_${kind}`], data?.emphasis && g.edgeEmphasis, state === 'hot' && g.edgeHot, state === 'dim' && g.edgeDim, data?.motion && kind === 'async' && g.edgeFlowing)}
+        className={cx(g.edge, g[`edge_${kind}`], data?.emphasis && g.edgeEmphasis, state === 'hot' && g.edgeHot, data?.motion && kind === 'async' && g.edgeFlowing)}
         interactionWidth={14}
       />
       {dot ? (
@@ -78,7 +79,7 @@ export const GraphEdge = memo(function GraphEdge({ id, sourceX, sourceY, targetX
       ) : null}
       {data?.label ? (
         <EdgeLabelRenderer>
-          <div className={cx(g.edgeLabel, data.emphasis && g.edgeLabelAccent, kind === 'blocks' && g.edgeLabelBlocks, state === 'hot' && g.edgeLabelHot, state === 'dim' && g.edgeLabelDim, 'nopan')} style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}>
+          <div className={cx(g.edgeLabel, data.emphasis && g.edgeLabelAccent, kind === 'blocks' && g.edgeLabelBlocks, state === 'hot' && g.edgeLabelHot, 'nopan')} style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}>
             {data.label}
           </div>
         </EdgeLabelRenderer>

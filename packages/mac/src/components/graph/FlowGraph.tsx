@@ -13,15 +13,16 @@ import {
   useReactFlow,
   useUpdateNodeInternals,
 } from '@xyflow/react';
-import type { Graph, GraphDirection } from '@beluga/shared/graph-spec.js';
+import type { Graph, GraphDirection, GraphNode } from '@beluga/shared/graph-spec.js';
 import { IconButton } from '../ui.js';
 import { reducedMotion, useDocTheme } from '../markdown/use-doc-theme.js';
-import { type ElkOutput, type Focus, INLINE_MAX_HEIGHT, type Placed, type Route, SIMPLEX_MAX_EDGES, type Size, backEdges, bestLayout, elkGraph, handleSides, inlineAspect, neighborhood, nodeBoxes, parentsFirst, placeLabels, placesOf, routesOf, stepFocus, turned } from './graph-model.js';
+import { type ElkOutput, type Focus, INLINE_MAX_HEIGHT, type Placed, type Route, SIMPLEX_MAX_EDGES, type Size, backEdges, bestLayout, elkGraph, fitZoom, handleSides, inlineAspect, neighborhood, nodeBoxes, parentsFirst, placeLabels, placesOf, routesOf, stepFocus, turned } from './graph-model.js';
+import { PACK_FROM, packedLayout, startView } from './graph-pack.js';
 import { cachedLayout, rememberLayout } from './layout-cache.js';
 import { layout } from './layout.js';
 import { useSharpZoom } from './sharp-zoom.js';
 import { NODE_TYPES, type FlowNode, drawingOf } from './nodes.js';
-import { EDGE_TYPES, EdgeMarkers, type EdgeState, type FlowEdge } from './edges.js';
+import { EDGE_TYPES, EdgeMarkers, type FlowEdge } from './edges.js';
 import { Inspector } from './Inspector.js';
 import { Walkthrough } from './Walkthrough.js';
 import g from './graph.module.css';
@@ -31,6 +32,10 @@ import g from './graph.module.css';
  * sight to learn their sizes, laid out, then shown. Point at a node to see what it touches,
  * click it for its details, step through the walkthrough Claude wrote, turn the layout, or open
  * the graph in the whole window (minimap, two-finger scroll pans, pinch zooms).
+ *
+ * A live graph (a board's What Waits on What, BLG-691) keeps its canvas while what it shows changes:
+ * a status moving just redraws that card, and a task coming or going lays it out again in place,
+ * keeping where you are.
  */
 
 export interface FlowGraphProps {
@@ -54,6 +59,12 @@ export interface FlowGraphProps {
    * a new graph (a CI run moving along) updates the drawing in place instead of laying it out again.
    */
   readonly shapeKey?: string;
+  /** It shows something that changes as you look (a board): new shapes lay out in place, keeping the view. */
+  readonly live?: boolean;
+  /** A busy graph of loose pieces (a board): packed into the frame's shape (graph-pack.ts). */
+  readonly pack?: boolean;
+  /** What a graph too big to read whole opens on (the work going on), in the whole window. */
+  readonly startAt?: readonly string[];
 }
 
 /** A fresh canvas for each graph (Claude rewrote the block, the file changed): nothing carries over. */
@@ -68,7 +79,7 @@ const keyOf = (graph: Graph): number => {
 export default function FlowGraph(props: FlowGraphProps) {
   return (
     <ReactFlowProvider>
-      <Canvas key={props.shapeKey ?? keyOf(props.graph)} {...props} />
+      <Canvas key={props.live ? 'live' : (props.shapeKey ?? keyOf(props.graph))} {...props} />
     </ReactFlowProvider>
   );
 }
@@ -76,6 +87,8 @@ export default function FlowGraph(props: FlowGraphProps) {
 type Phase = 'measuring' | 'laying-out' | 'ready' | 'failed';
 
 const NO_FOCUS: Focus = { nodes: new Set(), edges: new Set() };
+
+const cx = (...c: Array<string | false | undefined>): string => c.filter(Boolean).join(' ');
 
 function baseNodes(graph: Graph, direction: GraphDirection, localImages: boolean): FlowNode[] {
   const sides = handleSides(direction);
@@ -104,7 +117,15 @@ function placeNodes(nodes: readonly FlowNode[], places: ReadonlyMap<string, Plac
 /** Room for the walkthrough's caption along the bottom. */
 const STEP_PADDING = { top: '48px', left: '48px', right: '48px', bottom: '150px' } as const;
 
-function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidOut, cacheKey, onOpen, openLabel }: FlowGraphProps) {
+/** What a live graph's layout depends on: the nodes, the groups they're in, and the lines (in any order: a task moving up its list isn't a new shape). */
+const shapeOf = (graph: Graph): string => JSON.stringify([graph.nodes.map((n) => `${n.id}:${n.type}:${n.group ?? ''}`).sort(), graph.edges.map((e) => `${e.id}:${e.from}:${e.to}`).sort()]);
+
+const sameNode = (a: GraphNode, b: GraphNode): boolean => a === b || JSON.stringify(a) === JSON.stringify(b);
+
+/** How small you can zoom out: always far enough to see the whole graph. */
+const MIN_ZOOM = 0.15;
+
+function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidOut, cacheKey, onOpen, openLabel, live, pack, startAt }: FlowGraphProps) {
   const uid = useId().replace(/[^\w-]/g, '');
   const theme = useDocTheme();
   const motion = !reducedMotion();
@@ -129,6 +150,13 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
   // ELK's lines, and the nodes dragged since (their lines curve to wherever they are now).
   const [routes, setRoutes] = useState<ReadonlyMap<string, Route>>(cached?.routes ?? new Map());
   const [moved, setMoved] = useState<ReadonlySet<string>>(new Set());
+  // Nodes new to a live graph, drawn out of sight until the layout has a place for them.
+  const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
+  // Bumped when a live graph changes shape: lay it out again once its new nodes are measured.
+  const [reshaped, setReshaped] = useState(0);
+  const [floor, setFloor] = useState(MIN_ZOOM);
+  // You moved the view yourself: a resize leaves it where you put it.
+  const touched = useRef(false);
   const run = useRef(0);
   const wrap = useRef<HTMLDivElement>(null);
   const duration = motion ? 450 : 0;
@@ -157,16 +185,50 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
     if (ids.length) void flow.fitView({ nodes: ids, padding: STEP_PADDING, maxZoom: 1.1, duration: ms });
     else frameAll(ms);
   };
-  const frame = (ms: number): void => (stepRef.current >= 0 ? frameStep(stepRef.current, ms) : frameAll(ms));
+  // In the whole window, a graph too big to read whole opens readable, on the work going on (startAt).
+  const frameStart = (ms: number): void => {
+    const box = wrap.current;
+    const b = bounds.current;
+    if (mode === 'inline' || !startAt || !box || !b) return frameAll(ms);
+    const boxOf = (id: string) => {
+      const n = flow.getInternalNode(id);
+      return n ? { ...n.internals.positionAbsolute, width: n.measured.width ?? n.width ?? 0, height: n.measured.height ?? n.height ?? 0 } : undefined;
+    };
+    // The outermost group a node is in (or itself): where the view's corner may sit.
+    const outermost = (id: string): string => {
+      const up = flow.getInternalNode(id)?.parentId;
+      return up ? outermost(up) : id;
+    };
+    const ids = startAt.filter((id) => flow.getInternalNode(id)?.data.node.type !== 'group');
+    const wanted = ids.flatMap((id) => boxOf(id) ?? []);
+    const anchors = [...new Set(ids.map(outermost))].flatMap((id) => boxOf(id) ?? []);
+    void flow.setViewport(startView(b, { width: box.clientWidth, height: box.clientHeight }, wanted, anchors), { duration: ms });
+  };
+  const frame = (ms: number): void => (stepRef.current >= 0 ? frameStep(stepRef.current, ms) : frameStart(ms));
 
-  // The same shape with new words or statuses (shapeKey): the nodes take them where they are.
+  // The same shape with new words or statuses (shapeKey, or a live graph): only the nodes that changed take them, where they are.
   const first = useRef(graph);
   useEffect(() => {
     if (first.current === graph) return;
+    const before = first.current;
     first.current = graph;
+    if (live && shapeOf(before) !== shapeOf(graph)) return reshape();
     const by = new Map(graph.nodes.map((n) => [n.id, n]));
-    setNodes((now) => now.map((n) => (by.has(n.id) ? { ...n, data: { ...n.data, node: by.get(n.id)! } } : n)));
+    setNodes((now) => now.map((n) => (by.has(n.id) && !sameNode(n.data.node, by.get(n.id)!) ? { ...n, data: { ...n.data, node: by.get(n.id)! } } : n)));
   }, [graph]);
+
+  // A live graph changed shape: the nodes still there keep their places, new ones wait out of sight for the layout.
+  const reshape = (): void => {
+    const had = new Map(flow.getNodes().map((n) => [n.id, n]));
+    setNodes(
+      baseNodes(graph, direction, localImages).map((b) => {
+        const was = had.get(b.id);
+        return was && was.parentId === b.parentId && was.type === b.type ? { ...was, data: { ...was.data, node: b.data.node } } : b;
+      }),
+    );
+    setPending(new Set(graph.nodes.filter((n) => !had.has(n.id)).map((n) => n.id)));
+    setReshaped((r) => r + 1);
+  };
 
   // Shown from the cache: frame it once React Flow knows the canvas, and size the card.
   useEffect(() => {
@@ -178,9 +240,11 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
   /**
    * Lay the graph out. With `choose`, it's tried both ways round, plainly and wrapped onto more
    * rows, and the one that reads biggest in the frame wins (bestLayout); else only `start`'s way.
+   * A busy graph asked to (`pack`) is packed into the frame's shape instead of wrapped. `keep`: a
+   * live graph laid out again, the view stays where you are.
    */
   const lay = useCallback(
-    async (start: GraphDirection, choose: boolean): Promise<void> => {
+    async (start: GraphDirection, choose: boolean, keep = false): Promise<void> => {
       const mine = ++run.current;
       setPhase((p) => (p === 'ready' ? p : 'laying-out'));
       const box = wrap.current;
@@ -188,18 +252,20 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
       const aspect = box && real ? (mode === 'inline' ? inlineAspect(box.clientWidth) : box.clientWidth / box.clientHeight) : undefined;
       // In a conversation the card grows to fit the graph (up to a point).
       const room = box && real ? { width: box.clientWidth, height: mode === 'inline' ? INLINE_MAX_HEIGHT : box.clientHeight } : undefined;
-      // A busy graph takes a while to lay out: only the way it was asked for.
-      const ways = choose && room && graph.edges.length <= SIMPLEX_MAX_EDGES ? [start, turned(start)] : [start];
-      const tries = ways.flatMap((dir) => [undefined, ...(aspect ? [aspect] : [])].map((shape) => ({ dir, shape })));
+      const packed = !!pack && graph.nodes.length >= PACK_FROM;
+      // A busy graph takes a while to lay out: only the way it was asked for (packed, each piece is quick).
+      const ways = choose && room && (packed || graph.edges.length <= SIMPLEX_MAX_EDGES) ? [start, turned(start)] : [start];
+      const tries = ways.flatMap((dir) => (packed ? [undefined] : [undefined, ...(aspect ? [aspect] : [])]).map((shape) => ({ dir, shape })));
       // A layout that fails (or takes too long) just isn't a choice.
-      const done = await Promise.allSettled(tries.map((t) => layout(elkGraph(graph, sizes.current, t.dir, t.shape))));
+      const done = await Promise.allSettled(tries.map((t) => (packed ? packedLayout(graph, sizes.current, t.dir, aspect ?? 1.6, layout) : layout(elkGraph(graph, sizes.current, t.dir, t.shape)))));
       if (mine !== run.current) return;
       const laid = tries.flatMap((t, i) => {
         const r = done[i]!;
         return r.status === 'fulfilled' ? [{ direction: t.dir, wrapped: t.shape !== undefined, size: { width: r.value.width ?? 0, height: r.value.height ?? 0 }, out: r.value }] : [];
       });
       const pick = room ? bestLayout(laid, room, start) : laid[0];
-      if (!pick) return setPhase('failed');
+      // A live graph that can't be laid out again keeps the drawing it has (its new nodes show where they are).
+      if (!pick) return keep ? setPending(new Set()) : setPhase('failed');
       const out: ElkOutput = pick.out;
       const dir = pick.direction;
       if (dir !== start) setDirection(dir);
@@ -212,6 +278,8 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
         bounds.current = { width: out.width, height: out.height };
         onLaidOut?.(bounds.current);
         rememberLayout(cacheKey, mode, { direction: dir, places, routes: lines, bounds: bounds.current });
+        // Zooming out always goes far enough to see all of it.
+        if (room) setFloor(Math.max(0.02, Math.min(MIN_ZOOM, fitZoom(bounds.current, room, 28) * 0.8)));
       }
       setNodes((now) => placeNodes(now, places, dir));
       // The handles moved sides: React Flow measures them again before drawing lines.
@@ -220,25 +288,41 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
         updateInternals(graph.nodes.map((n) => n.id));
         requestAnimationFrame(() => {
           if (mine !== run.current) return;
-          frame(phaseRef.current === 'ready' ? duration : 0);
+          if (!keep) frame(phaseRef.current === 'ready' ? duration : 0);
+          setPending(new Set());
           setPhase('ready');
         });
       });
     },
-    [graph, mode, duration, cacheKey],
+    [graph, mode, duration, cacheKey, pack, startAt],
   );
 
-  // Every node has been measured once: lay out with the real sizes.
-  useEffect(() => {
-    if (!initialized || phase !== 'measuring') return;
+  // (React Flow's "initialized" can still be the last shape's for a moment.)
+  const allMeasured = (): boolean => graph.nodes.every((n) => n.type === 'group' || !!flow.getInternalNode(n.id)?.measured.width);
+
+  /** What each node measures now (the layout's sizes). */
+  const measure = (): void => {
     for (const n of flow.getNodes()) {
       if (n.data.node.type === 'group') continue;
       const w = n.measured?.width;
       const h = n.measured?.height;
       if (w && h) sizes.current.set(n.id, { width: Math.ceil(w), height: Math.ceil(h) });
     }
+  };
+
+  // Every node has been measured once: lay out with the real sizes.
+  useEffect(() => {
+    if (!initialized || phase !== 'measuring' || !allMeasured()) return;
+    measure();
     void lay(direction, true);
   }, [initialized, phase]);
+
+  // A live graph changed shape: once its new nodes are measured, lay it out again where you are.
+  useEffect(() => {
+    if (!reshaped || !initialized || phaseRef.current === 'measuring' || !allMeasured()) return;
+    measure();
+    void lay(direction, false, true);
+  }, [reshaped, initialized]);
 
   // The frame changed size (the card fit its height, the window was resized): frame the graph again.
   useEffect(() => {
@@ -250,7 +334,7 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
       if (size === last) return;
       const first = !last;
       last = size;
-      if (!first && phaseRef.current !== 'measuring' && stepRef.current < 0) frameAll(0);
+      if (!first && phaseRef.current !== 'measuring' && stepRef.current < 0 && !touched.current) frame(0);
     });
     observer.observe(box);
     return () => observer.disconnect();
@@ -267,6 +351,7 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
         if (n.data.node.type !== 'group' && w && h) sizes.current.set(n.id, { width: Math.ceil(w), height: Math.ceil(h) });
       }
     }
+    touched.current = false;
     void lay(next, false);
   };
 
@@ -288,28 +373,42 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
   const focus = useMemo<Focus>(() => (current ? stepFocus(graph, current) : hover ? neighborhood(graph, hover) : selected ? neighborhood(graph, selected) : NO_FOCUS), [graph, current, hover, selected]);
   const lit = focus.nodes.size > 0;
 
-  const shown = useMemo(
-    () =>
-      nodes.map((n) => {
-        const state = !lit ? '' : focus.nodes.has(n.id) ? g.nodeHot : n.data.node.type === 'group' ? '' : g.nodeDim;
-        return { ...n, className: state, selected: n.id === selected };
-      }),
-    [nodes, focus, lit, selected],
-  );
-  const edges = useMemo<FlowEdge[]>(
-    () =>
-      graph.edges.map((e) => {
-        const state: EdgeState = !lit ? 'none' : focus.edges.has(e.id) ? 'hot' : 'dim';
-        return {
-          id: e.id,
-          source: e.from,
-          target: e.to,
-          type: 'graph',
-          data: { kind: e.kind, state, markers: uid, motion, ...(routes.has(e.id) && !moved.has(e.from) && !moved.has(e.to) ? { route: routes.get(e.id)! } : {}), ...(e.label ? { label: e.label } : {}), ...(e.emphasis ? { emphasis: true } : {}), ...(e.animated !== undefined ? { animated: e.animated } : {}) },
-        };
-      }),
-    [graph, focus, lit, uid, motion, routes, moved],
-  );
+  // Only what's lit is marked (the canvas dims the rest, data-lit): pointing at a node redraws its
+  // neighbours, not every node and line. Nodes and lines that didn't change stay the same objects.
+  const nodeCache = useRef(new Map<string, { readonly base: FlowNode; readonly className: string; readonly selected: boolean; readonly out: FlowNode }>());
+  const shown = useMemo(() => {
+    const cache = nodeCache.current;
+    return nodes.map((n) => {
+      const className = cx(lit && focus.nodes.has(n.id) && g.nodeHot, pending.has(n.id) && g.nodePending);
+      const isSelected = n.id === selected;
+      const was = cache.get(n.id);
+      if (was && was.base === n && was.className === className && was.selected === isSelected) return was.out;
+      const out = { ...n, className, selected: isSelected };
+      cache.set(n.id, { base: n, className, selected: isSelected, out });
+      return out;
+    });
+  }, [nodes, focus, lit, selected, pending]);
+  const edgeCache = useRef(new Map<string, { readonly key: string; readonly route: Route | undefined; readonly out: FlowEdge }>());
+  const edges = useMemo<FlowEdge[]>(() => {
+    const cache = edgeCache.current;
+    return graph.edges.map((e) => {
+      const hot = lit && focus.edges.has(e.id);
+      const route = routes.has(e.id) && !moved.has(e.from) && !moved.has(e.to) ? routes.get(e.id) : undefined;
+      const key = JSON.stringify([e.from, e.to, e.kind, e.label, e.emphasis, e.animated, hot, uid, motion]);
+      const was = cache.get(e.id);
+      if (was && was.key === key && was.route === route) return was.out;
+      const out: FlowEdge = {
+        id: e.id,
+        source: e.from,
+        target: e.to,
+        type: 'graph',
+        ...(hot ? { className: g.edgeLit } : {}),
+        data: { kind: e.kind, state: hot ? 'hot' : 'none', markers: uid, motion, ...(route ? { route } : {}), ...(e.label ? { label: e.label } : {}), ...(e.emphasis ? { emphasis: true } : {}), ...(e.animated !== undefined ? { animated: e.animated } : {}) },
+      };
+      cache.set(e.id, { key, route, out });
+      return out;
+    });
+  }, [graph, focus, lit, uid, motion, routes, moved]);
 
   const onNodesChange = useCallback((changes: NodeChange<FlowNode>[]) => {
     // Selection is this graph's own (one node at a time); the rest (sizes, drags) is React Flow's.
@@ -325,6 +424,7 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
     void flow.setCenter(n.internals.positionAbsolute.x + w / 2, n.internals.positionAbsolute.y + h / 2, { zoom: Math.max(flow.getZoom(), 0.9), duration });
   };
 
+  const inline = mode === 'inline';
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
     if (e.key === 'Escape' && (step >= 0 || selected)) {
       e.stopPropagation();
@@ -332,17 +432,26 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
       else goStep(-1);
       return;
     }
+    // In the whole window: + and − zoom, 0 fits it all in.
+    if (!inline && step < 0 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const zoom = e.key === '+' || e.key === '=' ? 'in' : e.key === '-' ? 'out' : e.key === '0' ? 'fit' : undefined;
+      if (zoom) {
+        e.preventDefault();
+        if (zoom === 'fit') frameAll(duration);
+        else void (zoom === 'in' ? flow.zoomIn({ duration }) : flow.zoomOut({ duration }));
+        return;
+      }
+    }
     if (step < 0) return;
     if (e.key === 'ArrowRight') (e.preventDefault(), goStep(Math.min(steps.length - 1, step + 1)));
     if (e.key === 'ArrowLeft') (e.preventDefault(), goStep(Math.max(0, step - 1)));
   };
 
   const picked = selected ? graph.nodes.find((n) => n.id === selected) : undefined;
-  const inline = mode === 'inline';
   const across = direction === 'right' || direction === 'left';
 
   return (
-    <div ref={wrap} className={g.canvas} data-mode={mode} data-phase={phase} data-ready={phase === 'ready' ? 'true' : 'false'} onKeyDown={onKeyDown} tabIndex={-1}>
+    <div ref={wrap} className={g.canvas} data-mode={mode} data-phase={phase} data-ready={phase === 'ready' ? 'true' : 'false'} data-lit={lit ? 'true' : undefined} onKeyDown={onKeyDown} tabIndex={-1}>
       <EdgeMarkers id={uid} />
       <ReactFlow<FlowNode, FlowEdge>
         nodes={shown}
@@ -357,7 +466,7 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
         onNodeMouseLeave={() => setHover(undefined)}
         onPaneClick={() => setSelected(undefined)}
         colorMode={theme}
-        minZoom={0.15}
+        minZoom={floor}
         maxZoom={2.5}
         nodesConnectable={false}
         nodesDraggable
@@ -367,6 +476,11 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
         // In a conversation, scrolling scrolls the conversation; pinch zooms and dragging pans.
         zoomOnScroll={false}
         panOnScroll={!inline}
+        // Two fingers move the drawing as far as they move, like any scrolling view (React Flow's own is half that).
+        panOnScrollSpeed={1}
+        onMoveStart={(e) => {
+          if (e) touched.current = true;
+        }}
         preventScrolling={!inline}
         // React Flow's Space-to-pan listens on the whole window and swallows Space there: inline (in a
         // chat or a document) Space scrolls the page; dragging still pans.

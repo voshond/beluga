@@ -6,7 +6,7 @@ import { Icon } from '../components/Icon.js';
 import { ProjectIcon } from '../components/ProjectIcon.js';
 import { Button, Segmented, cx } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
-import { inApp } from '../lib/boot.js';
+import { canPickFolders, inApp, webServed } from '../lib/boot.js';
 import { useApi, useApp, useBeluga, useUi } from '../lib/beluga.js';
 import { pickFolders } from '../lib/projects.js';
 import s from './add-project.module.css';
@@ -165,10 +165,10 @@ export function AddProjectSheet() {
               >
                 <Icon name="folder" size={22} />
                 <div className={s.dropText}>
-                  <strong>Drop project folders here</strong>
+                  <strong>{webServed() ? 'Choose a project folder where Beluga runs' : 'Drop project folders here'}</strong>
                   <span>A git project, or a folder full of them (new ones in it show up too).</span>
                 </div>
-                {inApp() ? (
+                {canPickFolders() ? (
                   <Button variant="primary" onClick={() => void choose()}>
                     Choose Folders…
                   </Button>
@@ -313,7 +313,7 @@ function NewProject({ onDone }: { onDone: () => void }) {
       <div className={s.field}>
         <span>In</span>
         <div className={s.whereRow}>
-          {inApp() ? (
+          {canPickFolders() ? (
             <>
               <span className={s.whereText}>
                 <Icon name="folder" size={13} /> {parent ? short(parent) : 'Your code folder'}

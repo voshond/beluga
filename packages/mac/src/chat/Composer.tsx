@@ -10,7 +10,7 @@ import { roomAgentTags } from '@beluga/shared/agent-tags.js';
 import { shareNameOf } from '@beluga/shared/share-names.js';
 import { secretIn } from '@beluga/shared/secret-text.js';
 import { steeredMessages } from '@beluga/shared/claude-notices.js';
-import { fallbackFor, runtimeHere } from '@beluga/shared/runtime-fallbacks.js';
+import { fallbackFor, runtimeHas, runtimeHere } from '@beluga/shared/runtime-fallbacks.js';
 import { defaultAgentOf } from '@beluga/protocol.js';
 import { Icon } from '../components/Icon.js';
 import { Kbd, Tip, cx } from '../components/ui.js';
@@ -247,7 +247,9 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     setWorktreeState(choice);
   };
   // A side question (/btw): "/btw " turns the box into one; it's answered in the card above, never in the chat.
-  const canBtw = channel.startsWith('ws:') && !shared;
+  // Only where its agent has one (it forks the conversation's session: Claude's, OpenCode's; not Codex's).
+  const btwHere = useApp((st) => runtimeHas(runtimeHere(st.projects.flatMap((p) => p.workspaces).find((w) => `ws:${w.id}` === channel)?.agent, st.self), 'btw'));
+  const canBtw = channel.startsWith('ws:') && !shared && btwHere;
   const [asideIn, setAsideIn] = useState<string | undefined>(undefined);
   const aside = canBtw && asideIn === channel;
   const btwOpen = useApp((st) => Boolean(st.btw?.[channel]));
@@ -287,8 +289,9 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
             ...(mentionWorld.tasks ? { tasks: mentionWorld.tasks } : {}),
             skills,
             skillsOn,
+            ...(canBtw ? {} : { without: ['btw'] }),
           }),
-    [buffer, state.peers, state.selfId, state.dirCache, state.view.kind, state.projects, state.friends, wsId, mentionWorld.tasks, skills, skillsOn, runtimes],
+    [buffer, state.peers, state.selfId, state.dirCache, state.view.kind, state.projects, state.friends, wsId, mentionWorld.tasks, skills, skillsOn, canBtw, runtimes],
   );
   const sug = useSuggestions(suggestions, buffer, (picked) => accept(picked));
 

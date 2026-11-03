@@ -378,6 +378,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `attachments.open` | ✓ image full size › Open (in Preview) |
 | `daemon.stop` | ✓ |
 | `local.listDirs` | ✓ |
+| `local.browse` | ✓ in a browser the web port served: the folder picker (Add Project › Choose Folders…, New Project › Change…, Share a Folder, Settings › People & access › Add Folder…; `dialogs/FolderBrowser.tsx`) |
 | `local.openFolder` | ✓ |
 | `local.statFiles` | ✓ ⌘V of file paths attaches the files (⌘⇧V keeps the words) |
 | `projects.add` | ✓ Add projects sheet, Choose Folders…, drop folders on the sidebar |
@@ -610,6 +611,14 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `git.mergePreview` | ✓ the toolbar's Merge into main: where it goes, the commits and files, and checks (conflicts, uncommitted work, the main folder's branch) before you confirm |
 | `git.filters` | ✓ History's Branch and Author pop-ups |
 | `git.worktreeAt` | ✓ a commit in History › Start a Worktree Here |
+| `web.link` | ✓ Settings › Advanced › Web access: turning on Open Beluga in a browser, and New Link (a one-time join link, 10 minutes, as a QR with Copy, under the address picked in Reached from; opens the web port first when it's closed); `beluga web` prints one |
+| `web.sessions.list` | ✓ Settings › Advanced › Web access: the browsers let in (name, let in, last seen) and whether the port is open; `beluga web sessions` |
+| `web.sessions.revoke` | ✓ a browser's Remove in Settings › Advanced › Web access (its sockets close at once, its page locks); `beluga web revoke <id or name>` |
+| `web.stop` | ✓ Settings › Advanced › Web access: turning Open Beluga in a browser off; `beluga web stop` (and `beluga web --off`: the public link closes with it) |
+| `web.ways` | ✓ Settings › Advanced › Web access: Tailscale is offered under Reached from only when it's installed and logged in |
+| `web.tailscale` | ✓ Settings › Advanced › Web access › Reached from › Tailscale (the ts.net address, whose login gets in, a join link under it); `beluga web --tailscale` (with a QR), `beluga web --off`; `beluga status` shows it |
+| `web.public` | ✓ Settings › Advanced › Web access › Reached from › Public link (what it exposes, its current address, refreshed while shown, so a new one after a cloudflared restart appears); `beluga web --public`, `beluga web --off`; `beluga status` shows the current address |
+| `web.download` | ✓ in a browser the web port served: a chat file's Download, Show in Finder / Open on a file, Save on a shared file (docs/web.md) |
 ## Sending while the agent works, and images
 
 | What | Core | Mac |
@@ -628,53 +637,56 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 
 ## Agent runs, per runtime
 
-What an agent run does on each runtime (BLG-461). A cell is **pass** (it works as on Claude), **fallback** (it works another way, or is greyed, and the UI says why: the reason is `src/shared/runtime-fallbacks.ts`, named here as `fallback:<id>`), or **n/a** (nothing of it applies on that runtime, so nothing is shown for it). `tests/parity.test.ts` fails on a blank cell, on a fallback the table and the code disagree about, on a fallback no screen shows, and on a capability Codex lacks (`src/agent/runtime/codex/index.ts`) that no row accounts for. The local model runtime has Claude's capabilities (it is Claude Code on another endpoint) except `hasModelList`, so its column would be Claude's.
+What an agent run does on each runtime (BLG-461, OpenCode BLG-686). A cell is **pass** (it works as on Claude), **fallback** (it works another way, or is greyed, and the UI says why: the reason is `src/shared/runtime-fallbacks.ts`, named here as `fallback:<id>`), or **n/a** (nothing of it applies on that runtime, so nothing is shown for it; a feature the runtime lacks altogether is `missing:<id>`, from the same file's `RUNTIME_MISSING`, and its control isn't offered there). `tests/parity.test.ts` fails on a blank cell, on a fallback or a missing feature the table and the code disagree about, on a fallback no screen shows, and on a capability Codex or OpenCode lacks (`src/agent/runtime/codex/index.ts`, `src/agent/runtime/opencode/index.ts`) that no row accounts for. The local model runtime has Claude's capabilities (it is Claude Code on another endpoint) except `hasModelList`, so its column would be Claude's.
 
-| What | Ways in | Claude | Codex |
-|---|---|---|---|
-| Start a run in a worktree or chat, answers streamed | `session.submit`, `workspaces.startWorktree`, `workspaces.startChat` | pass | pass (`codex app-server`, a thread per place) |
-| Pick the agent and model, hand a live conversation off | `/model`, `workbench.setAgent`, `workbench.setModel`, `/handoff` | pass | pass (models from `model/list`, efforts per model; a handoff starts a new thread with the conversation carried) |
-| Continue a conversation later | `canResume` | pass | pass (`thread/resume`; one that can't be opened starts afresh and says so) |
-| Queue and steer while it works | `host.promote`, `canSteer` | pass | pass (`turn/steer`) |
-| Stop, Send now | `host.stopRun`, `host.steerNow`, `/stop`, `canInterrupt` | pass | pass (`turn/interrupt`, then the process) |
-| Approve or deny a command or an edit | `host.answerApproval`, `canGateEveryTool` | pass (every tool through the PreToolUse hook) | pass (what leaves its sandbox asks you through the same gate; inside it, the sandbox confines it) |
-| .env files and secrets stay out | `env.claudeDotenv`, `hasSandbox` | pass (policy.ts per call) | pass (its permissions profile denies them: `runtime/codex/sandbox.ts`) |
-| A friend's task on your Mac | `gateway.decide` | pass | pass (sandboxed: network off, your MCP servers off) |
-| A guest in your room prompting your agent | `invites.create` | pass | fallback (`fallback:guests`): turned away with the reason; the Invite People sheet says it beside Prompt and Edit |
-| A main folder stays read-only | `continue_in_worktree` | pass | pass (a read-only sandbox, Continue in New Worktree) |
-| Plan first, then approve | `/plan`, `session.setPlanMode`, `plans.here`, `hasPlanMode` | pass | pass (a read-only first turn answering with a plan, then the same approval card) |
-| Images in a message | `attachments.add`, `promptImages` | pass | pass |
-| Beluga's tools (room, board, plans, views, Mac, phone, sentinels) | `toolMounts` | pass (in process) | pass (stdio, scoped by a token) |
-| Steps on the agent card | `agent.steps`, `agent.step` | pass | pass (commands, edits, MCP calls mapped to the same steps) |
-| Usage and plan limits | `/usage`, `hasUsage` | pass | pass (its plan windows, filed under Codex) |
-| Compact the conversation | `/compact`, `session.compact`, `workspaces.compact`, `hasCompaction` | pass | fallback (`fallback:compact`): Compact greyed in the toolbar with the reason; /compact and Compact now say it; auto-compact leaves Codex to compact itself |
-| Fork a worktree | `/fork`, `workspaces.fork`, `canFork` | pass | fallback (`fallback:fork`): the toolbar's Fork says it in its hint, and the fork's first run says it as it starts |
-| Edit a sent message (Rewind Here, New Fork) | `workspaces.editPrompt` | pass | fallback (`fallback:rewind`): the files go back; the line under the edit says the conversation starts afresh |
-| Skills and custom commands | `claudeCode.skills`, `skills` | pass (native) | fallback (`fallback:skills`): translated; each one in the / list says what isn't on Codex |
-| MCP servers of your own | `claudeCode.mcpServers`, `claudeCode.mcpSignIn`, `claudeCode.mcpSetEnabled` | pass | pass (its own from `~/.codex/config.toml` through `mcpServerStatus/list`, signed in with `mcpServer/oauth/login`, turned on and off with `config/value/write`; a friend's task gets them switched off) |
-| Questions the agent asks you mid-run | `questions.answer`, `canAskUser` | pass | n/a: Codex asks in its answer, and you reply in the box |
-| Sub-agents and background agents | `claudeCode.findAgent`, `hasSubagents`, `hasBackgroundAgents` | pass | pass (its multi_agent on for your own runs, off for friends' and side calls: each sub-agent a row on the card with its name, prompt, steps and report, on the phone's sub-agent sheet too; the run stays open while ones it didn't wait for still work, up to the same 3 hours; Stop interrupts each one's turn. No Watch page or sidebar row: Codex keeps no Claude Code transcript for them) |
-| Claude Code sessions outside Beluga | `claudeCode.steps` | pass | n/a: Claude Code's own transcripts |
-| The process watched and killed for sure | `hasProcess` | pass | pass |
-| Side calls (naming a worktree, drafting a task, chat answers) | `complete` | pass | pass (`codexComplete`) |
+| What | Ways in | Claude | Codex | OpenCode |
+|---|---|---|---|---|
+| Start a run in a worktree or chat, answers streamed | `session.submit`, `workspaces.startWorktree`, `workspaces.startChat` | pass | pass (`codex app-server`, a thread per place) | pass (`opencode acp`, a session per place) |
+| Pick the agent and model, hand a live conversation off | `/model`, `workbench.setAgent`, `workbench.setModel`, `/handoff` | pass | pass (models from `model/list`, efforts per model; a handoff starts a new thread with the conversation carried) | pass (models from `opencode models`, efforts from each model's variants; a handoff starts a new session with the conversation carried) |
+| Continue a conversation later | `canResume` | pass | pass (`thread/resume`; one that can't be opened starts afresh and says so) | pass (`session/resume`; one that can't be opened starts afresh and says so) |
+| Queue and steer while it works | `host.promote`, `canSteer` | pass | pass (`turn/steer`) | pass (one prompt at a time: a message sent while it works waits for its own turn, and Steer Now stops the turn to read it, since `canSteer` is false) |
+| Stop, Send now | `host.stopRun`, `host.steerNow`, `/stop`, `canInterrupt` | pass | pass (`turn/interrupt`, then the process) | pass (`session/cancel`, then the process) |
+| Approve or deny a command or an edit | `host.answerApproval`, `canGateEveryTool` | pass (every tool through the PreToolUse hook) | pass (what leaves its sandbox asks you through the same gate; inside it, the sandbox confines it) | pass (every tool call asks Beluga first: Beluga's config makes each of its permissions, every agent's, "ask", judged by the same gate as Claude's) |
+| .env files and secrets stay out | `env.claudeDotenv`, `hasSandbox` | pass (policy.ts per call) | pass (its permissions profile denies them: `runtime/codex/sandbox.ts`) | pass (policy.ts per call, as Claude's) |
+| A friend's task on your Mac | `gateway.decide` | pass | pass (sandboxed: network off, your MCP servers off) | fallback (`fallback:friends`): handed to Claude (or Codex) when one runs here, the friend's card saying why; your plugins could answer a step before Beluga is asked |
+| A guest in your room prompting your agent | `invites.create` | pass | fallback (`fallback:guests`): turned away with the reason; the Invite People sheet says it beside Prompt and Edit | fallback (`fallback:guests`): turned away with the reason; the Invite People sheet says it beside Prompt and Edit |
+| A main folder stays read-only | `continue_in_worktree` | pass | pass (a read-only sandbox, Continue in New Worktree) | pass (policy.ts per call, Continue in New Worktree) |
+| Plan first, then approve | `/plan`, `session.setPlanMode`, `plans.here`, `hasPlanMode` | pass | pass (a read-only first turn answering with a plan, then the same approval card) | pass (its own plan agent, which edits nothing, then the same approval card) |
+| Images in a message | `attachments.add`, `promptImages` | pass | pass | pass |
+| Beluga's tools (room, board, plans, views, Mac, phone, sentinels) | `toolMounts` | pass (in process) | pass (stdio, scoped by a token) | pass (stdio, scoped by a token) |
+| Steps on the agent card | `agent.steps`, `agent.step` | pass | pass (commands, edits, MCP calls mapped to the same steps) | pass (its read, edit, bash, grep, MCP calls mapped to the same steps) |
+| Usage and plan limits | `/usage`, `hasUsage` | pass | pass (its plan windows, filed under Codex) | pass (tokens and cost per turn; no plan windows: it runs on your providers or its free models) |
+| Compact the conversation | `/compact`, `session.compact`, `workspaces.compact`, `hasCompaction` | pass | fallback (`fallback:compact`): Compact greyed in the toolbar with the reason; /compact and Compact now say it; auto-compact leaves Codex to compact itself | pass (its own `/compact`, its summary kept out of the chat) |
+| Fork a worktree | `/fork`, `workspaces.fork`, `canFork` | pass | fallback (`fallback:fork`): the toolbar's Fork says it in its hint, and the fork's first run says it as it starts | pass (`session/fork`) |
+| Edit a sent message (Rewind Here, New Fork) | `workspaces.editPrompt` | pass | fallback (`fallback:rewind`): the files go back; the line under the edit says the conversation starts afresh | fallback (`fallback:rewind`): the files go back; the line under the edit says the conversation starts afresh |
+| Skills and custom commands | `claudeCode.skills`, `skills` | pass (native) | fallback (`fallback:skills`): translated; each one in the / list says what isn't on Codex | pass (it loads your Claude Code skills itself; custom commands are expanded for it, Claude Code's own built-ins go in as text with a note) |
+| MCP servers of your own | `claudeCode.mcpServers`, `claudeCode.mcpSignIn`, `claudeCode.mcpSetEnabled` | pass | pass (its own from `~/.codex/config.toml` through `mcpServerStatus/list`, signed in with `mcpServer/oauth/login`, turned on and off with `config/value/write`; a friend's task gets them switched off) | n/a: the ones in your OpenCode config run in its runs, as in OpenCode; Settings lists Claude Code's and Codex's |
+| Questions the agent asks you mid-run | `questions.answer`, `canAskUser` | pass | n/a: Codex asks in its answer, and you reply in the box | n/a: its question tool is off (it can't reach you over ACP), so it asks in its answer and you reply in the box |
+| Sub-agents and background agents | `claudeCode.findAgent`, `hasSubagents`, `hasBackgroundAgents` | pass | pass (its multi_agent on for your own runs, off for friends' and side calls: each sub-agent a row on the card with its name, prompt, steps and report, on the phone's sub-agent sheet too; the run stays open while ones it didn't wait for still work, up to the same 3 hours; Stop interrupts each one's turn. No Watch page or sidebar row: Codex keeps no Claude Code transcript for them) | pass (its task tool's sub-agents, each a row on the card; no background agents: a run ends when it answers) |
+| Claude Code sessions outside Beluga | `claudeCode.steps` | pass | n/a: Claude Code's own transcripts | n/a: Claude Code's own transcripts |
+| The process watched and killed for sure | `hasProcess` | pass | pass | pass |
+| Side calls (naming a worktree, drafting a task, chat answers) | `complete` | pass | pass (`codexComplete`) | pass (`openCodeComplete`: one prompt as an agent of Beluga's, its session dropped after) |
+| A side question (/btw) | `/btw`, `session.btw` | pass | n/a (`missing:btw`): Codex can't fork its thread, so /btw isn't offered in its conversations | pass (a fork of its session with no tools, dropped after) |
+| The agent's own terminal | `agentTerm.open` | pass | n/a (`missing:terminal`): no Terminal view; its conversations stay in the chat | n/a (`missing:terminal`): no Terminal view; its conversations stay in the chat |
 
 ## Runtime conformance (BLG-462)
 
-The same scenarios run on every runtime (`tests/runtime-conformance.ts`, `npx vitest run tests/runtime-conformance.test.ts`): the in-memory reference, Claude's real runner over a scripted Agent SDK `query` (`tests/fake-claude.ts`), and Codex's real runner over a scripted `codex app-server` speaking the payloads codex-cli sends (`src/agent/runtime/codex/scripted.ts`). Where runtimes may differ, a capability flag says so and the scenario checks it both ways; mutants of the reference runtime prove a difference no flag covers fails the suite. **Live** runs against a signed-in Claude Code or Codex are waived (BLG-475: no Codex sign-in on the build Mac).
+The same scenarios run on every runtime (`tests/runtime-conformance.ts`, `npx vitest run tests/runtime-conformance.test.ts`): the in-memory reference, Claude's real runner over a scripted Agent SDK `query` (`tests/fake-claude.ts`), Codex's real runner over a scripted `codex app-server` speaking the payloads codex-cli sends (`src/agent/runtime/codex/scripted.ts`), and OpenCode's over a scripted `opencode acp` speaking the payloads OpenCode 1.19 sends (`src/agent/runtime/opencode/scripted.ts`). Where runtimes may differ, a capability flag says so and the scenario checks it both ways; mutants of the reference runtime prove a difference no flag covers fails the suite. **Live** runs against a signed-in Claude Code or Codex are waived (BLG-475: no Codex sign-in on the build Mac). OpenCode's free models need no account, so its live column is `scripts/live-opencode.ts` run against OpenCode 1.19.5 (steering and friends' tasks are refused before OpenCode is reached, so they're waived).
 
-| Scenario | Claude | Codex | Live Claude | Live Codex |
-|---|---|---|---|---|
-| Start and answer, the step streamed | pass | pass | waived | waived |
-| A command that asks, approved | pass | pass | waived | waived |
-| A command you deny | pass | pass | waived | waived |
-| Session id: one per place, kept on resume | pass | pass | waived | waived |
-| Usage event under its session (`hasUsage`) | pass | pass | waived | waived |
-| Steer while it works (`canSteer`) | pass | pass | waived | waived |
-| Interrupt, the message answered next (`canInterrupt`) | pass | pass | waived | waived |
-| Stop on abort, the open step ended | pass | pass | waived | waived |
-| Friends' tasks and guests (`canGateEveryTool`, `hasSandbox`) | pass | pass | waived | waived |
-| Model list (`hasModelList`) | pass | pass | waived | waived |
-| A worktree on Codex: a task, an approval, Stop, hand off to Claude (`tests/codex-flow.test.ts`, through the daemon's Session; the Mac's `packages/mac/e2e/codex-flow.spec.ts` runs with the plan's e2e) | pass | pass | waived | waived |
+| Scenario | Claude | Codex | OpenCode | Live Claude | Live Codex | Live OpenCode |
+|---|---|---|---|---|---|---|
+| Start and answer, the step streamed | pass | pass | pass | waived | waived | pass |
+| A command that asks, approved | pass | pass | pass | waived | waived | pass |
+| A command you deny | pass | pass | pass | waived | waived | pass |
+| Session id: one per place, kept on resume | pass | pass | pass | waived | waived | pass |
+| Usage event under its session (`hasUsage`) | pass | pass | pass | waived | waived | pass |
+| Steer while it works (`canSteer`) | pass | pass | pass | waived | waived | waived |
+| Interrupt, the message answered next (`canInterrupt`) | pass | pass | pass | waived | waived | pass |
+| Stop on abort, the open step ended | pass | pass | pass | waived | waived | pass |
+| Friends' tasks and guests (`canGateEveryTool`, `hasSandbox`) | pass | pass | pass | waived | waived | waived |
+| Model list (`hasModelList`) | pass | pass | pass | waived | waived | pass |
+| A worktree on Codex: a task, an approval, Stop, hand off to Claude (`tests/codex-flow.test.ts`, through the daemon's Session; the Mac's `packages/mac/e2e/codex-flow.spec.ts` runs with the plan's e2e) | pass | pass | n/a: the same flow on OpenCode is `tests/opencode-flow.test.ts` | waived | waived | n/a |
+| A worktree on OpenCode: a run, approvals, a read judged on its path, a key file turned down, Beluga's tools, plan then approve, /compact, Steer Now, Stop, /btw, a side call, models (`tests/opencode-flow.test.ts`; live: `npx tsx scripts/live-opencode.ts`, a free model, no account) | n/a | n/a | pass | n/a | n/a | waived: 12 of its 14 checks passed live; then OpenCode's free limit ran out, so the side call (fixed since, and checked by hand against OpenCode) and the key-file check wait for the next run |
 
 ## Beyond the shared actions
 
@@ -734,6 +746,7 @@ The same scenarios run on every runtime (`tests/runtime-conformance.ts`, `npx vi
 | Numbers and dashboards (docs/sentinel.md §10, BLG-244, reworked in BLG-246): a Keep the numbers step (`measure`: from the step before, a view source, or the agent's `sentinel_measure`) keeps named numbers, series (a whole array), rows or a step's output per run in ~/.beluga/sentinel/metrics/<sentinel>/<name>.jsonl (two years or 20 000 points); the state carries each metric's last 90 points and last rows; dashboards in ~/.beluga/dashboards.json — the `dashboard.*` API and `sentinel.metricRead`, the agent's `mcp__beluga_dashboard__*` tools (`sentinel_measure` inside a run, `dashboard_list`, `dashboard_create`, `dashboard_update`, `dashboard_remove` (asks you), `dashboard_add_tile`, `dashboard_update_tile`, `dashboard_move_tile`, `dashboard_remove_tile`, `metric_list`, `metric_read`), six number recipes | Mac (a sentinel's page › Numbers above History; Sentinel's Dashboard tab (Sentinels · Dashboard · Chat at the top of the Sentinel page; ⌘K › Go to Dashboard and Go › Dashboard land there): tile kinds number, series, table, output, text and divider, sized and retitled from a tile's ⋯, its tabs, compare, Refresh, Add a Tile by description (a draft sentinel when nothing fetches it yet) or picked, drag; New Sentinel › Recipe › Keep the numbers); the phone's `dashboard:<id>` screen with compare chips and pull to refresh, Home's row of the first dashboard's first three numbers (`dashboard.refresh`, `sentinel.metricRead`) |
 | Plans: milestones with pass criteria and parallel tasks, drafted by the agent in a conversation and kept off the board until approved; a live plan graph and outline; Step by Step · Check-ins · Autopilot run by a scheduler that starts worktrees and asks the agent to check each milestone; the composer's Plan with Tasks — the `plans.*` API, the agent's `mcp__beluga_plan__*` tools and the shared state's `plans` | Mac (`src/core/plans/`, the daemon runs it; `src/plans/*` in the app) |
 | Your Mac (BLG-47): one conversation with your own agent for the whole Mac, not one project, the same on the phone and the Mac (the `assistant` view, channel `mac:assistant`). It runs in ~/.beluga/assistant/work (its scratch folder's files are its outputs on the phone; its session and history beside it stay secret), with your usual approvals, and its tools (`mcp__beluga_mac__*`: `screenshot`, `device_info`, `list_work`, `start_worktree`, `start_task`, `start_plan`, `archive_worktree`) plus the board's. Since BLG-565 it archives a worktree you ask it to, through `workspaces.archive` (lossless and restorable; a worktree with Claude still working waits for your yes). What it starts it names as `worktree:<id>`, `task:<KEY>`, `plan:<id>`, drawn as links on both screens. Since BLG-102 it holds several chats, tabs above its conversation on the Mac (the `assistant` view's `chat`; channels `mac:assistant` for the first, `mac:assistant:<id>` for the others; the shared state's `assistant`): + starts one, × deletes one for good after asking (no archive), and the open tab is kept across restarts (~/.beluga/assistant/chats.json; each chat's session and history in `chats/<id>/`, the old single chat moved into `chats/main/`) | Mac (the sidebar's top row, `layout/AssistantNav.tsx`; the tabs, `chat/AssistantTabs.tsx`; core: `src/core/assistant/`, `src/agent/mac-tools.ts`); phone (the Ask sheet's first target and Home's Ask your Mac: the chat open on the Mac; its other chats by name where conversations are listed) |
+| Web access (BLG-649, BLG-650, docs/web.md): the daemon serves the whole UI to browsers on its own web port (127.0.0.1:7777; `beluga web --listen host:port --allow-host name`), apart from the token socket; a browser is let in once by a join link (`/join#<secret>`, 10 minutes, one use) and keeps an HttpOnly, SameSite=Strict session cookie (only its hash kept, in ~/.beluga/web-sessions.json); without one it gets only the Ask for a link page and no socket; revoking one cuts it off at once; the port reopens at each start until closed (~/.beluga/web.json) — the `web.*` API | Mac (Settings › Advanced › Web access, `dialogs/WebAccessSettings.tsx`; core: `src/daemon/web*.ts`); the browser shows the Mac app's own UI |
 | Graphs the agent draws (`beluga-graph` blocks: interactive diagrams laid out by ELK and drawn with React Flow, in answers, reports and Markdown files; hover, details, walkthrough, full window) | Mac (`components/graph/*`; the format is `src/shared/graph-spec.ts`, the agent learns it from `agent/graph-prompt.ts`) |
 | Views the agent shows (`beluga-view` blocks and the `show` tool: tables, charts, stats, code, colors; live from a file, folder, SQLite, Postgres, a web address or a command, paged, sorted and searched without the agent) | Mac (`components/views/*`; the format is `src/shared/view-spec.ts`, sources run in `core/views/sources.ts`, the agent learns it from `agent/view-prompt.ts`) |
 | Mention grammar (BLG-443): `@bob` asks bob's default agent, `@bob:codex` one of theirs, `@agents` everyone's default; `@claude`, `@claude:bob` and `@claudes` stay aliases (a person named claude is `@claude:claude`, with a hint); a mistyped name gets "Did you mean @bob?" and a person with no published default gets their Claude, each said in a toast; the request carries the agent (`agent_request.agent`) | both (core: `core/mentions.ts` `parseInput`, `core/session.ts` `submit`; the phone sends what you type through the same `submit`) |

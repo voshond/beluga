@@ -5,7 +5,7 @@ import { Store, initialState } from '../src/core/store.js';
 import { createMockBackend } from '../src/agent/mock.js';
 import type { RoomBridge } from '../src/agent/types.js';
 import { BoardWork } from '../src/core/board/work.js';
-import { DEFAULT_TASKS_PREFS, assigneeChoices, boardChoices, boardRepos, boardToShow, pickedRepos, reposLabel, fromV1TasksPrefs, assigneeKey, assigneesIn, checklist, connected, dueText, isFor, isSolo, onIt, onItTip, onItWords, projectToShow, readTasksPrefs, scopeCounts, scoped, statusesFor, taskGraph, toggleCheck, toggleOpened, untucked } from '../packages/mac/src/tasks/tasks-model.js';
+import { DEFAULT_TASKS_PREFS, assigneeChoices, boardChoices, boardRepos, boardToShow, pickedRepos, reposLabel, fromV1TasksPrefs, assigneeKey, assigneesIn, checklist, connected, dueText, isFor, isSolo, onIt, onItTip, onItWords, projectToShow, readTasksPrefs, scopeCounts, scoped, statusesFor, taskGraph, toggleCheck, toggleOpened, untucked, workGoingOn } from '../packages/mac/src/tasks/tasks-model.js';
 import { parseGraph } from '../src/shared/graph-spec.js';
 import { NO_TEAM, canAssign } from '../src/core/team/model.js';
 import type { Project } from '../src/workspaces/types.js';
@@ -231,6 +231,17 @@ describe('the Tasks view', () => {
     // A real klaud-graph: it parses with nothing left out.
     const parsed = parseGraph(JSON.stringify(graph));
     expect(parsed.ok && parsed.warnings).toEqual([]);
+  });
+
+  it('opens a busy graph on the work going on, else on what is up next', () => {
+    const { store, b } = board();
+    const going = b.create({ projectId: 'api', title: 'Going', status: 'in_progress' }, me);
+    const review = b.create({ projectId: 'api', title: 'Review', status: 'in_review' }, me);
+    const next = b.create({ projectId: 'api', title: 'Next', status: 'todo' }, me);
+    b.create({ projectId: 'api', title: 'Later', status: 'backlog' }, me);
+    const all = store.getState().board.issues;
+    expect(workGoingOn(all)).toEqual([going.id, review.id]);
+    expect(workGoingOn(all.filter((i) => i.id !== going.id && i.id !== review.id))).toEqual([next.id]);
   });
 });
 

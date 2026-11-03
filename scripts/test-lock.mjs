@@ -19,10 +19,11 @@ export function slotCount(env = process.env) {
   return Number.isFinite(n) && n >= 0 ? n : 2;
 }
 
-/** vitest workers per run: KLAUD_TEST_WORKERS, else half the cores (at least 2). */
+/** vitest workers per run: KLAUD_TEST_WORKERS, else every core on CI (the runner is the run's alone), else half the cores (at least 2). */
 export function workerCount(env = process.env, cores = os.availableParallelism()) {
   const n = Number.parseInt(env.KLAUD_TEST_WORKERS ?? '', 10);
-  return Number.isFinite(n) && n > 0 ? n : Math.max(2, Math.floor(cores / 2));
+  if (Number.isFinite(n) && n > 0) return n;
+  return env.CI ? Math.max(2, cores) : Math.max(2, Math.floor(cores / 2));
 }
 
 function readSlot(file) {

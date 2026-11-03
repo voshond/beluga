@@ -34,7 +34,7 @@ import { VoiceButton, VoiceNote, VoiceStage, voiceActive } from '../components/V
  * The microphone beside Send writes down what you say while you say it (lib/voice.ts): each pause
  * is written down at once. ■ puts the words in the field to edit; ↑ sends them as you said them.
  */
-type Target = { kind: 'mac'; topic: Topic; label: string } | { kind: 'project'; id: string; label: string; icon?: string } | { kind: 'conv'; topic: Topic; label: string; project?: string; icon?: string } | { kind: 'friend'; id: string; name: string; label: string };
+type Target = { kind: 'mac'; topic: Topic; label: string } | { kind: 'project'; id: string; label: string; icon?: string; empty?: boolean } | { kind: 'conv'; topic: Topic; label: string; project?: string; icon?: string } | { kind: 'friend'; id: string; name: string; label: string };
 const ICON: Record<Target['kind'], { Icon: typeof Folder; tone: Tone }> = { mac: { Icon: Laptop, tone: 'sky' }, project: { Icon: Folder, tone: 'butter' }, conv: { Icon: MessageSquare, tone: 'sky' }, friend: { Icon: Sparkles, tone: 'lavender' } };
 const ASSISTANT: Topic = 'conv:mac:assistant';
 
@@ -78,7 +78,7 @@ export default function Ask() {
     if (store.supports('assistant')) t.push({ kind: 'mac', topic: mac, label: home?.data.assistant?.title?.split(' · ')[0] || 'Your Mac' });
     // Only your own projects take a new chat: not the room, a friend's shared project or "Asked of
     // friends" (views.ts groups those under 'room', 'shared:…' and 'asked').
-    for (const p of work?.data.projects ?? []) if (p.id !== 'room' && p.id !== 'asked' && !p.id.startsWith('shared:')) t.push({ kind: 'project', id: p.id, label: p.name, ...(p.icon ? { icon: p.icon } : {}) });
+    for (const p of work?.data.projects ?? []) if (p.id !== 'room' && p.id !== 'asked' && !p.id.startsWith('shared:')) t.push({ kind: 'project', id: p.id, label: p.name, ...(p.icon ? { icon: p.icon } : {}), ...(p.conversations.length ? {} : { empty: true }) });
     for (const c of home?.data.running ?? []) if (c.topic !== mac) t.push({ kind: 'conv', topic: c.topic, label: c.title, ...(c.project ? { project: c.project } : {}), ...(c.icon ? { icon: c.icon } : {}) });
     for (const p of people?.data.people ?? []) if (p.presence !== 'offline') t.push({ kind: 'friend', id: p.peerId, name: p.name, label: `${p.name}'s agent` });
     return t;
@@ -189,9 +189,16 @@ export default function Ask() {
                         style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9, paddingHorizontal: 10, borderRadius: 14, backgroundColor: keyOf(t) === sel ? color.sunken : 'transparent' }}
                       >
                         {mark(t, 32)}
-                        <T v="body" numberOfLines={1} style={{ flex: 1 }}>
-                          {t.label}
-                        </T>
+                        <View style={{ flex: 1 }}>
+                          <T v="body" numberOfLines={1}>
+                            {t.label}
+                          </T>
+                          {t.kind === 'project' && t.empty ? (
+                            <T v="caption" numberOfLines={1}>
+                              No conversations yet
+                            </T>
+                          ) : null}
+                        </View>
                       </Press>
                     ))}
                   </View>

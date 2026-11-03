@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { claudeRuntime } from '../src/agent/runtime/claude/index.js';
 import { createCodexRuntime } from '../src/agent/runtime/codex/index.js';
+import { createOpenCodeRuntime } from '../src/agent/runtime/opencode/index.js';
+import { ScriptedOpenCode } from '../src/agent/runtime/opencode/scripted.js';
 import type { AgentRuntime, RuntimeCapabilities } from '../src/agent/runtime/types.js';
 import type { AgentRunInput } from '../src/agent/types.js';
 import { FakeClaude } from './fake-claude.js';
@@ -13,12 +15,15 @@ const claude = vi.hoisted(() => ({ query: undefined as unknown as (args: unknown
 vi.mock('@anthropic-ai/claude-agent-sdk', async (original) => ({ ...(await original<object>()), query: (args: unknown) => claude.query(args) }));
 claude.query = new FakeClaude().query as (args: unknown) => unknown;
 
-// The same suite for every runtime: the in-memory reference, Claude through its SDK, and Codex over
-// a scripted app-server. Live runs (a signed-in Claude Code or Codex) are waived (BLG-475).
+// The same suite for every runtime: the in-memory reference, Claude through its SDK, Codex over
+// a scripted app-server, and OpenCode over a scripted `opencode acp`. Live runs (a signed-in
+// Claude Code or Codex, an installed OpenCode) are waived (BLG-475).
 runtimeConformance('fake', createFakeRuntime);
 runtimeConformance('claude', () => claudeRuntime);
 const codex = new FakeCodex();
 runtimeConformance('codex', () => createCodexRuntime({ connect: codex.connect }));
+const opencode = new ScriptedOpenCode();
+runtimeConformance('opencode', () => createOpenCodeRuntime({ connect: opencode.connect, resolve: async () => undefined }));
 
 /** The fake runtime, changed: its capabilities patched, and its runs' inputs or answers bent. */
 function mutant(caps: Partial<RuntimeCapabilities>, bend: { input?: (i: AgentRunInput) => AgentRunInput; answer?: (a: string) => string } = {}): () => AgentRuntime {

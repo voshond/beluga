@@ -99,7 +99,7 @@ export class Compactor {
         onEvent: (kind, text) => {
           if (kind !== 'context' && kind !== 'compact' && kind !== 'usage') return;
           if (kind === 'compact') landed = true;
-          const out = kind === 'compact' ? withTrigger(text, trigger) : text;
+          const out = kind === 'compact' ? withTrigger(text, trigger, info?.used) : text;
           this.observe(channel, kind, out);
           emit(kind, out);
         },
@@ -115,11 +115,16 @@ export class Compactor {
   }
 }
 
-/** Claude Code always calls /compact "manual"; say auto when Beluga started it. */
-function withTrigger(text: string, trigger: Trigger): string {
+/**
+ * Claude Code always calls /compact "manual"; say auto when Beluga started it. A runtime that
+ * can't tell how full it was before (OpenCode: each run is a new process, its first number comes
+ * after the compaction) says 0: then it's what Beluga last saw (`before`).
+ */
+function withTrigger(text: string, trigger: Trigger, before?: number): string {
   try {
     const data = JSON.parse(text) as Record<string, unknown>;
-    return typeof data.pre === 'number' ? JSON.stringify({ ...data, trigger }) : text;
+    const pre = data.pre === 0 && before ? { pre: before } : {};
+    return typeof data.pre === 'number' ? JSON.stringify({ ...data, ...pre, trigger }) : text;
   } catch {
     return text;
   }

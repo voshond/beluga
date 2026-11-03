@@ -3,7 +3,8 @@ import { CAP_INFO, CAP_LEVEL_INFO, CAP_ORDER, type CapLevel, type CapRow, type C
 import { TRUST_INFO } from '@beluga/core/trust.js';
 import { Button, cx } from '../components/ui.js';
 import { Group, Select } from '../dialogs/settings-controls.js';
-import { inApp } from '../lib/boot.js';
+import { canPickFolders, inApp } from '../lib/boot.js';
+import { pickFolders } from '../lib/projects.js';
 import { useApi, useApp, useBeluga } from '../lib/beluga.js';
 import s from './access.module.css';
 
@@ -25,9 +26,9 @@ function useSay(): (what: string, call: Promise<unknown>, done?: string) => void
       .catch((err: unknown) => client.store.dispatch({ type: 'toast', text: `Couldn't ${what}: ${message(err)}`, level: 'error' }));
 }
 
-/** Pick a folder (the Mac's open panel; a typed path in a browser). */
+/** Pick a folder (the Mac's open panel; in a served page Beluga's picker of the server's folders; else a typed path). */
 async function pickFolder(): Promise<string | undefined> {
-  if (!inApp()) return undefined;
+  if (!inApp()) return (await pickFolders('A folder friends’ agents may read and write'))?.[0];
   const { open } = await import('@tauri-apps/plugin-dialog');
   const picked = await open({ directory: true, multiple: false, title: 'A folder friends’ agents may read and write' });
   return typeof picked === 'string' ? picked : undefined;
@@ -58,8 +59,8 @@ function Folders() {
         </div>
       ))}
       <div className={s.folderAdd}>
-        {inApp() ? null : <input className={s.input} aria-label="Folder path" placeholder="/Users/you/Shared" value={typed} onChange={(e) => setTyped(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} />}
-        <Button size="small" onClick={() => void add()} disabled={!inApp() && !typed.trim()}>
+        {canPickFolders() ? null : <input className={s.input} aria-label="Folder path" placeholder="/Users/you/Shared" value={typed} onChange={(e) => setTyped(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} />}
+        <Button size="small" onClick={() => void add()} disabled={!canPickFolders() && !typed.trim()}>
           Add Folder…
         </Button>
       </div>

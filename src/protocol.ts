@@ -52,11 +52,11 @@ export const NamedUsageWindow = UsageWindow.extend({ label: z.string().min(1).ma
 export type NamedUsageWindow = z.infer<typeof NamedUsageWindow>;
 
 /** Runtimes Beluga knows by name; others (a newer Mac's) still parse, as their id. */
-export const KNOWN_RUNTIMES = ['claude', 'codex', 'local'] as const;
+export const KNOWN_RUNTIMES = ['claude', 'codex', 'opencode', 'local'] as const;
 export type AgentRuntime = (typeof KNOWN_RUNTIMES)[number] | (string & {});
 
 /**
- * Which agent it is: its runtime ("claude", "codex", "local", …), the model when it's known
+ * Which agent it is: its runtime ("claude", "codex", "opencode", "local", …), the model when it's known
  * ("opus", "gpt-5", "qwen3"), and the name its owner gave it ("Claude", "Codex"). Screens say it
  * with shared/agent-label.ts; nothing assumes the agent is Claude.
  */

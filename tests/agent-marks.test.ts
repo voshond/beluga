@@ -8,6 +8,7 @@ describe('agent marks', () => {
     expect(runtimeMark('claude')).toBe('claudeCode');
     expect(runtimeMark('codex')).toBe('codex');
     expect(runtimeMark('local')).toBe('localModel');
+    expect(runtimeMark('opencode')).toBe('opencode');
     expect(agentMark(undefined)).toBe('claudeCode');
     for (const mark of ['claudeCode', 'codex', 'localModel', 'anthropic', 'openai'] as const) expect(AGENT_MARKS[mark].d).toMatch(/^M/);
   });
@@ -18,6 +19,10 @@ describe('agent marks', () => {
     expect(modelMark('gpt-oss-20b', 'local')).toBe('openai');
     expect(modelMark('claude-sonnet-4-5', 'local')).toBe('anthropic');
     expect(modelMark('qwen3', 'local')).toBe('localModel');
+    // OpenCode's models are provider/model: the provider says whose; its own free ones are OpenCode's.
+    expect(modelMark('anthropic/claude-sonnet-4-5', 'opencode')).toBe('anthropic');
+    expect(modelMark('openai/gpt-5.5', 'opencode')).toBe('openai');
+    expect(modelMark('opencode/big-pickle', 'opencode')).toBe('opencode');
   });
 });
 
@@ -30,7 +35,8 @@ describe('the agents you can pick', () => {
 
   it('every runtime with its models; one not set up stays, greyed, saying why', () => {
     const options = agentChoices(runtimes, claude);
-    expect(options.map((o) => o.label)).toEqual(['Claude', 'Claude · Opus', 'Codex', 'Codex · GPT-5.5', 'Local model']);
+    expect(options.map((o) => o.label)).toEqual(['Claude', 'Claude · Opus', 'Codex', 'Codex · GPT-5.5', 'OpenCode', 'Local model']);
+    expect(options.find((o) => o.runtime === 'opencode')).toMatchObject({ disabled: true, why: "OpenCode isn't set up on this Mac yet", mark: 'opencode' });
     expect(options.find((o) => o.runtime === 'local')).toMatchObject({ disabled: true, why: 'No local model endpoint is set', mark: 'localModel' });
     expect(options.find((o) => o.value === 'codex:gpt-5.5')).toMatchObject({ group: 'Codex', mark: 'codex', model: 'gpt-5.5' });
   });

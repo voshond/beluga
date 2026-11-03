@@ -104,6 +104,15 @@ const IDLE: Partial<Record<NodeJS.Platform, readonly [string, readonly string[],
 };
 
 /**
+ * The keyboard's idle time, only while a Beluga window is open to see things in. With none (a
+ * server, a Mac mini with the app closed) someone typing there isn't you at Beluga: undefined,
+ * so `atMac` goes by the (absent) window in front and the phone is told straight away.
+ */
+export function idleWhenWatched(screens: () => number, idle: () => Promise<number | undefined> = macIdleMs): () => Promise<number | undefined> {
+  return () => (screens() > 0 ? idle() : Promise.resolve(undefined));
+}
+
+/**
  * Milliseconds since you last used this computer's keyboard or mouse, or undefined when it can't
  * tell. Cheap enough to ask when there's something to push.
  */

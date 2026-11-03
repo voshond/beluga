@@ -24,6 +24,11 @@ export class AttentionRegistry {
     if (this.byClient.delete(clientId)) this.publish();
   }
 
+  /** How many screens say what they look at: none on a server with no window open. */
+  get screens(): number {
+    return this.byClient.size;
+  }
+
   /** Whether some screen in front shows this conversation. */
   visible(channel: string): boolean {
     return this.store.getState().attention.visible.includes(channel);

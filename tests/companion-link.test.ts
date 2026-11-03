@@ -10,6 +10,7 @@ import { DeviceBook } from '../src/companion/devices.js';
 import { Awake } from '../src/companion/awake.js';
 import { CompanionHost } from '../src/companion/host.js';
 import { HomeView } from '../src/companion/protocol.js';
+import { type Nudge, idleWhenWatched } from '../src/companion/push.js';
 import { attachCompanion } from '../src/companion/registry.js';
 import { runAsClient } from '../src/core/client-context.js';
 import { type Method, parseArgs } from '../src/ipc/api.js';
@@ -33,7 +34,7 @@ afterEach(async () => {
   for (const fn of cleanup.splice(0).reverse()) await fn();
 });
 
-function mac(callLog: Array<{ client: string; method: string; args: readonly unknown[] }> = [], awake?: Awake) {
+function mac(callLog: Array<{ client: string; method: string; args: readonly unknown[] }> = [], awake?: Awake, more: Partial<ConstructorParameters<typeof CompanionHost>[0]> = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'beluga-companion-'));
   const identity = generateIdentity();
   const store = new Store(initialState('test room'));
@@ -71,6 +72,7 @@ function mac(callLog: Array<{ client: string; method: string; args: readonly unk
     dht: { bootstrap: testnet.bootstrap, host: '127.0.0.1' },
     coalesceMs: 50,
     ...(awake ? { awake } : {}),
+    ...more,
   });
   const session = { setPrefs: (prefs: object) => store.dispatch({ type: 'prefs', prefs }), store, selfId: identity.peerId };
   attachCompanion(session, host);
@@ -229,6 +231,48 @@ describe('pairing a phone and its link', () => {
     await client.call('companion.defaultAgent', ['claude']);
     expect(store.getState().prefs.defaultAgent).toBeUndefined();
     await expect(client.call('companion.defaultAgent', ['local'])).rejects.toThrow(/No local agent/);
+  }, 60_000);
+
+  it('with no window open, an approval, a question and a friend\'s request reach the phone as pushes and are answered there (BLG-645)', async () => {
+    const calls: Array<{ client: string; method: string; args: readonly unknown[] }> = [];
+    const pushed: Nudge[] = [];
+    // A server, or a Mac mini with the app closed while someone types on it: no window, so the keyboard doesn't hold the news.
+    const { host, store } = mac(calls, undefined, { idleMs: idleWhenWatched(() => 0, async () => 1_000), pusher: { push: async (_to, n) => void pushed.push(n) } });
+    await host.start();
+    const info = await host.pairStart();
+    const p = phone();
+    const paired = pairDevice(p.node, info.link, p.device, { timeoutMs: 20_000 });
+    await waitFor(() => store.getState().companion.pairing?.waiting, 15_000);
+    host.pairApprove();
+    const result = await paired;
+    const open = async () => {
+      const c = new CompanionClient({ node: p.node, address: result.address, link: p.keys.link, app: '1.0.0', platform: 'android', topics: [] });
+      cleanup.push(() => c.close());
+      await c.connect();
+      await waitFor(() => store.getState().companion.devices[0]?.linked, 5_000);
+      return c;
+    };
+    // The phone says how to push to it, then its app closes.
+    const first = await open();
+    first.registerPush('fcm', 'token-1', 'relay-key-1');
+    await new Promise((r) => setTimeout(r, 200));
+    first.close();
+    await waitFor(() => !store.getState().companion.devices[0]?.linked, 5_000);
+
+    store.dispatch({ type: 'approval_add', approval: { id: 'a-tool', kind: 'tool', title: 'Run npm install', detail: 'npm install', askedAt: 1 } });
+    store.dispatch({ type: 'question_add', question: { qid: 'q1', requestId: 'r1', owner: store.getState().selfId!, channel: 'room', picked: {}, question: { kind: 'question', questions: [{ question: 'Which database?', header: '', options: [], multiSelect: false }] } } });
+    store.dispatch({ type: 'approval_add', approval: { id: 'a-friend', kind: 'request', title: 'mia asks: take a screenshot', detail: '', peer: 'mia-peer-id', askedAt: 2 } });
+    await waitFor(() => pushed.length >= 3, 5_000);
+    expect(pushed.every((n) => n.kind === 'needsYou' && n.priority === 'high')).toBe(true);
+    const titles = pushed.map((n) => n.title).join(' | ');
+    for (const said of ['npm install', 'Which database?', 'screenshot']) expect(titles).toContain(said);
+
+    // Opened from the push: each is answered from the phone.
+    const back = await open();
+    await back.call('host.answerApproval', ['yes', 'a-tool']);
+    await back.call('questions.answer', ['q1', { kind: 'answers', answers: { 'Which database?': 'Postgres' } }]);
+    await back.call('host.answerApproval', ['no', 'a-friend']);
+    expect(calls.map((c) => c.method)).toEqual(['host.answerApproval', 'questions.answer', 'host.answerApproval']);
   }, 60_000);
 
   it('takes photos and files from the phone, asks in a new chat, asks a friend, and signs out only itself', async () => {

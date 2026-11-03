@@ -16,8 +16,9 @@ import { type ArchiveManifest, type ArchivePhase, type ArchivePreview, archiveWo
 import { worktreeOrigin } from './origin.js';
 import { deleteFolderInBackground, removeWorktreeKeepingBranch, sweepSetAside } from './others.js';
 import { moveToTrash } from './trash.js';
-import { dropFolderSessions, dropSession } from '../agent/runtime/claude/claude-sessions.js';
+import { dropFolderSessions, dropSession, pathVariants, sessionFoldersUnder } from '../agent/runtime/claude/claude-sessions.js';
 import { dropCodexSessions } from '../agent/runtime/codex/codex-sessions.js';
+import { dropOpenCodeFolder, dropOpenCodeSession } from '../agent/runtime/opencode/sessions.js';
 import { addDay, dayKey } from './usage-days.js';
 import type { AgentRef } from '../protocol.js';
 import type { DeletePlan, MergeWait, Project, ProjectGroup, PullHead, ProjectSync, ProjectsConfig, Workspace, WorkspaceRecord, WorkspaceUsage } from './types.js';
@@ -117,6 +118,7 @@ export class WorkspaceManager {
   private refreshing?: Promise<readonly Project[]>;
   private followUp?: Promise<readonly Project[]>;
   private archivesSwept = false;
+  private sessionsSwept = false;
   /** One folder's status refresh in flight, per folder: the next waits for it (see refreshWorkspace). */
   private readonly folderRefreshes = new Map<string, Promise<boolean>>();
   /** Fetching state per project root (in flight, the last failure), shown with the default branch. */
@@ -442,6 +444,10 @@ export class WorkspaceManager {
         if (!this.archivesSwept) {
           this.archivesSwept = true;
           void sweepSetAside([this.store.archivesDir]).then(() => sweepPartialArchives(this.store.archivesDir));
+        }
+        if (!this.sessionsSwept) {
+          this.sessionsSwept = true;
+          void this.sweepLeftoverSessions().catch(() => undefined);
         }
         return projects;
       })
@@ -1113,6 +1119,29 @@ export class WorkspaceManager {
     return manifest;
   }
 
+  /**
+   * Claude Code's sessions for worktrees of ours deleted before Delete took them too (BLG-532): ones
+   * whose folder is gone and that no workspace still names (an archived one's stay, for Restore).
+   * Once a run. → how many folders' sessions went.
+   */
+  async sweepLeftoverSessions(): Promise<number> {
+    // An unreadable workspaces.json reads as none: then every archived worktree's would look left over.
+    if (!this.records.length) return 0;
+    const base = real(this.store.workspacesDir);
+    const named = new Set(this.records.flatMap((r) => (r.path ? pathVariants(r.path) : [])));
+    let dropped = 0;
+    for (const cwd of await sessionFoldersUnder(base)) {
+      // The worktree it ran in: <project>/<name> under the workspaces folder (Claude may have run in a sub-folder).
+      const parts = path.relative(base, real(cwd)).split(path.sep);
+      if (parts.length < 2 || parts[0] === '..') continue;
+      const folder = path.join(base, parts[0]!, parts[1]!);
+      if (existsSync(folder) || pathVariants(folder).some((v) => named.has(v))) continue;
+      await dropFolderSessions(cwd).catch(() => 0);
+      dropped++;
+    }
+    return dropped;
+  }
+
   /** Permanently delete: worktree folder, its branch, and its conversation. */
   async remove(id: string): Promise<void> {
     const ws = this.require(id);
@@ -1144,11 +1173,16 @@ export class WorkspaceManager {
     if (ws.archived) await dropArchive(ws.projectRoot, this.store.archivesDir, id).catch(() => undefined);
     if (scratch) rmSync(ws.path, { recursive: true, force: true });
     if (ours) {
-      // Claude Code's (your own Claude and local models alike) and Codex's, whichever agent ran there.
+      // Claude Code's (your own Claude and local models alike), Codex's and OpenCode's, whichever agent ran there.
       for (const dir of new Set([sessionsDir, path.resolve(ws.path)])) await dropFolderSessions(dir).catch(() => 0);
       await dropCodexSessions({ dir: sessionsDir }).catch(() => 0);
+      if (ws.sessionRuntime === 'opencode') {
+        if (ws.sessionId) await dropOpenCodeSession(ws.sessionId).catch(() => false);
+        await dropOpenCodeFolder(sessionsDir, ws.kind === 'worktree' ? ws.projectRoot : sessionsDir).catch(() => 0);
+      }
     } else if (ws.kind === 'chat' && this.ownSession(ws)) {
       if (ws.sessionRuntime === 'codex') await dropCodexSessions({ threadId: ws.sessionId! }).catch(() => 0);
+      else if (ws.sessionRuntime === 'opencode') await dropOpenCodeSession(ws.sessionId!).catch(() => false);
       else await dropSession(sessionsDir, ws.sessionId!).catch(() => undefined);
     }
     this.records = this.records.filter((r) => r.id !== id);

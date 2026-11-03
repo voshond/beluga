@@ -34,6 +34,14 @@ describe('which worktrees a plan owns', () => {
     expect(isLivePlan(plan({ status: 'done' }))).toBe(false);
   });
 
+  it('a finished plan whose branch isn’t in main yet keeps its row, until it ships', () => {
+    const pr = { number: 7, url: 'u', state: 'OPEN', title: 'P', draft: false, checks: 'none' } as const;
+    expect(isLivePlan(plan({ status: 'done', branch: 'plan/p' }))).toBe(true);
+    expect(isLivePlan(plan({ status: 'done', branch: 'plan/p', pr }))).toBe(true);
+    expect(isLivePlan(plan({ status: 'done', branch: 'plan/p', pr: { ...pr, state: 'MERGED' } }))).toBe(false);
+    expect(isLivePlan(plan({ status: 'done', branch: 'plan/p', shipped: { at: 1, how: 'local' } }))).toBe(false);
+  });
+
   it('the plan a place is part of: its page, its conversation, one of its tasks', () => {
     const state = plans(plan());
     expect(planOfPlace(state, board, { kind: 'plan', id: 'p' })).toBe('p');

@@ -1,7 +1,7 @@
 import type { BoardState } from '../../../../src/core/board/model.js';
 import type { Actor } from '../../../../src/core/board/model.js';
 import { AUTONOMY_INFO, type Autonomy, type Plan, type PlanBody, type PlanEvent, type PlanPr, type PlansState, diffBodies, milestoneDeps, planTitle, shownBody } from '../../../../src/core/plans/model.js';
-import type { MilestoneState, MilestoneView, NextStep, PlanView, TaskState, TaskView } from '../../../../src/core/plans/progress.js';
+import { type MilestoneState, type MilestoneView, type NextStep, type PlanView, type TaskState, type TaskView, agentNowWords } from '../../../../src/core/plans/progress.js';
 import { pulseWords } from '../../../../src/core/plans/watchdog.js';
 
 /**
@@ -93,6 +93,12 @@ export function taskWords(t: TaskView, now: number): { readonly label: string; r
   // Woken: the card says so while it works again.
   const sub = t.watch && !t.watch.needsYou && t.pulse.kind !== 'stopped' && t.pulse.kind !== 'waiting' ? `${w.sub ?? ''}${w.sub ? ' · ' : ''}${t.watch.line}` : w.sub;
   return { label: w.label, tone: w.tone, ...(sub ? { sub } : {}) };
+}
+
+/** A milestone's Claude right now, for its header and details (see agentNowWords): nothing while it isn't at work. */
+export function milestoneNowWords(m: Pick<MilestoneView, 'agentNow' | 'agent' | 'tasks'>, now: number): { readonly label: string; readonly tone: Tone; readonly sub?: string; readonly onCard: boolean } | undefined {
+  const w = agentNowWords(m, now);
+  return w ? { label: w.label, tone: w.asking ? 'warn' : 'claude', ...(w.sub ? { sub: w.sub } : {}), onCard: w.onCard } : undefined;
 }
 
 /** The one thing to do next, in words (the page's main button and its line). */

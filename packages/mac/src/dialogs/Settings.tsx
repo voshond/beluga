@@ -11,11 +11,14 @@ import { Avatar, Button, Dot, cx } from '../components/ui.js';
 import { runtimeMark } from '@beluga/shared/agent-marks.js';
 import type { RuntimeState } from '@beluga/shared/agent-runtimes.js';
 import { CopyCommand, LOCAL_MODELS_ID, useAgents } from '../onboarding/AgentsStep.js';
-import { FIX_LABEL } from '../onboarding/agent-setup.js';
-import { APP_VERSION } from '../lib/boot.js';
+import { fixLabel } from '../onboarding/agent-setup.js';
+import { APP_VERSION, webServed } from '../lib/boot.js';
 import { revealInFinder } from '../lib/files.js';
 import { type SettingsPane, useApi, useApp, useBeluga, useUi } from '../lib/beluga.js';
 import { ACCENTS, type Accent, setPrefs, useChosenPrefs, usePrefs } from '../lib/prefs.js';
+import { themeFor } from '../lib/themes.js';
+import { useDocTheme } from '../components/markdown/use-doc-theme.js';
+import { ThemeGroups } from './ThemePicker.js';
 import { EnvironmentSettings } from './EnvironmentSettings.js';
 import { ReportProblemRow } from './ReportProblemRow.js';
 import { ContextSettings } from './ContextSettings.js';
@@ -28,6 +31,7 @@ import { EarningsSettings } from './EarningsSettings.js';
 import { NotificationSettings } from './NotificationSettings.js';
 import { VoiceSettings } from './VoiceSettings.js';
 import { KeyboardSettings } from './KeyboardSettings.js';
+import { WebAccessSettings } from './WebAccessSettings.js';
 import { Group, Row, Select, Switch } from './settings-controls.js';
 import { MaintainerChip } from './SupportSheets.js';
 import s from './settings.module.css';
@@ -59,6 +63,7 @@ const PANES: ReadonlyArray<{ id: SettingsPane; label: string; icon: IconName }> 
   { id: 'phone', label: 'Phone', icon: 'phone' },
   { id: 'voice', label: 'Voice', icon: 'mic' },
   { id: 'keyboard', label: 'Keyboard', icon: 'command' },
+  { id: 'advanced', label: 'Advanced', icon: 'wrench' },
   { id: 'about', label: 'About', icon: 'globe' },
 ];
 
@@ -168,7 +173,8 @@ function General() {
           />
         </Row>
       </Group>
-      <UpdateSettingsGroup />
+      {/* A browser runs the build its server serves: the server's Beluga updates, not the page. */}
+      {webServed() ? null : <UpdateSettingsGroup />}
       <Group title="Writing">
         <Row label="Send with" detail={prefs.sendWith === 'enter' ? 'Shift+Return makes a new line.' : 'Return makes a new line.'}>
           <Select
@@ -213,10 +219,12 @@ function Appearance() {
   const lowPower = useApp((st) => st.prefs.lowPower ?? 'off');
   const saving = useApp((st) => st.powerSaving);
   const savingNote = saving ? 'Off while Low Power mode saves power.' : undefined;
+  const theme = themeFor(useDocTheme(), prefs);
+  const themeAccent = theme.accent !== undefined;
   return (
     <>
       <Group>
-        <Row label="Appearance">
+        <Row label="Appearance" {...(prefs.appearance === 'system' ? { detail: `Your light theme by day and your dark theme at night, as ${yourComputer()} switches.` } : {})}>
           <Select
             label="Appearance"
             value={prefs.appearance}
@@ -228,14 +236,15 @@ function Appearance() {
             ]}
           />
         </Row>
-        <Row label="Accent" detail={`Selection, focus and buttons. “System” follows ${yourComputer()}.`}>
+        <Row label="Accent" detail={`Selection, focus and buttons. “System” follows ${yourComputer()}${themeAccent ? `; the one beside it is ${theme.name}’s own` : ''}.`}>
           <div className={s.swatches}>
-            {(Object.keys(ACCENTS) as Accent[]).map((a) => (
-              <button key={a} type="button" aria-label={a} aria-pressed={prefs.accent === a} className={cx(s.swatch, prefs.accent === a && s.swatchOn)} style={{ background: a === 'system' ? 'conic-gradient(#3b82f6, #8b5cf6, #e11d48, #d97706, #059669, #3b82f6)' : ACCENTS[a] }} onClick={() => setPrefs({ accent: a })} />
+            {(Object.keys(ACCENTS) as Accent[]).filter((a) => a !== 'theme' || themeAccent || prefs.accent === 'theme').map((a) => (
+              <button key={a} type="button" aria-label={a === 'theme' ? `${theme.name}’s own` : a} {...(a === 'theme' ? { title: `${theme.name}’s own` } : {})} aria-pressed={prefs.accent === a} className={cx(s.swatch, prefs.accent === a && s.swatchOn)} style={{ background: a === 'system' ? 'conic-gradient(#3b82f6, #8b5cf6, #e11d48, #d97706, #059669, #3b82f6)' : ACCENTS[a] }} onClick={() => setPrefs({ accent: a })} />
             ))}
           </div>
         </Row>
       </Group>
+      <ThemeGroups />
       <Group title="Low Power">
         <Row
           label="Low Power mode"
@@ -263,7 +272,7 @@ function Appearance() {
           <Select
             label="Width"
             value={prefs.chatWidth}
-            onChange={(v) => setPrefs({ chatWidth: v })}
+            onChange={(v) => setPrefs({ chatWidth: v, chatWidthPicked: true })}
             options={[
               { value: 'narrow', label: 'Narrow' },
               { value: 'wide', label: 'Wide' },
@@ -280,7 +289,7 @@ function Appearance() {
         <Row label="Reduce motion" {...(savingNote ? { detail: savingNote } : {})}>
           <Switch label="Reduce motion" on={prefs.reduceMotion} onChange={(v) => setPrefs({ reduceMotion: v })} />
         </Row>
-        {keyPlatform() === 'mac' && (
+        {keyPlatform() === 'mac' && !webServed() && (
           <Row label="Reduce transparency" detail={savingNote ?? 'A solid sidebar, with no blur behind the window. Lighter on slower Macs.'}>
             <Switch label="Reduce transparency" on={prefs.reduceTransparency} onChange={(v) => setPrefs({ reduceTransparency: v })} />
           </Row>
@@ -313,7 +322,7 @@ function AgentsGroup({ mine }: { mine: string }) {
               {row.fix === 'install' ? (
                 <>
                   {' '}
-                  <CopyCommand className={s.agentCommand} />
+                  <CopyCommand className={s.agentCommand} runtime={row.id} />
                 </>
               ) : null}
             </div>
@@ -323,7 +332,7 @@ function AgentsGroup({ mine }: { mine: string }) {
             {row.words}
             {row.fix ? (
               <Button size="small" onClick={() => act(row)}>
-                {FIX_LABEL[row.fix]}
+                {fixLabel(row)}
               </Button>
             ) : null}
           </div>
@@ -578,7 +587,7 @@ function About() {
     <>
       <Group>
         <Row label="The Beluga app">{APP_VERSION}</Row>
-        <UpdateAboutRow />
+        {webServed() ? null : <UpdateAboutRow />}
         <Row label="Beluga (the part that runs your room)">{client.daemonVersion}</Row>
         <Row label="Windows attached" detail="Beluga windows connected to the room right now.">
           {client.clients}
@@ -633,14 +642,19 @@ const BODY: Record<SettingsPane, () => ReactNode> = {
   phone: PhoneSettings,
   voice: VoiceSettings,
   keyboard: KeyboardSettings,
+  advanced: WebAccessSettings,
   about: About,
 };
+
+/** The app's own panes a browser has no use for (it has no menu bar icon). */
+const APP_ONLY: ReadonlySet<SettingsPane> = new Set(['menubar']);
 
 /** Beluga's settings: this window's look on the left panes, Beluga's shared settings on the rest. */
 export function Settings() {
   const { ui } = useBeluga();
   const pane = useUi((u) => u.settings);
   if (!pane) return null;
+  const panes = webServed() ? PANES.filter((p) => !APP_ONLY.has(p.id)) : PANES;
   const Body = BODY[pane];
   // Opened from the welcome (Set Up… on Your agents): over it, not hidden behind it.
   const overWelcome = document.querySelector('[data-welcome]') ? '' : undefined;
@@ -651,7 +665,7 @@ export function Settings() {
         <Dialog.Content className={s.window} data-over-welcome={overWelcome} aria-describedby={undefined} onOpenAutoFocus={(e) => e.preventDefault()}>
           <nav className={s.nav}>
             <Dialog.Title className={s.title}>Settings</Dialog.Title>
-            {PANES.map((p) => (
+            {panes.map((p) => (
               <button key={p.id} type="button" className={cx(s.navItem, p.id === pane && s.navOn)} onClick={() => ui.patch({ settings: p.id })}>
                 <Icon name={p.icon} size={14} />
                 {p.label}

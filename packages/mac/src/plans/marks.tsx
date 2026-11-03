@@ -1,14 +1,16 @@
 import type { Actor } from '@beluga/core/board/model.js';
+import type { PlanPr } from '@beluga/core/plans/model.js';
 import type { TaskState } from '@beluga/core/plans/progress.js';
 import { useRef } from 'react';
 import { Icon } from '../components/Icon.js';
-import { Avatar, cx } from '../components/ui.js';
+import { Avatar, Button, cx } from '../components/ui.js';
+import { openExternal } from '../lib/system.js';
 import { useApp } from '../lib/beluga.js';
 import { agentName, useMyAgent } from '../lib/agent-words.js';
 import { breath, turn, useLive } from '../lib/live-motion.js';
 import { type Need, type Signal, signalOf } from '../layout/attention-model.js';
 import { SignalMark } from '../layout/signal-marks.js';
-import { type Headline, type Tone, type Who, TASK_STATE } from './plans-model.js';
+import { type Headline, type Tone, type Who, TASK_STATE, prWords } from './plans-model.js';
 import p from './plans.module.css';
 
 /** Small marks shared by the plan's graph, outline and lists: a task's state, a tone pill, progress. */
@@ -182,5 +184,14 @@ export function TaskChatMark({ worktree }: { worktree?: string }) {
     <span className={p.taskChatMark} title={tip} data-task-chat={level}>
       <SignalMark signal={signal} />
     </span>
+  );
+}
+
+/** The plan's pull request, one click from GitHub, with what stands in its way (the page's header, and above its conversation). */
+export function PlanPrChip({ pr }: { pr: PlanPr }) {
+  return (
+    <Button size="small" variant="quiet" icon="pr" title={`#${pr.number} ${pr.title}: ${prWords(pr)}. Open on GitHub`} onClick={() => void openExternal(pr.url)} className={p.prChip} data-state={pr.state === 'OPEN' ? (pr.conflicts || pr.checks === 'failing' ? 'problem' : 'open') : pr.state.toLowerCase()}>
+      #{pr.number} · {pr.state === 'OPEN' ? prWords(pr) : pr.state === 'MERGED' ? 'Merged' : 'Closed'}
+    </Button>
   );
 }

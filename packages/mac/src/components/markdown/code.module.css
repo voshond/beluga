@@ -133,3 +133,8 @@
 .toolOn {
   color: var(--accent);
 }
+
+/* Near-black themes: a lit edge in place of the shadow. */
+:global(:root[data-edges='lit']) .tool {
+  box-shadow: 0 0 0 0.5px var(--hairline-strong), var(--rim);
+}

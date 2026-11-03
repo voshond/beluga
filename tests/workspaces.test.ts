@@ -214,6 +214,36 @@ describe('worktree lifecycle', () => {
     }
   });
 
+  it('forgets the Claude Code sessions worktrees deleted before BLG-532 left behind, never an archived one’s', async () => {
+    const claude = path.join(base, 'claude');
+    process.env.CLAUDE_CONFIG_DIR = claude;
+    const fileSession = (cwd: string, id: string): string => {
+      const filed = path.join(claude, 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
+      mkdirSync(path.join(filed, id), { recursive: true });
+      writeFileSync(path.join(filed, `${id}.jsonl`), `${JSON.stringify({ type: 'user', cwd })}\n`);
+      return filed;
+    };
+    try {
+      const live = await mgr.createWorktree(repos()[0]!.id, 'live');
+      const archived = await mgr.createWorktree(repos()[0]!.id, 'shelved');
+      const liveFiled = fileSession(live.path, 'a');
+      const archivedFiled = fileSession(archived.path, 'b');
+      await mgr.archive(archived.id);
+      // Deleted by an older Beluga: no folder, no workspace, its sessions still filed (one ran in a sub-folder).
+      const gone = path.join(path.dirname(live.path), 'old-task');
+      const goneFiled = fileSession(gone, 'c');
+      const goneSub = fileSession(path.join(gone, 'packages', 'mac'), 'd');
+      // Outside Beluga's worktrees: not ours to judge.
+      const outside = fileSession(path.join(base, 'elsewhere', 'gone'), 'e');
+      expect(await mgr.sweepLeftoverSessions()).toBe(2);
+      expect([goneFiled, goneSub].map(existsSync)).toEqual([false, false]);
+      expect([liveFiled, archivedFiled, outside].map(existsSync)).toEqual([true, true, true]);
+      expect(await mgr.sweepLeftoverSessions()).toBe(0);
+    } finally {
+      delete process.env.CLAUDE_CONFIG_DIR;
+    }
+  });
+
   it("deleting a chat in the main folder forgets only its own Claude Code session", async () => {
     const claude = path.join(base, 'claude');
     process.env.CLAUDE_CONFIG_DIR = claude;

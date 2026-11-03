@@ -7,7 +7,7 @@ import { Icon } from '../components/Icon.js';
 import { ActionsDropdown } from '../components/SpecMenu.js';
 import { IconButton, Tip, cx } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
-import { inApp } from '../lib/boot.js';
+import { inApp, webServed } from '../lib/boot.js';
 import { AssigneeMark, StatusIcon } from './marks.js';
 import { ProofGone, ProofPreview, preloadReader } from './ProofPreview.js';
 import { TaskPicker } from './pickers.js';
@@ -124,8 +124,14 @@ export function Relations({ issue }: { issue: Issue }) {
   );
 }
 
-async function pickFiles(title: string, multiple = false): Promise<string[]> {
-  if (!inApp()) return [];
+/** Files for a task: the Open panel; in a page the web port served, the browser's picker, uploaded to the server. */
+async function pickFiles(title: string, multiple = false, failed: (why: Error) => void = () => undefined): Promise<string[]> {
+  if (!inApp()) {
+    if (!webServed()) return [];
+    const { chooseLocalFiles, uploadFiles } = await import('../lib/web-files.js');
+    const sent = await uploadFiles(await chooseLocalFiles({ multiple }), (file, err) => failed(new Error(`Couldn’t upload ${file.name}: ${err instanceof Error ? err.message : String(err)}`)));
+    return sent.map((u) => u.path);
+  }
   const { open } = await import('@tauri-apps/plugin-dialog');
   const picked = await open({ multiple, title });
   return picked === null ? [] : Array.isArray(picked) ? picked : [picked];
@@ -141,7 +147,7 @@ export function FilesList({ issue }: { issue: Issue }) {
   const { api, act } = useTaskActions();
   const files = taskFiles(issue);
   const add = async (): Promise<void> => {
-    for (const path of await pickFiles('Add files to this task', true)) {
+    for (const path of await pickFiles('Add files to this task', true, (why) => void act(() => Promise.reject(why)))) {
       const name = path.split('/').pop() ?? path;
       await act(() => api.addProof(issue.id, { kind: IMAGE.test(path) ? 'image' : 'file', title: name.slice(0, 120), path, context: true }));
     }
@@ -152,12 +158,12 @@ export function FilesList({ issue }: { issue: Issue }) {
         <h3 className={t.sectionTitle}>Files</h3>
         {files.length ? <span className={t.sectionCount}>{files.length}</span> : null}
         <span className={t.grow} />
-        {inApp() ? <IconButton icon="plus" label="Add Files" onClick={() => void add()} /> : null}
+        {inApp() || webServed() ? <IconButton icon="plus" label="Add Files" onClick={() => void add()} /> : null}
       </header>
       {files.length ? (
         <ProofItems issue={issue} items={files} />
       ) : (
-        <div className={t.relationEmpty}>{inApp() ? 'Drop files here, or on the task’s card, for the work to use. Your agent gets them too.' : 'Files added for the work show here.'}</div>
+        <div className={t.relationEmpty}>{inApp() || webServed() ? 'Drop files here, or on the task’s card, for the work to use. Your agent gets them too.' : 'Files added for the work show here.'}</div>
       )}
     </section>
   );
@@ -168,7 +174,7 @@ export function ProofList({ issue }: { issue: Issue }) {
   const { api, act } = useTaskActions();
   const [link, setLink] = useState<string>();
   const addFile = async (): Promise<void> => {
-    const [path] = await pickFiles('Add proof to this task');
+    const [path] = await pickFiles('Add proof to this task', false, (why) => void act(() => Promise.reject(why)));
     if (!path) return;
     const name = path.split('/').pop() ?? path;
     await act(() => api.addProof(issue.id, { kind: IMAGE.test(path) ? 'image' : 'file', title: name, path }));
@@ -192,7 +198,7 @@ export function ProofList({ issue }: { issue: Issue }) {
         <span className={t.grow} />
         <ActionsDropdown
           items={[
-            ...(inApp() ? [{ label: 'Picture or File…', icon: 'image' as const, onSelect: () => void addFile() }] : []),
+            ...(inApp() || webServed() ? [{ label: 'Picture or File…', icon: 'image' as const, onSelect: () => void addFile() }] : []),
             { label: 'Link…', icon: 'link', onSelect: () => setLink('') },
           ]}
         >

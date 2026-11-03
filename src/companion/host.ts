@@ -1126,18 +1126,24 @@ export class CompanionHost {
     } else if (this.node) {
       // The last phone went: say so on the DHT once more (phones: none), so it hears it's removed.
       await this.reach.publish().catch(() => undefined);
+      // That put can take seconds on the real DHT: a pairing opened meanwhile (`beluga pair` again,
+      // BLG-674) listens on this node, which must then stay.
+      if (this.stopped || this.opts.devices.size > 0 || this.pairing.isOpen) return;
       await this.shutdownNode();
     }
   }
 
   /** The DHT node as soon as it's up, while the companion's own server and the relay still start. */
   private readyNode(): Promise<DHT> {
+    // A node shutting down is no node to listen on: the next one, once it's gone.
+    if (this.stopping) return this.stopping.then(() => this.readyNode());
     if (this.node && this.server) return Promise.resolve(this.node);
     this.ensureNode().catch(() => undefined);
     return this.nodeUp!;
   }
 
   private ensureNode(): Promise<DHT> {
+    if (this.stopping) return this.stopping.then(() => this.ensureNode());
     if (this.node && this.server) return Promise.resolve(this.node);
     if (this.starting) return this.starting;
     let up!: (node: DHT) => void;
@@ -1174,13 +1180,21 @@ export class CompanionHost {
     return this.starting;
   }
 
-  private async shutdownNode(): Promise<void> {
-    await this.starting?.catch(() => undefined);
-    const { node, server } = this;
-    this.node = undefined;
-    this.server = undefined;
-    await this.reach.stop().catch(() => undefined);
-    await server?.close().catch(() => undefined);
-    await node?.destroy().catch(() => undefined);
+  /** A shutdown under way: starting a node waits for it (two at once would share the relay). */
+  private stopping?: Promise<void>;
+
+  private shutdownNode(): Promise<void> {
+    this.stopping ??= (async () => {
+      await this.starting?.catch(() => undefined);
+      const { node, server } = this;
+      this.node = undefined;
+      this.server = undefined;
+      await this.reach.stop().catch(() => undefined);
+      await server?.close().catch(() => undefined);
+      await node?.destroy().catch(() => undefined);
+    })().finally(() => {
+      this.stopping = undefined;
+    });
+    return this.stopping;
   }
 }

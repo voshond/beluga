@@ -10,11 +10,11 @@ import { type ElkInput, type ElkOutput, type Placed, type Point, type Route, pla
 import { layout } from '../components/graph/layout.js';
 import { useSharpZoom } from '../components/graph/sharp-zoom.js';
 import { breath, turn, useLive } from '../lib/live-motion.js';
-import { MILESTONE_STATE, type MilestoneJoin, type PlanGraphShape, TASK_STATE, changeMarks, gateId, graphShape, groupId, lockWords, milestoneJoin, milestoneLink, startingMilestones, taskNodeId, taskWords } from './plans-model.js';
+import { MILESTONE_STATE, type MilestoneJoin, type PlanGraphShape, TASK_STATE, changeMarks, gateId, graphShape, groupId, lockWords, milestoneJoin, milestoneLink, milestoneNowWords, startingMilestones, taskNodeId, taskWords } from './plans-model.js';
 import { COMPACT_STATES, FOLDS_KEY, type Folds, MILESTONE, type MilestoneFrame, PLAN_GAPS, arrowHead, isFolded, labelAt, milestoneAnchors, milestoneFrame, milestoneRoute, placeMilestones, readFolds, taskSize, withFold } from './plan-layout.js';
 import { useCheckerChat, useClock, usePlanActions } from './use-plans.js';
 import { useGlide } from './use-glide.js';
-import { LockMark, TaskChatMark, TaskStateIcon } from './marks.js';
+import { LiveDot, LockMark, TaskChatMark, TaskStateIcon } from './marks.js';
 import p from './plans.module.css';
 import c from './PlanCanvas.module.css';
 
@@ -56,6 +56,8 @@ interface MilestoneData extends Record<string, unknown> {
   readonly branch?: string;
   /** Beluga is starting its Claude right now (see startingMilestones). */
   readonly starting?: boolean;
+  /** Picked: its details are open (the same pick as its gate's). */
+  readonly selected: boolean;
   readonly onFold: (milestoneId: string, folded: boolean) => void;
 }
 interface GateData extends Record<string, unknown> {
@@ -289,7 +291,7 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
         width: box.width,
         height: box.height,
         measured: { width: box.width, height: box.height },
-        data: { view: m, current, folded: away, waitsOn, gated: m.dependsOn.some((d) => byMs.has(d)), ...(view.plan.branch ? { branch: view.plan.branch } : {}), ...(starting.has(id) ? { starting: true } : {}), onFold },
+        data: { view: m, current, folded: away, waitsOn, gated: m.dependsOn.some((d) => byMs.has(d)), ...(view.plan.branch ? { branch: view.plan.branch } : {}), ...(starting.has(id) ? { starting: true } : {}), selected: selected === gateId(id), onFold },
         selectable: false,
         draggable: false,
         zIndex: -1,
@@ -428,7 +430,8 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
         panOnScroll
         zoomOnPinch
         panOnDrag
-        onNodeClick={(_e, n) => (n.type === 'milestone' || n.className === c.foldedAway ? undefined : onSelect(n.type === 'gate' ? n.id : n.id.replace(/^t:/, '')))}
+        // A milestone (open, anywhere but its cards) or its gate: the milestone's details; a card: its task's.
+        onNodeClick={(_e, n) => (n.className === c.foldedAway || (n.type === 'milestone' && n.data.folded) ? undefined : onSelect(n.type === 'gate' ? n.id : n.type === 'milestone' ? gateId(n.id.replace(/^m:/, '')) : n.id.replace(/^t:/, '')))}
         onNodeMouseEnter={(_e, n) => (n.type === 'task' ? setHot(n.id) : undefined)}
         onNodeMouseLeave={(_e, n) => (n.type === 'task' ? setHot((h) => (h === n.id ? undefined : h)) : undefined)}
         onPaneClick={() => onSelect(undefined)}
@@ -539,6 +542,10 @@ const MilestoneNode = memo(function MilestoneNode({ data }: NodeProps<Node<Miles
   const share = m.state === 'passed' ? 1 : m.total ? m.finished / m.total : 0;
   const locked = data.waitsOn.length > 0;
   const passed = m.state === 'passed';
+  // Its agent at work right now: said in its header, even between tasks (when no card shows it).
+  const clock = useClock(!data.folded && (m.agentNow?.kind === 'working' || m.agentNow?.kind === 'command'));
+  const live = data.folded ? undefined : milestoneNowWords(m, clock);
+  const { openWorktree } = usePlanActions();
   // Where the line from what it waits on comes in: a lock, open once those gates pass.
   const badge = data.gated ? (
     <span className={cx(c.inBadge, locked ? c.inBadgeLocked : c.inBadgeOpen)} title={lockWords(data.waitsOn, m.dependsOn.length, data.branch)} aria-hidden="true">
@@ -570,7 +577,12 @@ const MilestoneNode = memo(function MilestoneNode({ data }: NodeProps<Node<Miles
     );
   }
   return (
-    <div className={cx(p.milestone, p[`ms_${m.state}`], data.current && p.msCurrent, c.ms, locked && c.msLocked)} data-locked={locked ? 'true' : undefined}>
+    <div
+      className={cx(p.milestone, p[`ms_${m.state}`], data.current && p.msCurrent, c.ms, locked && c.msLocked, live && c.msLive, data.selected && c.msSelected)}
+      data-locked={locked ? 'true' : undefined}
+      data-milestone={m.milestone.id}
+      data-agent-now={live ? live.tone : undefined}
+    >
       <Handle id="in" type="target" position={Position.Top} className={p.handle} isConnectable={false} />
       <Handle id="out" type="source" position={Position.Bottom} className={p.handle} isConnectable={false} />
       {badge}
@@ -608,6 +620,20 @@ const MilestoneNode = memo(function MilestoneNode({ data }: NodeProps<Node<Miles
           </span>
         </span>
         <span className={p.grow} />
+        {live && m.agent ? (
+          <button
+            type="button"
+            className={cx(c.agentNow, p[`tone_${live.tone}`], 'nodrag', 'nopan')}
+            title={`${live.label}${live.sub ? ` · ${live.sub}` : ''}: open its chat`}
+            aria-label={`${live.label}${live.sub ? `, ${live.sub}` : ''}. Open the Agent’s Chat`}
+            onClick={(e) => (e.stopPropagation(), openWorktree(m.agent!.worktree))}
+          >
+            {live.tone === 'claude' ? <LiveDot /> : <Icon name="chat" size={11} />}
+            <span className={c.agentNowLabel}>{live.label}</span>
+            {live.sub && !live.onCard ? <span className={c.agentNowSub}>{live.sub}</span> : null}
+            <TaskChatMark worktree={m.agent.worktree} />
+          </button>
+        ) : null}
         {locked ? (
           <span className={c.lockChip} title={lockWords(data.waitsOn, m.dependsOn.length, data.branch)}>
             <LockMark size={10} />

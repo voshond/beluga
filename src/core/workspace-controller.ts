@@ -1313,6 +1313,8 @@ export class WorkspaceController {
     settle();
     if (done) {
       this.loaded.delete(`${WS_PREFIX}${id}`);
+      // Its conversation went with it on disk; the copy loaded here goes too, or search still finds it.
+      this.deps.store.dispatch({ type: 'history', channel: `${WS_PREFIX}${id}`, items: [] });
       this.deps.intend({ type: 'close_tab', id });
       // Its views' rows go, and their scripts and handed-over rows unless another conversation shows them.
       forgetViews(answers, 'deleted', () => this.answersElsewhere(id));

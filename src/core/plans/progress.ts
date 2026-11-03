@@ -1,6 +1,6 @@
 import { type BoardState, type Issue, issueById } from '../board/model.js';
 import { type Autonomy, type Combining, type MilestoneAgent, type MilestoneRun, type Plan, type PlanBody, type PlanMerge, type PlanMilestone, type PlanTask, type TaskWatch, autonomyOf, milestoneDeps, openMilestones, shownBody } from './model.js';
-import { type RunInfo, type TaskPulse, type WaitingMessage, messageState, pulseOf } from './watchdog.js';
+import { type RunInfo, type TaskPulse, type WaitingMessage, messageState, pulseOf, pulseWords } from './watchdog.js';
 
 /**
  * Where a plan stands, worked out from the plan and the board (and what Claude is doing right
@@ -84,6 +84,11 @@ export interface MilestoneView {
   readonly merging?: PlanMerge;
   /** Its one Claude, while its worktree is there (see pilot.ts). */
   readonly agent?: MilestoneAgent;
+  /**
+   * That Claude at work right now (a turn under way, or asking you): what it's doing, even between
+   * tasks (wrapping one up, about to start the next), when no task card says so.
+   */
+  readonly agentNow?: TaskPulse;
 }
 
 /** The one thing a plan waits for (the page's main button). */
@@ -181,6 +186,32 @@ function mergingText(m: PlanMerge, title: string, branch: string | undefined): s
   if (!c) return `Merging “${title}” into ${branch ?? 'the plan’s branch'} …`;
   if (c.stuck) return `Fix the merge conflict in ${what} (${c.files.slice(0, 3).join(', ')}, in ${c.dir}): it merges once no markers are left`;
   return `Fixing a merge conflict in ${what}`;
+}
+
+/** A milestone's Claude right now, only while it's at work or asking (between turns it says nothing: its tasks do). */
+function agentPulse(live: Live, agent: MilestoneAgent): TaskPulse | undefined {
+  const channel = `ws:${agent.worktree}`;
+  const asking = live.asking(channel);
+  if (!asking && !live.busy(channel)) return undefined;
+  const run = live.run?.(channel);
+  const pulse = pulseOf(run, asking, undefined);
+  // Busy with no turn of its own to read yet (a message just sent): working, timed from its last word (else from its start).
+  return pulse.kind === 'working' || pulse.kind === 'command' || pulse.kind === 'waiting' ? pulse : { kind: 'working', since: run?.lastAt ?? agent.at };
+}
+
+/**
+ * A milestone's Claude right now, in words: “Working on BLG-12”, or “Working between tasks”
+ * (wrapping one up, starting the next: no card shows that), with its step and how long (`now`: 0
+ * leaves the time out). Nothing while it isn't at work. `onCard`: a task card says it too.
+ */
+export function agentNowWords(m: Pick<MilestoneView, 'agentNow' | 'agent' | 'tasks'>, now: number): { readonly label: string; readonly asking: boolean; readonly sub?: string; readonly onCard: boolean } | undefined {
+  if (!m.agentNow || !m.agent) return undefined;
+  const worktree = m.agent.worktree;
+  const on = m.tasks.find((t) => t.worktree === worktree && (t.state === 'running' || t.state === 'asking'));
+  const key = on ? (on.issue?.key ?? `“${on.task.title}”`) : undefined;
+  if (m.agentNow.kind === 'waiting') return { label: key ? `Asked you about ${key}` : 'Asked you something', asking: true, onCard: Boolean(on) };
+  const step = now ? pulseWords(m.agentNow, now).sub : m.agentNow.kind === 'working' || m.agentNow.kind === 'command' ? m.agentNow.step : undefined;
+  return { label: key ? `Working on ${key}` : 'Working between tasks', asking: false, ...(step ? { sub: step } : {}), onCard: Boolean(on) };
 }
 
 /** A plan where it stands. */
@@ -322,7 +353,8 @@ export function planView(plan: Plan, board: BoardState, live: Live = NOBODY_LIVE
     else if (run.check && run.checkAsked !== undefined && run.check.at >= run.checkAsked) state = run.check.verdict === 'fail' ? 'failed' : 'gate';
     else if (run.checkAsked !== undefined) state = 'checking';
     else state = 'gate';
-    return { milestone: m, index, state, tasks, finished: done, total: counted.length, autonomy, run, dependsOn: milestoneDeps(body, m), ...(merging ? { merging } : {}), ...(agent ? { agent } : {}) };
+    const agentNow = agent && state !== 'passed' ? agentPulse(live, agent) : undefined;
+    return { milestone: m, index, state, tasks, finished: done, total: counted.length, autonomy, run, dependsOn: milestoneDeps(body, m), ...(merging ? { merging } : {}), ...(agent ? { agent } : {}), ...(agentNow ? { agentNow } : {}) };
   });
 
   const open = milestones.filter((m) => openIds.has(m.milestone.id));

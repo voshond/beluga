@@ -17,9 +17,9 @@ export interface AgentLabelOptions {
   readonly capital?: boolean;
 }
 
-/** Model ids as people say them: "opus" → "Opus", "gpt-5" → "GPT-5", "claude-sonnet-4-5" → "Sonnet 4.5". */
+/** Model ids as people say them: "opus" → "Opus", "gpt-5" → "GPT-5", "claude-sonnet-4-5" → "Sonnet 4.5", OpenCode's "anthropic/claude-sonnet-4-5" the same (its provider isn't said). */
 export function modelName(model: string): string {
-  const m = model.trim().replace(/^claude-/i, '');
+  const m = model.trim().replace(/^[\w.@-]+\//, '').replace(/^claude-/i, '');
   if (/^gpt/i.test(m)) return m.replace(/^gpt/i, 'GPT');
   // A dated id's date ("-20250929") isn't said.
   const [first = '', ...rest] = m.split('-').filter((p) => !/^\d{8}$/.test(p));
@@ -44,7 +44,7 @@ export function agentLabel(ref: AgentRef | undefined, owner: string | undefined,
   return opts.capital ? phrase.charAt(0).toUpperCase() + phrase.slice(1) : phrase;
 }
 
-const RUNTIME_NAMES: Readonly<Record<string, string>> = { claude: 'Claude', codex: 'Codex', local: 'Local model' };
+const RUNTIME_NAMES: Readonly<Record<string, string>> = { claude: 'Claude', codex: 'Codex', opencode: 'OpenCode', local: 'Local model' };
 
 /**
  * A message's small badge: what runs the agent, when its name doesn't already say it, and the

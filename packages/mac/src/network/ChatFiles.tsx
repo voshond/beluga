@@ -4,7 +4,7 @@ import type { SocketClient } from '@beluga/ipc/socket-client.js';
 import { Icon } from '../components/Icon.js';
 import { type ActionItem, ActionsContext } from '../components/SpecMenu.js';
 import { cx } from '../components/ui.js';
-import { inApp } from '../lib/boot.js';
+import { inApp, webServed } from '../lib/boot.js';
 import { copyText } from '../lib/copy.js';
 import { useApp, useBeluga } from '../lib/beluga.js';
 import { type Pending, removePending } from './attachments.js';
@@ -39,6 +39,20 @@ async function saveAs(client: SocketClient, f: ChatFile): Promise<string | undef
   return to ? client.api.network['files.saveTo'](f.sha, to) : undefined;
 }
 
+/**
+ * Open a file that's here: with its app on this Mac; in a page the web port served (another
+ * computer, maybe), the browser downloads it instead.
+ */
+function openHere(client: SocketClient, f: ChatFile, state: ChatFileState | undefined): Promise<unknown> {
+  if (webServed() && state?.path) return import('../lib/web-files.js').then(({ download }) => download(client, { path: state.path! }));
+  return client.api.network['files.open'](f.sha);
+}
+
+/** Show it in Finder; in a served page, download it (there's no Finder on this side). */
+function revealHere(client: SocketClient, f: ChatFile, state: ChatFileState | undefined): Promise<unknown> {
+  return webServed() ? openHere(client, f, state) : client.api.network['files.reveal'](f.sha);
+}
+
 function useFileState(sha: string): ChatFileState | undefined {
   return useApp((st) => st.network.files?.[sha]);
 }
@@ -57,8 +71,12 @@ function fileItems(f: ChatFile, state: ChatFileState | undefined, ctx: { client:
     ];
   }
   return [
-    { label: 'Open', icon: 'external', onSelect: () => run(client.api.network['files.open'](f.sha)) },
-    { label: revealLabel(), icon: 'folder', onSelect: () => run(client.api.network['files.reveal'](f.sha)) },
+    ...(webServed()
+      ? [{ label: 'Download', icon: 'download' as const, onSelect: () => run(openHere(client, f, state)) }]
+      : [
+          { label: 'Open', icon: 'external' as const, onSelect: () => run(openHere(client, f, state)) },
+          { label: revealLabel(), icon: 'folder' as const, onSelect: () => run(revealHere(client, f, state)) },
+        ]),
     ...(inApp() ? [{ label: 'Save As…', icon: 'download' as const, onSelect: () => run(saveAs(client, f).then((to) => to && say(`Saved to ${to}`))) }] : []),
     { label: 'Copy Name', icon: 'copy', separate: true, onSelect: () => run(copyText(f.name), `Copied “${f.name}”`) },
     ...(state.path ? [{ label: 'Copy Path', onSelect: () => run(copyText(state.path!), 'Copied the path') }] : []),
@@ -87,7 +105,7 @@ function Picture({ f, state }: { f: ChatFile; state: ChatFileState | undefined }
   }, [here, url, f.sha]);
   if (!url) return null;
   return (
-    <button type="button" className={s.picture} onClick={() => void client.api.network['files.open'](f.sha)} aria-label={`Open ${f.name}`}>
+    <button type="button" className={s.picture} onClick={() => void openHere(client, f, state)} aria-label={`Open ${f.name}`}>
       <img src={url} alt={f.name} draggable={false} />
     </button>
   );
@@ -103,7 +121,7 @@ export const FileCard = memo(function FileCard({ f, conversation, mine }: { f: C
   const pct = coming && state.size ? Math.min(100, Math.round(((state.received ?? 0) / state.size) * 100)) : 0;
   const fail = (err: unknown): void => say(errorText(err), 'error');
   const primary = (): void => {
-    if (here) void client.api.network['files.open'](f.sha).catch(fail);
+    if (here) void openHere(client, f, state).catch(fail);
     else if (!coming) void client.api.network['files.download'](f.sha, conversation).catch(fail);
   };
   const detail = coming
@@ -134,8 +152,8 @@ export const FileCard = memo(function FileCard({ f, conversation, mine }: { f: C
               <Icon name="x" size={11} />
             </button>
           ) : here ? (
-            <button type="button" className={s.fileAction} aria-label={revealLabel(f.name)} onClick={() => void client.api.network['files.reveal'](f.sha).catch(fail)}>
-              <Icon name="folder" size={12} />
+            <button type="button" className={s.fileAction} aria-label={webServed() ? `Download ${f.name}` : revealLabel(f.name)} onClick={() => void revealHere(client, f, state).catch(fail)}>
+              <Icon name={webServed() ? 'download' : 'folder'} size={12} />
             </button>
           ) : (
             <button type="button" className={s.fileAction} aria-label={state?.state === 'failed' ? `Try downloading ${f.name} again` : `Download ${f.name}`} onClick={() => void client.api.network['files.download'](f.sha, conversation).catch(fail)}>

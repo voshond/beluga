@@ -37,6 +37,7 @@ export type RuntimeState = 'ready' | 'signed_out' | 'missing' | 'no_endpoint';
 export const KNOWN_RUNTIMES: ReadonlyArray<{ readonly id: string; readonly label: string; readonly missing: string }> = [
   { id: 'claude', label: 'Claude', missing: "Claude Code isn't signed in on this Mac" },
   { id: 'codex', label: 'Codex', missing: "Codex isn't set up on this Mac yet" },
+  { id: 'opencode', label: 'OpenCode', missing: "OpenCode isn't set up on this Mac yet" },
   { id: 'local', label: 'Local model', missing: 'No local model endpoint is set' },
 ];
 

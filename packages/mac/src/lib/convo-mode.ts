@@ -2,6 +2,7 @@ import type { AppState, LogItem } from '../../../../src/core/store.js';
 import { activityOf } from '../../../../src/ui/workspace-models.js';
 import { defaultAgentOf } from '../../../../src/protocol.js';
 import { runtimeOf } from '../../../../src/shared/agent-picker.js';
+import { runtimeHas } from '../../../../src/shared/runtime-fallbacks.js';
 
 /**
  * How a conversation shows in the middle of the window (BLG-534): the chat, the agent's own
@@ -85,7 +86,7 @@ type ModePrefs = Parameters<typeof shownMode>[0];
  */
 export function sendsToTerminal(state: AppState, prefs: ModePrefs, channel: string, runtime?: string): boolean {
   if (!prefs.termView) return false;
-  if (channel === 'draft') return prefs.convoDefault !== 'chat' && (runtime ?? defaultAgentOf(state.self).runtime) !== 'codex';
+  if (channel === 'draft') return prefs.convoDefault !== 'chat' && runtimeHas(runtime ?? defaultAgentOf(state.self).runtime, 'terminal');
   if (!channel.startsWith('ws:')) return false;
   const wsId = channel.slice(3);
   if (!terminalCapable(state, wsId)) return false;
@@ -107,10 +108,11 @@ export const clampVisuals = (width: number, room: number): number => Math.round(
 
 /**
  * Whether a workspace's conversation can show as a terminal: yours, made, not a project's main
- * checkout, and on Claude Code (a local model runs in it too). Codex's stays in the chat.
+ * checkout, and on Claude Code (a local model runs in it too). Codex's and OpenCode's stay in the
+ * chat (runtime-fallbacks.ts `terminal`).
  */
 export function terminalCapable(state: AppState, wsId: string | undefined): boolean {
   const ws = wsId ? state.projects.flatMap((p) => p.workspaces).find((w) => w.id === wsId) : undefined;
   if (!ws || ws.archived || ws.kind === 'main' || (ws.kind === 'worktree' && ws.external)) return false;
-  return runtimeOf(state, `ws:${ws.id}`, defaultAgentOf(state.self).runtime) !== 'codex';
+  return runtimeHas(runtimeOf(state, `ws:${ws.id}`, defaultAgentOf(state.self).runtime), 'terminal');
 }

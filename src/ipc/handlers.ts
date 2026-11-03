@@ -3,7 +3,7 @@ import { needFriendShares } from '../core/friend-share/launch.js';
 import { remoteScratch } from '../core/friend-share/scratch.js';
 import type { AddResult, WorkspaceController } from '../core/workspace-controller.js';
 import type { Workbench } from '../core/workbench.js';
-import { listLocalDirs, localDirKey, openWithSystem } from '../core/local.js';
+import { browseDir, listLocalDirs, localDirKey, openWithSystem } from '../core/local.js';
 import { ATTACHMENT_SHARE, type FetchShared, attachmentOnDisk, chipText, expandChips, importImageFitting, mediaTypeOf, pathInfo, publishForRoom, reattach, readAttachment, registerAttachment, roomAttachmentsDir, saveImageBytes } from '../core/attachments.js';
 import { fetchBytes } from '../core/downloads.js';
 import { testDatabase } from '../core/views/sources.js';
@@ -20,6 +20,7 @@ import type { Args, Method } from './api.js';
 import { NETWORK_HANDLERS } from './network-handlers.js';
 import { STRIPE_HANDLERS } from './stripe-handlers.js';
 import { SUPPORT_HANDLERS } from './support-handlers.js';
+import { WEB_HANDLERS } from './web-handlers.js';
 import { DIAGNOSTICS_HANDLERS } from './diagnostics-handlers.js';
 import { CLAUDE_CODE_HANDLERS } from './claude-code-handlers.js';
 import { STEPS_HANDLERS } from './steps-handlers.js';
@@ -28,6 +29,7 @@ import { BOARD_HANDLERS } from './board-handlers.js';
 import { DASHBOARD_HANDLERS } from './dashboard-handlers.js';
 import { SENTINEL_HANDLERS } from './sentinel-handlers.js';
 import { PLANS_HANDLERS } from './plans-handlers.js';
+import { plansOf } from '../core/plans/registry.js';
 import { DIALOGUES_HANDLERS } from './dialogues-handlers.js';
 import { ISSUES_HANDLERS } from './issues-handlers.js';
 import { CI_HANDLERS } from './ci-handlers.js';
@@ -258,7 +260,11 @@ export const HANDLERS = {
   'workbench.openCode': (s, id, file, line) => bench(s)?.openCode(id, file, line),
   'workbench.excerpt': (s, id, file, from, to) => bench(s)?.excerpt(id, file, from, to),
   'workbench.cancelMergeWhenReady': (s, id) => bench(s)?.cancelMergeWhenReady(id),
-  'workbench.refreshPrs': (s, only, recheckGh) => (typeof only === 'object' ? bench(s)?.pollPrs(only.reason, only.id) : bench(s)?.refreshPrs(only, recheckGh)),
+  'workbench.refreshPrs': (s, only, recheckGh) => {
+    // Back to the window: the plans' pull requests are looked at too, as the worktrees' are.
+    if (typeof only === 'object' && only.reason === 'focus') void plansOf(s)?.pilot.pollPrs('focus').catch(() => undefined);
+    return typeof only === 'object' ? bench(s)?.pollPrs(only.reason, only.id) : bench(s)?.refreshPrs(only, recheckGh);
+  },
   'workbench.editPrPrompt': (s) => bench(s)?.editPrPrompt(),
   'workbench.resetPrPrompt': (s) => bench(s)?.resetPrPrompt(),
   'workbench.measureDisk': (s) => bench(s)?.measureDisk(),
@@ -377,11 +383,13 @@ export const HANDLERS = {
     s.store.dispatch({ type: 'dir_cache', key: localDirKey(dir), entries });
     return entries;
   },
+  'local.browse': (_s, dir) => browseDir(dir),
   'local.openFolder': (_s, dir) => openWithSystem(dir),
   'local.statFiles': (_s, paths) => paths.map(pathInfo),
   ...NETWORK_HANDLERS,
   ...STRIPE_HANDLERS,
   ...SUPPORT_HANDLERS,
+  ...WEB_HANDLERS,
   ...DIAGNOSTICS_HANDLERS,
   ...CLAUDE_CODE_HANDLERS,
   ...STEPS_HANDLERS,

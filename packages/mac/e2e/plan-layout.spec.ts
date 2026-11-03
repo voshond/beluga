@@ -21,10 +21,10 @@ test('the plan and its chat share the page: no panel, a toggle that stays, a wid
   await page.setViewportSize({ width: 1400, height: 820 });
   await page.goto('/');
   await openPlan(page, /^Card checkout for launch,/);
-  // No right panel beside a plan, and its button can't bring it.
+  // No right panel beside a plan, and no button for it.
   const panel = page.locator('aside[aria-label="Panel"]');
   await expect(panel).toHaveAttribute('aria-hidden', 'true');
-  await expect(page.getByRole('button', { name: /^No panel on a plan/ })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /^(Show|Hide) the panel/ })).toHaveCount(0);
   await page.keyboard.press('Alt+Meta+Digit0');
   await expect(panel).toHaveAttribute('aria-hidden', 'true');
   // …⌥⌘0 hid the chat instead (its right side); the header's toggle is still there to bring it back.

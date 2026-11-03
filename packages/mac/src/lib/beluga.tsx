@@ -44,7 +44,7 @@ export const recipientPrefix = (to: Recipient): string => (to.claude ? (to.self 
 /** "bob's Claude", "your Claude", "bob". */
 export const recipientLabel = (to: Recipient): string => (to.claude ? (to.self ? 'your agent' : `${to.name}’s agent`) : to.name);
 
-export type SettingsPane = 'general' | 'appearance' | 'claude' | 'notifications' | 'workspaces' | 'terminal' | 'fire' | 'menubar' | 'environment' | 'people' | 'phone' | 'voice' | 'keyboard' | 'about';
+export type SettingsPane = 'general' | 'appearance' | 'claude' | 'notifications' | 'workspaces' | 'terminal' | 'fire' | 'menubar' | 'environment' | 'people' | 'phone' | 'voice' | 'keyboard' | 'advanced' | 'about';
 
 type Listener = () => void;
 

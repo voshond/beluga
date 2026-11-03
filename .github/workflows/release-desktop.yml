@@ -102,6 +102,63 @@ jobs:
           name: beluga-${{ runner.os }}
           path: release-out
 
+  # Beluga for a server (scripts/build-server.mjs): a tarball per system with Node inside, and
+  # the script that installs it (curl -fsSL …/releases/latest/download/install.sh | sh).
+  server:
+    if: github.event_name == 'workflow_dispatch' || endsWith(github.event.release.tag_name, '-mac')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-22.04, os: linux, arch: x64 }
+          - { runner: ubuntu-22.04-arm, os: linux, arch: arm64 }
+          - { runner: macos-14, os: darwin, arch: arm64 }
+          # Built on Apple silicon for Intel Macs: npm fetches the x64 prebuilds, the script x64 Node.
+          - { runner: macos-14, os: darwin, arch: x64 }
+    runs-on: ${{ matrix.runner }}
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: The install script as this workflow has it (a re-run for an older tag gets its fixes)
+        run: |
+          git fetch --depth 1 origin "$GITHUB_SHA"
+          git checkout "$GITHUB_SHA" -- scripts/install.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm ci
+        working-directory: packages/mac
+      - run: node scripts/build-server.mjs --os ${{ matrix.os }} --arch ${{ matrix.arch }} --out server-out
+      - name: It installs and runs (where it was built for this computer)
+        if: matrix.os != 'darwin' || matrix.arch == 'arm64'
+        run: |
+          BELUGA_DOWNLOAD_URL="file://$PWD/server-out/beluga-server-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" sh server-out/install.sh
+          ~/.local/bin/beluga up
+          ~/.local/bin/beluga status
+          ~/.local/bin/beluga stop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-${{ matrix.os }}-${{ matrix.arch }}
+          path: server-out
+
+  server-publish:
+    needs: server
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: server-*
+          path: artifacts
+          merge-multiple: true
+      - run: gh release upload "$TAG" artifacts/beluga-server-*.tar.gz artifacts/install.sh --clobber --repo "$GITHUB_REPOSITORY"
+
   publish:
     needs: build
     runs-on: ubuntu-latest
@@ -113,7 +170,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      # Only the desktop builds: the server's files (each with its own install.sh) are server-publish's.
       - uses: actions/download-artifact@v4
         with:
+          pattern: beluga-*
           path: artifacts
       - run: node scripts/release-desktop.mjs publish --tag "$TAG" --dir artifacts

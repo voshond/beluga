@@ -2,7 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { type ReactNode, type Ref, type TextareaHTMLAttributes, type InputHTMLAttributes, useId, useState } from 'react';
 import { pickFolders } from '../lib/projects.js';
 import { copyText } from '../lib/copy.js';
-import { inApp } from '../lib/boot.js';
+import { canPickFolders } from '../lib/boot.js';
 import { Icon, type IconName } from './Icon.js';
 import { Select, type SelectEntry } from './Select.js';
 import { cx } from './ui.js';
@@ -166,7 +166,7 @@ export function FolderInput({ value, onChange, title = 'Choose a folder', placeh
   return (
     <div className={s.folder}>
       <TextInput id={id} value={value} onChange={onChange} mono placeholder={placeholder} aria-label="Folder" />
-      {inApp() ? (
+      {canPickFolders() ? (
         <button
           type="button"
           className={s.button}

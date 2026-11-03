@@ -24,7 +24,7 @@ export const ClientFrame = z.discriminatedUnion('t', [
     t: z.literal('hello'),
     token: z.string().min(16).max(200),
     ipc: z.number().int(),
-    kind: z.enum(['mac', 'test']),
+    kind: z.enum(['mac', 'cli', 'test']),
     version: z.string().max(40),
     launchDir: z.string().max(4096).optional(),
     caps: z.array(z.enum(CAPS)).max(CAPS.length).default([]),

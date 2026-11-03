@@ -23,12 +23,12 @@ import { agentForChoice } from '@beluga/ui/agent-choice.js';
 import type { AgentRef } from '@beluga/protocol.js';
 import { openSheet } from '../lib/sheets.js';
 import { mod, openExternal } from '../lib/system.js';
-import { MilestoneBar, PlanProgress, Said, TonePill } from './marks.js';
+import { MilestoneBar, PlanPrChip, PlanProgress, Said, TonePill } from './marks.js';
 import { PlanChat } from './PlanChat.js';
 import { BRANCH, FEED, PlanDetails } from './PlanDetails.js';
 import { PlanOutline } from './PlanOutline.js';
 import { CHAT_DEFAULT, DEFAULT_PLAN_LAYOUT, type Display, PLAN_LAYOUT_KEY, type PlanLayout, chatOpen, clampChatWidth, readPlanLayout, setChatOpen } from './plan-layout.js';
-import { barColumns, changeWords, headline, nextWords, prWords, shipAction, titleOf } from './plans-model.js';
+import { barColumns, changeWords, headline, nextWords, shipAction, titleOf } from './plans-model.js';
 import { useCheckerChat, useConversationLoaded, usePlanActions, usePlanStep, usePlanView, usePlans } from './use-plans.js';
 import p from './plans.module.css';
 import { TeamReviews, usePlanTeamItems } from '../team/SharedPlans.js';
@@ -322,11 +322,7 @@ function Page({ view, prefs, setPrefs, picked, setPicked }: { view: PlanView; pr
         </div>
         <div className={p.headActions}>
           {/* The plan's pull request, always one click from GitHub, with what stands in its way. */}
-          {pr ? (
-            <Button size="small" variant="quiet" icon="pr" title={`#${pr.number} ${pr.title}: ${prWords(pr)}. Open on GitHub`} onClick={() => void openExternal(pr.url)} className={p.prChip} data-state={pr.state === 'OPEN' ? (pr.conflicts || pr.checks === 'failing' ? 'problem' : 'open') : pr.state.toLowerCase()}>
-              #{pr.number} · {pr.state === 'OPEN' ? prWords(pr) : pr.state === 'MERGED' ? 'Merged' : 'Closed'}
-            </Button>
-          ) : null}
+          {pr ? <PlanPrChip pr={pr} /> : null}
           {/* How it runs: nothing to run while Claude writes it. A real decision: its sheet says what changes. */}
           {drafting ? null : (
             <Button size="small" variant="quiet" icon="gauge" title={AUTONOMY_INFO[plan.autonomy].hint} onClick={() => openSheet({ kind: 'plan_mode', planId: plan.id })}>
@@ -423,7 +419,7 @@ function Page({ view, prefs, setPrefs, picked, setPicked }: { view: PlanView; pr
           ) : (
             <PlanOutline view={view} keys={keys} selected={picked} onSelect={setPicked} startable={startable} />
           )}
-          {picked ? <PlanDetails view={view} picked={picked} canStart={startable.has(picked)} onClose={() => setPicked(undefined)} /> : null}
+          {picked ? <PlanDetails view={view} picked={picked} canStart={startable.has(picked)} onPick={setPicked} onClose={() => setPicked(undefined)} /> : null}
         </div>
         {/* Hidden, not gone: what you typed, where you'd scrolled and a send to retry are there when it's back. */}
         {plan.home ? (

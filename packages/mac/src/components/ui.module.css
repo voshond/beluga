@@ -338,3 +338,8 @@
     opacity: 1;
   }
 }
+
+/* Near-black themes: a plain button keeps its shape by a lit edge. */
+:global(:root[data-edges='lit']) .plain {
+  box-shadow: 0 0 0 0.5px var(--hairline-strong), var(--rim);
+}

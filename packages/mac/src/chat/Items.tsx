@@ -532,6 +532,16 @@ function TurnCard({
                 </Button>
               </ActionsDropdown>
             </div>
+          ) : limited && failure?.kind === 'signed_out' && failure.runtime === 'opencode' ? (
+            // OpenCode's model provider said no (a key expired, none set up): add one in Terminal (`opencode auth login`), then Continue.
+            <div className={s.limitActions}>
+              <Button size="small" icon="person" onClick={() => void client.api.workbench.agentSignIn('opencode').catch((err: unknown) => toast(client, err instanceof Error ? err.message : String(err), 'error'))} title="Add or renew a model provider in Terminal (opencode auth login), then Continue">
+                Sign In
+              </Button>
+              <Button size="small" icon="play" onClick={resume} title={`Send “continue”: ${agentName(item.agent)} picks up where it stopped`}>
+                Continue
+              </Button>
+            </div>
           ) : limited ? (
             <div className={s.limitActions}>
               <Button size="small" icon="play" onClick={resume} title={`Send “continue”: ${agentName(item.agent)} picks up where it stopped`}>

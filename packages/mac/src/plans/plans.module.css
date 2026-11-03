@@ -2007,3 +2007,69 @@ textarea.goalBox {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* A milestone's agent, in its details: what it's doing right now. */
+.agentNowLine {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: var(--tone, var(--text-2));
+}
+.agentNowLine > span {
+  min-width: 0;
+}
+/* Its tasks in the order its agent does them: each a row that opens the task. */
+.msTaskList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.msTaskRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  box-sizing: content-box;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.msTaskRow:hover {
+  background: var(--hover, color-mix(in srgb, var(--text) 6%, transparent));
+}
+.msTaskRow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.msTaskTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.msTaskState {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.msTaskRow[data-state='running'] .msTaskState {
+  color: var(--claude);
+}
+.msTaskRow[data-state='asking'] .msTaskState,
+.msTaskRow[data-state='idle'] .msTaskState,
+.msTaskRow[data-state='stalled'] .msTaskState {
+  color: var(--warn);
+}

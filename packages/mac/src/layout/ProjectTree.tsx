@@ -12,7 +12,7 @@ import { EarningsPill } from '../components/EarningsPill.js';
 import { stripeMenuItem } from '../lib/earnings.js';
 import { Badge, Dot, IconButton, cx } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
-import { inApp } from '../lib/boot.js';
+import { inApp, webServed } from '../lib/boot.js';
 import { newEmptyGroup, useGroupEdit } from '../lib/group-edit.js';
 import { useApi, useApp, useBeluga, useUi } from '../lib/beluga.js';
 import { sameDeep } from '../lib/stable.js';
@@ -85,7 +85,7 @@ function useIconItems(p: Project): readonly ActionItem[] {
       onSelect: () => {
         void pickImage(`An icon for ${p.name}`).then((image) => (image ? change(image) : undefined));
       },
-      disabled: !inApp(),
+      disabled: !inApp() && !webServed(),
     },
     { label: 'Use the Project’s Own Icon', onSelect: () => void change(undefined) },
   ];

@@ -240,6 +240,18 @@ function Milestone({ m, last, i, draft, titles, after, picked }: { m: PlanView['
           <T v="caption" c={toneInk(tone)} style={{ fontWeight: "600", marginTop: 2, textTransform: "capitalize" }}>
             {m.state === 'gate' ? 'Waiting for you to pass it' : m.state}
           </T>
+          {m.agentNow ? (
+            // Its agent at work right now, even between tasks (1.40): a tap opens its conversation.
+            <Press scaleTo={0.98} onPress={() => (m.agentNow!.topic ? router.push(convHref(m.agentNow!.topic)) : setOpen(true))}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: (m.agentNow.asking ? color.warn : color.claude) }} />
+                <T v="caption" c={(m.agentNow.asking ? color.warn : color.claude)} numberOfLines={1} style={{ flex: 1, fontWeight: '600' }}>
+                  {m.agentNow.text}
+                </T>
+                {m.agentNow.topic ? <ChevronRight color={color.text3} size={13} /> : null}
+              </View>
+            </Press>
+          ) : null}
           {after.length ? (
             <T v="caption" c={color.text3} numberOfLines={2} style={{ marginTop: 2 }}>
               After {after.join(', ')}
