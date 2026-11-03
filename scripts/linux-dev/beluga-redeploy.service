@@ -1,0 +1,9 @@
+[Unit]
+Description=Redeploy Beluga (dev) after main moved, from @REPO@
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+Environment=PATH=@PATH@
+ExecStart=/usr/bin/bash @REPO@/scripts/linux-dev/redeploy.sh
+TimeoutStartSec=900

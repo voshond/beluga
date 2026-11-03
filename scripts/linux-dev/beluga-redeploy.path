@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch main in @REPO@ and redeploy Beluga (dev) when it moves
+
+[Path]
+# git appends to main's reflog on every update (also when refs are packed); the loose ref as well.
+PathChanged=@GITDIR@/logs/refs/heads/main
+PathChanged=@GITDIR@/refs/heads/main
+Unit=beluga-redeploy.service
+
+[Install]
+WantedBy=default.target
