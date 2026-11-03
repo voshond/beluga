@@ -121,7 +121,7 @@ export class WorkspaceManager {
   private readonly folderRefreshes = new Map<string, Promise<boolean>>();
   /** Fetching state per project root (in flight, the last failure), shown with the default branch. */
   private fetchState = new Map<string, Pick<ProjectSync, 'fetching' | 'fetchError'>>();
-  /** A remote's default branch learned while fetching, for repos without origin/HEAD (by root). */
+  /** Remote default branches learned while fetching, keyed by project root and remote. */
   private remoteDefaults = new Map<string, string>();
 
   /** What new branches start with (Settings › Workspaces; the session points this at your choice). */
@@ -537,10 +537,11 @@ export class WorkspaceManager {
     }
   }
 
-  /** origin's default branch ("origin/main"), or the one learned from the remote when origin/HEAD isn't set. */
+  /** The project's remote default, including one learned while fetching. */
   async baseOf(root: string): Promise<string> {
-    const learned = this.remoteDefaults.get(root);
-    if (learned && (await g.isCommit(root, `origin/${learned}`))) return `origin/${learned}`;
+    const remote = await g.projectRemote(root);
+    const learned = remote && this.remoteDefaults.get(`${root}\0${remote}`);
+    if (remote && learned && (await g.isCommit(root, `${remote}/${learned}`))) return `${remote}/${learned}`;
     return g.defaultBase(root);
   }
 
@@ -575,14 +576,15 @@ export class WorkspaceManager {
 
   // ------------------------------------------------------------- a plan's branch
 
-  /** A plan's branch: made from the latest default branch unless it's there (here, or on origin) → whether it was made. */
+  /** A plan's branch: made from the latest default branch unless it already exists. */
   async planBranch(projectId: string, branch: string): Promise<{ made: boolean }> {
     const { root } = this.repoProject(projectId);
     if (!/^plan\/[\w.-]+$/.test(branch)) throw new WorkspaceError(`“${branch}” isn’t a plan branch name`);
     if (await g.isCommit(root, `refs/heads/${branch}`)) return { made: false };
-    if (await g.hasRemote(root)) await g.tryGit(root, ['fetch', 'origin', '--prune']);
-    if (await g.isCommit(root, `refs/remotes/origin/${branch}`)) {
-      await g.git(root, ['branch', '--track', branch, `origin/${branch}`]);
+    const remote = await g.projectRemote(root);
+    if (remote) await g.tryGit(root, ['fetch', remote, '--prune']);
+    if (remote && await g.isCommit(root, `refs/remotes/${remote}/${branch}`)) {
+      await g.git(root, ['branch', '--track', branch, `${remote}/${branch}`]);
       return { made: false };
     }
     await g.git(root, ['branch', '--no-track', branch, await this.baseOf(root)]);
@@ -608,10 +610,11 @@ export class WorkspaceManager {
     return g.combineBranches(project.root, hidden, branch, branches);
   }
 
-  /** The default branch as GitHub has it now ("origin/main", fetched first), else the local one. */
+  /** The remote's default branch, fetched first, else the local one. */
   async latestBase(projectId: string): Promise<string> {
     const { root } = this.repoProject(projectId);
-    if (await g.hasRemote(root)) await g.tryGit(root, ['fetch', 'origin', '--prune']);
+    const remote = await g.projectRemote(root);
+    if (remote) await g.tryGit(root, ['fetch', remote, '--prune']);
     return this.baseOf(root);
   }
 
@@ -630,7 +633,7 @@ export class WorkspaceManager {
   async mergeBranchIntoMain(projectId: string, branch: string): Promise<g.MergeResult> {
     const { root } = this.repoProject(projectId);
     const base = await this.baseOf(root);
-    const target = base.startsWith('origin/') ? base.slice('origin/'.length) : base === 'HEAD' ? undefined : base;
+    const target = base === 'HEAD' ? undefined : (await sync.splitBase(root, base)).branch;
     const res = await g.mergeInto(root, branch, target);
     await this.refresh();
     return res;
@@ -638,8 +641,8 @@ export class WorkspaceManager {
 
   /** The default branch's name, without the remote ("main"). */
   async defaultBranchName(projectId: string): Promise<string> {
-    const base = await this.baseOf(this.repoProject(projectId).root);
-    return base.replace(/^origin\//, '');
+    const root = this.repoProject(projectId).root;
+    return (await sync.splitBase(root, await this.baseOf(root))).branch;
   }
 
   /** Mark a project as fetching (or record how its last fetch went), shown right away. */
@@ -654,10 +657,10 @@ export class WorkspaceManager {
     });
   }
 
-  /** A remote's default branch, learned while fetching (used when origin/HEAD isn't set). */
-  learnRemoteDefault(projectId: string, branch: string): void {
+  /** A remote's default branch, learned while fetching. */
+  learnRemoteDefault(projectId: string, remote: string, branch: string): void {
     const project = this.projects.find((p) => p.id === projectId && p.root);
-    if (project && /^[\w./-]+$/.test(branch)) this.remoteDefaults.set(project.root, branch);
+    if (project && /^[\w./-]+$/.test(branch)) this.remoteDefaults.set(`${project.root}\0${remote}`, branch);
   }
 
   /**
@@ -1285,11 +1288,12 @@ export class WorkspaceManager {
 
   // ---------------------------------------------------------------- handoff
 
-  /** The project whose origin points at the same repository as `remote` (any URL style). */
+  /** The project whose selected remote points at the same repository as `remote` (any URL style). */
   async projectForRemote(remote: string): Promise<Project | undefined> {
     const want = normalizeRemote(remote);
     for (const p of this.projects.filter((x) => x.root)) {
-      const url = await g.git(p.root, ['remote', 'get-url', 'origin']).then((s) => s.trim(), () => '');
+      const selected = await g.projectRemote(p.root);
+      const url = selected ? await g.git(p.root, ['remote', 'get-url', selected]).then((s) => s.trim(), () => '') : '';
       if (url && normalizeRemote(url) === want) return p;
     }
     return undefined;
@@ -1298,7 +1302,8 @@ export class WorkspaceManager {
   async remoteOf(projectId: string): Promise<string | undefined> {
     const project = this.projects.find((p) => p.id === projectId);
     if (!project?.root) return undefined;
-    return g.git(project.root, ['remote', 'get-url', 'origin']).then((s) => s.trim() || undefined, () => undefined);
+    const remote = await g.projectRemote(project.root);
+    return remote ? g.git(project.root, ['remote', 'get-url', remote]).then((s) => s.trim() || undefined, () => undefined) : undefined;
   }
 
   /** A new worktree on an existing branch (e.g. one fetched from a friend's handoff). */
@@ -1376,22 +1381,22 @@ export class WorkspaceManager {
     const ws = this.require(id);
     if (ws.kind !== 'worktree' || !ws.branch) throw new WorkspaceError('Only worktrees can be merged');
     if ((ws.status?.changed ?? 0) > 0) throw new WorkspaceError(`${ws.name} has uncommitted changes. Commit them first.`);
-    const result = await g.mergeInto(ws.projectRoot, ws.branch, this.mergeTarget(ws));
+    const result = await g.mergeInto(ws.projectRoot, ws.branch, await this.mergeTarget(ws));
     await this.refresh();
     return result;
   }
 
   /** The branch a worktree merges into: its base, without the remote (undefined: whatever main is on). */
-  private mergeTarget(ws: Workspace): string | undefined {
+  private async mergeTarget(ws: Workspace): Promise<string | undefined> {
     const base = ws.base ?? this.projectOf(ws).base;
-    return base.startsWith('origin/') ? base.slice('origin/'.length) : base === 'HEAD' ? undefined : base;
+    return base === 'HEAD' ? undefined : (await sync.splitBase(ws.projectRoot, base)).branch;
   }
 
   /** What merging this worktree would do (see merge-preview.ts). */
   async mergePreview(id: string): Promise<MergePreview> {
     const ws = this.require(id);
     if (ws.kind !== 'worktree' || !ws.branch) throw new WorkspaceError('Only worktrees can be merged');
-    const into = this.mergeTarget(ws);
+    const into = await this.mergeTarget(ws);
     return mergePreview({ folder: ws.projectRoot, from: ws.branch, ...(into ? { into } : {}), uncommitted: ws.status?.changed ?? 0 });
   }
 

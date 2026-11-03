@@ -13,7 +13,7 @@ import type { WorkspaceManager } from '../workspaces/manager.js';
 import type { Workspace } from '../workspaces/types.js';
 import { worktreeOrigin } from '../workspaces/origin.js';
 import { formatBytes, measureAll } from '../workspaces/disk.js';
-import { contentIn, fetchRemote, resetTo } from '../workspaces/git.js';
+import { contentIn, fetchRemote, projectRemote, resetTo } from '../workspaces/git.js';
 import { type MergeOptions, type MergeProblem, type PrStepKind, buildPrPrompt, catchUpPrompt, commitSubjects, createPr, disableAutoMerge, prFromCommits, titleOfBranch, resolvePrConflictsPrompt, customPrPrompt, deleteRemoteBranch, ensurePrPromptFile, explainMergeError, findPr, fixChecksPrompt, forgetGh, ghState, gitSetup, hasGh, listPrs, useHttpsRemote, mergePr, mergeToBase, prStep, pushForPr, remoteRef, resetPrPrompt, unpushedCommits } from '../workspaces/pr.js';
 import { PROJECT_FILES, type ProjectScripts, checkSetup, projectFileName, scriptEnv } from '../workspaces/scripts.js';
 import { clonedSetup } from '../workspaces/setup-clone.js';
@@ -620,7 +620,9 @@ export class Workbench {
   /** The branch a worktree's PRs go into ("main"). */
   private prBase(ws: Workspace): string {
     const project = this.manager.list.find((p) => p.id === ws.projectId);
-    const base = (ws.base ?? project?.base ?? 'origin/main').replace(/^origin\//, '');
+    const raw = ws.base ?? project?.base ?? 'origin/main';
+    const remote = project?.sync?.remote ?? 'origin';
+    const base = raw.startsWith(`${remote}/`) ? raw.slice(remote.length + 1) : raw;
     return base === 'HEAD' ? (project?.sync?.branch ?? 'main') : base;
   }
 
@@ -646,9 +648,10 @@ export class Workbench {
     if (!pr || pr.state !== 'MERGED') return this.deps.toast('Continue After Merge is for a worktree whose pull request merged', 'info');
     if ((ws.status?.changed ?? 0) > 0) return this.deps.toast(`${ws.name} has uncommitted changes: commit them first`, 'warn');
     const base = this.prBase(ws);
-    const target = `origin/${base}`;
+    const remote = await projectRemote(ws.path) ?? 'origin';
+    const target = `${remote}/${base}`;
     try {
-      await fetchRemote(ws.path);
+      await fetchRemote(ws.path, remote);
     } catch (err) {
       return this.deps.toast(`Couldn’t fetch ${target}: ${err instanceof Error ? err.message : String(err)}`, 'error');
     }

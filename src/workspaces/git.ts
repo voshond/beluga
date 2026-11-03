@@ -65,11 +65,16 @@ export async function mainCheckout(dir: string): Promise<string | undefined> {
   return gitDir && path.basename(gitDir) === '.git' ? path.dirname(gitDir) : undefined;
 }
 
-/** origin's default branch, e.g. "origin/main"; falls back to a local main/master. */
+export async function projectRemote(repo: string): Promise<string | undefined> {
+  const remotes = ((await tryGit(repo, ['remote'])) ?? '').split('\n').map((remote) => remote.trim()).filter(Boolean);
+  return remotes.includes('fork') ? 'fork' : remotes.includes('origin') ? 'origin' : remotes[0];
+}
+
 export async function defaultBase(repo: string): Promise<string> {
-  const head = (await tryGit(repo, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']))?.trim();
+  const remote = await projectRemote(repo);
+  const head = remote ? (await tryGit(repo, ['symbolic-ref', '--short', `refs/remotes/${remote}/HEAD`]))?.trim() : undefined;
   if (head) return head;
-  for (const candidate of ['origin/main', 'origin/master', 'main', 'master']) {
+  for (const candidate of [...(remote ? [`${remote}/main`, `${remote}/master`] : []), 'main', 'master']) {
     if (await tryGit(repo, ['rev-parse', '--verify', '--quiet', candidate])) return candidate;
   }
   return 'HEAD';

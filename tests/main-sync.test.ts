@@ -80,6 +80,23 @@ const head = (dir: string, ref = 'HEAD') => git(dir, 'rev-parse', ref).trim();
 const stashes = (dir: string) => git(dir, 'stash', 'list').trim();
 
 describe('the default branch', () => {
+  it('uses the fork for the project base, fetch, sync and repository card', async () => {
+    const fork = path.join(base, 'fork.git');
+    execFileSync('git', ['clone', '--bare', '-q', origin, fork]);
+    git(repo, 'remote', 'add', 'fork', fork);
+    git(repo, 'fetch', '-q', 'fork');
+    git(repo, 'remote', 'set-head', 'fork', 'main');
+    git(mate, 'remote', 'set-url', 'origin', fork);
+    teammatePushes({ 0: 'fork change' }, 'fork change');
+    await ctl.refresh();
+    expect(project().base).toBe('fork/main');
+    expect(await ctl.mainSync.fetch(pid())).toEqual({ ok: true });
+    expect(project().sync).toMatchObject({ remote: 'fork', upstream: 'fork/main', behind: 1 });
+    expect(await mgr.defaultBranchName(pid())).toBe('main');
+    git(repo, 'remote', 'set-url', 'fork', 'https://github.com/voshond/beluga.git');
+    expect(await ctl.mainSync.githubRepo(pid())).toMatchObject({ owner: 'voshond', repo: 'beluga' });
+  });
+
   it('reports the main folder against origin/main as of the last fetch', async () => {
     teammatePushes({ 0: 'from mate' }, 'mate 1');
     let line = await defaultBranch(repo, 'origin/main');
