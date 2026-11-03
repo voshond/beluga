@@ -26,7 +26,7 @@ describe('cloning a project', () => {
     process.env.GIT_CONFIG_COUNT = '1';
     process.env.GIT_CONFIG_KEY_0 = `url.file://${source}.insteadOf`;
     process.env.GIT_CONFIG_VALUE_0 = 'https://github.com/example/repo.git';
-    const target = path.join(parent, 'clone');
+    const target = path.join(parent, 'projects', 'clone');
     await expect(cloneProject('https://github.com/example/repo.git', target)).resolves.toBe(target);
     expect(readFileSync(path.join(target, 'README.md'), 'utf8')).toBe('hello');
     git(target, 'worktree', 'add', '-b', 'task', path.join(parent, 'task'));

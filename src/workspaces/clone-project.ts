@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { tryGit } from './git.js';
 
@@ -14,6 +14,7 @@ export const cloneProject = async (remote: string, target: string): Promise<stri
   const dir = path.resolve(target);
   if (progress.has(dir)) throw new Error('A clone is already running for this folder.');
   if (existsSync(dir) && (!statSync(dir).isDirectory() || readdirSync(dir).length > 0)) throw new Error('The target folder is not empty. Choose an empty folder.');
+  mkdirSync(path.dirname(dir), { recursive: true });
   progress.set(dir, 'Starting clone…');
   try {
     await new Promise<void>((resolve, reject) => {

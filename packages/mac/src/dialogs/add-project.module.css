@@ -215,3 +215,8 @@
 .newError {
   color: var(--error);
 }
+
+.githubList {
+  flex: 0 1 200px;
+  max-height: 200px;
+}
