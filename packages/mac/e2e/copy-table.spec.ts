@@ -21,7 +21,7 @@ test('Copy Table puts the whole table on the clipboard', async ({ page, context 
   await expect(table).toBeVisible({ timeout: 30_000 });
   await table.hover();
   await table.getByRole('button', { name: 'Copy Table' }).click();
-  await expect(page.getByText('Copied 4 rows').last()).toBeVisible();
+  await expect(page.getByText('Copied 9 rows').last()).toBeVisible();
   await expect(table.getByRole('button', { name: 'Copied' })).toBeVisible();
 
   const { text, html } = await page.evaluate(async () => {
@@ -42,8 +42,8 @@ test('Copy Table puts the whole table on the clipboard', async ({ page, context 
   const tableBox = (await table.boundingBox())!;
   await page.screenshot({ path: '../../.beluga/scratch/02-copy-as-menu.png', clip: { x: tableBox.x, y: tableBox.y, width: Math.max(tableBox.width, box!.x + box!.width - tableBox.x + 8), height: Math.max(tableBox.height, box!.y + box!.height - tableBox.y + 8) } });
   await page.getByRole('menuitem', { name: 'JSON', exact: true }).click();
-  await expect(page.getByText('Copied 4 rows as JSON').last()).toBeVisible();
+  await expect(page.getByText('Copied 9 rows as JSON').last()).toBeVisible();
   const json = JSON.parse(await page.evaluate(() => navigator.clipboard.readText())) as Record<string, unknown>[];
-  expect(json).toHaveLength(4);
+  expect(json).toHaveLength(9);
   expect(json[0]).toMatchObject({ Provider: 'Stripe', 'Success rate': 97.7 });
 });

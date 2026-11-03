@@ -13,6 +13,8 @@ export interface Presence {
   readonly state: PresenceState;
   /** A short note ("at lunch"). */
   readonly note?: string;
+  /** An emoji that goes with it, shown next to your name ("🌮"). */
+  readonly emoji?: string;
   /** When it goes back to online by itself (ms since epoch). */
   readonly until?: number;
 }

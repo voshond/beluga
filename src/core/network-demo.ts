@@ -69,7 +69,7 @@ export async function startDemoNetwork(store: Store, name: string): Promise<Netw
   await me.mesh.accept((await bob.createInvite()).link);
   await me.mesh.accept((await mia.createInvite()).link);
   await mia.accept((await bob.createInvite()).code);
-  mia.setPresence({ state: 'away', note: 'in a meeting' });
+  mia.setPresence({ state: 'away', note: 'in a meeting', emoji: '📅' });
   // mia has a profile picture (her card's avatar opens it large); bob keeps his initial.
   mia.setAvatar(demoPortrait());
   let stopped = false;

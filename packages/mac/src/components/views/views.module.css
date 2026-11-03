@@ -1374,7 +1374,8 @@ th[style*='right'] .th {
 .headBare .titles {
   display: none;
 }
-.bare .scroll {
+/* Flush only without a search above: its ring would hide under the sticky headings. */
+.bare .scroll:first-child {
   margin-top: 0;
 }
 

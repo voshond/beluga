@@ -53,9 +53,10 @@ describe('the network as a core service', () => {
     await settle(() => ann.store.getState().network.friends[0]?.online && bob.store.getState().network.friends[0]?.online);
     expect(ann.store.getState().network).toMatchObject({ enabled: true, self: { name: 'ann' }, invitations: [] });
 
-    await call(bob.session, 'network.presence.set', { state: 'dnd', note: 'focus' });
+    await call(bob.session, 'network.presence.set', { state: 'dnd', note: 'focus', emoji: '🎧' });
     await settle(() => ann.store.getState().network.friends[0]?.presence.state === 'dnd');
-    expect(await call(bob.session, 'network.presence.get')).toEqual({ state: 'dnd', note: 'focus' });
+    expect(await call(bob.session, 'network.presence.get')).toEqual({ state: 'dnd', note: 'focus', emoji: '🎧' });
+    expect(ann.store.getState().network.friends[0]?.presence).toEqual({ state: 'dnd', note: 'focus', emoji: '🎧' });
 
     const bobId = bob.service.mesh.peerId;
     await call(ann.session, 'network.dm.send', bobId, 'hello bob');

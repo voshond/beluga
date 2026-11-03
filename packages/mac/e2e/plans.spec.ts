@@ -147,6 +147,70 @@ test('opening a passed milestone opens its box in the same frame: never an open 
   await info.attach('unfolded', { path: shot, contentType: 'image/png' });
 });
 
+test('folding a milestone moves its lines with it, every frame, and no box is stretched past its own gate', async ({ page }, info) => {
+  await page.goto('/');
+  await sidebar(page).getByRole('button', { name: 'Card checkout for launch', exact: true }).click();
+  await expect(main(page).locator('[data-ready="true"]')).toBeVisible({ timeout: 20_000 });
+  const box = main(page).locator('.react-flow__node-milestone').filter({ hasText: 'Test-mode foundations' });
+  await expect(box.getByRole('button', { name: /passed\. Show its/ })).toBeVisible();
+  // Opening it narrows its box, so the milestone beside it slides over. Each frame from the click: where
+  // that one's line leaves (the path's first point) against the middle of its box's foot as drawn then.
+  type Frame = { x: number; y: number; lineX: number; lineY: number };
+  const frames = await box.evaluate(
+    (el) =>
+      new Promise<Frame[]>((done) => {
+        const node = document.querySelector<HTMLElement>('.react-flow__node[data-id="m:safe-payments"]')!;
+        const line = (): SVGPathElement | null => document.querySelector('g[data-from="gate:safe-payments"] path.react-flow__edge-path');
+        const seen: Frame[] = [];
+        const look = (): void => {
+          const css = getComputedStyle(node);
+          const at = new DOMMatrix(css.transform);
+          const start = /^M\s*([-\d.]+)[ ,]([-\d.]+)/.exec(line()?.getAttribute('d') ?? '');
+          seen.push({ x: at.m41 + parseFloat(css.width) / 2, y: at.m42 + parseFloat(css.height), lineX: start ? parseFloat(start[1]!) : NaN, lineY: start ? parseFloat(start[2]!) : NaN });
+          if (seen.length < 50) requestAnimationFrame(look);
+          else done(seen);
+        };
+        el.querySelector<HTMLElement>('[aria-expanded="false"]')!.click();
+        requestAnimationFrame(look);
+      }),
+  );
+  // It moved (the glide ran), and its line stayed on its foot all the way (within the gate's inset), never
+  // jumping ahead. Where a frame's read falls against the line's step and the box's transition varies, so
+  // the line may show the box a frame early or late: it must sit between the box's frames either side.
+  const first = frames[0]!;
+  const last = frames.at(-1)!;
+  expect(Math.hypot(last.x - first.x, last.y - first.y)).toBeGreaterThan(50);
+  const within = (v: number, a: number, b: number): boolean => v >= Math.min(a, b) - 2 && v <= Math.max(a, b) + 2;
+  const off = frames.slice(1, -1).filter((f, i) => !(within(f.lineX, frames[i]!.x, frames[i + 2]!.x) && within(f.lineY, frames[i]!.y - 10, frames[i + 2]!.y - 10)));
+  expect(off).toEqual([]);
+  // Settled: each open box only as tall as its tasks and gate (its gate right under its last card).
+  await expect(main(page).locator('.react-flow__node-task').filter({ hasText: 'Stripe test-mode fixtures' })).toBeVisible();
+  await page.waitForTimeout(700);
+  const room = await main(page)
+    .locator('.react-flow__node-milestone')
+    .evaluateAll((els) =>
+      els.flatMap((el) => {
+        const id = el.getAttribute('data-id') ?? '';
+        const gate = document.querySelector<HTMLElement>(`.react-flow__node[data-id="gate:${id.replace(/^m:/, '')}"]`);
+        if (!gate || gate.getAttribute('aria-hidden') === 'true') return [];
+        const top = gate.getBoundingClientRect().top;
+        const cards = [...document.querySelectorAll<HTMLElement>('.react-flow__node-task')].filter((n) => {
+          const r = n.getBoundingClientRect();
+          const b = el.getBoundingClientRect();
+          return r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= top;
+        });
+        const last = Math.max(...cards.map((n) => n.getBoundingClientRect().bottom));
+        return cards.length ? [{ id, gap: top - last }] : [];
+      }),
+    );
+  expect(room.length).toBeGreaterThan(1);
+  // MILESTONE.gateGap (16) on the canvas's zoom: never a stretch of empty room.
+  for (const r of room) expect(r.gap, r.id).toBeLessThan(24);
+  const shot = info.outputPath('opened.png');
+  await main(page).locator('.react-flow').screenshot({ path: shot });
+  await info.attach('opened', { path: shot, contentType: 'image/png' });
+});
+
 test('where the plan’s work goes, one click from the canvas: main, then each milestone; the chat keeps what you typed when hidden', async ({ page }, info) => {
   await page.goto('/');
   await sidebar(page).getByRole('button', { name: 'Card checkout for launch', exact: true }).click();

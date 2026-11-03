@@ -83,6 +83,25 @@ export function closeUp(slots: readonly Slot[], lifted: string, gap: number): Sp
     });
 }
 
+/**
+ * The columns a scope hides, to open while a card is held: the ones before the first it shows
+ * (they open on the left) and the rest (on the right), each in the board's order.
+ */
+export function foldedAround<K>(all: readonly K[], shown: readonly K[]): { readonly before: K[]; readonly after: K[] } {
+  const first = all.findIndex((k) => shown.includes(k));
+  const hidden = all.filter((k) => !shown.includes(k));
+  if (first < 0) return { before: [], after: hidden };
+  return { before: hidden.filter((k) => all.indexOf(k) < first), after: hidden.filter((k) => all.indexOf(k) > first) };
+}
+
+/** A column's box cut to what's visible of it (a column still opening is partly hidden); undefined when none is. */
+export function clipBox(box: Box, clip: { readonly left: number; readonly right: number } | undefined): Box | undefined {
+  if (!clip) return box;
+  const left = Math.max(box.left, clip.left);
+  const right = Math.min(box.right, clip.right);
+  return right - left >= 1 ? { ...box, left, right } : undefined;
+}
+
 /** The board as measured once when a drag starts (and again when it scrolls): what spotIn needs, so a pointer move only does arithmetic. */
 export interface ColumnGeometry<K> {
   readonly key: K;

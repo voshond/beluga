@@ -31,7 +31,7 @@ test('the Friends card turns the network on, and friends show with their status'
   await card.getByRole('button', { name: 'Turn On' }).click();
   await expect(friend(page, 'bob')).toBeVisible({ timeout: 30_000 });
   await expect(friend(page, 'bob')).toHaveAccessibleName(/^bob, Online/);
-  await expect(friend(page, 'mia')).toHaveAccessibleName(/^mia, Away · in a meeting/, { timeout: 15_000 });
+  await expect(friend(page, 'mia')).toHaveAccessibleName(/^mia, Away · 📅 in a meeting/, { timeout: 15_000 });
   await expect(group(page, 'launch')).toBeVisible();
   // Your own status at the bottom of the sidebar.
   await expect(page.getByRole('button', { name: /^Your status: Online/ })).toBeVisible();
@@ -211,6 +211,22 @@ test('your status: Do Not Disturb from the sidebar, then back to Online', async 
   await expect(card.getByRole('radio', { name: /Do Not Disturb/ })).toHaveAttribute('aria-checked', 'true');
   await card.getByRole('radio', { name: /^Online/ }).click();
   await expect(page.getByRole('button', { name: /^Your status: Online/ })).toBeVisible();
+});
+
+test('your status gets an emoji next to its note, and a friend’s shows by their name', async ({ page }) => {
+  await expect(friend(page, 'mia').getByText('📅')).toBeVisible({ timeout: 15_000 });
+  await shot(page, '06-friends-emoji');
+  await page.getByRole('button', { name: /^Your status/ }).click();
+  const card = page.getByRole('dialog', { name: 'Your status' });
+  await card.getByRole('textbox', { name: 'Status note' }).fill('Beluga');
+  await card.getByRole('textbox', { name: 'Status note' }).press('Tab');
+  await card.getByRole('button', { name: 'Pick a status emoji' }).click();
+  await shot(page, '07-emoji-picker');
+  await page.getByRole('dialog', { name: 'Status emoji' }).getByRole('button', { name: '🐋' }).click();
+  await expect(page.getByRole('button', { name: /^Your status: Online · 🐋 Beluga/ })).toBeVisible();
+  await shot(page, '08-status-set');
+  await card.getByRole('button', { name: 'Clear the note and emoji' }).click();
+  await expect(page.getByRole('button', { name: /^Your status: Online$/ })).toBeVisible();
 });
 
 test('a friend’s right-click menu: Message, Add to Channel, Copy Name, Remove…', async ({ page }) => {

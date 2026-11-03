@@ -14,7 +14,7 @@ import { type AgentRef, defaultAgentOf } from '../../protocol.js';
 import { chosenAgent } from '../settings.js';
 import { needsChecksText, unexplained } from './criteria.js';
 import { inSet, labelsFor } from './labels.js';
-import { aboutPrompt, alongPrompt, briefPrompt, boardNote, definePrompt, describeIssue, describeList, gitHubLine, reposPrompt } from './prompt.js';
+import { aboutPrompt, alongPrompt, briefPrompt, boardNote, definePrompt, describeIssue, describeList, gitHubLine, ownTaskPrompt, reposPrompt } from './prompt.js';
 import { type Actor, type Assignee, BRIEF_SECTIONS, type BriefSection, type Issue, STATUS_INFO, boardName, boardOf, childrenOf, filterIssues, isArchived, isFinished, isOpen, isOwnBoard, isStartable, issueForWorkspace, reposOf, titleFromName, worktreeDoing, worktreeOf } from './model.js';
 
 /** How a name is written after "@" (as the message box completes it: src/ui/suggest.ts friendMention). */
@@ -505,7 +505,8 @@ export class BoardWork {
     // A board of several repos: where its tasks go, so a task made here lands in the right one.
     const repos = projectId && boardId ? reposPrompt(this.board.state(), boardId, projectId, this.repoName) : '';
     const along = channel.startsWith(WS) && issue ? this.alongNote(channel.slice(WS.length), issue) : '';
-    const brief = (own ? own.brief : issue ? briefPrompt(this.board.state(), issue) + this.briefExtra(issue) : boardNote()) + repos + along + about + parallel + (opts.plan ? definePrompt(Boolean(issue)) : '');
+    const decide = !own && !issue && !opts.plan && this.mayOpenOwnTask(channel) ? ownTaskPrompt() : '';
+    const brief = (own ? own.brief : issue ? briefPrompt(this.board.state(), issue) + this.briefExtra(issue) : boardNote() + decide) + repos + along + about + parallel + (opts.plan ? definePrompt(Boolean(issue)) : '');
     if (!opts.plan) return { tools, brief };
     this.pending.delete(channel);
     return {
@@ -529,8 +530,11 @@ export class BoardWork {
     }
   }
 
-  /** Make (or rewrite) the task a conversation is doing from Claude's definition. */
-  private define(channel: string, def: TaskDefinition, current: Issue | undefined): Issue {
+  /**
+   * Make (or rewrite) the task a conversation is doing from Claude's definition. One Claude opens
+   * on its own (not an approved plan) is private until you share it (BLG-683).
+   */
+  private define(channel: string, def: TaskDefinition, current: Issue | undefined, opts: { readonly private?: boolean } = {}): Issue {
     const by: Actor = this.myClaude(channel);
     const wsId = channel.startsWith(WS) ? channel.slice(WS.length) : undefined;
     const ws = wsId ? this.workspaces().find((w) => w.id === wsId) : undefined;
@@ -555,6 +559,7 @@ export class BoardWork {
           ...(def.priority ? { priority: def.priority } : {}),
           ...(def.estimate ? { estimate: def.estimate } : {}),
           ...(def.labels?.length ? { labels: def.labels } : {}),
+          ...(opts.private ? { private: true } : {}),
           brief: Object.fromEntries(sections.filter(([, v]) => v?.trim())),
         },
         by,
@@ -562,11 +567,18 @@ export class BoardWork {
       );
       if (inWorktree) this.board.linkWorktree(issue.id, ws.id, { branch: ws.branch, name: ws.name }, by);
       else if (wsId) this.carried.set(wsId, issue.id);
-      return issue;
+      return this.board.need(issue.id);
     }
     this.board.update(issue.id, { title: def.title, ...(def.priority ? { priority: def.priority } : {}), ...(def.estimate ? { estimate: def.estimate } : {}), ...(def.labels ? { labels: def.labels } : {}) }, by);
     for (const [section, text] of sections) if (text?.trim()) this.board.editBrief(issue.id, section, text, by, { reason: 'the plan' });
     return this.board.need(issue.id);
+  }
+
+  /** With a task per worktree on (BLG-683): a run in a worktree of a project here, doing no task, may open its own. */
+  private mayOpenOwnTask(channel: string): boolean {
+    if (!this.board.autoTasksOn || !channel.startsWith(WS)) return false;
+    const ws = this.workspaces().find((w) => w.id === channel.slice(WS.length));
+    return ws?.kind === 'worktree' && !ws.askOnly && this.deps.store.getState().projects.some((p) => p.id === ws.projectId && p.root);
   }
 
   /** The project a run is in: its task's, or its worktree's. */
@@ -638,12 +650,8 @@ export class BoardWork {
       if (carried) this.carried.delete(from!);
       this.board.linkWorktree(source.id, ws.id, { branch: ws.branch, name: ws.name }, beluga);
       if (source.status === 'todo' || source.status === 'backlog') this.board.update(source.id, { status: 'in_progress' }, beluga);
-      return;
     }
-    // Only when you asked for a task per worktree (tasks come from plans). Claude writes its brief: what you said isn't pasted in.
-    if (!this.board.autoTasksOn || !this.deps.store.getState().projects.some((p) => p.id === ws.projectId && p.root)) return;
-    const issue = this.board.create({ projectId: ws.projectId, title: titleFromName(ws.name), autoTitle: true, status: 'in_progress', assignee: this.me() }, beluga, 'worktree');
-    this.board.linkWorktree(issue.id, ws.id, { branch: ws.branch, name: ws.name }, beluga);
+    // Otherwise no task yet: with a task per worktree on, its Claude decides whether the work is one (ownTaskPrompt, BLG-683).
   }
 
   /**
@@ -759,8 +767,10 @@ export class BoardWork {
           this.pending.set(channel, def);
           return `Saved “${def.title}”: it becomes ${current ? `the new brief of ${current.key}` : 'this work’s task in Tasks'} when the user approves your plan. Call ExitPlanMode now.`;
         }
-        const issue = this.define(channel, def, current);
-        return `${issue.key} “${issue.title}” is defined`;
+        if (current) return `${this.define(channel, def, current).key} “${def.title}” is defined`;
+        const issue = this.define(channel, def, undefined, { private: true });
+        const home = issue.worktrees.length ? 'this worktree’s task' : 'a task for this work';
+        return `Opened ${issue.key} “${issue.title}”, ${home}: private (only the user sees it, until they Share with Team) and assigned to them. Tell the user you opened it and that it’s private: \`task:${issue.key}\`.`;
       },
       get: (key) => {
         const issue = pick(key);

@@ -12,9 +12,12 @@ import {
   TASK_CARD,
   TASK_COMPACT,
   arrowHead,
+  between,
   chatOpen,
   clampChatWidth,
+  easeOut,
   gateHeight,
+  glidable,
   isFolded,
   labelAt,
   milestoneAnchors,
@@ -157,6 +160,29 @@ describe('the plan graph’s geometry', () => {
     expect(arrowHead([{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 0 }], 4)).toBe('M95,4 L100,0 L95,-4');
     expect(arrowHead([{ x: 1, y: 1 }])).toBe('');
     expect(labelAt([{ x: 0, y: 0 }, { x: 0, y: 40 }, { x: 90, y: 40 }])).toEqual({ x: 0, y: 20 });
+  });
+
+  it('glides a line with the cards: on their curve, square all the way, or not at all when its shape changes', () => {
+    // The canvas's ease-out: from 0 to 1, always on its way, well ahead of linear early on.
+    expect(easeOut(0)).toBe(0);
+    expect(easeOut(1)).toBe(1);
+    expect(easeOut(-1)).toBe(0);
+    expect(easeOut(0.25)).toBeGreaterThan(0.6);
+    const steps = Array.from({ length: 21 }, (_, i) => easeOut(i / 20));
+    for (let i = 1; i < steps.length; i++) expect(steps[i]!).toBeGreaterThanOrEqual(steps[i - 1]!);
+    // A gate's line as its milestone opens: same corners, each stretch the same way, so it glides.
+    const folded = [{ x: 100, y: 56 }, { x: 100, y: 100 }, { x: 300, y: 100 }, { x: 300, y: 140 }];
+    const open = [{ x: 120, y: 400 }, { x: 120, y: 444 }, { x: 300, y: 444 }, { x: 300, y: 484 }];
+    expect(glidable(folded, open)).toBe(true);
+    const half = between(folded, open, 0.5);
+    expect(half).toEqual([{ x: 110, y: 228 }, { x: 110, y: 272 }, { x: 300, y: 272 }, { x: 300, y: 312 }]);
+    expect(half[1]!.x).toBe(half[0]!.x);
+    expect(half[2]!.y).toBe(half[1]!.y);
+    expect(between(folded, open, 1)).toEqual(open);
+    // More corners, or a stretch turning from down to across: it can't stay square, so it doesn't glide.
+    expect(glidable(folded, [{ x: 100, y: 56 }, { x: 100, y: 140 }])).toBe(false);
+    expect(glidable([{ x: 0, y: 0 }, { x: 0, y: 50 }], [{ x: 0, y: 0 }, { x: 50, y: 0 }])).toBe(false);
+    expect(glidable([], [])).toBe(false);
   });
 
   it('folds passed milestones by itself, and keeps your choice for each plan', () => {

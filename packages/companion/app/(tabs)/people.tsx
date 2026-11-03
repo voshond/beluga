@@ -32,8 +32,9 @@ export default function People() {
                 <Press scaleTo={0.985} onPress={() => router.push(`/person/${encodeURIComponent(p.peerId)}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 }}>
                   <Avatar name={p.name} size={44} presence={p.presence} />
                   <View style={{ flex: 1, gap: 2 }}>
-                    <T v="body" style={{ fontWeight: '500' }}>
+                    <T v="body" style={{ fontWeight: '500' }} numberOfLines={1}>
                       {p.name}
+                      {p.emoji && !p.update && p.presence !== 'offline' ? ` ${p.emoji}` : ''}
                     </T>
                     <T v="caption" numberOfLines={1}>
                       {p.update ? UPDATE_WORD[p.update] : WORD[p.presence]}

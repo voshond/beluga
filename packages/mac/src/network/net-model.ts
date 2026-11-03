@@ -39,13 +39,18 @@ export function untilLabel(until: number | undefined, now = Date.now()): string 
   return `until ${new Date(until).toLocaleDateString([], { weekday: 'long' })}`;
 }
 
-/** "Away · in a meeting", "Online", "Offline"; "Needs a Beluga update" when your Macs can't link because of it. */
+/** A status's emoji and note together ("🌮 at lunch"), or '' when it has neither. */
+export function statusText(p: Pick<Presence, 'emoji' | 'note'>): string {
+  return [p.emoji?.trim(), p.note?.trim()].filter(Boolean).join(' ');
+}
+
+/** "Away · 🌮 at lunch", "Online", "Offline"; "Needs a Beluga update" when your Macs can't link because of it. */
 export function presenceLine(p: Pick<PersonView, 'online' | 'presence' | 'update'>): string {
   if (p.update === 'them') return 'Offline to you · their Beluga needs an update';
   if (p.update === 'you') return 'Update Beluga to reach them';
   const state = shownState(p);
-  const note = state !== 'offline' ? p.presence.note?.trim() : undefined;
-  return [STATE_LABEL[state], note].filter(Boolean).join(' · ');
+  const status = state !== 'offline' ? statusText(p.presence) : '';
+  return [STATE_LABEL[state], status].filter(Boolean).join(' · ');
 }
 
 /** Their Beluga in words: "1.2.0", "1.1.0 · update needed", or "An older version" for Macs that don't say. */
@@ -59,7 +64,7 @@ export function belugaLine(p: Pick<PersonView, 'beluga' | 'update'>): string {
 /** Your status in words, as your sidebar and the menu bar say it ("Do Not Disturb until 3:30 PM"). */
 export function selfLine(presence: Presence, now = Date.now()): string {
   const until = untilLabel(presence.until, now);
-  return [CHOICE_LABEL[presence.state] + (until ? ` ${until}` : ''), presence.note?.trim()].filter(Boolean).join(' · ');
+  return [CHOICE_LABEL[presence.state] + (until ? ` ${until}` : ''), statusText(presence)].filter(Boolean).join(' · ');
 }
 
 // ---- how long a status lasts
@@ -92,10 +97,11 @@ export function untilOf(duration: Duration, now = Date.now()): number | undefine
 }
 
 /** The status to send: the state, the note (trimmed, kept to 140), and when it ends. */
-export function presenceFor(state: PresenceState, opts: { note?: string; duration?: Duration } = {}, now = Date.now()): Presence {
+export function presenceFor(state: PresenceState, opts: { note?: string; emoji?: string; duration?: Duration } = {}, now = Date.now()): Presence {
   const note = opts.note?.trim().slice(0, 140);
+  const emoji = opts.emoji?.trim().slice(0, 32);
   const until = state === 'online' ? undefined : untilOf(opts.duration ?? 'forever', now);
-  return { state, ...(note ? { note } : {}), ...(until ? { until } : {}) };
+  return { state, ...(note ? { note } : {}), ...(emoji ? { emoji } : {}), ...(until ? { until } : {}) };
 }
 
 // ---- invitations

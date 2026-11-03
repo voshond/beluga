@@ -13,6 +13,7 @@ import { breath, turn, useLive } from '../lib/live-motion.js';
 import { MILESTONE_STATE, type MilestoneJoin, type PlanGraphShape, TASK_STATE, changeMarks, gateId, graphShape, groupId, lockWords, milestoneJoin, milestoneLink, startingMilestones, taskNodeId, taskWords } from './plans-model.js';
 import { COMPACT_STATES, FOLDS_KEY, type Folds, MILESTONE, type MilestoneFrame, PLAN_GAPS, arrowHead, isFolded, labelAt, milestoneAnchors, milestoneFrame, milestoneRoute, placeMilestones, readFolds, taskSize, withFold } from './plan-layout.js';
 import { useCheckerChat, useClock, usePlanActions } from './use-plans.js';
+import { useGlide } from './use-glide.js';
 import { LockMark, TaskChatMark, TaskStateIcon } from './marks.js';
 import p from './plans.module.css';
 import c from './PlanCanvas.module.css';
@@ -210,16 +211,14 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
     const { shape } = inner;
     const folded = new Map(Object.entries(JSON.parse(foldKey) as Record<string, string>));
     const criteria = new Map(shape.milestones.map((m) => [m.id, m.criteria] as const));
-    const frameOf = (id: string, height?: number): MilestoneFrame => {
+    // Each box only as tall as its own tasks and gate: stretched to a taller neighbour's height, a short
+    // milestone would be mostly empty room between its tasks and its gate.
+    const frameOf = (id: string, fold: boolean): MilestoneFrame => {
       const o = inner.outs.get(id);
-      return milestoneFrame({ width: o?.width ?? 0, height: o?.height ?? 0 }, criteria.get(id) ?? [], folded.has(id), height, folded.get(id));
+      return milestoneFrame({ width: o?.width ?? 0, height: o?.height ?? 0 }, criteria.get(id) ?? [], fold, undefined, folded.get(id));
     };
-    // The open milestones of a row all as tall as its tallest (their gates line up across it); folded ones stay one row.
-    const frames = new Map<string, MilestoneFrame>();
-    for (const row of shape.rows) {
-      const tall = Math.max(0, ...row.filter((id) => !folded.has(id)).map((id) => frameOf(id).height));
-      for (const id of row) frames.set(id, frameOf(id, tall));
-    }
+    const opened = new Map(shape.milestones.map((m) => [m.id, frameOf(m.id, false)] as const));
+    const frames = new Map(shape.milestones.map((m) => [m.id, folded.has(m.id) ? frameOf(m.id, true) : opened.get(m.id)!] as const));
     const next = shape.edges.filter((e) => e.kind === 'next').map((e) => ({ id: e.id, from: e.from.replace(/^gate:/, ''), to: e.to.replace(/^m:/, '') }));
     const parents = new Map<string, string[]>();
     for (const e of next) parents.set(e.to, [...(parents.get(e.to) ?? []), e.from]);
@@ -229,7 +228,8 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
     const routes = new Map<string, Route>();
     for (const m of shape.milestones) {
       const box = boxes.get(m.id);
-      const frame = frames.get(m.id);
+      // Folded, its cards and gate stay where they sit open (hidden), so opening it fades them in in place.
+      const frame = opened.get(m.id);
       const o = inner.outs.get(m.id);
       if (!box || !frame || !o) continue;
       places.set(groupId(m.id), box);
@@ -268,6 +268,9 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
     return new Set(shape.edges.filter((e) => e.kind === 'blocks' && (e.from === me || e.to === me) && lane.get(e.from) !== lane.get(e.to)).map((e) => (e.from === me ? e.to : e.from)));
   }, [shape, lane, selected]);
   const starting = useMemo(() => new Set(startingMilestones(view).map((m) => m.milestone.id)), [view]);
+  // Each node says its size as measured (the layout knows it exactly): without one, React Flow drops a
+  // re-made node's handles and every line vanishes for a frame, then comes back drawn afresh, ahead of
+  // its gliding cards (folding a milestone, picking a task).
   const nodes = useMemo<PlanNode[]>(() => {
     if (!laid) return [];
     const out: PlanNode[] = [];
@@ -285,6 +288,7 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
         style: { width: box.width, height: box.height },
         width: box.width,
         height: box.height,
+        measured: { width: box.width, height: box.height },
         data: { view: m, current, folded: away, waitsOn, gated: m.dependsOn.some((d) => byMs.has(d)), ...(view.plan.branch ? { branch: view.plan.branch } : {}), ...(starting.has(id) ? { starting: true } : {}), onFold },
         selectable: false,
         draggable: false,
@@ -304,6 +308,7 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
           position: { x: at.x, y: at.y },
           width: at.width,
           height: at.height,
+          measured: { width: at.width, height: at.height },
           draggable: false,
           ...hidden,
           data: { view: t, ...(key ? { key } : {}), ...(mark ? { mark } : {}), canStart: startable.has(t.task.id), onStart, selected: selected === t.task.id, linked: linked.has(taskNodeId(t.task.id)) },
@@ -311,7 +316,7 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
       }
       const gate = laid.places.get(gateId(id));
       if (gate) {
-        out.push({ id: gateId(id), type: 'gate', parentId: groupId(id), position: { x: gate.x, y: gate.y }, width: gate.width, height: gate.height, draggable: false, ...hidden, data: { view: m, current, folded: away, selected: selected === gateId(id) } });
+        out.push({ id: gateId(id), type: 'gate', parentId: groupId(id), position: { x: gate.x, y: gate.y }, width: gate.width, height: gate.height, measured: { width: gate.width, height: gate.height }, draggable: false, ...hidden, data: { view: m, current, folded: away, selected: selected === gateId(id) } });
       }
     }
     return out;
@@ -714,12 +719,16 @@ const NODE_TYPES = { task: TaskNode, milestone: MilestoneNode, gate: GateNode } 
  */
 const PlanLine = memo(function PlanLine({ id, source, target, sourceX, sourceY, targetX, targetY, data }: EdgeProps<PlanEdge>) {
   const kind = data?.kind ?? 'blocks';
-  const points: readonly Point[] = data?.route?.points ?? [
-    { x: sourceX, y: sourceY },
-    { x: (sourceX + targetX) / 2, y: sourceY },
-    { x: (sourceX + targetX) / 2, y: targetY },
-    { x: targetX, y: targetY },
-  ];
+  // Re-laid, it glides with the cards it joins (or, reshaped, waits for them hidden and fades back in).
+  const { points, reshaped } = useGlide(
+    data?.route?.points ?? [
+      { x: sourceX, y: sourceY },
+      { x: (sourceX + targetX) / 2, y: sourceY },
+      { x: (sourceX + targetX) / 2, y: targetY },
+      { x: targetX, y: targetY },
+    ],
+  );
+  const arrive = reshaped ? c.lineIn : undefined;
   const state = data?.state ?? 'waiting';
   const look = data?.look;
   // Back from a folded milestone: it waits for the cards to slide in and show, then appears (never ahead of them).
@@ -731,13 +740,14 @@ const PlanLine = memo(function PlanLine({ id, source, target, sourceX, sourceY, 
   const cls = cx(kind === 'next' ? c.flow : c.line, c[`${kind === 'next' ? 'flow' : 'line'}_${state}`], data?.current && c.lineCurrent, look && c[`look_${look}`], back && c.lineBack);
   const at = data?.label ? labelAt(points) : undefined;
   return (
-    <g data-from={source} data-to={target} data-kind={kind} data-state={state} data-look={look}>
+    // Reshaped, it's drawn afresh (keyed), so its fade-in starts over.
+    <g key={reshaped} className={arrive} data-from={source} data-to={target} data-kind={kind} data-state={state} data-look={look}>
       <BaseEdge id={id} path={roundedPath(points, kind === 'next' ? 14 : 10)} className={cls} interactionWidth={0} />
       {data?.joined ? null : <path d={arrowHead(points, kind === 'next' ? 5 : 3.5)} className={cx(cls, c.arrow)} />}
-      {data?.join ? <JoinMark join={data.join} current={data.current} /> : null}
+      {data?.join ? <JoinMark join={data.join} current={data.current} arrive={arrive} /> : null}
       {data?.label && at ? (
         <EdgeLabelRenderer>
-          <div className={cx(c.flowLabel, c[`flowLabel_${state}`])} style={{ transform: `translate(-50%, -50%) translate(${at.x}px, ${at.y}px)` }}>
+          <div className={cx(c.flowLabel, c[`flowLabel_${state}`], arrive)} style={{ transform: `translate(-50%, -50%) translate(${at.x}px, ${at.y}px)` }}>
             {state === 'done' ? <LockMark open size={9} /> : <LockMark size={9} />}
             {data.label}
           </div>
@@ -752,16 +762,18 @@ const PlanLine = memo(function PlanLine({ id, source, target, sourceX, sourceY, 
  * stem from it into the lock, solid green once all are in. Its tooltip names what it still waits on,
  * and the branch the milestone starts from.
  */
-function JoinMark({ join, current }: { join: NonNullable<LineData['join']>; current: boolean }) {
+function JoinMark({ join, current, arrive }: { join: NonNullable<LineData['join']>; current: boolean; arrive: string | undefined }) {
   const cls = cx(c.flow, c[`flow_${join.state}`], current && c.lineCurrent);
-  const at = join.stem[0]!;
+  // The knot glides with the lines into it (it's keyed with its line, so a reshaped one starts afresh).
+  const { points: stem } = useGlide(join.stem);
+  const at = stem[0]!;
   return (
     <>
-      <path d={roundedPath(join.stem, 14)} className={cls} />
-      <path d={arrowHead(join.stem, 5)} className={cx(cls, c.arrow)} />
+      <path d={roundedPath(stem, 14)} className={cls} />
+      <path d={arrowHead(stem, 5)} className={cx(cls, c.arrow)} />
       <EdgeLabelRenderer>
         <div
-          className={cx(c.flowLabel, c[`flowLabel_${join.state}`], c.joinKnot)}
+          className={cx(c.flowLabel, c[`flowLabel_${join.state}`], c.joinKnot, arrive)}
           style={{ transform: `translate(-50%, -50%) translate(${at.x}px, ${at.y}px)` }}
           title={join.tip}
           aria-label={join.tip}

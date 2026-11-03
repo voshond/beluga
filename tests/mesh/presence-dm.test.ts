@@ -24,7 +24,7 @@ describe('presence', () => {
     ann.mesh.setPresence({ state: 'dnd' });
     await settle(() => bob.friend(ann.identity.peerId)?.presence.state === 'dnd');
 
-    ann.mesh.setPresence({ state: 'offline', note: 'secret note' });
+    ann.mesh.setPresence({ state: 'offline', note: 'secret note', emoji: '🤫' });
     await settle(() => bob.friend(ann.identity.peerId)?.online === false);
     // Others see a plain "offline" (not your note); you still see what you chose.
     expect(bob.friend(ann.identity.peerId)?.presence).toEqual({ state: 'offline' });

@@ -63,6 +63,7 @@ export function briefPrompt(board: BoardState, issue: Issue): string {
   return [
     '',
     `This worktree is doing task ${issue.key} in Beluga's Tasks: "${issue.title}" (${STATUS_INFO[issue.status].label}${issue.priority !== 'none' ? `, ${PRIORITY_INFO[issue.priority].label} priority` : ''}).`,
+    issue.private ? 'It’s private: only the user sees it (never their teammates or Linear) until they Share with Team. Don’t bring it up in chats with friends or teammates.' : '',
     parent ? `It's a sub-task of the epic ${line(parent)}.` : '',
     issue.github ? gitHubLine(issue.github) : '',
     blockers.length ? `It waits on: ${blockers.map(line).join('; ')}.` : '',
@@ -187,6 +188,22 @@ export function boardNote(): string {
     'task_brief_edit, task_note, task_relate, task_attach_proof). Use it when the user talks about tasks, issues,',
     'a backlog or what to do next, asks you to track or plan work, or asks for several things at once.',
     ...HOW_TASKS_WORK,
+  ].join('\n');
+}
+
+/**
+ * A worktree doing no task, with a task per worktree on (BLG-683): Claude decides whether this work
+ * is one. Real work gets its task (private, the user's); a question or a look around doesn't.
+ */
+export function ownTaskPrompt(): string {
+  return [
+    '',
+    'This worktree has no task yet, and the user wants one for each worktree that does real work. Decide once you',
+    'understand the request: when it is work that will ship (a fix, a feature, a change that ends in a pull request),',
+    'open its task with mcp__beluga_board__task_define before you start (a short title, the goal in your own words,',
+    'acceptance criteria). It is linked to this worktree, assigned to the user, and private: only they see it until',
+    'they Share with Team. Then say in your answer that you opened it and that it is private, with its `task:KEY`.',
+    'A question, a look around or a quick one-off gets no task: say nothing about tasks then.',
   ].join('\n');
 }
 

@@ -267,6 +267,16 @@ src/                 the engine (core, friends network, agents, terminals) and t
 docs/                guides and design notes
 ```
 
+## Star History
+
+<a href="https://www.star-history.com/?repos=kayraucklnc%2Fbeluga&type=date&legend=top-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=kayraucklnc/beluga&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=kayraucklnc/beluga&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=kayraucklnc/beluga&type=date&legend=top-left" />
+ </picture>
+</a>
+
 ## License
 
 MIT

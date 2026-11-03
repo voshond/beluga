@@ -612,7 +612,8 @@ export class Gateway {
       const yours = this.trustFor(id);
       const theirs = card?.trust ?? state.granted[id]?.level;
       const offers = card?.offers ?? (room?.agent ? ['project', 'shell', 'files'] : []);
-      const status = friend ? `${friend.presence.state}${friend.presence.note ? ` · ${friend.presence.note}` : ''}` : undefined;
+      const said = friend ? [friend.presence.emoji, friend.presence.note].filter(Boolean).join(' ') : '';
+      const status = friend ? `${friend.presence.state}${said ? ` · ${said}` : ''}` : undefined;
       return {
         name: friend?.name ?? room?.name ?? 'someone',
         peerId: id,

@@ -473,7 +473,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `board.archiveDone` | ✓ the archive button on Done (list group, board column), Tasks ⋯ › Archive Done Tasks |
 | `board.unarchive` | ✓ an archived task's banner (Restore), ⋯ › Restore from Archive |
 | `board.emptyArchive` | ✓ Tasks › Archive › Empty Archive |
-| `board.setAutoTasks` | ✓ Tasks › ⋯ › Open a Task for Every New Worktree |
+| `board.setAutoTasks` | ✓ Tasks › ⋯ › Agent Opens a Task for Worktree Work |
 | `board.createBoard` | ✓ Tasks › the board switcher › New Board… (a name, the repos it covers, its keys) |
 | `board.editBoard` | ✓ Tasks › the board switcher › Board Settings…, ⋯ › Board Settings… / Repos on This Board…, the Repos filter's Repos on This Board…, a task's Repo menu |
 | `board.removeBoard` | ✓ a board of its own's settings sheet › Delete Board…, and Tasks › ⋯ › Delete Board… (its tasks go back to their repos' boards) |

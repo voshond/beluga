@@ -86,7 +86,7 @@ export const NETWORK_HANDLERS = {
   'network.groups.join': (s, text) => net(s).accept(text),
   'network.groups.approve': (s, groupId, peerId) => net(s).approve(groupId, peerId),
   'network.groups.decline': (s, groupId, peerId) => net(s).decline(groupId, peerId),
-  'network.presence.set': (s, presence) => net(s).setPresence({ state: presence.state, ...(presence.note !== undefined ? { note: presence.note } : {}), ...(presence.until !== undefined ? { until: presence.until } : {}) }),
+  'network.presence.set': (s, presence) => net(s).setPresence({ state: presence.state, ...(presence.note !== undefined ? { note: presence.note } : {}), ...(presence.emoji !== undefined ? { emoji: presence.emoji } : {}), ...(presence.until !== undefined ? { until: presence.until } : {}) }),
   'network.presence.get': (s) => net(s).getPresence(),
   'network.avatar.set': (s, b64) => net(s).setAvatar(b64 === null ? undefined : Buffer.from(b64, 'base64')),
   'network.avatar.get': (s, sha) => net(s).avatar(sha),

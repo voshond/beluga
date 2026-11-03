@@ -1433,6 +1433,7 @@ export function peopleView(state: DomainState): PeopleView {
         name: clip(f.name, 64),
         presence: f.online ? f.presence.state : 'offline',
         ...(f.presence.note ? { note: clip(f.presence.note, 200) } : {}),
+        ...(f.presence.emoji ? { emoji: clip(f.presence.emoji, 32) } : {}),
         ...(usage ? { usage } : {}),
         offers: [...(card?.claude ? ['claude'] : []), ...(card?.offers ?? [])].slice(0, 20),
         ...(chat ? { chat } : {}),

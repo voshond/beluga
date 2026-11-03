@@ -27,7 +27,12 @@ export function loadPresence(file: string): Presence {
 
 export function savePresence(file: string, p: Presence): Presence {
   const valid = PresenceSchema.parse(p);
-  const clean: Presence = { state: valid.state, ...(valid.note?.trim() ? { note: valid.note.trim() } : {}), ...(valid.until ? { until: valid.until } : {}) };
+  const clean: Presence = {
+    state: valid.state,
+    ...(valid.note?.trim() ? { note: valid.note.trim() } : {}),
+    ...(valid.emoji?.trim() ? { emoji: valid.emoji.trim() } : {}),
+    ...(valid.until ? { until: valid.until } : {}),
+  };
   writeJson(file, clean);
   return clean;
 }

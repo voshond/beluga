@@ -19,6 +19,8 @@ export const CardSchema = z.object({
 export const PresenceSchema = z.object({
   state: z.enum(['online', 'away', 'dnd', 'offline']),
   note: z.string().max(140).optional(),
+  /** One emoji (a flag or a family is several code points); a Mac from before it drops it. */
+  emoji: z.string().max(32).optional(),
   until: z.number().int().positive().optional(),
 });
 

@@ -104,8 +104,8 @@ export interface MilestoneFrame extends Size {
 /**
  * A milestone's box from its tasks' layout (`inner`: ELK's size for them, its head's room included)
  * and its criteria. Open: at least MILESTONE.minWidth wide, the gate a bar across its foot. Folded:
- * one summary row, wide enough for its `title`. `height` stretches an open box (to its row's
- * tallest), its gate staying at the foot.
+ * one summary row, wide enough for its `title`. `height` stretches an open box, its gate staying
+ * at the foot.
  */
 export function milestoneFrame(inner: Size, criteria: readonly string[], folded: boolean, height?: number, title = ''): MilestoneFrame {
   if (folded) {
@@ -258,6 +258,48 @@ export function arrowHead(points: readonly Point[], size = 5): string {
 export function labelAt(points: readonly Point[]): Point | undefined {
   const [a, b] = points;
   return a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : undefined;
+}
+
+// ---- gliding: lines move with the cards
+
+/** How long a re-laid plan glides (the cards' transform in PlanCanvas.module.css: the same ms, the same curve). */
+export const GLIDE_MS = 520;
+
+/** The canvas's ease-out, `cubic-bezier(0.22, 1, 0.36, 1)` (--ease-out in tokens.css): how far along a glide is at `t` (0 to 1). */
+export function easeOut(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  const [x1, y1, x2, y2] = [0.22, 1, 0.36, 1];
+  const at = (a: number, b: number, s: number): number => 3 * a * s * (1 - s) ** 2 + 3 * b * s * s * (1 - s) + s ** 3;
+  // The curve's x runs one way only: halve towards the s whose x is t, then read its y.
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    if (at(x1, x2, mid) < t) lo = mid;
+    else hi = mid;
+  }
+  return at(y1, y2, (lo + hi) / 2);
+}
+
+const along = (a: Point, b: Point): 'h' | 'v' | 'o' => (Math.abs(a.y - b.y) < 0.5 ? 'h' : Math.abs(a.x - b.x) < 0.5 ? 'v' : 'o');
+
+/**
+ * Whether a line can glide from one shape to the other point by point: as many corners, each stretch
+ * running the same way (across or down), so it stays square all the way. Otherwise it fades instead.
+ */
+export function glidable(from: readonly Point[], to: readonly Point[]): boolean {
+  if (from.length !== to.length || from.length < 2) return false;
+  for (let i = 1; i < to.length; i++) if (along(from[i - 1]!, from[i]!) !== along(to[i - 1]!, to[i]!)) return false;
+  return true;
+}
+
+/** A line `k` of the way (0 to 1) from one shape to the other (they're glidable). */
+export function between(from: readonly Point[], to: readonly Point[], k: number): Point[] {
+  return to.map((p, i) => {
+    const a = from[i] ?? p;
+    return { x: a.x + (p.x - a.x) * k, y: a.y + (p.y - a.y) * k };
+  });
 }
 
 // ---- folding

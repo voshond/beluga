@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { closeUp, landingIndex, neighbours, spotIn, withGap } from '../packages/mac/src/tasks/board-drag.js';
+import { clipBox, closeUp, foldedAround, landingIndex, neighbours, spotIn, withGap } from '../packages/mac/src/tasks/board-drag.js';
 
 /** The board's drag, the pure part: measured once, then only arithmetic while the pointer moves. */
 
@@ -30,6 +30,22 @@ describe('the board drag', () => {
     expect(spotIn(900, 300, cols)).toEqual({ key: 'done', index: 0 });
     expect(spotIn(10, 10, [])).toBeUndefined();
     expect(landingIndex(5, [])).toBe(0);
+  });
+
+  it('opens the columns a scope hides on the side they belong (BLG-679)', () => {
+    const all = ['backlog', 'todo', 'in_progress', 'in_review', 'in_plan', 'done', 'canceled'];
+    expect(foldedAround(all, ['todo', 'in_progress', 'in_review', 'in_plan'])).toEqual({ before: ['backlog'], after: ['done', 'canceled'] });
+    expect(foldedAround(all, ['backlog'])).toEqual({ before: [], after: ['todo', 'in_progress', 'in_review', 'in_plan', 'done', 'canceled'] });
+    expect(foldedAround(all, all)).toEqual({ before: [], after: [] });
+    expect(foldedAround(all, [])).toEqual({ before: [], after: all });
+  });
+
+  it('only counts the part of a column that has opened', () => {
+    const box = { top: 0, bottom: 500, left: 100, right: 386 };
+    expect(clipBox(box, undefined)).toBe(box);
+    expect(clipBox(box, { left: 0, right: 160 })).toEqual({ top: 0, bottom: 500, left: 100, right: 160 });
+    expect(clipBox(box, { left: 300, right: 900 })).toEqual({ top: 0, bottom: 500, left: 300, right: 386 });
+    expect(clipBox(box, { left: 0, right: 100 })).toBeUndefined();
   });
 
   it('shows the gap where it would land, and its neighbours', () => {

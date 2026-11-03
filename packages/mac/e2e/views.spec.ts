@@ -103,6 +103,10 @@ test('shows data live: stats, a chart, a table that pages itself, code and color
   const plain = page.getByRole('figure', { name: 'Table' }).filter({ hasText: 'Provider' }).last();
   await plain.getByRole('columnheader', { name: /Success rate/ }).getByRole('button').click();
   await expect(plain.locator('tbody tr').first()).toContainText('Adyen');
+  // Long enough to search: the search box sits clear of the sticky headings, its ring whole.
+  const search = (await plain.getByRole('searchbox', { name: 'Search the rows' }).locator('..').boundingBox())!;
+  const heading = (await plain.locator('thead').boundingBox())!;
+  expect(heading.y).toBeGreaterThanOrEqual(search.y + search.height + 4);
   await shot(page, 'views-03c-markdown-table', plain);
 
   const code = page.getByRole('figure', { name: 'Code' }).last();

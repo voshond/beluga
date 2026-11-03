@@ -64,6 +64,7 @@ export default function Person() {
           </Animated.View>
           <T v="title" style={{ marginTop: 14 }}>
             {p.name}
+            {p.emoji && !p.update && p.presence !== 'offline' ? ` ${p.emoji}` : ''}
           </T>
           <T v="callout" style={{ marginTop: 2 }}>
             {p.update ? UPDATE_WORD[p.update] : WORD[p.presence]}

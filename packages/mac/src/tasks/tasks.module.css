@@ -616,6 +616,47 @@
   background: color-mix(in srgb, var(--accent) 5%, var(--bg-sunken));
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent);
 }
+/* A status this scope hides, open while a card is up: a softer, dashed place to drop it. */
+.columnFolded {
+  background: color-mix(in srgb, var(--bg-sunken) 55%, transparent);
+  box-shadow: none;
+  outline: 1px dashed var(--hairline-strong);
+  outline-offset: -1px;
+}
+/* As tall as a column's head with its + button, so the heads line up. */
+.columnFolded .columnHead {
+  min-height: 42px;
+}
+.columnFolded.columnOver {
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-sunken));
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-color: transparent;
+}
+/* Hidden columns slide open by their width; the board's gap on their inner side is taken back so a closed one takes no room. */
+.fold {
+  flex: 0 0 auto;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+  margin-left: -12px;
+}
+.foldBefore {
+  justify-content: flex-end;
+  margin-left: 0;
+  margin-right: -12px;
+}
+.foldInner {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 12px;
+  min-height: 0;
+}
+.foldInnerAfter {
+  padding-left: 12px;
+}
+.foldInnerBefore {
+  padding-right: 12px;
+}
 .columnHead {
   display: flex;
   align-items: center;

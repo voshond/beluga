@@ -19,6 +19,43 @@ const STATES: ReadonlyArray<{ state: PresenceState; hint: string }> = [
   { state: 'offline', hint: 'Still get messages' },
 ];
 
+/** What a status's emoji is usually about: meetings, food, away, focus, travel, feeling. */
+const EMOJIS = ['💬', '📅', '🎧', '💻', '🧠', '🐛', '🚀', '🔥', '☕', '🍽️', '🌮', '🏠', '🚗', '✈️', '🌴', '🏃', '😴', '🤒', '🎉', '✅', '🎮', '📚', '🐋', '👋'] as const;
+
+/** The emoji in front of the note: a smile until you pick one; picking one sets it at once. */
+function EmojiChooser({ emoji, onPick }: { emoji?: string; onPick: (emoji: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const pick = (e: string): void => {
+    onPick(e);
+    setOpen(false);
+  };
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button type="button" className={cx(s.emojiButton, emoji && s.emojiChosen)} aria-label={emoji ? `Status emoji ${emoji}: change it` : 'Pick a status emoji'}>
+          {emoji ?? <Icon name="smile" size={13} />}
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content className={s.emojiCard} side="bottom" align="start" sideOffset={6} collisionPadding={10} aria-label="Status emoji">
+          <div className={s.emojiGrid}>
+            {EMOJIS.map((e) => (
+              <button key={e} type="button" className={cx(s.emojiPick, e === emoji && s.emojiPicked)} aria-label={e} aria-pressed={e === emoji} onClick={() => pick(e)}>
+                {e}
+              </button>
+            ))}
+          </div>
+          {emoji ? (
+            <button type="button" className={s.emojiNone} onClick={() => pick('')}>
+              No Emoji
+            </button>
+          ) : null}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
 /** Which duration a status's end time matches (roughly), so the choice shows ticked. */
 function durationOf(p: Presence, now = Date.now()): Duration {
   if (!p.until) return 'forever';
@@ -38,7 +75,7 @@ export function useSetPresence(): (p: Presence) => void {
 }
 
 /**
- * Your status: a note, Online / Away / Do Not Disturb / Appear Offline, and for how long. Picking
+ * Your status: an emoji and a note, Online / Away / Do Not Disturb / Appear Offline, and for how long. Picking
  * one applies it at once (like the menu bar's); the note is saved on Return or when you leave it.
  */
 export function StatusPanel({ onDone }: { onDone?: () => void }) {
@@ -50,8 +87,8 @@ export function StatusPanel({ onDone }: { onDone?: () => void }) {
   const [duration, setDuration] = useState<Duration>(durationOf(presence));
   useEffect(() => setNote(presence.note ?? ''), [presence.note]);
   if (!self) return null;
-  const apply = (state: PresenceState, opts: { note?: string; duration?: Duration } = {}): void =>
-    set(presenceFor(state, { note: opts.note ?? note, duration: opts.duration ?? duration }));
+  const apply = (state: PresenceState, opts: { note?: string; emoji?: string; duration?: Duration } = {}): void =>
+    set(presenceFor(state, { note: opts.note ?? note, emoji: opts.emoji ?? presence.emoji, duration: opts.duration ?? duration }));
   const saveNote = (): void => {
     if ((presence.note ?? '') !== note.trim()) apply(presence.state, { note });
   };
@@ -64,8 +101,8 @@ export function StatusPanel({ onDone }: { onDone?: () => void }) {
           <div className={s.statusNow}>{selfLine(presence)}</div>
         </div>
       </div>
-      <label className={s.note}>
-        <Icon name="chat" size={13} />
+      <div className={s.note}>
+        <EmojiChooser emoji={presence.emoji} onPick={(emoji) => apply(presence.state, { emoji })} />
         <input
           className={s.noteInput}
           value={note}
@@ -82,21 +119,21 @@ export function StatusPanel({ onDone }: { onDone?: () => void }) {
             }
           }}
         />
-        {note ? (
+        {note || presence.emoji ? (
           <button
             type="button"
             className={s.noteClear}
-            aria-label="Clear the note"
+            aria-label="Clear the note and emoji"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => {
               setNote('');
-              apply(presence.state, { note: '' });
+              apply(presence.state, { note: '', emoji: '' });
             }}
           >
             <Icon name="x" size={9} />
           </button>
         ) : null}
-      </label>
+      </div>
       <div className={s.separator} />
       <div role="radiogroup" aria-label="Status">
         {STATES.map(({ state, hint }) => (

@@ -21,6 +21,7 @@ import {
   offerSent,
   roomBits,
   presenceFor,
+  statusText,
   belugaLine,
   presenceLine,
   readCode,
@@ -109,6 +110,14 @@ describe('presence', () => {
     expect(presenceLine({ online: false, presence: { state: 'away', note: 'in a meeting' } })).toBe('Offline');
   });
 
+  it('puts the status emoji before the note, and says it alone when there is no note', () => {
+    expect(presenceLine({ online: true, presence: { state: 'online', emoji: '🐋', note: 'Beluga' } })).toBe('Online · 🐋 Beluga');
+    expect(presenceLine({ online: true, presence: { state: 'away', emoji: '🌮' } })).toBe('Away · 🌮');
+    expect(presenceLine({ online: false, presence: { state: 'away', emoji: '🌮' } })).toBe('Offline');
+    expect(selfLine({ state: 'online', emoji: ' 🎧 ', note: 'focus' })).toBe('Online · 🎧 focus');
+    expect(statusText({})).toBe('');
+  });
+
   it('says who needs to update instead of just offline, and which Beluga they’re on', () => {
     expect(presenceLine({ online: false, presence: { state: 'offline' }, update: 'them' })).toBe('Offline to you · their Beluga needs an update');
     expect(presenceLine({ online: false, presence: { state: 'offline' }, update: 'you' })).toBe('Update Beluga to reach them');
@@ -128,6 +137,8 @@ describe('presence', () => {
     const now = 1_000_000;
     expect(presenceFor('online', { note: '  hi ', duration: 'hour' }, now)).toEqual({ state: 'online', note: 'hi' });
     expect(presenceFor('dnd', { duration: 'hour' }, now)).toEqual({ state: 'dnd', until: now + 3_600_000 });
+    expect(presenceFor('online', { emoji: ' 🐋 ', note: 'Beluga' }, now)).toEqual({ state: 'online', note: 'Beluga', emoji: '🐋' });
+    expect(presenceFor('online', { emoji: '', note: 'Beluga' }, now)).toEqual({ state: 'online', note: 'Beluga' });
     expect(presenceFor('away', {}, now)).toEqual({ state: 'away' });
     expect(presenceFor('away', { note: 'x'.repeat(200) }, now).note).toHaveLength(140);
   });

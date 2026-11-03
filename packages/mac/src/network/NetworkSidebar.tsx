@@ -111,6 +111,7 @@ function FriendRow({ f, groups }: { f: FriendView; groups: readonly GroupView[] 
   const bits = useApp((st) => roomBits(st.peers, f.peerId, st.follow), sameDeep);
   const state = shownState(f);
   const note = state !== 'offline' ? f.presence.note?.trim() : undefined;
+  const emoji = state !== 'offline' ? f.presence.emoji?.trim() : undefined;
   const addTo = (g: GroupView): void => {
     client.api.network['groups.addMember'](g.id, f.peerId).then(
       () => say(`Added ${f.name} to ${g.name}`),
@@ -144,6 +145,11 @@ function FriendRow({ f, groups }: { f: FriendView; groups: readonly GroupView[] 
         label={
           <span className={s.who}>
             <span className={cx(s.whoName, f.unread > 0 && s.unreadName)}>{f.name}</span>
+            {emoji ? (
+              <span className={s.whoEmoji} aria-hidden>
+                {emoji}
+              </span>
+            ) : null}
             {note ? <span className={s.whoNote}>{note}</span> : null}
           </span>
         }

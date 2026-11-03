@@ -1023,6 +1023,8 @@ export const PeopleView = z.object({
         name: z.string().max(64),
         presence: z.enum(['online', 'away', 'dnd', 'offline']),
         note: z.string().max(200).optional(),
+        /** The emoji of their status ("🌮"), shown by their name; an older Mac leaves it out. */
+        emoji: z.string().max(32).optional(),
         usage: UsageView.optional(),
         /** What their Beluga lets your Claude do (their card): "screen", "commands"… */
         offers: z.array(z.string().max(40)).max(20),

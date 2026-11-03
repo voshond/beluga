@@ -17,7 +17,7 @@ const sha = z.string().regex(/^[0-9a-f]{64}$/);
 const File = z.object({ sha, name: z.string().min(1).max(200), size: z.number().int().min(0), mime: z.string().max(100).optional(), image: z.boolean().optional() });
 const Ask = z.union([z.literal('all'), z.array(peerId).min(1).max(100)]);
 const Post = z.object({ text: z.string().max(8_000), files: z.array(File).max(20).optional(), ask: Ask.optional() });
-const Presence = z.object({ state: z.enum(['online', 'away', 'dnd', 'offline']), note: z.string().max(140).optional(), until: z.number().int().positive().optional() });
+const Presence = z.object({ state: z.enum(['online', 'away', 'dnd', 'offline']), note: z.string().max(140).optional(), emoji: z.string().max(32).optional(), until: z.number().int().positive().optional() });
 
 export const NETWORK_API = {
   // Whether the network is on, and your peer id and address on it.

@@ -38,7 +38,7 @@ export function createBoardToolDefs(board: BoardTools) {
   return [
     tool(
       'task_define',
-      'Define the work this conversation is for, as a task: a short title and, in your own words (never the user’s message pasted in), its goal, the context someone new needs, acceptance criteria, the decisions made and why, open questions, an estimate and a priority. In plan mode it goes on the board when the user approves your plan; call it right before ExitPlanMode.',
+      'Define the work this conversation is for, as a task: a short title and, in your own words (never the user’s message pasted in), its goal, the context someone new needs, acceptance criteria, the decisions made and why, open questions, an estimate and a priority. In plan mode it goes on the board when the user approves your plan; call it right before ExitPlanMode. Elsewhere, with no task yet, it opens this worktree’s task now: private and the user’s (tell them).',
       {
         title: z.string().min(1).max(120),
         goal: z.string().min(1).max(4000).describe('What it’s for and what done looks like, in a sentence or three'),
