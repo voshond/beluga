@@ -58,6 +58,20 @@ Each browser is a device of yours, like a phone (`src/daemon/web-sessions.ts`, `
   links, revokes and closing the port are the Mac app's and the command line's. The CLI is
   `src/web-cli.ts`.
 
+### Passwords instead of links
+
+A name with a password lets a browser in without a join link: `beluga web passwd <name>` asks for
+one (at least 10 characters; piped stdin works too) and `beluga web passwd --remove <name>` takes the
+name away. Once a name exists, the Ask page becomes a sign-in form (`src/daemon/web-passwords.ts`,
+`loginRoute` in `web-join.ts`); join links keep working beside it.
+
+- Passwords are scrypt hashes in `~/.beluga/web-passwords.json` (0600), read on every sign-in, so a
+  change counts at once. Accounts an older build kept in `web.json` move there once.
+- `POST /login` takes JSON from the page's own origin only, and wrong passwords count against the
+  join links' limiter (10 per address and 50 in all per 10 minutes; a public link's own, stricter one).
+- A signed-in browser is a session like a joined one, named `<name>: <browser> on <OS>` and
+  recorded with its name: changing or removing a password signs that name's browsers out.
+
 ## Reaching it from elsewhere
 
 - **Through SSH** (`beluga connect user@host`, `src/cli/connect.ts`): run on the laptop. It asks

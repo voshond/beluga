@@ -1,5 +1,5 @@
 [Unit]
-Description=Beluga daemon (dev, from @REPO@)
+Description=Beluga (dev, from @REPO@): the daemon and its web port on 0.0.0.0:7777
 After=network-online.target
 Wants=network-online.target
 
@@ -7,9 +7,11 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=@REPO@
 Environment=PATH=@PATH@
-ExecStart=@REPO@/node_modules/.bin/tsx src/cli.ts daemon --keep-alive
+ExecStartPre=-/usr/bin/sh -c 'cd packages/mac && node_modules/.bin/vite build --logLevel warn --emptyOutDir false && find dist/assets -type f -mtime +7 -delete'
+ExecStart=@REPO@/node_modules/.bin/tsx src/cli.ts web --listen 0.0.0.0:7777 --insecure-http
 Restart=always
 RestartSec=3
+TimeoutStartSec=300
 TimeoutStopSec=20
 
 [Install]

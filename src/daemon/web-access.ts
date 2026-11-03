@@ -3,7 +3,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import { belugaEnv } from '../core/beluga-env.js';
 import { belugaHome } from '../core/home.js';
-import { joinRoute, locked, sessionCookie, viaHttps } from './web-join.js';
+import { type LimitFor, joinRoute, lockedFor, loginRoute, sessionCookie, viaHttps } from './web-join.js';
+import { WebPasswords } from './web-passwords.js';
 import { type JoinLink, JoinLimiter, type WebSessionInfo, WebSessions } from './web-sessions.js';
 import { WebFiles, sweepUploads } from './web-files.js';
 import { PublicReach, type PublicReachOptions, type PublicState } from './reach/public.js';
@@ -72,6 +73,7 @@ export interface WebAccessOptions {
   readonly root?: string;
   readonly log?: (line: string) => void;
   readonly sessions?: WebSessions;
+  readonly passwords?: WebPasswords;
   /** Remember the port across restarts (off in tests). Default true. */
   readonly remember?: boolean;
   /** How the public link opens its tunnel (tests use a fake). */
@@ -82,6 +84,7 @@ export interface WebAccessOptions {
 
 export class WebAccess {
   readonly sessions: WebSessions;
+  readonly passwords: WebPasswords;
   /** Uploads from browsers, and one-time download links to them. */
   readonly files = new WebFiles();
   private readonly limiter = new JoinLimiter();
@@ -98,10 +101,13 @@ export class WebAccess {
 
   constructor(private readonly opts: WebAccessOptions) {
     this.sessions = opts.sessions ?? new WebSessions({ onRevoke: (id) => this.server?.drop(id) });
+    this.passwords = opts.passwords ?? new WebPasswords();
     this.public = new PublicReach({ ...(opts.log ? { log: opts.log } : {}), ...opts.publicReach });
     this.tailscale = new TailscaleReach({ ...(opts.log ? { log: opts.log } : {}), ...opts.tailscaleReach });
     if (opts.remember !== false) sweepUploads();
   }
+
+  private readonly limitFor: LimitFor = (req) => (this.public.carries(req) ? { limiter: this.public.limiter, who: PublicReach.visitor(req) } : { limiter: this.limiter, who: req.socket.remoteAddress ?? '?' });
 
   get on(): boolean {
     return !!this.server;
@@ -129,10 +135,10 @@ export class WebAccess {
       ...(this.opts.root ? { root: this.opts.root } : {}),
       // A browser let in, or (BLG-655) your own Tailscale login as Serve vouches for it.
       authorize: (req) => this.sessions.check(sessionCookie(req, viaHttps(req))) ?? tailscaleSession(this.tailscale.trusted(req)),
-      routes: [joinRoute(this.sessions, (req) => (this.public.carries(req) ? { limiter: this.public.limiter, who: PublicReach.visitor(req) } : { limiter: this.limiter, who: req.socket.remoteAddress ?? '?' }), this.opts.log)],
+      routes: [joinRoute(this.sessions, this.limitFor, this.opts.log), loginRoute(this.sessions, this.passwords, this.limitFor, this.opts.log)],
       authedRoutes: this.files.routes(this.opts.log),
       publicFiles: isPublicFile,
-      locked,
+      locked: lockedFor(this.passwords),
       ...(this.opts.log ? { log: this.opts.log } : {}),
     });
     const at = await server.listen();

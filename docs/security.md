@@ -60,6 +60,11 @@ shell, read and write your files. So the web port is treated as the most sensiti
   minutes. The secret is in the URL's fragment, which browsers never send to a server, and the
   join page wipes it from the address bar before it does anything else. Wrong secrets are
   rate-limited (10 per address and 50 in all per 10 minutes); a good link always works.
+- **A password, if you set one.** `beluga web passwd <name>` adds a name and password as a way in
+  beside join links: scrypt hashes only (`~/.beluga/web-passwords.json`, 0600), same-origin JSON
+  only, and wrong ones share the join links' rate limits. A password is only as strong as you make
+  it (10 characters at least), and over plain http it crosses the network readable: use it on
+  https or a network you trust. Changing or removing it signs that name's browsers out.
 - **The session is a cookie scripts can't read.** `HttpOnly`, `SameSite=Strict`, and on https
   `Secure` with the `__Host-` prefix (and then only that one is taken). Only its SHA-256 is stored
   (`~/.beluga/web-sessions.json`, 0600).

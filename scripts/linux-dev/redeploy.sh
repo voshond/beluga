@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Redeploy this checkout's Beluga after main moved (a merge): run by beluga-redeploy.service when
 # beluga-redeploy.path sees main change. Beluga's Merge merges inside this checkout, so the new code
-# is already here: reinstall packages if a lockfile changed, then restart the daemon and the web
-# gateway (which rebuilds the window as it starts).
+# is already here: reinstall packages if a lockfile changed, then restart Beluga (which rebuilds the
+# window as it starts).
 #   DRY_RUN=1 bash scripts/linux-dev/redeploy.sh    says what it would do, changes nothing
 set -euo pipefail
 
@@ -37,12 +37,12 @@ if changed packages/mac/package-lock.json && { [ -n "$old" ] || [ ! -d packages/
 
 if [ -n "$root_deps$mac_deps" ]; then
   # Stopped first: npm ci replaces node_modules under the running daemon.
-  run systemctl --user stop beluga-web.service beluga-daemon.service
+  run systemctl --user stop beluga-daemon.service
   [ -z "$root_deps" ] || { echo "redeploy: package-lock.json changed: npm ci"; run npm ci --no-audit --no-fund; }
   [ -z "$mac_deps" ] || { echo "redeploy: packages/mac/package-lock.json changed: npm ci"; (cd packages/mac && run npm ci --no-audit --no-fund); }
-  run systemctl --user start beluga-daemon.service beluga-web.service
+  run systemctl --user start beluga-daemon.service
 else
-  run systemctl --user restart beluga-daemon.service beluga-web.service
+  run systemctl --user restart beluga-daemon.service
 fi
 
 if [ -z "$dry" ]; then

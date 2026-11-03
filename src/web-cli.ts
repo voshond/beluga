@@ -7,6 +7,8 @@ import { forgetWebConfig, readWebConfig } from './daemon/web-access.js';
 import { publicWords } from './daemon/reach/public.js';
 import { TailscaleReach, tailscaleWords } from './daemon/reach/tailscale.js';
 import { qrLines } from './cli/qr.js';
+import { readLine } from './cli/prompt.js';
+import { WebPasswords } from './daemon/web-passwords.js';
 
 /**
  * `beluga web …`: `web` gives a join link from the Beluga that's running (opening its web port),
@@ -21,7 +23,9 @@ beluga web --off                                        browser access off: the 
 beluga web link                                         another link from the Beluga that runs
 beluga web sessions                                     the browsers let in
 beluga web revoke <id or name>                          sign a browser out now
-beluga web stop                                         close the web port`;
+beluga web stop                                         close the web port
+beluga web passwd <name>                                sign in with a name and password instead of a link (asks for it)
+beluga web passwd --remove <name>                       remove that name and sign its browsers out`;
 
 type Out = (text: string) => void;
 
@@ -44,12 +48,43 @@ async function attach(): Promise<SocketClient | undefined> {
   return SocketClient.connect({ url: `ws://127.0.0.1:${info.port}`, token: info.token, kind: 'cli', version: info.version, connect: (url) => new WebSocket(url) as unknown as SocketLike });
 }
 
+const signOutUser = async (user: string): Promise<number> => {
+  const client = await attach();
+  try {
+    const sessions = client ? (await client.call('web.sessions.list')).sessions : new WebSessions().list();
+    const mine = sessions.filter((s: WebSessionInfo) => s.user === user);
+    const local = client ? undefined : new WebSessions();
+    for (const s of mine) await (client ? client.call('web.sessions.revoke', s.id) : local!.revoke(s.id));
+    return mine.length;
+  } finally {
+    client?.close();
+  }
+};
+
+const passwd = async (args: readonly string[], out: Out): Promise<void> => {
+  const remove = args[0] === '--remove';
+  const name = (remove ? args[1] : args[0])?.trim();
+  if (!name) throw new Error('Which name? `beluga web passwd <name>`');
+  const passwords = new WebPasswords();
+  if (remove) {
+    if (!passwords.remove(name)) throw new Error(`No name "${name}"`);
+    const gone = await signOutUser(name);
+    return out(`${name} can't sign in any more${gone ? `; ${gone} browser${gone === 1 ? '' : 's'} signed out` : ''}.\n`);
+  }
+  const password = await readLine('Password: ', { hidden: true });
+  if (process.stdin.isTTY && (await readLine('Again: ', { hidden: true })) !== password) throw new Error('The two passwords don’t match');
+  await passwords.set(name, password);
+  const gone = await signOutUser(name);
+  out(`${name} can sign in with that password${gone ? ` (${gone} browser${gone === 1 ? '' : 's'} signed in before are signed out)` : ''}.\n`);
+};
+
 /**
  * Run a `web` command. Resolves to the web port's settings when Beluga should run here, in the
  * foreground, with it open (no Beluga was running); undefined once the command is done.
  */
 export async function webCommand(argv: readonly string[], out: Out = (t) => void process.stdout.write(t)): Promise<{ web: WebArgs; rest: string[] } | undefined> {
   const [sub, ...rest] = argv;
+  if (sub === 'passwd') return void (await passwd(rest, out));
   if (sub === 'sessions' || sub === 'revoke' || sub === 'stop') {
     const client = await attach();
     try {

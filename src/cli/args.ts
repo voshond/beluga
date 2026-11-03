@@ -25,7 +25,7 @@ export const COMMANDS = {
   phones: { usage: ['beluga phones', 'beluga phones remove <name>'], summary: 'list the paired phones, or remove one', options: {} },
   service: { usage: ['beluga service [install | remove]'], summary: 'keep Beluga running, from boot (systemd on Linux, launchd on a Mac)', options: {} },
   web: {
-    usage: ['beluga web [--listen host:port] [--allow-host name] [--insecure-http]', 'beluga web --tailscale', 'beluga web --public', 'beluga web --off', 'beluga web link', 'beluga web sessions', 'beluga web revoke <id or name>', 'beluga web stop'],
+    usage: ['beluga web [--listen host:port] [--allow-host name] [--insecure-http]', 'beluga web --tailscale', 'beluga web --public', 'beluga web --off', 'beluga web link', 'beluga web sessions', 'beluga web revoke <id or name>', 'beluga web stop', 'beluga web passwd [--remove] <name>'],
     summary: 'open Beluga in a browser: a link that lets one in (opens the web port, 127.0.0.1:7777), the browsers let in, signing one out, closing the port',
     options: {},
     passThrough: true,

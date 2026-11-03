@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { WebPasswords } from './web-passwords.js';
 import { type JoinLimiter, type WebSessions } from './web-sessions.js';
 import { type WebRoute, html, json, sameOrigin } from './web.js';
 
@@ -66,6 +67,30 @@ export function locked(req: IncomingMessage, res: ServerResponse, url: URL): voi
   res.end('Not signed in');
 }
 
+const LOGIN_SCRIPT = `(function(){var f=document.getElementById('f'),e=document.getElementById('e'),b=f.querySelector('button');
+f.addEventListener('submit',function(v){v.preventDefault();e.textContent='';b.disabled=true;
+fetch('/login',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({user:f.user.value,password:f.password.value})})
+.then(function(r){return r.json().then(function(o){if(r.ok)location.replace('/');else{e.textContent=o.error||'That didn\u2019t work.';b.disabled=false}})})
+.catch(function(){e.textContent='Beluga didn\u2019t answer. Check it is running.';b.disabled=false})})})();`;
+const LOGIN_SCRIPT_HASH = createHash('sha256').update(LOGIN_SCRIPT).digest('base64');
+const LOGIN_STYLE = `form{display:grid;gap:.75rem;margin:1.25rem 0;text-align:left}label{display:grid;gap:.3rem;font-size:13px;color:#5d5672}
+input{font:inherit;color:#3b3550;background:#fff;border:1px solid #ddd6ee;border-radius:8px;padding:.55rem .7rem}input:focus{outline:2px solid #8b7fd6;outline-offset:-1px}
+button{font:inherit;font-weight:600;border:0;border-radius:8px;padding:.6rem;background:#8b7fd6;color:#fff;cursor:pointer}button:disabled{opacity:.6}#e{color:#b4475c;min-height:1.2em;margin:0}.small{font-size:13px}`;
+const LOGIN_PAGE = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Beluga</title><style>${PAGE_STYLE}${LOGIN_STYLE}</style>
+<main>${LOCK_ICON}<h1>Sign in to Beluga</h1><form id="f"><label>Name<input name="user" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus></label>
+<label>Password<input name="password" type="password" autocomplete="current-password" required></label><p id="e" role="alert"></p><button type="submit">Sign In</button></form>
+<p class="small">Or open a join link: run <code>beluga web</code> on the computer Beluga runs on.</p></main><script>${LOGIN_SCRIPT}</script></html>`;
+const LOGIN_CSP = `default-src 'none'; script-src 'sha256-${LOGIN_SCRIPT_HASH}'; style-src 'unsafe-inline'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+const MAX_LOGIN_BODY = 2048;
+
+export const lockedFor =
+  (passwords: WebPasswords) =>
+  (req: IncomingMessage, res: ServerResponse, url: URL): void => {
+    const page = req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html' || (req.headers.accept ?? '').includes('text/html'));
+    if (!page || !passwords.any) return locked(req, res, url);
+    html(res, 401, LOGIN_PAGE, { 'content-security-policy': LOGIN_CSP });
+  };
+
 function readBody(req: IncomingMessage, limit: number): Promise<string | undefined> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
@@ -130,6 +155,56 @@ export function joinRoute(sessions: WebSessions, limit: JoinLimiter | LimitFor, 
     }
     log?.(`web: ${joined.session.name} joined (${joined.session.id})`);
     json(res, 200, { ok: true, name: joined.session.name }, { 'set-cookie': setCookie(joined.cookie, new URL(origin!).protocol === 'https:') });
+    return true;
+  };
+}
+
+type Credentials = { user: string; password: string };
+
+const parseCredentials = (body: string | undefined): Credentials | undefined => {
+  if (!body) return undefined;
+  try {
+    const raw = JSON.parse(body) as { user?: unknown; password?: unknown };
+    if (typeof raw.user !== 'string' || typeof raw.password !== 'string') return undefined;
+    if (!raw.user || raw.user.length > 64 || !raw.password || raw.password.length > 1024) return undefined;
+    return { user: raw.user.trim(), password: raw.password };
+  } catch {
+    return undefined;
+  }
+};
+
+export function loginRoute(sessions: WebSessions, passwords: WebPasswords, limit: LimitFor, log?: (line: string) => void): WebRoute {
+  return async (req, res, url) => {
+    if (url.pathname !== '/login') return false;
+    if (req.method !== 'POST') {
+      json(res, 405, { error: 'Method not allowed' });
+      return true;
+    }
+    const origin = req.headers.origin;
+    if (!sameOrigin(origin, req.headers.host)) {
+      json(res, 403, { error: 'Sign in from Beluga’s own page' });
+      return true;
+    }
+    if (!(req.headers['content-type'] ?? '').startsWith('application/json')) {
+      json(res, 415, { error: 'Expected JSON' });
+      return true;
+    }
+    const { limiter, who } = limit(req);
+    if (!limiter.allowed(who)) {
+      json(res, 429, { error: 'Too many tries. Wait a few minutes.' }, { 'retry-after': '600' });
+      return true;
+    }
+    const credentials = parseCredentials(await readBody(req, MAX_LOGIN_BODY));
+    const user = credentials ? await passwords.check(credentials.user, credentials.password) : undefined;
+    if (!user) {
+      limiter.failed(who);
+      log?.(`web: wrong password from ${who}`);
+      json(res, 401, { error: 'That name and password don’t match.' });
+      return true;
+    }
+    const opened = sessions.signIn(user, req.headers['user-agent']);
+    log?.(`web: ${opened.session.name} signed in (${opened.session.id})`);
+    json(res, 200, { ok: true, name: opened.session.name }, { 'set-cookie': setCookie(opened.cookie, new URL(origin!).protocol === 'https:') });
     return true;
   };
 }

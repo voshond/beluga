@@ -30,6 +30,7 @@ const Stored = z.object({
   os: z.string().max(40),
   createdAt: z.number(),
   lastSeenAt: z.number(),
+  user: z.string().max(64).optional(),
 });
 type Stored = z.infer<typeof Stored>;
 const StoredFile = z.object({ sessions: z.array(Stored).max(MAX_SESSIONS) });
@@ -42,6 +43,7 @@ export interface WebSessionInfo {
   readonly os: string;
   readonly createdAt: number;
   readonly lastSeenAt: number;
+  readonly user?: string;
 }
 
 export interface JoinLink {
@@ -98,11 +100,19 @@ export class WebSessions {
     const expires = this.links.get(key);
     if (expires === undefined) return undefined;
     this.links = new Map([...this.links].filter(([k]) => k !== key));
+    if (expires <= this.now()) return undefined;
+    return this.open(userAgent);
+  }
+
+  signIn(user: string, userAgent: string | undefined): { cookie: string; session: WebSessionInfo } {
+    return this.open(userAgent, user);
+  }
+
+  private open(userAgent: string | undefined, user?: string): { cookie: string; session: WebSessionInfo } {
     const now = this.now();
-    if (expires <= now) return undefined;
     const cookie = token(32);
     const { browser, os } = describeBrowser(userAgent);
-    const stored: Stored = { id: randomBytes(6).toString('hex'), hash: sha256(cookie), name: this.uniqueName(`${browser} on ${os}`), browser, os, createdAt: now, lastSeenAt: now };
+    const stored: Stored = { id: randomBytes(6).toString('hex'), hash: sha256(cookie), name: this.uniqueName(`${user ? `${user}: ` : ''}${browser} on ${os}`.slice(0, 72)), browser, os, createdAt: now, lastSeenAt: now, ...(user ? { user } : {}) };
     // The least recently seen go when there are too many (cut off like a revoke).
     const byRecent = [...this.sessions.values()].sort((a, b) => b.lastSeenAt - a.lastSeenAt);
     const evicted = byRecent.slice(MAX_SESSIONS - 1);
@@ -174,7 +184,7 @@ export class WebSessions {
   }
 }
 
-const info = (s: Stored): WebSessionInfo => ({ id: s.id, name: s.name, browser: s.browser, os: s.os, createdAt: s.createdAt, lastSeenAt: s.lastSeenAt });
+const info = (s: Stored): WebSessionInfo => ({ id: s.id, name: s.name, browser: s.browser, os: s.os, createdAt: s.createdAt, lastSeenAt: s.lastSeenAt, ...(s.user ? { user: s.user } : {}) });
 
 /**
  * Wrong join attempts allowed per address, and in all, per window: a 128-bit secret can't be
