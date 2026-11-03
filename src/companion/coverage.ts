@@ -298,6 +298,7 @@ export const PHONE: Record<Method, Side> = {
 
   // ---- supporting Beluga: the star and coffee asks are the Mac's (they open web pages there)
   'support.answer': 'mac',
+  'diagnostics.report': 'mac',
 
   // ---- Your Mac's chats (BLG-102): since 1.14 the phone lists them, starts one and deletes one
   // (it's chatting). Which tab is open is the Mac's: the phone opens any chat without moving it.

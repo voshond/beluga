@@ -259,6 +259,9 @@ export interface FoundProject {
   readonly changed: number;
 }
 
+/** How many repos the Add projects sheet gets: all of them, in practice (it searches them). */
+export const SUGGEST_ALL = 500;
+
 /** Folders people keep their code in. */
 const CODE_DIRS = ['Projects', 'projects', 'Developer', 'code', 'Code', 'dev', 'src', 'repos', 'Repos', 'GitHub', 'github', 'git', 'work', 'Work', 'workspace', 'Sites', 'Documents/GitHub', 'Documents/Projects'];
 

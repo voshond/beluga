@@ -510,6 +510,8 @@ export interface DomainState extends CollabState, WorkState, NetworkSlice, Earni
   readonly approvals: readonly Approval[];
   readonly browser: BrowserDomain;
   readonly viewer?: ViewerDomain;
+  /** When each watched file was last written (fileKey), so a preview of it reads it again: a picture shows the new one. */
+  readonly written: Readonly<Record<string, number>>;
   readonly follow?: string;
   readonly focus: Readonly<Record<string, Focus>>;
   /** Your default for people you haven't picked a trust level for. */
@@ -607,6 +609,8 @@ export type Action =
   | { type: 'viewer_image'; at: Location; image: Bitmap }
   | { type: 'viewer_error'; at: Location; error: string }
   | { type: 'viewer_close' }
+  /** A watched file was written again (fs_changed). */
+  | { type: 'file_written'; at: Location; ts: number }
   | { type: 'focus'; actorKey: string; focus: Focus }
   | { type: 'follow'; peerId?: string }
   | { type: 'policy'; policy: Policy }
@@ -709,6 +713,7 @@ export function initialState(room: string, policy: Policy = 'ask', prefs: Partia
     log: [],
     approvals: [],
     browser: { rows: [], loading: false },
+    written: {},
     focus: {},
     policy,
     levels: {},
@@ -767,6 +772,18 @@ export const peerName = (state: Pick<DomainState, 'peers' | 'self'> & { readonly
   (state.self?.peerId === peerId
     ? state.self.name
     : (state.network?.friends.find((f) => f.peerId === peerId)?.name ?? state.sharedProjects?.flatMap((p) => p.members).find((m) => m.peerId === peerId)?.name ?? peerId.slice(0, 6)));
+
+/** One file, wherever it is: the key `written` is kept by. */
+export const fileKey = (at: Location): string => `${at.owner}\0${at.share}\0${at.path}`;
+
+/** How many files' last writes are kept (the most recent; as many as are watched). */
+export const WRITTEN_LIMIT = 200;
+
+function noteWritten(written: Readonly<Record<string, number>>, key: string, ts: number): Readonly<Record<string, number>> {
+  const { [key]: _old, ...rest } = written;
+  const kept = Object.entries(rest).slice(-(WRITTEN_LIMIT - 1));
+  return { ...Object.fromEntries(kept), [key]: ts };
+}
 
 const sameLoc = (a: Location | undefined, b: Location): boolean =>
   Boolean(a) && a?.owner === b.owner && a.share === b.share && a.path === b.path;
@@ -1088,6 +1105,8 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
       return { ...state, viewer: { ...state.viewer, loading: false, error: action.error } };
     case 'viewer_close':
       return { ...state, viewer: undefined };
+    case 'file_written':
+      return { ...state, written: noteWritten(state.written, fileKey(action.at), action.ts) };
     case 'focus':
       return { ...state, focus: { ...state.focus, [action.actorKey]: action.focus } };
     case 'follow':

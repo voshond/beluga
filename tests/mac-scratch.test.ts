@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HTML_SANDBOX, hasRenderedLook, hasText, isHtmlFile } from '../packages/mac/src/views/reader/reader-model.js';
+import { HTML_SANDBOX, hasRenderedLook, hasText, isHtmlFile, previewVersion } from '../packages/mac/src/views/reader/reader-model.js';
 import { FRESH_MS, atEnd, fileKind, followed, foldersWithFiles, isFresh, isViewable, scratchPlace, scratchState, sortScratch, stepViewable, timeAgo } from '../packages/mac/src/layout/panel/scratch-model.js';
 
 /** The Scratch tab's small decisions: how long ago, what a file is, which one to show. */
@@ -23,6 +23,15 @@ describe('Scratch tab model', () => {
     expect(fileKind('.context/log.txt')).toBe('text');
     expect(fileKind('.beluga/scratch/report.HTML')).toBe('html');
     expect(fileKind('.beluga/scratch/page.htm')).toBe('html');
+  });
+
+  it('a preview reads a picture again by the version its place gives, else when it was last written (BLG-670)', () => {
+    expect(previewVersion(1234, 99)).toBe(1234);
+    expect(previewVersion('v2', undefined)).toBe('v2');
+    // Changes gives none (its list is the same when a picture is written again): the written time is used.
+    expect(previewVersion(undefined, 99)).toBe(99);
+    expect(previewVersion({ files: [] }, 99)).toBe(99);
+    expect(previewVersion(undefined, undefined)).toBeUndefined();
   });
 
   it('can look at pictures, videos, PDFs and web pages; the rest is text', () => {

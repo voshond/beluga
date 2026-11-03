@@ -32,6 +32,13 @@ export const HTML_SANDBOX = '';
 /** Shown as itself (a picture, pages, a video), never as text. */
 export const isVisualFile = (path: string): boolean => isImageFile(path) || isPdfFile(path) || isVideoFile(path);
 
+/**
+ * Which version of a picture, PDF or video to show: the one the place showing it gives (Scratch: when
+ * it was last written), else when Beluga last saw it written. A new one reads the file again.
+ */
+export const previewVersion = (version: unknown, written: number | undefined): string | number | undefined =>
+  typeof version === 'string' || typeof version === 'number' ? version : written;
+
 /** JSON laid out with two-space indents (a one-line API response becomes readable); undefined when it isn't JSON. */
 export function prettyJson(path: string, content: string): string | undefined {
   if (!/\.json$/i.test(path) || content.length > 2_000_000) return undefined;

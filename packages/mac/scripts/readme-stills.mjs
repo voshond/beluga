@@ -24,6 +24,7 @@ const STILLS = {
   'mac/ask-a-friend': 0.95,
   'mac/wants-to': 0.3,
   'mac/sentinel': 0.75,
+  'mac/fire': 0.62,
 };
 
 for (const [name, at] of Object.entries(STILLS)) {

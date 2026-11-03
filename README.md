@@ -117,6 +117,16 @@ Ask about your data and your agent finds the database, connects and runs the que
 
 Plain Markdown gets the same care: tables sort and turn into charts, JSON folds, terminal output keeps its colors, math is typeset and Mermaid becomes a real diagram.
 
+<h3 align="center">And your words are on fire!</h3>
+
+<p align="center">
+  <picture>
+    <source media="(min-width: 700px)" srcset="assets/mac/fire.gif">
+    <img src="assets/mac/fire-still.png" alt="On Max effort the dark message box burns with red pixel fire: pixels fly from the caret as you type, the fire flares gold when you type fast, and the words you delete burst into falling pixels" width="600">
+  </picture>
+</p>
+<p align="center"><sub><b>Max effort</b> sets the message box on fire: pixels fly as you type, it flares when you rush, and what you delete bursts. Pick another fire, or have it on everywhere, in <b>Settings › Fire &amp; Confetti</b>.</sub></p>
+
 ## Your agent, and your friends' agents
 
 <p align="center">

@@ -31,6 +31,13 @@ import { HistorySaver } from './history-saver.js';
 import { forgetViews } from './views/forget.js';
 import { nothingAhead, pendingWorktree, withAhead } from './optimistic.js';
 
+/** What adding a folder did: the project it added, how many a watched folder holds, or why it couldn't. */
+export interface AddResult {
+  readonly project?: { readonly id: string; readonly name: string };
+  readonly found?: number;
+  readonly error?: string;
+}
+
 export interface ControllerDeps {
   readonly manager: WorkspaceManager;
   readonly store: Store;
@@ -1500,23 +1507,38 @@ export class WorkspaceController {
     }
   }
 
-  async addProject(dir: string): Promise<void> {
+  /**
+   * Add a git project. It waits for a delete of the same project still running (archiving its
+   * worktrees), so that one can't take it out again afterwards. The project shows as soon as its
+   * own git is read; the full refresh of every project follows in the background.
+   */
+  async addProject(dir: string): Promise<AddResult> {
     try {
-      this.deps.manager.addProject(dir);
-      await this.refresh();
+      const project = await this.inLane(real(dir), async () => {
+        this.deps.manager.addProject(dir);
+        return this.deps.manager.loadAdded(dir);
+      });
+      this.publish();
       this.deps.toast('Project added', 'success');
+      void this.refresh().catch(() => undefined);
+      return project ? { project: { id: project.id, name: project.name } } : {};
     } catch (err) {
-      this.deps.toast(errorText(err), 'error');
+      const error = errorText(err);
+      this.deps.toast(error, 'error');
+      return { error };
     }
   }
 
-  async addFolder(dir: string): Promise<void> {
+  async addFolder(dir: string): Promise<AddResult> {
     try {
       const found = this.deps.manager.addFolder(dir);
       await this.refresh();
       this.deps.toast(`Watching ${dir}: ${found} project(s) found`, 'success');
+      return { found };
     } catch (err) {
-      this.deps.toast(errorText(err), 'error');
+      const error = errorText(err);
+      this.deps.toast(error, 'error');
+      return { error };
     }
   }
 

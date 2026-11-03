@@ -180,19 +180,45 @@ export class WorkspaceManager {
 
   addProject(dir: string): string {
     const root = path.resolve(dir);
+    if (!existsSync(root)) throw new WorkspaceError(`${root} isn’t there anymore`);
     if (!isMainCheckout(root)) throw new WorkspaceError(`${root} is not a git project (no .git folder)`);
     const removed = this.config.removed?.filter((r) => real(r) !== real(root));
-    this.config = { ...this.config, projects: [...new Set([...this.config.projects, root])], hidden: this.config.hidden.filter((h) => h !== root), ...(removed ? { removed } : {}) };
+    const hidden = this.config.hidden.filter((h) => real(h) !== real(root));
+    this.config = { ...this.config, projects: [...new Set([...this.config.projects, root])], hidden, ...(removed ? { removed } : {}) };
     this.store.saveConfig(this.config);
     return projectId(root);
   }
 
+  /** Watch a folder of projects: new ones in it show up, and ones you removed from it come back. */
   addFolder(dir: string): number {
     const root = path.resolve(dir);
     if (!existsSync(root)) throw new WorkspaceError(`${root} doesn't exist`);
-    this.config = { ...this.config, roots: [...new Set([...this.config.roots, root])] };
+    const inside = real(root) + path.sep;
+    const removed = this.config.removed?.filter((r) => !real(r).startsWith(inside));
+    this.config = { ...this.config, roots: [...new Set([...this.config.roots, root])], ...(removed ? { removed } : {}) };
     this.store.saveConfig(this.config);
     return findProjects([root]).length;
+  }
+
+  /** Whether a project's (real) root is one the config lists and shows. */
+  private wanted(root: string): boolean {
+    const is = (r: string): boolean => real(r) === root;
+    if (!existsSync(root) || this.config.hidden.some(is) || this.config.removed?.some(is)) return false;
+    return this.config.projects.some(is) || findProjects(this.config.roots).some(is);
+  }
+
+  /**
+   * A project just added, read from git now and listed, without waiting for a full refresh of
+   * every project (that follows). Undefined: it isn't one the config shows anymore.
+   */
+  async loadAdded(dir: string): Promise<Project | undefined> {
+    const root = real(dir);
+    if (!this.wanted(root)) return undefined;
+    const project = await this.loadProject(root);
+    if (!this.wanted(root)) return undefined;
+    const repos = [...this.projects.filter((p) => p.root && p.id !== project.id), project].sort((a, b) => a.name.localeCompare(b.name));
+    this.projects = [...this.projects.filter((p) => !p.root), ...repos];
+    return project;
   }
 
   get groups(): readonly ProjectGroup[] {
@@ -465,7 +491,10 @@ export class WorkspaceManager {
     const roots = [...new Set([...findProjects(this.config.roots), ...this.config.projects].map(real))].filter(
       (r) => !this.config.hidden.includes(r) && !this.config.removed?.includes(r) && existsSync(r),
     );
-    const loaded = await Promise.all(roots.map((root) => this.loadProject(root)));
+    const read = await Promise.all(roots.map((root) => this.loadProject(root)));
+    // Projects added while this ran (it read the config before them) stay until the next scan finds them.
+    const scanned = new Set(roots);
+    const loaded = [...read, ...this.projects.filter((p) => p.root && !scanned.has(p.root) && this.wanted(p.root))];
     // Same-named projects (e.g. two clones) get their parent folder added so you can tell them apart.
     const counts = new Map<string, number>();
     for (const p of loaded) counts.set(p.name, (counts.get(p.name) ?? 0) + 1);

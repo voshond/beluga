@@ -8,9 +8,11 @@ import { type DocNav, type DocVariant, MarkdownDoc } from '../../components/mark
 import { useImageUrl } from '../../components/markdown/MdImage.js';
 import { VideoPlayer } from '../../components/VideoPlayer.js';
 import { MAX_FILE_BYTES } from '@beluga/protocol.js';
+import { fileKey } from '@beluga/core/store.js';
+import { useApp } from '../../lib/beluga.js';
 import { Bitmap } from '../FilesView.js';
 import { isImageFile, isVideoFile } from '../../components/markdown/md-paths.js';
-import { BINARY_TEXT, HTML_SANDBOX, LARGE_MARKDOWN, prettyJson, type ReaderMode, isHtmlFile, isMarkdownFile, isPdfFile, langOf } from './reader-model.js';
+import { BINARY_TEXT, HTML_SANDBOX, LARGE_MARKDOWN, prettyJson, previewVersion, type ReaderMode, isHtmlFile, isMarkdownFile, isPdfFile, langOf } from './reader-model.js';
 import { PdfView } from './PdfView.js';
 import { usePinchZoom } from '../../components/usePinchZoom.js';
 import { useDecoded } from '../../components/use-decoded.js';
@@ -42,7 +44,7 @@ const ZOOMS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
  * zoom in and out, or double-click for actual size. The original file is shown (sharp at any
  * zoom), not the small preview Beluga decoded for the terminal.
  */
-function ImageView({ viewer, controls, version }: { viewer: ViewerState; controls: boolean; version?: string | number }) {
+function ImageView({ viewer, controls, version }: { viewer: ViewerState; controls: boolean; version?: string | number | undefined }) {
   const { url, error } = useImageUrl({ owner: viewer.owner, share: viewer.share, path: viewer.path }, version);
   // Written again (a live screenshot): the new picture is decoded first, the old one shown meanwhile.
   const pic = useDecoded(url);
@@ -93,7 +95,7 @@ function ImageView({ viewer, controls, version }: { viewer: ViewerState; control
 }
 
 /** A video, played from its bytes (read like a picture, up to MAX_DOC_VIDEO_BYTES). */
-function VideoFile({ viewer, version, fallback }: { viewer: ViewerState; version?: string | number; fallback?: ReactNode }) {
+function VideoFile({ viewer, version, fallback }: { viewer: ViewerState; version?: string | number | undefined; fallback?: ReactNode }) {
   const { url, error } = useImageUrl({ owner: viewer.owner, share: viewer.share, path: viewer.path }, version);
   if (error) return <Empty icon="play" title="Can’t play this video here" detail={/too large/i.test(error) ? 'It’s too big to play here (up to 64 MB).' : error} action={fallback ? <EmptyActions>{fallback}</EmptyActions> : undefined} />;
   if (!url) return <div className={r.opening}>Opening…</div>;
@@ -111,7 +113,7 @@ export interface FileContentProps {
   readonly onOpenInEditor?: (() => void) | undefined;
   readonly onSaveCopy?: (() => void) | undefined;
   readonly nav?: Partial<DocNav>;
-  /** Changes when the file may have (a PDF is read again then). */
+  /** Changes when the file may have: a picture, PDF or video is read again then (without one, when Beluga sees it written). */
   readonly version?: unknown;
   /** You may edit it here (Edit in the header starts it): your own workspace's file, in the panel or full size. */
   readonly editable?: boolean;
@@ -124,6 +126,8 @@ export function FileContent({ viewer, variant, mode, onMode, wrap, onOpenInEdito
   const box = useRef<HTMLDivElement>(null);
   const markdown = isMarkdownFile(viewer.path);
   const html = isHtmlFile(viewer.path);
+  const written = useApp((st) => st.written[fileKey(viewer)]);
+  const fresh = previewVersion(version, written);
   // A search result opened it at a line: the source, scrolled there (once it's drawn).
   useEffect(() => {
     if (!reveal || viewer.loading || !viewer.content) return;
@@ -134,7 +138,7 @@ export function FileContent({ viewer, variant, mode, onMode, wrap, onOpenInEdito
     return () => cancelAnimationFrame(frame);
   }, [reveal?.seq, viewer.path, viewer.loading, viewer.content.length, mode, Boolean(editing)]);
   // PDFs and pictures are read as themselves (their bytes), whatever the text read made of them.
-  if (isPdfFile(viewer.path)) return <PdfView at={{ owner: viewer.owner, share: viewer.share, path: viewer.path }} controls={variant !== 'panel'} version={version} />;
+  if (isPdfFile(viewer.path)) return <PdfView at={{ owner: viewer.owner, share: viewer.share, path: viewer.path }} controls={variant !== 'panel'} version={fresh ?? version} />;
   if (isVideoFile(viewer.path)) {
     const out = onOpenInEditor ? (
       <Button size="small" variant="quiet" icon="external" onClick={onOpenInEditor}>
@@ -145,9 +149,9 @@ export function FileContent({ viewer, variant, mode, onMode, wrap, onOpenInEdito
         Save a Copy…
       </Button>
     ) : undefined;
-    return <VideoFile viewer={viewer} fallback={out} {...(typeof version === 'string' || typeof version === 'number' ? { version } : {})} />;
+    return <VideoFile viewer={viewer} fallback={out} version={fresh} />;
   }
-  if (viewer.image || (isImageFile(viewer.path) && !viewer.error)) return <ImageView viewer={viewer} controls={variant !== 'panel'} {...(typeof version === 'string' || typeof version === 'number' ? { version } : {})} />;
+  if (viewer.image || (isImageFile(viewer.path) && !viewer.error)) return <ImageView viewer={viewer} controls={variant !== 'panel'} version={fresh} />;
   if (viewer.loading && !viewer.content) return <div className={r.opening}>Opening…</div>;
   if (viewer.error) return <Empty icon="alert" title="Can’t open this file" detail={viewer.error} />;
   const escape = onOpenInEditor ? (

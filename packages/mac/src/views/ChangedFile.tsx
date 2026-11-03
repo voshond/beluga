@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import type { AppState, Location, ViewerState } from '@beluga/core/store.js';
+import { type AppState, type Location, type ViewerState, fileKey } from '@beluga/core/store.js';
 import type { ChangedFile as Change } from '@beluga/workspaces/git.js';
 import { shareNameOf } from '@beluga/shared/share-names.js';
 import { useApi, useApp } from '../lib/beluga.js';
@@ -45,8 +45,8 @@ export function useChangeLocation(path: string | undefined): Location | undefine
   return useMemo(() => (path ? changeLocation({ view, selfId, shared }, path) : undefined), [view, selfId, shared, path]);
 }
 
-/** The file's text, read again whenever the changes are (Claude edited it, a commit). */
-function useText(at: Location, skip: boolean, version: unknown): { content?: string; truncated?: boolean; error?: string } {
+/** The file's text, read again whenever the changes are (Claude edited it, a commit) or it's written. */
+function useText(at: Location, skip: boolean, version: unknown, written: number | undefined): { content?: string; truncated?: boolean; error?: string } {
   const api = useApi();
   const key = `${at.owner}\0${at.share}\0${at.path}`;
   const [state, setState] = useState<{ key: string; content?: string; truncated?: boolean; error?: string }>();
@@ -60,16 +60,16 @@ function useText(at: Location, skip: boolean, version: unknown): { content?: str
     return () => {
       alive = false;
     };
-  }, [key, version, skip]);
+  }, [key, version, written, skip]);
   return state?.key === key ? state : {};
 }
 
 export function ChangedFileView({ at, variant, wrap = true, version: own }: { at: Location; variant: DocVariant; wrap?: boolean; version?: string | number }) {
   const visual = isVisualFile(at.path);
-  // Read again when the changes are (or, given one, its own version: when it was last written).
+  // Read again when the changes are (or, given one, its own version: when it was last written), and when Beluga sees it written.
   const reviewed = useApp((st) => st.review?.data);
-  const version = own ?? reviewed;
-  const text = useText(at, visual, version);
+  const written = useApp((st) => st.written[fileKey(at)]);
+  const text = useText(at, visual, own ?? reviewed, written);
   const viewer: ViewerState = {
     ...at,
     content: text.content ?? '',
@@ -80,7 +80,7 @@ export function ChangedFileView({ at, variant, wrap = true, version: own }: { at
   };
   return (
     <Suspense fallback={<div className={r.opening}>Opening…</div>}>
-      <FileContent viewer={viewer} variant={variant} mode="rendered" onMode={() => undefined} wrap={wrap} version={version} />
+      <FileContent viewer={viewer} variant={variant} mode="rendered" onMode={() => undefined} wrap={wrap} version={own} />
     </Suspense>
   );
 }

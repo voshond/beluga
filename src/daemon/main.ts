@@ -8,8 +8,12 @@ import { belugaHome } from '../core/home.js';
 import { openWithSystem } from '../core/local.js';
 import { IPC_VERSION } from '../ipc/protocol.js';
 import { type Core, buildCore } from './core.js';
+import type { Recorder } from '../core/blackbox/recorder.js';
+import { blackbox } from '../core/blackbox/recorder.js';
+import { startBlackbox } from './blackbox.js';
 import { clearDaemonInfo, writeDaemonInfo } from './files.js';
 import { watchEventLoop } from './lag.js';
+import { keepLogSmall } from './log-size.js';
 import type { Readable } from 'node:stream';
 import { stopWhenInputEnds } from './stop-on-input.js';
 import { DaemonServer } from './server.js';
@@ -37,8 +41,12 @@ export interface DaemonOptions {
   /** Override LINGER_MS / FIRST_CLIENT_MS (tests). */
   readonly lingerMs?: number;
   readonly firstClientMs?: number;
-  /** How often the event-loop delay is logged (default 30 s, see lag.ts). */
+  /** Log the event-loop delay every this often, slow or not (scripts/perf-lag.mjs); otherwise only slow periods and hourly (lag.ts). */
   readonly lagEveryMs?: number;
+  /** What writes daemon.log, kept small while it runs (log-size.ts): stderr unless said otherwise. */
+  readonly logFd?: number;
+  /** The black box to keep event-loop periods and state changes in (core/blackbox/recorder.ts). */
+  readonly record?: Recorder;
   /** Stop once this ends: the app's pipe on Windows, which has no signals (stop-on-input.ts). */
   readonly stopWithInput?: Readable;
 }
@@ -124,18 +132,30 @@ export async function startDaemon(config: Config, opts: DaemonOptions): Promise<
     }, opts.lingerMs ?? LINGER_MS);
   });
 
+  const record = opts.record;
+  const stopActions = record ? core.session.store.onAction((a) => record.action(a.type)) : () => undefined;
   core.start();
-  stopLag = watchEventLoop(log, opts.lagEveryMs);
+  const onPeriod = record ? (lag: Parameters<Recorder['period']>[0]) => record.period(lag, process.memoryUsage()) : undefined;
+  const stopWatch = watchEventLoop(log, { ...(opts.lagEveryMs ? { everyMs: opts.lagEveryMs, all: true } : {}), ...(onPeriod ? { onPeriod } : {}) });
+  stopLag = () => {
+    stopWatch();
+    stopActions();
+  };
   return { core, server, port, token, stop, done };
 }
 
 /** Run the daemon as this process: signals stop it, problems are logged and shown, never fatal. */
 export async function runDaemon(config: Config, opts: DaemonOptions): Promise<void> {
-  const log = (line: string): void => void process.stderr.write(`${new Date().toISOString()} ${line}\n`);
+  const log = (line: string): void => {
+    blackbox.record('log', line);
+    process.stderr.write(`${new Date().toISOString()} ${line}\n`);
+  };
   // Once the terminal or pipe it was started from is gone (EIO, EPIPE), every write fails: drop those lines.
   // Unheard, each failed write was an uncaught error whose log line failed again, spinning a core (BLG-365).
   process.stderr.on('error', () => {});
-  const daemon = await startDaemon(config, { ...opts, log });
+  const box = startBlackbox({ version: opts.version });
+  const daemon = await startDaemon(config, { ...opts, log, record: blackbox });
+  keepLogSmall(opts.logFd ?? 2, log);
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(signal, () => void daemon.stop(`Got ${signal}`));
   if (opts.stopWithInput) stopWhenInputEnds(opts.stopWithInput, (why) => void daemon.stop(why));
   // The Mac app's word that the Mac is about to sleep (BLG-277, src-tauri/src/power.rs): mail the
@@ -155,13 +175,18 @@ export async function runDaemon(config: Config, opts: DaemonOptions): Promise<vo
   });
   process.on('unhandledRejection', (err) => {
     log(`unhandled: ${errorText(err)}`);
+    box.incident('unhandled rejection', err instanceof Error ? (err.stack ?? err.message) : String(err));
     daemon.core.session.toast(`Something went wrong: ${errorText(err)}`.slice(0, 200), 'error');
   });
   // Everyone's screens and the room hang off this process: log a stray throw rather than die.
   process.on('uncaughtException', (err) => {
     log(`uncaught: ${err.stack ?? errorText(err)}`);
+    box.incident('uncaught exception', err.stack ?? errorText(err));
   });
-  process.once('exit', () => clearDaemonInfo());
+  process.once('exit', (code) => {
+    clearDaemonInfo();
+    box.saveNow(`exit ${code}`);
+  });
   await daemon.done;
   process.exit(0);
 }

@@ -1,6 +1,7 @@
 import { baseName, sepOf } from '@beluga/shared/os-path.js';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { DotMatrix } from '../components/DotMatrix.js';
 import { Icon } from '../components/Icon.js';
 import { ProjectIcon } from '../components/ProjectIcon.js';
 import { Button, Segmented, cx } from '../components/ui.js';
@@ -28,6 +29,12 @@ const ago = (ts: number): string => {
 
 type Mode = 'add' | 'new' | 'clone';
 
+/** A folder you added here: on its way (adding takes a moment), in, or why it couldn't be. */
+type Row = { readonly kind: 'adding' } | { readonly kind: 'added' } | { readonly kind: 'failed'; readonly error: string };
+
+/** Suggestions shown before you filter (Filter searches every one found). */
+const NEWEST = 24;
+
 /**
  * Add projects the Mac way: drop folders on it, choose them in the Open panel, or pick from the
  * git projects already on this Mac (most recently worked on first). Or start a new one.
@@ -44,7 +51,7 @@ export function AddProjectSheet() {
   const hidden = useApp((st) => st.hiddenProjects.join('\n'));
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(new Set());
   const [found, setFound] = useState<Found[] | undefined>();
-  const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
+  const [rows, setRows] = useState<ReadonlyMap<string, Row>>(new Map());
   const [filter, setFilter] = useState('');
   const [typed, setTyped] = useState('');
   const [over, setOver] = useState(false);
@@ -55,16 +62,23 @@ export function AddProjectSheet() {
   useEffect(() => {
     if (!open) return;
     setMode(asked === 'new' ? 'new' : 'add');
-    setAdded(new Set());
+    setRows(new Map());
     setRevealed(new Set());
     setFilter('');
     setFound(undefined);
     void api.projects.suggest().then(setFound, () => setFound([]));
   }, [open, asked]);
 
+  const mark = (path: string, row: Row): void => setRows((m) => new Map(m).set(path, row));
+  // Each folder shows Adding… on its row at once, then Added or what went wrong.
   const add = async (paths: readonly string[]): Promise<void> => {
-    for (const p of paths) await api.projects.add(p);
-    setAdded((a) => new Set([...a, ...paths]));
+    await Promise.all(
+      paths.map(async (p) => {
+        mark(p, { kind: 'adding' });
+        const res = await api.projects.add(p).catch((err: unknown) => ({ error: errorText(err) }));
+        mark(p, res.error ? { kind: 'failed', error: res.error } : { kind: 'added' });
+      }),
+    );
   };
 
   // Folders dropped anywhere on the window while this is open are added.
@@ -99,11 +113,13 @@ export function AddProjectSheet() {
     const known = new Set(roots.split('\n'));
     const q = filter.trim().toLowerCase();
     const listed = new Set((found ?? []).map((f) => f.path));
-    const hiddenOnly = found ? [...hiddenSet, ...revealed].filter((p, i, all) => !listed.has(p) && all.indexOf(p) === i).map((p): Found => ({ path: p, name: baseName(p) || p, changed: 0 })) : [];
-    return [...hiddenOnly, ...(found ?? [])]
-      .filter((f) => !known.has(f.path) || added.has(f.path) || revealed.has(f.path))
+    // Folders you dropped, chose or typed (not among the suggestions) and hidden projects come first.
+    const extra = found ? [...rows.keys(), ...hiddenSet, ...revealed].filter((p, i, all) => !listed.has(p) && all.indexOf(p) === i).map((p): Found => ({ path: p, name: baseName(p) || p, changed: 0 })) : [];
+    const newest = (found ?? []).filter((f, i) => q || i < NEWEST || rows.has(f.path));
+    return [...extra, ...newest]
+      .filter((f) => !known.has(f.path) || rows.has(f.path) || revealed.has(f.path))
       .filter((f) => !q || f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q));
-  }, [found, filter, roots, added, hiddenSet, revealed]);
+  }, [found, filter, roots, rows, hiddenSet, revealed]);
 
   const choose = async (): Promise<void> => {
     const picked = await pickFolders('Add projects');
@@ -170,18 +186,31 @@ export function AddProjectSheet() {
                   <div className={s.note}>{filter ? `Nothing called “${filter}”.` : 'No other git projects in ~/Projects, ~/Developer, ~/code and the like.'}</div>
                 ) : (
                   shown.map((f) => {
-                    const done = added.has(f.path) || revealed.has(f.path);
+                    const row = rows.get(f.path);
+                    const done = row?.kind === 'added' || revealed.has(f.path);
                     const wasHidden = hiddenSet.has(f.path) || revealed.has(f.path);
+                    const when = wasHidden ? 'hidden' : f.changed ? ago(f.changed) : undefined;
                     return (
-                      <div key={f.path} className={s.item} role="listitem" onDoubleClick={() => !done && void (wasHidden ? show(f.path) : add([f.path]))}>
+                      <div key={f.path} className={s.item} role="listitem" onDoubleClick={() => !done && !row && void (wasHidden ? show(f.path) : add([f.path]))}>
                         <ProjectIcon id={`path:${f.path}`} name={f.name} size={26} />
                         <span className={s.itemText}>
                           <span className={s.itemName}>{f.name}</span>
-                          <span className={s.itemPath}>
-                            {short(f.path)} · {wasHidden ? 'hidden' : ago(f.changed)}
-                          </span>
+                          {row?.kind === 'failed' ? (
+                            <span className={s.itemError} role="alert">
+                              {row.error}
+                            </span>
+                          ) : (
+                            <span className={s.itemPath}>
+                              {short(f.path)}
+                              {when ? ` · ${when}` : ''}
+                            </span>
+                          )}
                         </span>
-                        {done ? (
+                        {row?.kind === 'adding' ? (
+                          <span className={s.adding}>
+                            <DotMatrix size={12} /> Adding…
+                          </span>
+                        ) : done ? (
                           <span className={s.added}>
                             <Icon name="check" size={12} /> {wasHidden ? 'Showing' : 'Added'}
                           </span>
@@ -191,7 +220,7 @@ export function AddProjectSheet() {
                           </Button>
                         ) : (
                           <Button size="small" onClick={() => void add([f.path])}>
-                            Add
+                            {row?.kind === 'failed' ? 'Try Again' : 'Add'}
                           </Button>
                         )}
                       </div>
@@ -214,8 +243,8 @@ export function AddProjectSheet() {
                   Add
                 </Button>
                 <span className={s.flex} />
-                <Button variant={added.size || revealed.size ? 'primary' : 'quiet'} onClick={close}>
-                  {added.size || revealed.size ? 'Done' : 'Cancel'}
+                <Button variant={rows.size || revealed.size ? 'primary' : 'quiet'} onClick={close}>
+                  {rows.size || revealed.size ? 'Done' : 'Cancel'}
                 </Button>
               </form>
             </>

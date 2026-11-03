@@ -215,6 +215,8 @@ export class RoomFiles {
 
   /** Owner side of a download: send one encrypted chunk, and tell the owner who is downloading. */
   private async serveChunk(from: string, body: BodyOf<'fs_fetch'>): Promise<void> {
+    // A picture, PDF or video shown is watched like a text file read (fs_read): written again, it's read again.
+    if (body.offset === 0) this.deps.shares.watchFile(body.share, body.path);
     try {
       const { data, total } = await this.deps.shares.readChunk(body.share, body.path, body.offset, CHUNK_BYTES, from === this.selfId);
       if (body.offset === 0 && from !== this.selfId) this.system(`${peerName(this.store.getState(), from)} is downloading ${body.share}/${body.path}`);

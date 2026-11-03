@@ -1,13 +1,13 @@
 import type { Session } from '../core/session.js';
 import { needFriendShares } from '../core/friend-share/launch.js';
 import { remoteScratch } from '../core/friend-share/scratch.js';
-import type { WorkspaceController } from '../core/workspace-controller.js';
+import type { AddResult, WorkspaceController } from '../core/workspace-controller.js';
 import type { Workbench } from '../core/workbench.js';
 import { listLocalDirs, localDirKey, openWithSystem } from '../core/local.js';
 import { ATTACHMENT_SHARE, type FetchShared, attachmentOnDisk, chipText, expandChips, importImageFitting, mediaTypeOf, pathInfo, publishForRoom, reattach, readAttachment, registerAttachment, roomAttachmentsDir, saveImageBytes } from '../core/attachments.js';
 import { fetchBytes } from '../core/downloads.js';
 import { testDatabase } from '../core/views/sources.js';
-import { statSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { findProjects, isMainCheckout } from '../workspaces/discovery.js';
@@ -15,11 +15,12 @@ import { githubProjects } from '../workspaces/github-projects.js';
 import { cloneProject, cloneProgress } from '../workspaces/clone-project.js';
 import { createProject, defaultProjectsHome } from '../workspaces/new-project.js';
 import { projectId } from '../workspaces/manager.js';
-import { chooseProjectIcon, readProjectIcon, suggestProjects } from '../core/project-icons.js';
+import { SUGGEST_ALL, chooseProjectIcon, readProjectIcon, suggestProjects } from '../core/project-icons.js';
 import type { Args, Method } from './api.js';
 import { NETWORK_HANDLERS } from './network-handlers.js';
 import { STRIPE_HANDLERS } from './stripe-handlers.js';
 import { SUPPORT_HANDLERS } from './support-handlers.js';
+import { DIAGNOSTICS_HANDLERS } from './diagnostics-handlers.js';
 import { CLAUDE_CODE_HANDLERS } from './claude-code-handlers.js';
 import { STEPS_HANDLERS } from './steps-handlers.js';
 import { GATEWAY_HANDLERS } from './gateway-handlers.js';
@@ -343,20 +344,23 @@ export const HANDLERS = {
     chooseProjectIcon(root, image ? expandHome(image) : undefined);
   },
   // A git project is added; a folder of them is watched (new ones in it show up too).
-  'projects.add': (s, dir) => {
+  // → what it did, or why it couldn't (the Add projects sheet shows it on the folder's row).
+  'projects.add': async (s, dir): Promise<AddResult> => {
     const abs = expandHome(dir);
-    if (isMainCheckout(abs)) return ctl(s)?.addProject(abs);
-    if (findProjects([abs]).length) return ctl(s)?.addFolder(abs);
-    s.toast(`${path.basename(abs)} isn't a git project, and has none inside`, 'warn');
-    return undefined;
+    if (isMainCheckout(abs)) return (await ctl(s)?.addProject(abs)) ?? {};
+    if (findProjects([abs]).length) return (await ctl(s)?.addFolder(abs)) ?? {};
+    const error = existsSync(abs) ? `${path.basename(abs)} isn't a git project, and has none inside` : `${abs} isn't there`;
+    s.toast(error, 'warn');
+    return { error };
   },
   'projects.addFolder': (s, dir) => ctl(s)?.addFolder(expandHome(dir)),
   'projects.iconAt': (_s, dir) => readProjectIcon(expandHome(dir)),
-  'projects.suggest': (s) => suggestProjects(s.store.getState().projects.map((p) => p.root).filter(Boolean)),
+  // Every repo found (the sheet shows the newest, and its Filter searches them all).
+  'projects.suggest': (s) => suggestProjects(s.store.getState().projects.map((p) => p.root).filter(Boolean), undefined, SUGGEST_ALL),
   'projects.create': async (s, name, parent) => {
     const dir = await createProject(name, parent ? expandHome(parent) : undefined);
-    await ctl(s)?.addProject(dir);
-    return { id: projectId(dir), path: dir };
+    const added = await ctl(s)?.addProject(dir);
+    return { id: added?.project?.id ?? projectId(dir), path: dir };
   },
   'projects.github': () => githubProjects(),
   'projects.clone': async (s, remote, target) => {
@@ -378,6 +382,7 @@ export const HANDLERS = {
   ...NETWORK_HANDLERS,
   ...STRIPE_HANDLERS,
   ...SUPPORT_HANDLERS,
+  ...DIAGNOSTICS_HANDLERS,
   ...CLAUDE_CODE_HANDLERS,
   ...STEPS_HANDLERS,
   ...GATEWAY_HANDLERS,

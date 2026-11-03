@@ -9,7 +9,8 @@ export const daemonInfoPath = (): string => path.join(belugaHome(), 'daemon.json
 export const daemonLockPath = (): string => path.join(belugaHome(), 'daemon.lock');
 export const daemonLogPath = (): string => path.join(belugaHome(), 'logs', 'daemon.log');
 
-const LOG_LIMIT = 5 * 1024 * 1024;
+/** Past this, daemon.log is set aside as daemon.log.1 and started over, so the two stay under twice it. */
+export const LOG_LIMIT = 5 * 1024 * 1024;
 
 /** Whether a process with this pid is alive (and ours to signal). */
 export function alive(pid: number): boolean {
