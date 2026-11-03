@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -50,6 +50,25 @@ describe('the Codex trust table', () => {
     const main = path.resolve('/p/main');
     expect(profile.filesystem).toMatchObject({ [main]: 'read', [path.resolve('/p/fix')]: 'write', '/h/.beluga': 'deny', [path.join('/h', '.ssh')]: 'deny', [`${main}/**/.env*`]: 'deny' });
   });
+
+  // Linux's bubblewrap can't mount over a link: "Can't mount on symlink destination ~/.klaud".
+  it.skipIf(process.platform === 'win32')('denies a linked secret at its target, never the link', () => {
+    const home = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'beluga-home-')));
+    try {
+      mkdirSync(path.join(home, '.beluga'));
+      mkdirSync(path.join(home, 'dotfiles', 'gh'), { recursive: true });
+      mkdirSync(path.join(home, '.config'));
+      symlinkSync(path.join(home, '.beluga'), path.join(home, '.klaud'));
+      symlinkSync(path.join(home, 'dotfiles', 'gh'), path.join(home, '.config', 'gh'));
+      symlinkSync(path.join(home, 'gone'), path.join(home, '.netrc'));
+      const c = codexConfinement('own', 'full', { cwd: '/p/main', folders: [], writable: ['/p/main'], home, belugaHome: path.join(home, '.beluga') });
+      const fs = (c.config[`permissions.${PROFILE}`] as { filesystem: Record<string, string> }).filesystem;
+      expect(Object.keys(fs).filter((p) => [path.join(home, '.klaud'), path.join(home, '.config', 'gh'), path.join(home, '.netrc')].includes(p))).toEqual([]);
+      expect(fs).toMatchObject({ [path.join(home, '.beluga')]: 'deny', [path.join(home, 'dotfiles', 'gh')]: 'deny', [path.join(home, '.ssh')]: 'deny' });
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
 });
 
 const found = findCodex();
@@ -57,7 +76,7 @@ const found = findCodex();
 const codex = found && spawnSync(found, ['--version'], { timeout: 15_000 }).status === 0 ? found : undefined;
 describe.skipIf(!codex || process.platform !== 'darwin')("Codex's own sandbox, as Beluga sets it (the real codex binary)", () => {
   // Inside your home, so a friend reaching only shared folders is kept out of what's beside it.
-  const dir = codex ? realpathSync(mkdtempSync(path.join(os.homedir(), 'Library', 'Caches', 'beluga-codex-sandbox-'))) : '';
+  const dir = codex && process.platform === 'darwin' ? realpathSync(mkdtempSync(path.join(os.homedir(), 'Library', 'Caches', 'beluga-codex-sandbox-'))) : '';
   const work = path.join(dir, 'work');
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
   if (codex) {

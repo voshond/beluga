@@ -1,3 +1,4 @@
+import { lstatSync, realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { belugaHomeDir } from '../../../core/shares.js';
@@ -118,6 +119,30 @@ export interface ConfinementPlace {
   readonly belugaHome?: string;
 }
 
+/**
+ * Deny a path where it really is. Linux's sandbox (bubblewrap) can't mount over a link and fails the
+ * whole run ("Can't mount on symlink destination"): the ~/.klaud the home's rename leaves pointing
+ * at ~/.beluga, or a dotfile manager's ~/.config/gh. A link is denied at its target (still a
+ * secret); a dangling one leads nowhere and is skipped; anything else (or absent) as named.
+ */
+function denyAt(filesystem: Record<string, string>, p: string): void {
+  let link: boolean;
+  try {
+    link = lstatSync(p).isSymbolicLink();
+  } catch {
+    link = false;
+  }
+  if (!link) {
+    filesystem[p] = 'deny';
+    return;
+  }
+  try {
+    filesystem[realpathSync(p)] = 'deny';
+  } catch {
+    // Dangling: nothing to read there.
+  }
+}
+
 /** The run's confinement as Codex thread config (see the table above). */
 export function codexConfinement(origin: RunOrigin, scope: 'folder' | 'full', place: ConfinementPlace): CodexConfinement {
   const row = trustRow(origin, scope);
@@ -130,9 +155,9 @@ export function codexConfinement(origin: RunOrigin, scope: 'folder' | 'full', pl
     filesystem[home] = 'deny';
     filesystem[path.join(home, '.gitconfig')] = 'read';
   }
-  for (const rel of HOME_SECRETS) filesystem[path.join(home, rel)] = 'deny';
+  for (const rel of HOME_SECRETS) denyAt(filesystem, path.join(home, rel));
   // Beluga's own files (identity, settings, trust choices); the run's folders inside it stay open below.
-  filesystem[place.belugaHome ?? belugaHomeDir()] = 'deny';
+  denyAt(filesystem, place.belugaHome ?? belugaHomeDir());
   for (const root of roots) filesystem[root] = writable.has(root) ? 'write' : 'read';
   for (const root of roots) for (const glob of SECRET_GLOBS) filesystem[`${root}/**/${glob}`] = 'deny';
   const config: Record<string, unknown> = {
