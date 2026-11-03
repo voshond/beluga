@@ -26,7 +26,7 @@ export type GitTroubleKind =
 
 /**
  * A fix the card offers. `push_https`: this one push over HTTPS with gh's login (the remote stays
- * as it is). `use_https`: switch the project's origin to HTTPS for good (asked first). `install_gh`,
+ * as it is). `use_https`: switch the project's remote to HTTPS for good (asked first). `install_gh`,
  * `gh_login`, `add_ssh_key`, `check_host`: run in Beluga's terminal, so you see it. `retry`: try again.
  * `link`: a page that explains it.
  */
@@ -63,8 +63,9 @@ export interface GitSetup {
   readonly brew?: string;
   /** The gh to type in the terminal (its full path when it isn't on the usual PATH). */
   readonly ghCommand?: string;
-  /** The origin remote's URL. */
+  /** The project's remote's URL, and its name ("fork" when there is one, else "origin"). */
   readonly remote?: string;
+  readonly remoteName?: string;
 }
 
 const GH_CLI_URL = 'https://cli.github.com';
@@ -150,7 +151,7 @@ export function explainGitTrouble(raw: string, setup: GitSetup = { gh: 'unknown'
   const host = remoteHost(setup.remote);
   const gh = setup.ghCommand ?? 'gh';
   const pushHttps: GitFix | undefined = ssh && https ? { id: 'push_https', label: 'Push over HTTPS', detail: `Pushes this once with your GitHub CLI login instead of SSH. Your remote stays as it is.` } : undefined;
-  const useHttps: GitFix | undefined = ssh && https ? { id: 'use_https', label: 'Always Use HTTPS for This Project…', detail: `Changes origin to ${https} (asks first). You can change it back any time.` } : undefined;
+  const useHttps: GitFix | undefined = ssh && https ? { id: 'use_https', label: 'Always Use HTTPS for This Project…', detail: `Changes ${setup.remoteName ?? 'origin'} to ${https} (asks first). You can change it back any time.` } : undefined;
   const thenHttps = 'Then Beluga pushes over HTTPS with that login.';
   const thenRetry = 'Then Beluga tries again.';
   // Each fix once (two routes can land on the same page).
@@ -197,7 +198,7 @@ export function explainGitTrouble(raw: string, setup: GitSetup = { gh: 'unknown'
     case 'gh_logged_out':
       return out('The GitHub CLI isn’t logged in', 'Beluga opens pull requests and merges with GitHub’s own command-line tool, and it needs your GitHub login (once).', [ghSetupFix({ ...setup, gh: setup.gh === 'missing' ? 'missing' : 'logged_out' }, thenRetry), retry]);
     case 'no_remote':
-      return out('This project isn’t on GitHub yet', 'There’s no GitHub repository to push to: the project has no “origin” remote. Add one (or publish the project on GitHub), then try again.', [{ id: 'link', label: 'How Remotes Work', detail: 'GitHub’s guide to adding a remote.', url: REMOTE_DOCS }, retry]);
+      return out('This project isn’t on GitHub yet', 'There’s no GitHub repository to push to: the project has no remote. Add one (or publish the project on GitHub), then try again.', [{ id: 'link', label: 'How Remotes Work', detail: 'GitHub’s guide to adding a remote.', url: REMOTE_DOCS }, retry]);
     case 'offline':
       return out(`Couldn’t reach ${host === 'github.com' ? 'GitHub' : host}`, ssh ? 'This Mac couldn’t connect. Check your internet connection. Some networks also block SSH: HTTPS usually still works there.' : 'This Mac couldn’t connect. Check your internet connection, then try again.', [retry, setup.gh === 'ok' ? pushHttps : undefined]);
   }

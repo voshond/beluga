@@ -72,9 +72,9 @@ export interface WorkbenchDeps {
   /** Merge a PR on GitHub (injected in tests; throws gh's error). */
   readonly mergePr?: (dir: string, number: number, opts: MergeOptions) => Promise<void>;
   /** How many commits here the branch on GitHub doesn't have yet (injected in tests). */
-  readonly unpushedCommits?: (dir: string, branch: string) => Promise<number>;
+  readonly unpushedCommits?: (dir: string, branch: string, remote?: string) => Promise<number>;
   /** Delete a merged branch on GitHub (injected in tests). */
-  readonly deleteRemoteBranch?: (dir: string, branch: string) => Promise<void>;
+  readonly deleteRemoteBranch?: (dir: string, branch: string, remote?: string) => Promise<void>;
   /** A PR's one-click step on GitHub (injected in tests; throws gh's error). */
   readonly prStep?: (dir: string, number: number, step: PrStepKind) => Promise<void>;
   /** A PR's comments, reviews and threads, and posting on it (injected in tests). */
@@ -86,14 +86,14 @@ export interface WorkbenchDeps {
   readonly pushForPr?: typeof pushForPr;
   readonly disableAutoMerge?: (dir: string, number: number) => Promise<void>;
   /** Where a branch was last pushed to (its remote-tracking ref), to notice pushes. */
-  readonly remoteRef?: (dir: string, branch: string) => string | undefined;
+  readonly remoteRef?: (dir: string, branch: string, remote?: string) => string | undefined;
   /** The clock (injected in tests). */
   readonly now?: () => number;
   readonly hasGh?: () => Promise<boolean>;
   /** This Mac's way to GitHub from a folder: gh, Homebrew, the remote (injected in tests). */
   readonly gitSetup?: (dir: string) => Promise<GitSetup>;
-  /** Switch a project's origin to HTTPS (injected in tests). */
-  readonly useHttpsRemote?: (dir: string) => Promise<{ from: string; to: string }>;
+  /** Switch a project's remote to HTTPS (injected in tests). */
+  readonly useHttpsRemote?: (dir: string) => Promise<{ remote: string; from: string; to: string }>;
   readonly measure?: (dir: string) => Promise<number | undefined>;
   /** Your environment variables for something starting there (see env-vars.ts). */
   readonly envFor?: (where: EnvPlace) => Record<string, string>;
@@ -377,7 +377,8 @@ export class Workbench {
       return;
     }
     const project = this.manager.list.find((p) => p.id === ws.projectId);
-    const prompt = buildPrPrompt({ branch: ws.branch, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', projectPrompt: project?.scripts?.prPrompt, extra });
+    const remote = this.remoteOf(ws);
+    const prompt = buildPrPrompt({ branch: ws.branch, base: ws.base ?? project?.base ?? `${remote}/main`, project: project?.name ?? '', remote, projectPrompt: project?.scripts?.prPrompt, extra });
     if (!this.deps.store.getState().prs[ws.id]) this.prAsked.add(ws.id);
     this.deps.controller.open(ws.id);
     this.deps.askClaude(prompt, `ws:${ws.id}`);
@@ -413,7 +414,7 @@ export class Workbench {
         return fail(`Couldn’t commit what’s left: ${firstLine(err)}`);
       }
       const base = this.prBase(ws);
-      const subjects = await commitSubjects(ws.path, `origin/${base}`).catch(() => []);
+      const subjects = await commitSubjects(ws.path, `${this.remoteOf(ws)}/${base}`).catch(() => []);
       const text = prFromCommits(branch, subjects);
       let pr: PullRequest;
       try {
@@ -435,7 +436,7 @@ export class Workbench {
 
   /**
    * Merge into its base, with no pull request: commits anything left (as the branch's name), then
-   * lands the branch on origin/<base> (fast-forward, or a merge commit) and pushes it there.
+   * lands the branch on <remote>/<base> (fast-forward, or a merge commit) and pushes it there.
    * Nothing in the main folder changes. Conflicts or a base that moved meanwhile push nothing.
    */
   async mergeToBase(id: string, opts: { readonly https?: boolean } = {}): Promise<GitHubOutcome> {
@@ -445,12 +446,13 @@ export class Workbench {
     this.creatingPr.add(id);
     const branch = ws.branch;
     const base = this.prBase(ws);
+    const target = `${this.remoteOf(ws)}/${base}`;
     const warn = (message: string): GitHubOutcome => {
       this.deps.toast(message, 'warn');
       return { ok: false, message };
     };
     try {
-      this.deps.toast(`Merging ${branch} into origin/${base}…`);
+      this.deps.toast(`Merging ${branch} into ${target}…`);
       try {
         if ((ws.status?.changed ?? 0) > 0) await this.manager.commitAll(id, titleOfBranch(branch));
       } catch (err) {
@@ -460,13 +462,13 @@ export class Workbench {
       try {
         result = await (this.deps.mergeToBase ?? mergeToBase)(ws.path, branch, base, opts);
       } catch (err) {
-        return this.troubleOr(ws, err, `Couldn’t merge into origin/${base}`);
+        return this.troubleOr(ws, err, `Couldn’t merge into ${target}`);
       }
       this.troubles.delete(id);
       if (!result.ok) {
         if (result.reason === 'moved') return warn(`Someone pushed to ${base} just now: nothing was pushed, try again`);
         const files = result.files.slice(0, 3).join(', ') + (result.files.length > 3 ? '…' : '');
-        return warn(`${branch} conflicts with origin/${base} (${files}): nothing was pushed. Create a PR, or ask your agent to bring ${base} in first`);
+        return warn(`${branch} conflicts with ${target} (${files}): nothing was pushed. Create a PR, or ask your agent to bring ${base} in first`);
       }
       void this.deps.controller.refresh();
       void this.refreshPrs(id);
@@ -505,7 +507,7 @@ export class Workbench {
   /**
    * One of the fixes a GitHub trouble card offers (see shared/git-trouble.ts), then `retry`.
    * Push over HTTPS pushes this once with gh's login; Always Use HTTPS (the Mac asks first) changes
-   * origin; installing gh, logging in and the SSH steps run in the worktree's GitHub terminal, where
+   * the project's remote; installing gh, logging in and the SSH steps run in the worktree's GitHub terminal, where
    * you see and answer them, and once they finish well it's tried again.
    */
   async gitFix(id: string, fix: GitFixId, retry: GitRetry = 'pr'): Promise<GitHubOutcome> {
@@ -526,10 +528,10 @@ export class Workbench {
         return again(true);
       case 'use_https': {
         try {
-          const { from, to } = await (this.deps.useHttpsRemote ?? useHttpsRemote)(ws.path);
-          this.deps.toast(`origin is ${to} now (it was ${from})`, 'success');
+          const { remote, from, to } = await (this.deps.useHttpsRemote ?? useHttpsRemote)(ws.path);
+          this.deps.toast(`${remote} is ${to} now (it was ${from})`, 'success');
         } catch (err) {
-          const message = `Couldn’t switch origin to HTTPS: ${firstLine(err)}`;
+          const message = `Couldn’t switch ${this.remoteOf(ws)} to HTTPS: ${firstLine(err)}`;
           this.deps.toast(message, 'error');
           return { ok: false, message };
         }
@@ -578,7 +580,7 @@ export class Workbench {
     const ok = await (this.deps.hasGh ?? hasGh)();
     this.deps.store.dispatch({ type: 'gh', ok });
     if (ok) void this.refreshPrs(ws.id);
-    // The SSH key was the trouble and gh is logged in now: push over HTTPS with that login (origin unchanged).
+    // The SSH key was the trouble and gh is logged in now: push over HTTPS with that login (the remote unchanged).
     const sshTrouble = trouble && (trouble.kind === 'ssh_denied' || trouble.kind === 'host_key');
     const https = Boolean(ok && sshTrouble && (fix === 'gh_login' || fix === 'install_gh') && httpsRemoteOf(setup.remote));
     return again(https);
@@ -620,10 +622,16 @@ export class Workbench {
   /** The branch a worktree's PRs go into ("main"). */
   private prBase(ws: Workspace): string {
     const project = this.manager.list.find((p) => p.id === ws.projectId);
-    const raw = ws.base ?? project?.base ?? 'origin/main';
-    const remote = project?.sync?.remote ?? 'origin';
-    const base = raw.startsWith(`${remote}/`) ? raw.slice(remote.length + 1) : raw;
+    const remote = this.remoteOf(ws);
+    const raw = ws.base ?? project?.base ?? `${remote}/main`;
+    const prefix = [remote, 'fork', 'origin'].find((name) => raw.startsWith(`${name}/`));
+    const base = prefix ? raw.slice(prefix.length + 1) : raw;
     return base === 'HEAD' ? (project?.sync?.branch ?? 'main') : base;
+  }
+
+  /** The remote a worktree's project pushes to ("fork" when there is one, else "origin"). */
+  private remoteOf(ws: Workspace): string {
+    return this.manager.list.find((p) => p.id === ws.projectId)?.sync?.remote ?? 'origin';
   }
 
   /** GitHub says the PR conflicts with its base: Claude merges the base in here, resolves it and pushes. */
@@ -632,7 +640,7 @@ export class Workbench {
     const pr = this.deps.store.getState().prs[id];
     if (!ws || !pr) return;
     this.deps.controller.open(id);
-    this.deps.askClaude(resolvePrConflictsPrompt(pr, this.prBase(ws)), `ws:${id}`);
+    this.deps.askClaude(resolvePrConflictsPrompt(pr, this.prBase(ws), this.remoteOf(ws)), `ws:${id}`);
     this.deps.toast(`${this.agent()} is resolving PR #${pr.number}’s conflicts…`);
   }
 
@@ -672,7 +680,7 @@ export class Workbench {
     }
     await this.deps.controller.refresh();
     this.deps.controller.open(id);
-    this.deps.askClaude(catchUpPrompt(pr, base), `ws:${id}`);
+    this.deps.askClaude(catchUpPrompt(pr, base, remote), `ws:${id}`);
     this.deps.toast(`${ws.branch} has work since PR #${pr.number}: ${this.agent()} is bringing in the latest ${base}`);
   }
 
@@ -701,7 +709,7 @@ export class Workbench {
     this.merging.add(id);
     try {
       // GitHub merges what it has: commits made here since the last push would be left behind, and lost with the worktree. Push them first.
-      const unpushed = await (this.deps.unpushedCommits ?? unpushedCommits)(ws.path, ws.branch);
+      const unpushed = await (this.deps.unpushedCommits ?? unpushedCommits)(ws.path, ws.branch, this.remoteOf(ws));
       if (unpushed > 0) {
         const commits = unpushed === 1 ? '1 commit' : `${unpushed} commits`;
         this.deps.toast(`Pushing ${commits} to ${ws.branch} before merging PR #${pr.number}…`);
@@ -739,7 +747,7 @@ export class Workbench {
       await this.refreshPrs(id);
       const merged = this.deps.store.getState().prs[id]?.state === 'MERGED';
       if (merged && opts.deleteBranch) {
-        await (this.deps.deleteRemoteBranch ?? deleteRemoteBranch)(ws.path, ws.branch).catch((err: unknown) => this.deps.toast(`Merged, but the branch on GitHub wasn’t deleted: ${err instanceof Error ? err.message : String(err)}`, 'warn'));
+        await (this.deps.deleteRemoteBranch ?? deleteRemoteBranch)(ws.path, ws.branch, this.remoteOf(ws)).catch((err: unknown) => this.deps.toast(`Merged, but the branch on GitHub wasn’t deleted: ${err instanceof Error ? err.message : String(err)}`, 'warn'));
       }
       const message = merged ? `Merged PR #${pr.number}` : opts.auto ? `PR #${pr.number} merges when its checks pass` : `PR #${pr.number} is queued to merge`;
       this.deps.toast(message, 'success');
@@ -835,7 +843,7 @@ export class Workbench {
     }
     if (step === 'update_branch') this.pushedAt.set(id, this.now());
     await this.refreshPrs(id);
-    const message = step === 'ready' ? `PR #${pr.number} is ready for review` : `PR #${pr.number} has the latest ${(ws.base ?? 'base').replace(/^origin\//, '')} now`;
+    const message = step === 'ready' ? `PR #${pr.number} is ready for review` : `PR #${pr.number} has the latest ${this.prBase(ws)} now`;
     this.deps.toast(message, 'success');
     return { ok: true, message };
   }
@@ -982,9 +990,9 @@ export class Workbench {
     return this.manager.list.flatMap((p) => p.workspaces).filter((w) => w.kind === 'worktree' && w.branch && !w.archived && worktreeOrigin(w) === 'beluga' && (only ? w.id === only : (w.status?.ahead ?? 0) > 0 || prs[w.id]));
   }
 
-  /** Whether the branch moved on origin since last time (pushed, or fetched after someone pushed). */
+  /** Whether the branch moved on its remote since last time (pushed, or fetched after someone pushed). */
   private pushed(ws: Workspace): boolean {
-    const ref = (this.deps.remoteRef ?? remoteRef)(ws.path, ws.branch!);
+    const ref = (this.deps.remoteRef ?? remoteRef)(ws.path, ws.branch!, this.remoteOf(ws));
     const known = this.remoteSeen.has(ws.id);
     const before = this.remoteSeen.get(ws.id);
     this.remoteSeen.set(ws.id, ref);

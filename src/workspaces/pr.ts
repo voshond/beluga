@@ -5,19 +5,20 @@ import type { PrCheck, PullRequest } from '../core/work-store.js';
 import { belugaHome } from './store.js';
 import { belugaEnv } from '../core/beluga-env.js';
 import { type GitSetup, httpsRemoteOf } from '../shared/git-trouble.js';
+import { projectRemote } from './git.js';
 export { describePr } from '../shared/format.js';
 
 /**
  * What Claude does when you click PR. Edit it in Settings → Claude → Pull request
  * instructions (saved to ~/.beluga/prompts/pull-request.md). {{branch}}, {{base}},
- * {{baseBranch}} and {{project}} are filled in.
+ * {{baseBranch}}, {{remote}} and {{project}} are filled in.
  */
 export const DEFAULT_PR_PROMPT = `Open a pull request for the work in this workspace.
 
 1. Look at everything that changed compared to {{base}} (git log {{base}}..HEAD and git diff {{base}}).
 2. If there are uncommitted changes that belong to this work, commit them with a clear conventional-commit
    message. Never commit secrets, .env files or unrelated changes.
-3. Push {{branch}} to origin (set the upstream). If git rejects it as non-fast-forward because the
+3. Push {{branch}} to {{remote}} (set the upstream). If git rejects it as non-fast-forward because the
    branch's last pull request was already merged and GitHub's copy is exactly that pull request's head
    (gh pr view {{branch}} --json state,headRefOid), push with --force-with-lease={{branch}}:<that sha>.
    Never force-push otherwise: say what's on GitHub that isn't here instead.
@@ -65,6 +66,7 @@ export interface PrContext {
   readonly branch: string;
   readonly base: string;
   readonly project: string;
+  readonly remote?: string;
   /** Project-specific additions from beluga.json. */
   readonly projectPrompt?: string;
   /** What you typed for this one PR ("/pr mention the migration"). */
@@ -73,8 +75,9 @@ export interface PrContext {
 
 /** The full prompt Claude gets for one PR. */
 export function buildPrPrompt(ctx: PrContext, template = customPrPrompt() ?? DEFAULT_PR_PROMPT): string {
-  const baseBranch = ctx.base.replace(/^origin\//, '');
-  const filled = template.replaceAll('{{branch}}', ctx.branch).replaceAll('{{baseBranch}}', baseBranch).replaceAll('{{base}}', ctx.base).replaceAll('{{project}}', ctx.project);
+  const remote = ctx.remote ?? 'origin';
+  const baseBranch = ctx.base.startsWith(`${remote}/`) ? ctx.base.slice(remote.length + 1) : ctx.base;
+  const filled = template.replaceAll('{{branch}}', ctx.branch).replaceAll('{{baseBranch}}', baseBranch).replaceAll('{{base}}', ctx.base).replaceAll('{{remote}}', remote).replaceAll('{{project}}', ctx.project);
   const project = ctx.projectPrompt?.trim() ? `\n\nProject guidelines for pull requests (from the project's beluga.json):\n${ctx.projectPrompt.trim()}` : '';
   const extra = ctx.extra?.trim() ? `\n\nFor this pull request, also: ${ctx.extra.trim()}` : '';
   return `${filled}${project}${extra}`;
@@ -82,20 +85,20 @@ export function buildPrPrompt(ctx: PrContext, template = customPrPrompt() ?? DEF
 
 /** Ask Claude to fix the failing checks on a PR. */
 /** GitHub says the PR conflicts with its base: Claude brings the base in, resolves, and pushes. */
-export const resolvePrConflictsPrompt = (pr: PullRequest, base: string): string =>
+export const resolvePrConflictsPrompt = (pr: PullRequest, base: string, remote = 'origin'): string =>
   [
     `Pull request #${pr.number} (${pr.url}) has merge conflicts with ${base}, so GitHub can't merge it. Resolve them on this branch:`,
-    `1. Commit anything uncommitted first. Then \`git fetch origin\` and \`git merge origin/${base}\` (a merge, not a rebase: never rewrite what's pushed).`,
+    `1. Commit anything uncommitted first. Then \`git fetch ${remote}\` and \`git merge ${remote}/${base}\` (a merge, not a rebase: never rewrite what's pushed).`,
     "2. For each conflicted file, read both sides and the commits behind them, and keep both intents; don't just pick one side. Remove every conflict marker.",
     '3. Run the typecheck and the tests that cover what changed, and fix what the merge broke.',
     `4. Commit the merge and \`git push\` (never force-push). Then say in a few lines which files conflicted and how you resolved each.`,
   ].join('\n');
 
 /** After its PR merged, you carry on here but the branch has newer commits: Claude catches it up with the base. */
-export const catchUpPrompt = (pr: PullRequest, base: string): string =>
+export const catchUpPrompt = (pr: PullRequest, base: string, remote = 'origin'): string =>
   [
     `Pull request #${pr.number} was merged into ${base}, and this branch has carried on since. Bring it up to date so the next pull request only has the new work:`,
-    `\`git fetch origin\`, then \`git merge origin/${base}\`. Resolve any conflicts keeping both intents, run the tests that cover what changed, and commit the merge. Don't push or open a pull request.`,
+    `\`git fetch ${remote}\`, then \`git merge ${remote}/${base}\`. Resolve any conflicts keeping both intents, run the tests that cover what changed, and commit the merge. Don't push or open a pull request.`,
     'Then say in one or two lines what is on this branch now that is not in the base yet.',
   ].join('\n');
 
@@ -170,9 +173,10 @@ export function forgetGh(): void {
   ghReady = undefined;
 }
 
-/** What Beluga knows about this Mac's way to GitHub from `dir`: gh, Homebrew, the origin remote (for explainGitTrouble). */
+/** What Beluga knows about this Mac's way to GitHub from `dir`: gh, Homebrew, the project's remote (for explainGitTrouble). */
 export async function gitSetup(dir: string): Promise<GitSetup> {
-  const [state, remote] = await Promise.all([ghState(), run('git', ['remote', 'get-url', 'origin'], dir, 5000).then((u) => u.trim() || undefined, () => undefined)]);
+  const remoteName = (await projectRemote(dir)) ?? 'origin';
+  const [state, remote] = await Promise.all([ghState(), run('git', ['remote', 'get-url', remoteName], dir, 5000).then((u) => u.trim() || undefined, () => undefined)]);
   const brew = findTool('brew');
   const ghCommand = gh();
   return {
@@ -180,7 +184,7 @@ export async function gitSetup(dir: string): Promise<GitSetup> {
     ...(brew ? { brew: path.dirname(brew) } : {}),
     // The terminal's own PATH usually has it; a full path when it's only in Homebrew's folder.
     ...(ghCommand !== 'gh' ? { ghCommand } : {}),
-    ...(remote ? { remote } : {}),
+    ...(remote ? { remote, remoteName } : {}),
   };
 }
 
@@ -188,19 +192,20 @@ export async function gitSetup(dir: string): Promise<GitSetup> {
 const ghCredentials = (): string[] => ['-c', 'credential.helper=', '-c', `credential.helper=!"${gh()}" auth git-credential`];
 
 /**
- * Switch a project's origin to HTTPS for good, with gh's login for it in that repository only
+ * Switch a project's remote to HTTPS for good, with gh's login for it in that repository only
  * (asked first, on the Mac). Returns the URL it had, so it can be changed back.
  */
-export async function useHttpsRemote(dir: string): Promise<{ from: string; to: string }> {
-  const from = (await run('git', ['remote', 'get-url', 'origin'], dir, 5000)).trim();
+export async function useHttpsRemote(dir: string): Promise<{ remote: string; from: string; to: string }> {
+  const remote = (await projectRemote(dir)) ?? 'origin';
+  const from = (await run('git', ['remote', 'get-url', remote], dir, 5000)).trim();
   const to = httpsRemoteOf(from);
-  if (!to) throw new Error(`origin isn’t an SSH address Beluga can turn into HTTPS (${from})`);
-  await run('git', ['remote', 'set-url', 'origin', to], dir, 5000);
+  if (!to) throw new Error(`${remote} isn’t an SSH address Beluga can turn into HTTPS (${from})`);
+  await run('git', ['remote', 'set-url', remote, to], dir, 5000);
   const key = `credential.${new URL(to).origin}.helper`;
   // An empty helper first: only gh's answers for this host here (a stale keychain password won't be tried first).
   await run('git', ['config', '--local', '--replace-all', key, ''], dir, 5000);
   await run('git', ['config', '--local', '--add', key, `!"${gh()}" auth git-credential`], dir, 5000);
-  return { from, to };
+  return { remote, from, to };
 }
 
 /** One entry of gh's statusCheckRollup: a CheckRun (Actions job) or a StatusContext (commit status). */
@@ -330,6 +335,15 @@ const PR_FIELDS = 'number,url,state,title,isDraft,statusCheckRollup,reviewDecisi
 /** How many PRs one `gh pr list` asks for. */
 export const PR_LIST_LIMIT = 60;
 
+type PushTarget = { readonly remote: string; readonly url: string | undefined; readonly to: string };
+
+const pushTarget = async (dir: string, opts: { readonly https?: boolean }): Promise<PushTarget> => {
+  const remote = (await projectRemote(dir)) ?? 'origin';
+  const url = opts.https ? httpsRemoteOf((await run('git', ['remote', 'get-url', remote], dir, 5000)).trim()) : undefined;
+  if (opts.https && !url) throw new Error(`${remote} isn’t an SSH address Beluga can push to over HTTPS`);
+  return { remote, url, to: url ?? remote };
+};
+
 /**
  * Push a worktree's branch for its pull request. A branch whose last PR was squash-merged and that
  * carried on from the base (Beluga moves it there after a merge) no longer follows GitHub's copy,
@@ -338,18 +352,16 @@ export const PR_LIST_LIMIT = 60;
  * lost. Any other refusal says git's reason, not its first line ("To https://github.com/…").
  */
 export async function pushForPr(dir: string, head: string, opts: { readonly https?: boolean } = {}): Promise<'pushed' | 'replaced'> {
-  // Over HTTPS with gh's login, this once (the SSH key isn't working): to origin's HTTPS address, origin itself unchanged.
-  const url = opts.https ? httpsRemoteOf((await run('git', ['remote', 'get-url', 'origin'], dir, 5000)).trim()) : undefined;
-  if (opts.https && !url) throw new Error('origin isn’t an SSH address Beluga can push to over HTTPS');
-  const to = url ?? 'origin';
+  // Over HTTPS with gh's login, this once (the SSH key isn't working): to the remote's HTTPS address, the remote itself unchanged.
+  const { remote: name, url, to } = await pushTarget(dir, opts);
   const pre = url ? ghCredentials() : [];
   const push = (...args: string[]): Promise<string> => run('git', [...pre, 'push', ...(url ? [] : ['-u']), ...args, to, `${head}:${head}`], dir, 120_000);
-  // Pushed to a URL, git doesn't move origin/<head> or set the upstream: do it, so the branch reads as pushed.
+  // Pushed to a URL, git doesn't move <remote>/<head> or set the upstream: do it, so the branch reads as pushed.
   const track = async (): Promise<void> => {
     if (!url) return;
     const sha = (await run('git', ['rev-parse', head], dir, 5000).catch(() => '')).trim();
-    if (sha) await run('git', ['update-ref', `refs/remotes/origin/${head}`, sha], dir, 5000).catch(() => undefined);
-    await run('git', ['branch', `--set-upstream-to=origin/${head}`, head], dir, 5000).catch(() => undefined);
+    if (sha) await run('git', ['update-ref', `refs/remotes/${name}/${head}`, sha], dir, 5000).catch(() => undefined);
+    await run('git', ['branch', `--set-upstream-to=${name}/${head}`, head], dir, 5000).catch(() => undefined);
   };
   try {
     await push();
@@ -373,18 +385,16 @@ export async function pushForPr(dir: string, head: string, opts: { readonly http
 export type BaseMergeResult = { readonly ok: true; readonly how: 'fast_forward' | 'merge_commit'; readonly sha: string } | { readonly ok: false; readonly reason: 'conflict'; readonly files: readonly string[] } | { readonly ok: false; readonly reason: 'moved' };
 
 /**
- * Merge a worktree's branch straight into origin's `base`, with no pull request: the latest
- * origin/<base> is fetched, then fast-forwarded to `head` when it can be, or else a merge commit
- * (origin/<base> first, `head` second) is made with `git merge-tree`, so no checkout, not even the
+ * Merge a worktree's branch straight into the remote's `base`, with no pull request: the latest
+ * <remote>/<base> is fetched, then fast-forwarded to `head` when it can be, or else a merge commit
+ * (<remote>/<base> first, `head` second) is made with `git merge-tree`, so no checkout, not even the
  * main folder's, changes. Then it's pushed, never forced: someone pushing to `base` in between
  * ('moved') or a conflict leaves GitHub as it was.
  */
 export async function mergeToBase(dir: string, head: string, base: string, opts: { readonly https?: boolean } = {}): Promise<BaseMergeResult> {
-  const url = opts.https ? httpsRemoteOf((await run('git', ['remote', 'get-url', 'origin'], dir, 5000)).trim()) : undefined;
-  if (opts.https && !url) throw new Error('origin isn’t an SSH address Beluga can push to over HTTPS');
-  const to = url ?? 'origin';
+  const { remote, url, to } = await pushTarget(dir, opts);
   const pre = url ? ghCredentials() : [];
-  const tracking = `refs/remotes/origin/${base}`;
+  const tracking = `refs/remotes/${remote}/${base}`;
   try {
     await run('git', [...pre, 'fetch', to, `+refs/heads/${base}:${tracking}`], dir, 120_000);
   } catch (err) {
@@ -544,12 +554,12 @@ export async function prStep(dir: string, number: number, step: PrStepKind): Pro
  * Delete a merged branch on GitHub. Not gh's --delete-branch: that also deletes the local branch
  * and checks out the base, which a worktree can't (the base is checked out in the main folder).
  */
-export async function deleteRemoteBranch(dir: string, branch: string, remote = 'origin'): Promise<void> {
-  await run('git', ['push', remote, '--delete', branch], dir, 30_000);
+export async function deleteRemoteBranch(dir: string, branch: string, remote?: string): Promise<void> {
+  await run('git', ['push', remote ?? (await projectRemote(dir)) ?? 'origin', '--delete', branch], dir, 30_000);
 }
 
 /**
- * What this computer last knew the branch to be on origin (its remote-tracking ref), read straight
+ * What this computer last knew the branch to be on its remote (its remote-tracking ref), read straight
  * from the repository without running git. It changes when the branch is pushed (or fetched after
  * someone else pushed): the moment a PR is worth looking at again.
  */
@@ -600,12 +610,13 @@ export async function commitSubjects(dir: string, base: string): Promise<string[
 }
 
 /**
- * How many commits on HEAD the branch on origin doesn't have (what a merge on GitHub would leave
+ * How many commits on HEAD the branch on its remote doesn't have (what a merge on GitHub would leave
  * behind). 0 when git can't tell, so a hiccup never stands in the way of a merge.
  */
-export async function unpushedCommits(dir: string, branch: string, remote = 'origin'): Promise<number> {
+export async function unpushedCommits(dir: string, branch: string, remote?: string): Promise<number> {
   try {
-    return Number((await run('git', ['rev-list', '--count', `refs/remotes/${remote}/${branch}..HEAD`], dir)).trim()) || 0;
+    const name = remote ?? (await projectRemote(dir)) ?? 'origin';
+    return Number((await run('git', ['rev-list', '--count', `refs/remotes/${name}/${branch}..HEAD`], dir)).trim()) || 0;
   } catch {
     return 0;
   }

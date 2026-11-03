@@ -40,6 +40,19 @@ beforeEach(() => {
 const mainOnOrigin = (): string => git(origin, 'rev-parse', 'main');
 
 describe('mergeToBase', () => {
+  it('pushes to the fork remote when there is one, never to origin', async () => {
+    const fork = path.join(path.dirname(origin), 'fork.git');
+    execFileSync('git', ['clone', '-q', '--bare', origin, fork]);
+    git(work, 'remote', 'add', 'fork', fork);
+    git(work, 'remote', 'set-url', '--push', 'origin', path.join(path.dirname(origin), 'nowhere.git'));
+    const before = mainOnOrigin();
+    const res = await mergeToBase(work, 'feat', 'main');
+    expect(res).toMatchObject({ ok: true, how: 'fast_forward' });
+    expect(git(fork, 'rev-parse', 'main')).toBe(git(work, 'rev-parse', 'feat'));
+    expect(git(work, 'rev-parse', 'fork/main')).toBe(git(work, 'rev-parse', 'feat'));
+    expect(mainOnOrigin()).toBe(before);
+  });
+
   it('fast-forwards origin/main when nothing landed there since', async () => {
     const res = await mergeToBase(work, 'feat', 'main');
     expect(res).toMatchObject({ ok: true, how: 'fast_forward' });

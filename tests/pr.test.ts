@@ -42,6 +42,13 @@ describe('buildPrPrompt', () => {
     expect(buildPrPrompt({ ...ctx, base: 'develop' }, '{{base}}|{{baseBranch}}')).toBe('develop|develop');
   });
 
+  it('pushes to the fork and strips fork/ when the project has one', () => {
+    const out = buildPrPrompt({ ...ctx, base: 'fork/main', remote: 'fork' }, DEFAULT_PR_PROMPT);
+    expect(out).toContain('Push feat/x to fork');
+    expect(out).toContain('gh pr create --base main --head feat/x');
+    expect(out).not.toContain('origin');
+  });
+
   it('fills the default template completely', () => {
     const out = buildPrPrompt(ctx, DEFAULT_PR_PROMPT);
     expect(out).not.toMatch(/\{\{\w+\}\}/);

@@ -74,6 +74,11 @@ describe('what Claude is asked', () => {
     expect(text).toMatch(/both intents/);
   });
 
+  it('fetches and merges from the fork when the project has one', () => {
+    expect(resolvePrConflictsPrompt(pr, 'main', 'fork')).toContain('git fetch fork` and `git merge fork/main');
+    expect(catchUpPrompt(pr, 'main', 'fork')).toContain('git fetch fork`, then `git merge fork/main');
+  });
+
   it('catches a carried-on branch up without pushing', () => {
     const text = catchUpPrompt(pr, 'main');
     expect(text).toContain('git merge origin/main');

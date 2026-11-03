@@ -60,7 +60,14 @@ describe('mergePr / deleteRemoteBranch (gh stubbed)', () => {
     exec.calls.length = 0;
     exec.impl = () => ({ stdout: '' });
     await deleteRemoteBranch('/code/auth', 'klaud/auth');
-    expect(exec.calls).toEqual([{ cmd: 'git', args: ['push', 'origin', '--delete', 'klaud/auth'], cwd: '/code/auth' }]);
+    expect(exec.calls.at(-1)).toEqual({ cmd: 'git', args: ['push', 'origin', '--delete', 'klaud/auth'], cwd: '/code/auth' });
+  });
+
+  it('deletes it on the fork when the project has one', async () => {
+    exec.calls.length = 0;
+    exec.impl = (_cmd, args) => ({ stdout: args[0] === 'remote' ? 'origin\nfork\n' : '' });
+    await deleteRemoteBranch('/code/auth', 'klaud/auth');
+    expect(exec.calls.at(-1)).toEqual({ cmd: 'git', args: ['push', 'fork', '--delete', 'klaud/auth'], cwd: '/code/auth' });
   });
 });
 

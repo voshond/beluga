@@ -82,8 +82,8 @@ export interface BranchOptions {
   readonly planned?: boolean;
 }
 
-/** "origin/main" → "main". */
-const short = (ref: string): string => ref.replace(/^(refs\/heads\/|refs\/remotes\/)?origin\//, '');
+/** "origin/main" or "fork/main" → "main". */
+const short = (ref: string): string => ref.replace(/^(refs\/heads\/|refs\/remotes\/)?(origin|fork)\//, '');
 
 /** Its project pushes somewhere and the GitHub CLI isn't known to be missing: PRs are the way to merge. */
 export function onGitHub(state: Pick<DomainState, 'projects' | 'gh'>, ws: Workspace): boolean {
@@ -209,7 +209,7 @@ export function branchState(state: Pick<DomainState, 'projects' | 'gh' | 'prs' |
           { id: 'pr_claude', label: 'Create PR with Your Agent', hint: 'Your agent commits what belongs, then writes the title and description: what, why, how to test', claude: true },
           { id: 'pr_custom', label: 'Create PR with Instructions…', hint: 'Tell your agent anything extra for this one (a draft, an issue to mention…)', claude: true },
           { id: 'pr_draft', label: 'Create Draft PR', hint: `Like Create PR, as a draft: it can’t merge until it’s marked ready` },
-          { id: 'merge_base', label: `Merge into ${into}…`, hint: `No pull request: ${changed ? 'commits what’s left, ' : ''}merges ${ws.branch} into origin/${into} and pushes it there` },
+          { id: 'merge_base', label: `Merge into ${into}…`, hint: `No pull request: ${changed ? 'commits what’s left, ' : ''}merges ${ws.branch} into ${into} on GitHub and pushes it there` },
         ]
       : [];
   if (pr?.state === 'CLOSED' && !changed && !ahead) return at('closed', 'PR closed', 'muted', `PR #${pr.number} was closed without merging`, planned ? [] : [archive, remove]);
