@@ -23,6 +23,12 @@ export async function endpoint(): Promise<Endpoint> {
   const res = await fetch('/__beluga/endpoint');
   const body = (await res.json()) as Endpoint & { error?: string };
   if (!res.ok || body.error) throw new Error(body.error ?? 'Beluga is not running');
+  // Behind the web gateway (src/web/gateway.ts) it's a path on this same site: ws(s):// to it.
+  if (body.url.startsWith('/')) {
+    const ws = new URL(body.url, location.href);
+    ws.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return { url: ws.href, token: body.token };
+  }
   return body;
 }
 
