@@ -31,6 +31,7 @@ const keyFor = (keys: readonly TermKey[], action: TermAction): string | undefine
   return k ? chordLabel(k.chord) : undefined;
 };
 import s from './agent-term.module.css';
+import { copyText } from '../lib/copy.js';
 
 /** What a pane is: the agent's own terminal on the conversation, or a shell beside it. */
 export type PaneKind = 'agent' | 'shell';
@@ -234,7 +235,7 @@ export function TermPane({ wsId, termKey, kind, cwd, split, focusOnMount, onSpli
     else if (a === 'find') setFinding(true);
     else if (a === 'clear') t?.clear();
     else if (a === 'select_all') t?.selectAll();
-    else if (a === 'copy') void navigator.clipboard?.writeText(t?.getSelection() ?? '').catch(() => undefined);
+    else if (a === 'copy') void copyText(t?.getSelection() ?? '').catch(() => undefined);
     else if (a === 'paste') void navigator.clipboard?.readText().then((text) => t?.paste(text)).catch(() => undefined);
     else if (a === 'split_right' || a === 'split_down') onSplit(a === 'split_right' ? 'right' : 'down');
     else if (a === 'newest_visual') {

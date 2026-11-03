@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { pretendSystem } from '../../src/core/gateway/demo-system.js';
-import { captureScreen, describeDevice, deviceInfo, listWindows, parseOsRelease, parseWindowsFacts } from '../../src/core/gateway/device.js';
+import { captureScreen, describeDevice, deviceInfo, linuxDisplayEnv, listWindows, parseOsRelease, parseWindowsFacts } from '../../src/core/gateway/device.js';
 
 const dirs: string[] = [];
 const tmp = (): string => {
@@ -23,6 +23,14 @@ describe('a friend’s screenshot and device info on Linux', () => {
     expect(shot.of).toBe('the main display');
     expect(shot.view).toMatch(/-view\.jpg$/);
     expect(sys.ran.some((r) => r.startsWith('sips'))).toBe(false);
+  });
+
+  it('finds the desktop when Beluga was started without one (a service, ssh, another tty)', () => {
+    const look = (env: Record<string, string>, files: Record<string, string[]>) => ({ env, runtimeDir: '/run/user/1000', home: '/home/v', list: (d: string) => files[d] ?? [], exists: (f: string) => f === '/home/v/.Xauthority' });
+    expect(linuxDisplayEnv(look({ DISPLAY: ':1' }, { '/tmp/.X11-unix': ['X0'] }))).toEqual({});
+    expect(linuxDisplayEnv(look({}, { '/run/user/1000': ['wayland-0.lock', 'wayland-0', 'pipewire-0'], '/tmp/.X11-unix': ['X0'] }))).toEqual({ WAYLAND_DISPLAY: 'wayland-0', XDG_RUNTIME_DIR: '/run/user/1000' });
+    expect(linuxDisplayEnv(look({}, { '/run/user/1000': ['pipewire-0'], '/tmp/.X11-unix': ['X1', 'X0'] }))).toEqual({ DISPLAY: ':0', XAUTHORITY: '/home/v/.Xauthority' });
+    expect(linuxDisplayEnv(look({}, {}))).toEqual({});
   });
 
   it("says one app's window can't be picked", async () => {

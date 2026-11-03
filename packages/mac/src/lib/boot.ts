@@ -36,10 +36,8 @@ export async function endpoint(): Promise<Endpoint> {
 export function capabilities(setZoom: (dir: 'in' | 'out' | 'reset') => { ok: boolean; message: string }): Capabilities {
   return {
     copyText: async (text: string) => {
-      if (inApp()) {
-        const { writeText } = await import('@tauri-apps/plugin-clipboard-manager');
-        await writeText(text);
-      } else await navigator.clipboard.writeText(text);
+      const { copyText } = await import('./copy.js');
+      await copyText(text);
     },
     // Clicking one comes back as a tap (the app shell's "notification-tap" event, or NOTIFICATION_TAP here).
     notify: async (raw: { title: string; body: string; sound: boolean; tone?: SoundChoice; volume?: number; channel?: string; approval?: string; task?: string; popup?: boolean; banner?: boolean }) => {

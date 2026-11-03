@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
-import { promises as fs } from 'node:fs';
+import { existsSync, readdirSync, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -24,7 +24,8 @@ export interface ExecBytesResult {
 }
 
 export interface SystemPort {
-  exec(cmd: string, args: readonly string[], timeoutMs?: number): Promise<ExecResult>;
+  /** `env`: added to this process's own environment for that command. */
+  exec(cmd: string, args: readonly string[], timeoutMs?: number, env?: Readonly<Record<string, string>>): Promise<ExecResult>;
   /** Like exec, but stdout/stderr are raw bytes (a screenshot, a file): used by adb exec-out (phone-adb.ts). */
   execBytes?(cmd: string, args: readonly string[], timeoutMs?: number): Promise<ExecBytesResult>;
   /** A long-running command's stdout as it comes (a phone's screen video over adb), until it ends or stop(). */
@@ -34,9 +35,9 @@ export interface SystemPort {
 }
 
 export const realSystem: SystemPort = {
-  exec: (cmd, args, timeoutMs = 15_000) =>
+  exec: (cmd, args, timeoutMs = 15_000, env) =>
     new Promise((resolve) => {
-      execFile(cmd, [...args], { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, encoding: 'utf8' }, (err, stdout, stderr) => {
+      execFile(cmd, [...args], { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, encoding: 'utf8', ...(env ? { env: { ...process.env, ...env } } : {}) }, (err, stdout, stderr) => {
         const code = err ? (typeof (err as { code?: unknown }).code === 'number' ? ((err as { code: number }).code) : 1) : 0;
         resolve({ code, stdout: stdout ?? '', stderr: stderr ?? (err ? err.message : '') });
       });
@@ -162,6 +163,60 @@ const LINUX_SHOTS = (file: string): ReadonlyArray<readonly [string, readonly str
   ['import', ['-window', 'root', file]],
 ];
 
+export interface DisplayLook {
+  readonly env: Readonly<Record<string, string | undefined>>;
+  /** This user's runtime folder (/run/user/<uid>) when there's no XDG_RUNTIME_DIR. */
+  readonly runtimeDir?: string;
+  readonly home: string;
+  /** A folder's names, [] when it can't be read. */
+  readonly list: (dir: string) => readonly string[];
+  readonly exists: (file: string) => boolean;
+}
+
+/**
+ * Linux: the desktop to take a screenshot of, when Beluga was started without one (a service, over
+ * ssh, from a terminal on another tty): this user's Wayland socket, else the first X display and
+ * its ~/.Xauthority. Nothing when the environment already names one, or none is found.
+ */
+export function linuxDisplayEnv(look: DisplayLook): Record<string, string> {
+  const { env } = look;
+  if (env.WAYLAND_DISPLAY || env.DISPLAY) return {};
+  const runtime = env.XDG_RUNTIME_DIR ?? look.runtimeDir;
+  const wayland = runtime ? look.list(runtime).filter((n) => /^wayland-\d+$/.test(n)).sort()[0] : undefined;
+  if (wayland && runtime) return { WAYLAND_DISPLAY: wayland, ...(env.XDG_RUNTIME_DIR ? {} : { XDG_RUNTIME_DIR: runtime }) };
+  const x = look.list('/tmp/.X11-unix').map((n) => /^X(\d+)$/.exec(n)?.[1]).filter((n): n is string => n !== undefined).sort((a, b) => Number(a) - Number(b))[0];
+  if (x === undefined) return {};
+  const auth = path.join(look.home, '.Xauthority');
+  return { DISPLAY: `:${x}`, ...(!env.XAUTHORITY && look.exists(auth) ? { XAUTHORITY: auth } : {}) };
+}
+
+const realDisplayEnv = (sys: SystemPort): Record<string, string> =>
+  linuxDisplayEnv({
+    env: process.env,
+    ...(typeof process.getuid === 'function' ? { runtimeDir: `/run/user/${process.getuid()}` } : {}),
+    home: sys.os.homedir(),
+    list: (dir) => {
+      try {
+        return readdirSync(dir);
+      } catch {
+        return [];
+      }
+    },
+    exists: existsSync,
+  });
+
+/** Every pixel the same (a screen that's off, asleep or locked away gives black): nothing to show. */
+async function blank(file: string): Promise<boolean> {
+  try {
+    const { decodeImage } = await import('../../image/decode.js');
+    const { data } = decodeImage(await fs.readFile(file), file, 64);
+    for (let i = 4; i < data.length; i += 4) if (data[i] !== data[0] || data[i + 1] !== data[1] || data[i + 2] !== data[2]) return false;
+    return data.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Where to allow screenshots when one fails, per system. */
 const SHOT_HINT: Partial<Record<NodeJS.Platform, string>> = {
   darwin: 'macOS may need Beluga allowed in System Settings › Privacy & Security › Screen Recording.',
@@ -205,14 +260,19 @@ export async function captureScreen(sys: SystemPort, dir: string, opts: { app?: 
   else if (platform === 'win32') res = await powershell(sys, shotPs(file, win?.id), 20_000);
   else {
     res = { code: 1, stdout: '', stderr: '' };
+    const env = realDisplayEnv(sys);
     for (const [cmd, args] of LINUX_SHOTS(file)) {
-      res = await sys.exec(cmd, args, 20_000);
+      res = await sys.exec(cmd, args, 20_000, env);
       if (res.code === 0 && (await fs.stat(file).catch(() => undefined))?.size) break;
     }
   }
   const stat = await fs.stat(file).catch(() => undefined);
   if (res.code !== 0 || !stat?.size) {
     throw new Error(`The screenshot didn't work${res.stderr.trim() ? `: ${res.stderr.trim().slice(0, 200)}` : ''}. ${SHOT_HINT[platform]}`);
+  }
+  if (platform === 'linux' && (await blank(file))) {
+    await fs.rm(file, { force: true });
+    throw new Error('The screenshot came out blank: the screen is off, asleep or locked (a closed lid, a monitor that went to sleep). Wake it and try again.');
   }
   // A smaller copy for Claude's eyes (the PNG of a Retina display is several MB).
   const view = file.replace(/\.png$/, '-view.jpg');

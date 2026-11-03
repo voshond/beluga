@@ -14,6 +14,7 @@ import { setWorktreeFlag, useWorktreeInfo } from './worktree-info-state.js';
 import s from './worktree-info.module.css';
 import { LivePanel } from '../claude-code/Live.js';
 import { openFolderLabel } from '../lib/os-words.js';
+import { copyText } from '../lib/copy.js';
 
 /**
  * What a worktree made outside Beluga is (another app's, Claude Code's, a script's): where it
@@ -243,7 +244,7 @@ export function WorktreeInfoPage({ ws, agent, origin }: { ws: Workspace; agent?:
             ) : null}
             <Field label="Folder">
               <Tip label="Copy path">
-                <button type="button" className={s.path} onClick={() => void navigator.clipboard?.writeText(ws.path).then(() => toast(client, 'Copied the path', 'success'))}>
+                <button type="button" className={s.path} onClick={() => void copyText(ws.path).then(() => toast(client, 'Copied the path', 'success'))}>
                   {ws.path}
                 </button>
               </Tip>
