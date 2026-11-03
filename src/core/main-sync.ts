@@ -1,5 +1,5 @@
 import { syncMainPrompt, syncWorktreePrompt } from '../agent/sync-main.js';
-import { conflictedFiles } from '../workspaces/git.js';
+import { conflictedFiles, projectRemote } from '../workspaces/git.js';
 import { type GhRunner, type GitHubInfo, type GitHubRepo, fetchGitHubInfo, ghHosts, parseGitHubRemote, runGh } from '../workspaces/github.js';
 import type { WorkspaceManager } from '../workspaces/manager.js';
 import * as sync from '../workspaces/sync.js';
@@ -121,14 +121,14 @@ export class MainSync {
 
   private async doFetch(projectId: string, opts: { quiet?: boolean }): Promise<FetchOutcome> {
     const project = this.project(projectId);
-    const remote = project.sync?.remote ?? 'origin';
+    const remote = await projectRemote(project.root) ?? 'origin';
     this.tried.set(projectId, this.now);
     this.deps.manager.setFetchState(projectId, { fetching: true });
     this.deps.publish();
     const result = await sync.fetchRemote(project.root, remote);
     if (result.ok) {
       this.authFailed.delete(projectId);
-      if (result.remoteDefault) this.deps.manager.learnRemoteDefault(projectId, result.remoteDefault);
+      if (result.remoteDefault) this.deps.manager.learnRemoteDefault(projectId, remote, result.remoteDefault);
       this.deps.manager.setFetchState(projectId, {});
       await this.deps.refresh();
       return { ok: true };

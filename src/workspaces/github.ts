@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 /**
- * A project's GitHub repository: where it is on the web (from the origin remote, ssh or https,
+ * A project's GitHub repository: where it is on the web (from the selected remote, ssh or https,
  * github.com or a GitHub Enterprise host), and what `gh` says about it (public or private,
  * people, open pull requests, stars). Nothing here asks for a sign-in: without `gh`, or signed
  * out, there's simply no info.
