@@ -76,10 +76,14 @@ const found = findCodex();
 const codex = found && spawnSync(found, ['--version'], { timeout: 15_000 }).status === 0 ? found : undefined;
 describe.skipIf(!codex || process.platform !== 'darwin')("Codex's own sandbox, as Beluga sets it (the real codex binary)", () => {
   // Inside your home, so a friend reaching only shared folders is kept out of what's beside it.
-  const dir = codex && process.platform === 'darwin' ? realpathSync(mkdtempSync(path.join(os.homedir(), 'Library', 'Caches', 'beluga-codex-sandbox-'))) : '';
+  // A skipped block's body still runs: nothing made (in ~/Library, or as '' in the repo) unless it runs.
+  const runs = Boolean(codex) && process.platform === 'darwin';
+  const dir = runs ? realpathSync(mkdtempSync(path.join(os.homedir(), 'Library', 'Caches', 'beluga-codex-sandbox-'))) : '';
   const work = path.join(dir, 'work');
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
-  if (codex) {
+  afterAll(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+  if (runs) {
     mkdirSync(path.join(work, 'sub'), { recursive: true });
     writeFileSync(path.join(work, '.env'), 'API_TOKEN=nope');
     writeFileSync(path.join(work, 'sub', '.env.local'), 'API_TOKEN=nope');
