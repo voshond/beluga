@@ -186,8 +186,9 @@ export function PlanChat({
   const send = (queue = false): void => {
     const { text: message, images, shown } = att.take(text.trim());
     if (!message) return;
+    const planned = planMessage(message, images, shown);
     setText("");
-    deliver(planMessage(message, images, shown), busy && !queue);
+    deliver(planned, busy && !queue);
   };
   const stop = (): void => {
     api.host.stopRun(channel).then(

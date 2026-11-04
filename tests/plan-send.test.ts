@@ -72,6 +72,20 @@ describe('plan chat send (KLD-66)', () => {
   });
 });
 
+describe('plan chat over plain HTTP', () => {
+  it('a message gets its id without crypto.randomUUID (the web port on a LAN address has none)', () => {
+    const real = crypto.randomUUID;
+    Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true });
+    try {
+      const a = planMessage('hi');
+      expect(a.id).toMatch(/^[0-9a-f]{32}$/);
+      expect(planMessage('hi').id).not.toBe(a.id);
+    } finally {
+      Object.defineProperty(crypto, 'randomUUID', { value: real, configurable: true });
+    }
+  });
+});
+
 describe('plan chat while the plan waits for approval', () => {
   it('what you type is what to change in the plan, not a message to the held run', async () => {
     const api = fakeApi();

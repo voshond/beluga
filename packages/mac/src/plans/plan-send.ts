@@ -25,7 +25,10 @@ export interface PlanMessage {
   expanded?: string;
 }
 
-export const planMessage = (typed: string, images?: readonly number[], shown?: readonly number[]): PlanMessage => ({ typed, id: crypto.randomUUID(), ...(images ? { images } : {}), ...(shown ? { shown } : {}) });
+/** crypto.randomUUID only exists on HTTPS or localhost: the web port over plain HTTP (a LAN or Tailscale address) has none. */
+export const messageId = (): string => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+
+export const planMessage = (typed: string, images?: readonly number[], shown?: readonly number[]): PlanMessage => ({ typed, id: messageId(), ...(images ? { images } : {}), ...(shown ? { shown } : {}) });
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
