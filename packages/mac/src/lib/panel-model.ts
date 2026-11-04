@@ -114,6 +114,8 @@ function tabsOfView(view: View, wsKind?: WsKind): PanelTab[] {
   // A shared workspace's shell is its owner's (its Scratch you see, read over the link); the Terminal view is already all shells.
   if (view.kind === 'shared') return ['info', 'scratch'];
   if (view.kind === 'terminal') return ['info'];
+  // Your Mac's chat: its scratch folder too, which all its chats share (BLG-704).
+  if (view.kind === 'assistant') return ['terminal', 'info', 'scratch'];
   return ['terminal', 'info'];
 }
 

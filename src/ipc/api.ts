@@ -422,6 +422,8 @@ export const API = {
   'projects.setIcon': args(id, opt(path)),
   'projects.add': args(path),
   'projects.addFolder': args(path),
+  // Make a folder that isn't a git project one (git, a .gitignore, a first commit), then add it.
+  'projects.initGit': args(path),
   'projects.suggest': args(),
   // Start a new project: a folder (name, in this folder or your code folder), git and a first commit → { id, path }.
   'projects.create': args(z.string().max(100), opt(path)),

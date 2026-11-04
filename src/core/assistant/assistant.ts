@@ -4,7 +4,8 @@ import path from 'node:path';
 import { dropAgentSession } from '../../agent/runtime/drop-session.js';
 import type { AgentPlace, MacTools } from '../../agent/types.js';
 import { ASSISTANT_CHANNEL, ASSISTANT_TITLE, CHAT_ID, FIRST_CHAT, THIS_COMPUTER, type AssistantChats, assistantChannel, assistantChatOf } from '../../shared/assistant.js';
-import { SCRATCH_DIR, listScratch } from '../../workspaces/scratch.js';
+import { SCRATCH_DIR, type ScratchFile, type ScratchTotal, listScratch, scratchTotal, tidyScratch } from '../../workspaces/scratch.js';
+import { moveToTrash } from '../../workspaces/trash.js';
 import { type SystemPort, captureScreen, describeDevice, deviceInfo, realSystem } from '../gateway/device.js';
 import { HistorySaver } from '../history-saver.js';
 import { tilde } from '../paths.js';
@@ -24,7 +25,8 @@ import { chatFits, chatLimitMessage } from '../../shared/chat-limit.js';
  * "what's using my CPU?", "start a worktree in beluga for the login bug".
  *
  * Where it lives: ~/.beluga/assistant/. Its Claude works in `work/` (its scratch folder is
- * `work/.beluga/scratch/`, where screenshots and files it sends you go); its chats (BLG-102, see
+ * `work/.beluga/scratch/`, where screenshots and files it sends you go: the Mac's Scratch tab beside its
+ * chat, and what nobody touched for a month goes to the Trash on its own, BLG-704); its chats (BLG-102, see
  * below) each keep their Claude session and history beside it (`chats/<id>/state.json`,
  * `history.json`, listed in `chats.json`). Everything in Beluga's home is secret
  * to the phone (isSecretPath) except a few folders Claude works in; `assistant/work` is one of
@@ -55,7 +57,14 @@ export interface AssistantDeps {
   /** Codex's own folder (~/.codex): a deleted chat's thread goes from there too. */
   readonly codexDir?: string;
   readonly now?: () => number;
+  /** Where old scratch files go (the Trash; the tests keep their own). */
+  readonly trash?: (abs: string) => Promise<void>;
+  /** How soon after starting, and how often after, old scratch files are tidied (false: never). */
+  readonly tidy?: { readonly firstMs: number; readonly everyMs: number } | false;
 }
+
+/** Your Mac's scratch is tidied a minute after Beluga starts, then once a day. */
+const TIDY = { firstMs: 60_000, everyMs: 86_400_000 };
 
 interface Saved {
   readonly sessionId?: string;
@@ -114,6 +123,7 @@ export class MacAssistant {
   private readonly saver: HistorySaver;
   private readonly unsubscribe: () => void;
   private lastLog: readonly LogItem[] | undefined;
+  private tidyTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private readonly deps: AssistantDeps) {
     this.workDir = path.join(deps.dir, 'work');
@@ -149,11 +159,14 @@ export class MacAssistant {
       this.lastLog = log;
       this.saver.changed();
     });
+    this.tidySoon(deps.tidy === undefined ? TIDY : deps.tidy, 'first');
   }
 
   stop(): void {
     this.unsubscribe();
     this.saver.stop();
+    if (this.tidyTimer) clearTimeout(this.tidyTimer);
+    this.tidyTimer = undefined;
   }
 
   private get now(): number {
@@ -356,6 +369,33 @@ export class MacAssistant {
   forChat(channel: string, from: string): { readonly place: AgentPlace; readonly tools: MacTools; readonly brief: string } | undefined {
     if (from !== this.deps.selfId() || !/^(dm|group):/.test(channel)) return undefined;
     return { place: { cwd: this.workDir, additionalDirectories: [], autoEdit: true, agent: this.agent(), onSession: () => undefined }, tools: this.tools(), brief: chatBrief() };
+  }
+
+  private tidySoon(when: AssistantDeps['tidy'], next: 'first' | 'again'): void {
+    if (!when) return;
+    this.tidyTimer = setTimeout(
+      () => {
+        void this.tidyScratch().finally(() => {
+          if (this.tidyTimer) this.tidySoon(when, 'again');
+        });
+      },
+      next === 'first' ? when.firstMs : when.everyMs,
+    );
+    this.tidyTimer.unref?.();
+  }
+
+  /**
+   * What its Claude saved and nobody touched for a month goes to the Trash (SCRATCH_KEEP_MS): every
+   * chat shares this one folder and, unlike a worktree's, it's never archived, so it would only grow.
+   */
+  tidyScratch(): Promise<string[]> {
+    return tidyScratch(this.workDir, { now: this.now, trash: this.deps.trash ?? moveToTrash }).catch(() => []);
+  }
+
+  /** Its scratch folder for the Mac's Scratch tab: what's in it, newest first, and how much it holds. */
+  async scratch(): Promise<{ root: string; dir: string; files: ScratchFile[]; total: ScratchTotal }> {
+    const [files, total] = await Promise.all([listScratch(this.workDir), scratchTotal(this.workDir, this.now)]);
+    return { root: this.workDir, dir: path.join(this.workDir, SCRATCH_DIR), files, total };
   }
 
   /** Its outputs (what's in its scratch folder), newest first: what the phone shows with it. */

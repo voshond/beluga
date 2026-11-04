@@ -31,6 +31,48 @@ export function badProjectName(name: string): string | undefined {
 
 const isEmptyDir = (dir: string): boolean => readdirSync(dir).every((f) => f === '.DS_Store');
 
+/** What a folder made into a project leaves out of git when it has no .gitignore of its own (.env files still reach worktrees: env.ts copies them). */
+const GITIGNORE = ['.DS_Store', 'node_modules/', '.env', '.env.*', '!.env.example', ''].join('\n');
+
+/** Git won't commit without a name and email: borrow the Mac's user name when none is set. */
+async function author(dir: string): Promise<string[]> {
+  if ((await tryGit(dir, ['config', 'user.email']))?.trim()) return [];
+  const me = os.userInfo().username;
+  return ['-c', `user.name=${me}`, '-c', `user.email=${me}@localhost`];
+}
+
+/**
+ * Make a folder a git project where it is: git on `main`, a .gitignore when it has none, a README
+ * when it's empty, and what's in it in a first commit, so worktrees can branch from it straight away.
+ * Your home folder and the disk itself are refused. When it fails, nothing it made is left behind.
+ */
+export async function initProject(dir: string): Promise<string> {
+  const abs = path.resolve(dir);
+  if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new WorkspaceError(`${abs} isn't there`);
+  // Home, or a folder holding it (the disk too): from there home is inside, not up and out.
+  const toHome = path.relative(abs, os.homedir());
+  if (!toHome.startsWith('..') && !path.isAbsolute(toHome)) {
+    throw new WorkspaceError(`${abs} is too big to be one project. Pick the folder of the project itself.`);
+  }
+  if (existsSync(path.join(abs, '.git'))) throw new WorkspaceError(`${path.basename(abs)} is already a git project`);
+  const name = path.basename(abs);
+  const wrote = [
+    ...(existsSync(path.join(abs, '.gitignore')) ? [] : [{ file: '.gitignore', text: GITIGNORE }]),
+    ...(isEmptyDir(abs) ? [{ file: 'README.md', text: `# ${name}\n` }] : []),
+  ];
+  try {
+    await git(abs, ['init', '--initial-branch=main']);
+    for (const w of wrote) writeFileSync(path.join(abs, w.file), w.text);
+    await git(abs, ['add', '-A']);
+    await git(abs, [...(await author(abs)), 'commit', '-m', `Start ${name}`], 120_000);
+  } catch (e) {
+    rmSync(path.join(abs, '.git'), { recursive: true, force: true });
+    for (const w of wrote) rmSync(path.join(abs, w.file), { force: true });
+    throw e;
+  }
+  return abs;
+}
+
 /**
  * Start a new project: a folder `name` in `parent` (your code folder unless you pick one), git on
  * `main` with a README in a first commit, so worktrees can branch from it straight away.
@@ -48,9 +90,7 @@ export async function createProject(name: string, parent?: string): Promise<stri
     await git(dir, ['init', '--initial-branch=main']);
     writeFileSync(path.join(dir, 'README.md'), `# ${n}\n`);
     await git(dir, ['add', 'README.md']);
-    // Git won't commit without a name and email: borrow the Mac's user name when none is set.
-    const who = (await tryGit(dir, ['config', 'user.email']))?.trim() ? [] : ['-c', `user.name=${os.userInfo().username}`, '-c', `user.email=${os.userInfo().username}@localhost`];
-    await git(dir, [...who, 'commit', '-m', `Start ${n}`]);
+    await git(dir, [...(await author(dir)), 'commit', '-m', `Start ${n}`]);
   } catch (e) {
     // Leave nothing half-made behind (but never a folder that was there before).
     if (!existed) rmSync(dir, { recursive: true, force: true });

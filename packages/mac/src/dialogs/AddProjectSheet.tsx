@@ -30,7 +30,7 @@ const ago = (ts: number): string => {
 type Mode = 'add' | 'new' | 'clone';
 
 /** A folder you added here: on its way (adding takes a moment), in, or why it couldn't be. */
-type Row = { readonly kind: 'adding' } | { readonly kind: 'added' } | { readonly kind: 'failed'; readonly error: string };
+type Row = { readonly kind: 'adding'; readonly init?: boolean } | { readonly kind: 'added' } | { readonly kind: 'failed'; readonly error: string; readonly canInit?: boolean };
 
 /** Suggestions shown before you filter (Filter searches every one found). */
 const NEWEST = 24;
@@ -76,9 +76,15 @@ export function AddProjectSheet() {
       paths.map(async (p) => {
         mark(p, { kind: 'adding' });
         const res = await api.projects.add(p).catch((err: unknown) => ({ error: errorText(err) }));
-        mark(p, res.error ? { kind: 'failed', error: res.error } : { kind: 'added' });
+        mark(p, res.error ? { kind: 'failed', error: res.error, canInit: 'canInit' in res && res.canInit } : { kind: 'added' });
       }),
     );
+  };
+  // A plain folder: git there, what's in it in a first commit, and it's added.
+  const initGit = async (p: string): Promise<void> => {
+    mark(p, { kind: 'adding', init: true });
+    const res = await api.projects.initGit(p).catch((err: unknown) => ({ error: errorText(err) }));
+    mark(p, res.error ? { kind: 'failed', error: res.error } : { kind: 'added' });
   };
 
   // Folders dropped anywhere on the window while this is open are added.
@@ -208,7 +214,7 @@ export function AddProjectSheet() {
                         </span>
                         {row?.kind === 'adding' ? (
                           <span className={s.adding}>
-                            <DotMatrix size={12} /> Adding…
+                            <DotMatrix size={12} /> {row.init ? 'Setting up git…' : 'Adding…'}
                           </span>
                         ) : done ? (
                           <span className={s.added}>
@@ -217,6 +223,10 @@ export function AddProjectSheet() {
                         ) : wasHidden ? (
                           <Button size="small" onClick={() => void show(f.path)} aria-label={`Show ${f.name}`}>
                             Show
+                          </Button>
+                        ) : row?.kind === 'failed' && row.canInit ? (
+                          <Button size="small" onClick={() => void initGit(f.path)} aria-label={`Set up git in ${f.name}`}>
+                            Set Up Git
                           </Button>
                         ) : (
                           <Button size="small" onClick={() => void add([f.path])}>

@@ -1,6 +1,7 @@
 import { type KeyboardEvent, type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Location } from '@beluga/core/store.js';
 import { shareNameOf } from '@beluga/shared/share-names.js';
+import { activeAssistantChannel, assistantChannel } from '@beluga/shared/assistant.js';
 import { SHOWN_SCRATCH_DIRS } from '@beluga/shared/scratch-dir.js';
 import { formatBytes } from '@beluga/shared/format.js';
 import { joinPath } from '@beluga/shared/os-path.js';
@@ -17,7 +18,7 @@ import { ChangedFileView } from '../../views/ChangedFile.js';
 import { signalOf } from '../attention-model.js';
 import { ResizeHandle } from './ResizeHandle.js';
 import { NextFileRow, ScratchEmpty, ScratchSkeleton } from './ScratchSkeleton.js';
-import { type ScratchEntry, type ScratchKind, type ScratchSort, atEnd, fileKind, followed, foldersWithFiles, isFresh, isViewable, scratchPlace, scratchState, sortScratch, timeAgo } from './scratch-model.js';
+import { type ScratchEntry, type ScratchKind, type ScratchSort, type ScratchTotal, atEnd, fileKind, followed, foldersWithFiles, isFresh, isViewable, scratchBytes, scratchCount, scratchPlace, scratchState, sortScratch, timeAgo } from './scratch-model.js';
 import s from './panel.module.css';
 import k from './scratch.module.css';
 import { everyWhileShown } from '../../lib/window-active.js';
@@ -30,7 +31,15 @@ import { revealLabel } from '../../lib/os-words.js';
  * The preview shows the newest file until you pick one, then stays on it. Scrolled to its end
  * (or with the to-the-end button), it follows the file: what's written to it stays in sight. While
  * the first look is on its way it's drawn in outline; an empty folder says so, calmly.
+ *
+ * Whose folder: a worktree's (yours, or a friend's over the link, BLG-259), or Your Mac's (BLG-704),
+ * which all its chats share and which tidies itself (core/assistant).
  */
+export type ScratchOf = { readonly wsId: string; readonly owner?: string } | { readonly assistant: true };
+
+const isMac = (of: ScratchOf): of is { readonly assistant: true } => 'assistant' in of;
+/** One key per folder, so a hook looks again when it's another one. */
+const keyOf = (of: ScratchOf): string => (isMac(of) ? 'mac' : `${of.owner ?? ''}/${of.wsId}`);
 
 const POLL_MS = 1200;
 const ICONS: Record<ScratchKind, IconName> = { image: 'image', pdf: 'file', video: 'play', html: 'globe', json: 'file', markdown: 'file', text: 'file' };
@@ -39,13 +48,24 @@ interface Listing {
   readonly root: string;
   readonly dir: string;
   readonly files: readonly ScratchEntry[];
+  /** All it holds (not there from a friend's Beluga). */
+  readonly total?: ScratchTotal;
+  /** Where its files are read (Your Mac's; a worktree's is its own share). */
+  readonly at?: Location;
+}
+
+type Api = ReturnType<typeof useApi>;
+
+function lookIn(api: Api, of: ScratchOf): Promise<Listing | undefined> {
+  if (isMac(of)) return api.assistant.scratch();
+  return of.owner ? api.sharing.scratch(of.owner, of.wsId) : api.workspaces.scratch(of.wsId);
 }
 
 /**
  * The folder's files, looked at again every moment while the window is in front. It changes only
  * when they do; a late answer never replaces a newer one; a failed look keeps what's on screen.
  */
-function useScratch(wsId: string, owner?: string): Listing | undefined | null {
+function useScratch(of: ScratchOf): Listing | undefined | null {
   const api = useApi();
   const [list, setList] = useState<Listing | null>();
   useEffect(() => {
@@ -57,12 +77,12 @@ function useScratch(wsId: string, owner?: string): Listing | undefined | null {
     const look = (): void => {
       if (document.visibilityState !== 'visible') return;
       const n = ++asked;
-      (owner ? api.sharing.scratch(owner, wsId) : api.workspaces.scratch(wsId)).then(
+      lookIn(api, of).then(
         (res) => {
           if (!alive || n < shown) return;
           shown = n;
-          const next = res ? { root: res.root, dir: res.dir, files: res.files } : null;
-          const key = next ? `${next.dir}\n${next.files.map((f) => `${f.path}:${f.mtime}:${f.size}`).join('|')}` : 'none';
+          const next: Listing | null = res ? { root: res.root, dir: res.dir, files: res.files, ...(res.total ? { total: res.total } : {}), ...(res.at ? { at: res.at } : {}) } : null;
+          const key = next ? `${next.dir}\n${next.total?.files}:${next.total?.bytes}\n${next.files.map((f) => `${f.path}:${f.mtime}:${f.size}`).join('|')}` : 'none';
           if (key === sig) return;
           sig = key;
           setList(next);
@@ -79,7 +99,7 @@ function useScratch(wsId: string, owner?: string): Listing | undefined | null {
       alive = false;
       stop();
     };
-  }, [wsId, owner]);
+  }, [keyOf(of)]);
   return list;
 }
 
@@ -87,16 +107,17 @@ function useScratch(wsId: string, owner?: string): Listing | undefined | null {
 const NEWEST_MS = 4000;
 
 /** When Claude last saved something to this workspace's scratch folder (0: nothing there; undefined: not looked yet). */
-export function useScratchNewest(wsId: string | undefined, owner?: string): number | undefined {
+export function useScratchNewest(of: ScratchOf | undefined): number | undefined {
   const api = useApi();
   const [newest, setNewest] = useState<number>();
+  const key = of ? keyOf(of) : undefined;
   useEffect(() => {
     setNewest(undefined);
-    if (!wsId) return;
+    if (!of) return;
     let alive = true;
     const look = (): void => {
       if (document.visibilityState !== 'visible') return;
-      (owner ? api.sharing.scratch(owner, wsId) : api.workspaces.scratch(wsId)).then(
+      lookIn(api, of).then(
         (res) => alive && setNewest(Math.max(0, ...(res?.files ?? []).map((f) => f.mtime))),
         () => undefined,
       );
@@ -107,7 +128,7 @@ export function useScratchNewest(wsId: string | undefined, owner?: string): numb
       alive = false;
       stop();
     };
-  }, [wsId, owner]);
+  }, [key]);
   return newest;
 }
 
@@ -163,12 +184,21 @@ function useFollowEnd(body: RefObject<HTMLDivElement | null>, content: RefObject
   return { follow, onScroll, followEnd };
 }
 
-function Preview({ wsId, owner, file, root, onClose }: { wsId: string; owner?: string; file: ScratchEntry; root: string; onClose: () => void }) {
+function Preview({ of, file, list, onClose }: { of: ScratchOf; file: ScratchEntry; list: Listing; onClose: () => void }) {
   const api = useApi();
   const { client } = useBeluga();
   const selfId = useApp((st) => st.selfId);
   const now = useNow();
-  const at: Location = { owner: owner ?? selfId, share: shareNameOf(wsId), path: file.path };
+  const owner = isMac(of) ? undefined : of.owner;
+  const at: Location = isMac(of) ? { owner: list.at?.owner ?? selfId, share: list.at?.share ?? '', path: joinPath(list.at?.path ?? '', file.path) } : { owner: owner ?? selfId, share: shareNameOf(of.wsId), path: file.path };
+  const root = list.root;
+  // Full size: over the worktree's conversation; Your Mac's chat has no such place, so the Files page.
+  const openFull = (): void => {
+    if (isMac(of)) {
+      client.store.dispatch({ type: 'view', view: { kind: 'files' } });
+      void api.files.open(at);
+    } else void api.files.open(at).then(() => openFocus('file', of.wsId));
+  };
   const name = file.path.split('/').pop() ?? file.path;
   const local = joinPath(root, file.path);
   const body = useRef<HTMLDivElement>(null);
@@ -186,7 +216,7 @@ function Preview({ wsId, owner, file, root, onClose }: { wsId: string; owner?: s
         {isViewable(file.path) ? null : <IconButton icon="toEnd" label="Follow the End" active={follow} onClick={followEnd} />}
         {owner ? null : <IconButton icon="external" label="Open With Its App" onClick={() => void openWithDefaultApp(client, local)} />}
         {owner ? null : <IconButton icon="folder" label={revealLabel()} onClick={() => void revealInFinder(client, local)} />}
-        <IconButton icon="expand" label="Open in full" keys={chordLabel('Cmd+Enter')} onClick={() => void api.files.open(at).then(() => openFocus('file', wsId))} />
+        <IconButton icon="expand" label="Open in full" keys={chordLabel('Cmd+Enter')} onClick={openFull} />
         <IconButton icon="x" label="Close" keys="Esc" onClick={onClose} />
       </div>
       <div ref={body} className={cx(s.previewBody, s.previewFile, 'selectable')} tabIndex={0} onScroll={onScroll}>
@@ -199,13 +229,22 @@ function Preview({ wsId, owner, file, root, onClose }: { wsId: string; owner?: s
   );
 }
 
-/** `owner`: a friend's worktree shared with you, listed and read over the link (BLG-259). */
-export function ScratchTab({ wsId, owner }: { wsId: string; owner?: string }) {
+/** The conversation whose Claude saves here: the worktree's, or Your Mac's chat on screen. */
+function useWorking(of: ScratchOf): boolean {
+  return useApp((st) => {
+    if (!isMac(of)) return signalOf(st, `ws:${of.wsId}`, of.wsId).working;
+    const chat = st.view.kind === 'assistant' ? st.view.chat : undefined;
+    return signalOf(st, chat ? assistantChannel(chat) : activeAssistantChannel(st.assistant)).working;
+  });
+}
+
+export function ScratchTab({ of }: { of: ScratchOf }) {
   const { client } = useBeluga();
   const prefs = usePrefs();
   const on = useApp((st) => st.prefs.scratchFolder);
-  const working = useApp((st) => signalOf(st, `ws:${wsId}`, wsId).working);
-  const list = useScratch(wsId, owner);
+  const owner = isMac(of) ? undefined : of.owner;
+  const working = useWorking(of);
+  const list = useScratch(of);
   const now = useNow();
   const [picked, setPicked] = useState<string>();
   const [closed, setClosed] = useState(false);
@@ -218,7 +257,6 @@ export function ScratchTab({ wsId, owner }: { wsId: string; owner?: string }) {
   // Nothing picked: the newest file, as each lands. Picked: that one, while it's there.
   const shown = closed ? undefined : followed(files, !picked, picked);
   const file = files.find((f) => f.path === shown);
-  const root = list?.root ?? '';
 
   // Nothing picked: the newest file stays in sight as new ones arrive.
   useEffect(() => {
@@ -252,14 +290,14 @@ export function ScratchTab({ wsId, owner }: { wsId: string; owner?: string }) {
   if (state === 'missing' || !list) return <Empty icon="alert" title="No folder to look in" detail="This workspace’s folder is missing." />;
   if (state === 'empty') return <ScratchEmpty working={working} off={!owner && !on} dir={list.dir} {...(owner ? {} : { onReveal: () => void revealInFinder(client, list.dir) })} />;
   const split = clampShare(prefs.panelSplit, SPLIT_MIN, SPLIT_MAX);
+  const bytes = scratchBytes(files, list.total);
   return (
     <div ref={box} className={s.stack}>
       <div className={s.top} style={file ? { flex: `0 0 ${Math.round(split * 100)}%` } : undefined}>
         <div className={s.summary}>
           <div className={s.summaryRow}>
-            <span className={s.summaryTitle}>
-              {files.length} file{files.length === 1 ? '' : 's'}
-            </span>
+            <span className={s.summaryTitle}>{scratchCount(files.length, list.total)}</span>
+            {bytes !== undefined ? <span className={s.dim}>{formatBytes(bytes)}</span> : null}
             <span className={s.dim}>{foldersWithFiles(files, SHOWN_SCRATCH_DIRS).join(' · ')}</span>
             <span className={s.flex} />
             <ActionsDropdown
@@ -315,7 +353,7 @@ export function ScratchTab({ wsId, owner }: { wsId: string; owner?: string }) {
             onReset={() => setPrefs({ panelSplit: SPLIT_DEFAULT })}
             onStep={(dir) => setPrefs({ panelSplit: clampShare(split - dir * 0.04, SPLIT_MIN, SPLIT_MAX) })}
           />
-          <Preview wsId={wsId} {...(owner ? { owner } : {})} file={file} root={root} onClose={() => setClosed(true)} />
+          <Preview of={of} file={file} list={list} onClose={() => setClosed(true)} />
         </>
       ) : null}
     </div>

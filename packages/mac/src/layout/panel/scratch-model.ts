@@ -117,3 +117,25 @@ export function stepViewable(paths: readonly string[], current: string | undefin
   for (i += dir; i >= 0 && i < paths.length; i += dir) if (isViewable(paths[i]!)) return paths[i];
   return undefined;
 }
+
+/** How much a scratch folder holds, all of it (the list shows only the newest few hundred). */
+export interface ScratchTotal {
+  readonly files: number;
+  readonly bytes: number;
+}
+
+/**
+ * How much it holds: the listed files' sizes while the list has them all (they're current), else the
+ * count of everything (kept a moment, so a file just written may be missing from it).
+ */
+export function scratchBytes(files: readonly ScratchEntry[], total?: ScratchTotal): number | undefined {
+  if (!total) return undefined;
+  return total.files > files.length ? total.bytes : files.reduce((n, f) => n + f.size, 0);
+}
+
+/** The summary's title: "68 files", "300 of 5,578 files" when the list shows only the newest. */
+export function scratchCount(listed: number, total?: ScratchTotal): string {
+  const all = Math.max(listed, total?.files ?? 0);
+  const word = all === 1 ? 'file' : 'files';
+  return all > listed ? `${listed.toLocaleString('en-US')} of ${all.toLocaleString('en-US')} ${word}` : `${all.toLocaleString('en-US')} ${word}`;
+}

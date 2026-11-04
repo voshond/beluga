@@ -58,8 +58,8 @@ export async function checkUrl(fetchFn: FetchLike, t: UptimeTrigger, now: () => 
   const expect = t.expect ?? 200;
   try {
     const res = await fetchFn(t.url, { method: 'GET', redirect: expect >= 300 && expect < 400 ? 'manual' : 'follow', headers: { 'User-Agent': 'Beluga Sentinel (uptime)' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
-    // The body isn't needed; let the connection go.
-    void res.text().catch(() => undefined);
+    // The body isn't needed; stop downloading it and let the connection go.
+    void res.body?.cancel().catch(() => undefined);
     return { ok: res.status === expect, status: res.status, ms: now() - start };
   } catch (err) {
     const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');

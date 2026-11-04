@@ -16,7 +16,10 @@ import { ChangesTab } from './panel/ChangesTab.js';
 import { FilesTab } from './panel/FilesTab.js';
 import { TerminalPane } from './panel/TerminalPane.js';
 import { HistoryTab } from './panel/HistoryTab.js';
-import { ScratchTab, useScratchNewest } from './panel/ScratchTab.js';
+import { type ScratchOf, ScratchTab, useScratchNewest } from './panel/ScratchTab.js';
+
+/** Your Mac's scratch folder (one, whichever of its chats is open). */
+const MAC_SCRATCH: ScratchOf = { assistant: true };
 import { BackgroundTab, useBackgroundRunning } from './panel/BackgroundTab.js';
 import s from './panel/panel.module.css';
 import { shortcutKeys } from '../lib/shortcuts.js';
@@ -59,11 +62,14 @@ function useBadges(): Badges {
   // Claude is acting on the phone right now: a dot on the Phone tab, whatever you're looking at.
   const phoneBusy = useApp((st) => st.companion.devices.some((d) => d.control?.busy === true));
   // Something Claude saved to Scratch since you last looked: a dot until you do.
-  const newest = useScratchNewest(ws?.id);
+  // (Beside Your Mac's chat, its own folder: BLG-704.)
+  const mac = view.kind === 'assistant';
+  const newest = useScratchNewest(ws ? { wsId: ws.id } : mac ? MAC_SCRATCH : undefined);
   const scratchSeen = useRef(new Map<string, number>());
-  const lookingScratch = ws && tabShowing({ view, projects }, 'scratch', prefs);
-  if (ws && newest !== undefined && (lookingScratch || !scratchSeen.current.has(ws.id))) scratchSeen.current.set(ws.id, newest);
-  const freshScratch = ws && newest !== undefined ? newest > (scratchSeen.current.get(ws.id) ?? newest) : false;
+  const scratchKey = ws?.id ?? (mac ? 'mac' : undefined);
+  const lookingScratch = scratchKey && tabShowing({ view, projects }, 'scratch', prefs);
+  if (scratchKey && newest !== undefined && (lookingScratch || !scratchSeen.current.has(scratchKey))) scratchSeen.current.set(scratchKey, newest);
+  const freshScratch = scratchKey && newest !== undefined ? newest > (scratchSeen.current.get(scratchKey) ?? newest) : false;
   return {
     ...(phoneBusy ? { phone: { tone: 'accent' as const } } : {}),
     ...(freshScratch ? { scratch: { tone: 'accent' as const } } : {}),
@@ -284,7 +290,7 @@ function Pane({ pane, lead, style, badges, settled }: { pane: PaneId; lead: bool
               <div className={s.loading} />
             ) : (
               <Suspense fallback={<div className={s.loading} />}>
-                <Body tab={tab} wsId={wsId} {...(view.kind === 'project' ? { projectId: view.id, mainId } : {})} {...(view.kind === 'shared' ? { sharedWs: { id: view.id, owner: view.owner } } : {})} />
+                <Body tab={tab} wsId={wsId} {...(view.kind === 'project' ? { projectId: view.id, mainId } : {})} {...(view.kind === 'shared' ? { sharedWs: { id: view.id, owner: view.owner } } : {})} {...(view.kind === 'assistant' ? { mac: true } : {})} />
               </Suspense>
             )}
           </div>
@@ -295,7 +301,7 @@ function Pane({ pane, lead, style, badges, settled }: { pane: PaneId; lead: bool
 }
 
 /** The tab's content. Memoized: the panel re-renders as the conversation streams; its tabs only when their own data changes. */
-const Body = memo(function Body({ tab, wsId, projectId, mainId, sharedWs }: { tab: PanelTab; wsId: string | undefined; projectId?: string; mainId?: string | undefined; sharedWs?: { id: string; owner: string } }) {
+const Body = memo(function Body({ tab, wsId, projectId, mainId, sharedWs, mac }: { tab: PanelTab; wsId: string | undefined; projectId?: string; mainId?: string | undefined; sharedWs?: { id: string; owner: string }; mac?: boolean }) {
   switch (tab) {
     case 'changes':
       return wsId ? <ChangesTab key={wsId} wsId={wsId} /> : null;
@@ -310,7 +316,7 @@ const Body = memo(function Body({ tab, wsId, projectId, mainId, sharedWs }: { ta
         </div>
       );
     case 'scratch':
-      return wsId ? <ScratchTab key={wsId} wsId={wsId} /> : sharedWs ? <ScratchTab key={sharedWs.id} wsId={sharedWs.id} owner={sharedWs.owner} /> : null;
+      return wsId ? <ScratchTab key={wsId} of={{ wsId }} /> : sharedWs ? <ScratchTab key={sharedWs.id} of={{ wsId: sharedWs.id, owner: sharedWs.owner }} /> : mac ? <ScratchTab key="mac" of={MAC_SCRATCH} /> : null;
     case 'background':
       return wsId ? <BackgroundTab key={wsId} wsId={wsId} /> : null;
     case 'history': {

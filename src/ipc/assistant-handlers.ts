@@ -27,4 +27,9 @@ export const ASSISTANT_HANDLERS = {
     s.host.forgetContext(channel);
     await a.deleteChat(id);
   },
+  'assistant.scratch': async (s) => {
+    const listing = await mac(s).scratch();
+    // Its files open in the viewer from where its folder is shared (else a private share of it, only yours).
+    return { ...listing, at: s.localLocation(listing.root, true) };
+  },
 } satisfies AssistantHandlers;

@@ -35,6 +35,8 @@ import { nothingAhead, pendingWorktree, withAhead } from './optimistic.js';
 export interface AddResult {
   readonly project?: { readonly id: string; readonly name: string };
   readonly found?: number;
+  /** The folder is there but isn't a git project: it can be made one (projects.initGit). */
+  readonly canInit?: boolean;
   readonly error?: string;
 }
 
@@ -121,7 +123,7 @@ export const workspaceIdOf = (channel: string): string | undefined => (channel.s
 export { shareNameOf } from '../shared/share-names.js';
 import { shareNameOf } from '../shared/share-names.js';
 import { fallbackFor } from '../shared/runtime-fallbacks.js';
-import { SCRATCH_DIR, type ScratchFile, ensureScratch, listScratch } from '../workspaces/scratch.js';
+import { SCRATCH_DIR, type ScratchFile, type ScratchTotal, ensureScratch, listScratch, scratchTotal } from '../workspaces/scratch.js';
 import { isUnder } from '../shared/path-inside.js';
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
@@ -1491,13 +1493,14 @@ export class WorkspaceController {
   }
 
   /** A workspace's scratch folder and what's in it, newest first (nothing when it's gone). */
-  async scratch(id: string): Promise<{ root: string; dir: string; files: ScratchFile[] } | undefined> {
+  async scratch(id: string): Promise<{ root: string; dir: string; files: ScratchFile[]; total: ScratchTotal } | undefined> {
     const ws = this.deps.manager.find(id);
     if (!ws || !existsSync(ws.path)) return undefined;
     // Made when you look (kept out of git), so there's a folder to drop things in and show in Finder.
     // (Never in a sub-agent's own worktree: that's Claude Code's, looked at, not written to.)
     if (!ws.askOnly && worktreeOrigin(ws) !== 'agent') await ensureScratch(ws.path);
-    return { root: ws.path, dir: path.join(ws.path, SCRATCH_DIR), files: await listScratch(ws.path) };
+    const [files, total] = await Promise.all([listScratch(ws.path), scratchTotal(ws.path)]);
+    return { root: ws.path, dir: path.join(ws.path, SCRATCH_DIR), files, total };
   }
 
   openInFinder(id: string): void {

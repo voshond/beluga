@@ -216,7 +216,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `files.closeViewer` | ✓ |
 | `files.readImage` | ✓ |
 | `files.readImageFile` | ✓ images in the Markdown reader (`![](diagram.png)` next to the file); PDFs drawn page by page in Files, Changes and the reader; videos (MP4, M4V, MOV, WebM, up to 64 MB) played inline in the reader with play, pause and seek |
-| `workspaces.scratch` | ✓ the panel's Scratch tab: the workspace's `.beluga/scratch/` and `.context/` folders, newest first, live; the preview shows the newest until you pick one, and a file scrolled to its end (or Follow the End) follows what's written to it; drawn in outline (moving while the agent works) until something lands; the sort menu puts what can be looked at first (pictures, videos, PDFs, web pages; BLG-111), web pages are drawn in a sandboxed frame (no scripts), and full size ← → steps through the viewable files in that order, stopping at the ends |
+| `workspaces.scratch` | ✓ the panel's Scratch tab: the workspace's `.beluga/scratch/` and `.context/` folders, newest first, live, with how many files there are and how much they hold; the preview shows the newest until you pick one, and a file scrolled to its end (or Follow the End) follows what's written to it; drawn in outline (moving while the agent works) until something lands; the sort menu puts what can be looked at first (pictures, videos, PDFs, web pages; BLG-111), web pages are drawn in a sandboxed frame (no scripts), and full size ← → steps through the viewable files in that order, stopping at the ends |
 | `files.read` | ✓ a changed file as itself in Changes (Markdown formatted), without moving the Files tab's open file |
 | `files.searchContent` | ✓ the Files tab's search box on Contents: lines by file (ripgrep, else Node), Match Case / Whole Word / Regular Expression; a line opens the file there |
 | `files.searchNames` | ✓ the Files tab's search box on Names: every file in the folder whose path matches (ripgrep's list, else git's), Match Case / Whole Word / Regular Expression; shown as a tree, a file opens |
@@ -384,6 +384,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `local.statFiles` | ✓ ⌘V of file paths attaches the files (⌘⇧V keeps the words) |
 | `projects.add` | ✓ Add projects sheet, Choose Folders…, drop folders on the sidebar |
 | `projects.addFolder` | ✓ (a dropped folder of projects is watched) |
+| `projects.initGit` | ✓ Add projects sheet: a plain folder’s row offers Set Up Git |
 | `projects.suggest` | ✓ "On this Mac" in the Add projects sheet |
 | `projects.github` | ✓ Add projects sheet › Clone from GitHub repository list |
 | `projects.clone` | ✓ Add projects sheet › Clone from GitHub |
@@ -445,6 +446,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `assistant.newChat` | ✓ Your Mac's tab strip › + (a new empty chat, open now); on the phone, New chat in Your Mac's chats list or ••• |
 | `assistant.openChat` | ✓ clicking one of Your Mac's tabs (or a notification from one of its chats); kept across restarts, and the phone's Ask your Mac follows it |
 | `assistant.deleteChat` | ✓ a tab's × › Delete Chat (asks first; its run stops, its messages, folder and agent transcript go for good, no archive; the last one leaves a fresh chat); on the phone, long-press in Your Mac's chats list or ••• › Delete this chat |
+| `assistant.scratch` | ✓ the panel's Scratch tab beside Your Mac's chat (BLG-704): its `work/.beluga/scratch/`, which all its chats share, newest first and live, with how much it holds in total; what nobody touched for 30 days goes to the Trash on its own (a minute after Beluga starts, then daily) |
 | `gateway.list` | ✓ the shared state's `gateway` (task cards in conversations, Requests) |
 | `gateway.confirm` | ✓ the “Ask bob's agent?” card in a conversation: Ask / Always / Not now |
 | `gateway.cancel` | ✓ Cancel on a task card and in Requests (sent), Stop in Requests (received) |

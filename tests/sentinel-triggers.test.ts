@@ -272,11 +272,22 @@ describe('uptime', () => {
 
   it('checks with a 10 s timeout and the status it expects', async () => {
     const seen: Array<{ url: string; redirect?: string }> = [];
-    const f: FetchLike = async (url, init) => (seen.push({ url, ...(init?.redirect ? { redirect: init.redirect } : {}) }), { status: 204, text: async () => '' });
+    let cancelled = 0;
+    let read = 0;
+    const f: FetchLike = async (url, init) => (
+      seen.push({ url, ...(init?.redirect ? { redirect: init.redirect } : {}) }),
+      {
+        status: 204,
+        body: { cancel: async () => void cancelled++ },
+        text: async () => (read++, ''),
+      }
+    );
     expect(await checkUrl(f, { ...t, expect: 204 })).toMatchObject({ ok: true, status: 204 });
     expect(await checkUrl(f, t)).toMatchObject({ ok: false, status: 204 });
     expect(await checkUrl(f, { ...t, expect: 301 })).toMatchObject({ ok: false });
     expect(seen.map((x) => x.redirect)).toEqual(['follow', 'follow', 'manual']);
+    expect(cancelled).toBe(3);
+    expect(read).toBe(0);
     const timeout: FetchLike = async () => Promise.reject(Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }));
     expect(await checkUrl(timeout, t)).toMatchObject({ ok: false, status: 0, error: 'no answer in 10 s' });
   });

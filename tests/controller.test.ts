@@ -8,6 +8,7 @@ import type { Session } from '../src/core/session.js';
 import { ShareService } from '../src/core/shares.js';
 import { Store, initialState } from '../src/core/store.js';
 import { WorkspaceController, shareNameOf, workspaceIdOf } from '../src/core/workspace-controller.js';
+import { isMainCheckout } from '../src/workspaces/discovery.js';
 import { WorkspaceManager } from '../src/workspaces/manager.js';
 import { WorkspaceStore } from '../src/workspaces/store.js';
 import { API } from '../src/ipc/api.js';
@@ -495,7 +496,9 @@ describe('WorkspaceController', () => {
     expect(await ctl.addProject('/definitely/not/here')).toEqual({ error: expect.stringMatching(/isn’t there anymore/) });
     const plain = mkdtempSync(path.join(os.tmpdir(), 'klaud-plain-'));
     const session = { workspaces: ctl, toast: (t: string) => void toasts.push(t), store } as unknown as Session;
-    expect(await HANDLERS['projects.add'](session, plain)).toEqual({ error: expect.stringMatching(/isn't a git project/) });
+    expect(await HANDLERS['projects.add'](session, plain)).toEqual({ error: expect.stringMatching(/isn't a git project/), canInit: true });
+    expect(await HANDLERS['projects.initGit'](session, plain)).toEqual({ project: { id: expect.any(String), name: path.basename(plain) } });
+    expect(isMainCheckout(plain)).toBe(true);
     expect(await HANDLERS['projects.add'](session, repo)).toEqual({ project: { id, name: 'app' } });
   });
 

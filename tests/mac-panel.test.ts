@@ -80,11 +80,11 @@ describe('the right panel’s tabs', () => {
     expect(panelTabsFor(ws, 'worktree', true)).not.toContain('phone');
     expect(panelTabsFor(ws, 'chat', true)).not.toContain('phone');
     expect(panelTabsFor(room, undefined, true)).not.toContain('phone');
-    expect(panelTabsFor({ kind: 'assistant' }, undefined, true)).toEqual(['terminal', 'info', 'phone']);
-    expect(panelTabsFor({ kind: 'assistant' })).toEqual(['terminal', 'info']);
+    expect(panelTabsFor({ kind: 'assistant' }, undefined, true)).toEqual(['terminal', 'info', 'scratch', 'phone']);
+    expect(panelTabsFor({ kind: 'assistant' })).toEqual(['terminal', 'info', 'scratch']);
     expect(panelTabsFor({ kind: 'phone' }, undefined, true)).toEqual(['terminal', 'info']);
     expect(panelTabsFor({ kind: 'plan', id: 'p1' }, undefined, true)).toEqual([]);
-    expect(paneTabs(DEFAULT_LAYOUT, 'top', panelTabsFor({ kind: 'assistant' }, undefined, true))).toEqual(['info', 'phone']);
+    expect(paneTabs(DEFAULT_LAYOUT, 'top', panelTabsFor({ kind: 'assistant' }, undefined, true))).toEqual(['scratch', 'info', 'phone']);
   });
 
   it('opens on the tab you last picked there, else Changes when there are changes, else Info', () => {

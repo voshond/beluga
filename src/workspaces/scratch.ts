@@ -99,3 +99,98 @@ export async function listScratch(dir: string): Promise<ScratchFile[]> {
   }
   return files.sort((a, b) => b.mtime - a.mtime || a.path.localeCompare(b.path)).slice(0, MAX_FILES);
 }
+
+/** How much the shown folders hold, all of it (the list has only the newest MAX_FILES, a few deep). */
+export interface ScratchTotal {
+  readonly files: number;
+  readonly bytes: number;
+}
+
+/** Each file under a folder, however deep (no links followed), with its size and when it was last written. */
+async function eachFile(abs: string, seen: (size: number, mtime: number) => void): Promise<void> {
+  const entries = await fs.readdir(abs, { withFileTypes: true }).catch(() => []);
+  for (const e of entries) {
+    const child = path.join(abs, e.name);
+    if (e.isDirectory()) await eachFile(child, seen);
+    else if (e.isFile()) {
+      const st = await fs.lstat(child).catch(() => undefined);
+      if (st) seen(st.size, st.mtimeMs);
+    }
+  }
+}
+
+/** A count is kept this long: the tab asks every moment, and a folder can hold thousands of files. */
+const TOTAL_TTL_MS = 15_000;
+const totals = new Map<string, { readonly at: number; readonly total: Promise<ScratchTotal> }>();
+
+/** Everything in the shown folders, counted (at most every TOTAL_TTL_MS for each workspace). */
+export function scratchTotal(dir: string, now = Date.now()): Promise<ScratchTotal> {
+  const kept = totals.get(dir);
+  if (kept && now - kept.at < TOTAL_TTL_MS) return kept.total;
+  const total = (async (): Promise<ScratchTotal> => {
+    let files = 0;
+    let bytes = 0;
+    for (const rel of SHOWN_SCRATCH_DIRS) {
+      if (await noLinks(dir, rel))
+        await eachFile(path.join(dir, rel), (size) => {
+          files += 1;
+          bytes += size;
+        });
+    }
+    return { files, bytes };
+  })();
+  totals.set(dir, { at: now, total });
+  total.catch(() => totals.delete(dir));
+  return total;
+}
+
+/**
+ * How long Your Mac's scratch keeps what its Claude saved: untouched this long, it goes to the Trash on
+ * its own (a worktree's scratch goes with the worktree when it's archived; Your Mac's never would).
+ */
+export const SCRATCH_KEEP_MS = 30 * 86_400_000;
+
+/** When a file, or a folder and everything in it, was last written: the newest time in it. */
+async function lastWritten(abs: string): Promise<number> {
+  const st = await fs.lstat(abs).catch(() => undefined);
+  if (!st) return Number.POSITIVE_INFINITY; // gone already, or can't be read: left alone
+  let newest = st.mtimeMs;
+  if (st.isDirectory()) {
+    await eachFile(abs, (_size, mtime) => {
+      newest = Math.max(newest, mtime);
+    });
+  }
+  return newest;
+}
+
+export interface TidyOptions {
+  readonly keepMs?: number;
+  readonly now?: number;
+  /** Where an old one goes (the Trash: it can be put back). */
+  readonly trash: (abs: string) => Promise<void>;
+}
+
+/**
+ * Put what's in Beluga's own scratch folder (never `.context/`) and untouched for `keepMs` in the
+ * Trash, each top-level file or folder whole, judged by the newest thing in it → the names that went.
+ * One that won't go stays for the next time.
+ */
+export async function tidyScratch(dir: string, opts: TidyOptions): Promise<string[]> {
+  if (!(await noLinks(dir))) return [];
+  const scratch = path.join(dir, SCRATCH_DIR);
+  const cutoff = (opts.now ?? Date.now()) - (opts.keepMs ?? SCRATCH_KEEP_MS);
+  const entries = await fs.readdir(scratch).catch(() => [] as string[]);
+  const gone: string[] = [];
+  for (const name of entries.sort()) {
+    const abs = path.join(scratch, name);
+    if ((await lastWritten(abs)) >= cutoff) continue;
+    try {
+      await opts.trash(abs);
+      gone.push(name);
+    } catch {
+      // Still there: tried again at the next tidy.
+    }
+  }
+  totals.delete(dir);
+  return gone;
+}

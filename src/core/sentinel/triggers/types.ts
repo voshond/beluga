@@ -32,7 +32,7 @@ export interface TriggerContext<C = unknown> {
 }
 
 /** What a JSON answer needs of fetch (tests and the demo pass their own). */
-export type FetchLike = (url: string, init?: { readonly method?: string; readonly headers?: Record<string, string>; readonly signal?: AbortSignal; readonly redirect?: 'follow' | 'manual' }) => Promise<{ readonly status: number; readonly ok?: boolean; text(): Promise<string> }>;
+export type FetchLike = (url: string, init?: { readonly method?: string; readonly headers?: Record<string, string>; readonly signal?: AbortSignal; readonly redirect?: 'follow' | 'manual' }) => Promise<{ readonly status: number; readonly ok?: boolean; readonly body?: { cancel(): Promise<void> } | null; text(): Promise<string> }>;
 
 /** What the event triggers use, injected (the daemon's real ones; fakes in the tests and the demo). */
 export interface TriggerDeps {

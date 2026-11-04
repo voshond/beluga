@@ -205,3 +205,29 @@ test('Scratch: viewable files first, a web page drawn in a sandbox, and ← → 
     if (name === 'b111-report.html') await expect(page.getByRole('main').locator('iframe')).toBeVisible();
   }
 });
+
+/** Your Mac's chat has its own Scratch (BLG-704): the folder all its chats share, and how much it holds. */
+test('Scratch beside Your Mac: its folder, live, with how much it holds, and a picture that opens', async ({ page }) => {
+  await page.goto('/');
+  await sidebar(page).getByText('Your Mac', { exact: true }).click();
+  await expect(page.getByRole('tablist', { name: 'Your Mac’s chats' })).toBeVisible();
+  if (!(await tab(page, 'Scratch').isVisible())) await page.keyboard.press('Meta+Alt+0');
+  await tab(page, 'Scratch').click();
+  await expect(tab(page, 'Scratch')).toHaveAttribute('aria-selected', 'true');
+  const finder = panel(page).getByRole('button', { name: 'Show in Finder' });
+  await expect(finder).toBeVisible();
+  const dir = (await finder.getAttribute('title'))!;
+  expect(dir).toMatch(/\/work\/\.beluga\/scratch$/);
+
+  mkdirSync(path.join(dir, 'screens'), { recursive: true });
+  writeFileSync(path.join(dir, 'screens', 'desktop.png'), RED);
+  writeFileSync(path.join(dir, 'cpu.txt'), 'x'.repeat(4096));
+  const files = panel(page).getByRole('listbox', { name: 'Scratch files' });
+  await expect(files.getByRole('option')).toHaveCount(2);
+  await expect(panel(page).getByText('2 files', { exact: true })).toBeVisible();
+  // How much it holds, beside the count (not each row's size).
+  await expect(panel(page).getByText('2 files', { exact: true }).locator('..')).toContainText('4 KB');
+  await files.getByRole('option', { name: /desktop\.png/ }).click();
+  await expect(panel(page).getByRole('region', { name: 'desktop.png' }).locator('img')).toBeVisible();
+  await page.screenshot({ path: '../../.beluga/scratch/01-your-mac-scratch.png' });
+});
