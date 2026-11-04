@@ -64,7 +64,7 @@ export function createMacToolDefs(mac: MacTools) {
     tool(
       'start_plan',
       'Start a plan in a project: its own conversation where Claude drafts milestones and tasks for the owner to approve. Returns its id: name it in your answer as `plan:<id>`.',
-      { project: z.string().min(1).max(200).describe('The project’s name (from list_work)'), goal: z.string().min(1).max(8000).describe('What the plan is for, in a few sentences') },
+      { project: z.string().min(1).max(200).describe('The project’s name (from list_work)'), goal: z.string().min(1).describe('What the plan is for, in a few sentences') },
       (a) => guarded(async () => words(await mac.startPlan({ project: a.project, goal: a.goal }))),
     ),
     tool(

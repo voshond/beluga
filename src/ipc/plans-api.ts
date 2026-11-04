@@ -43,7 +43,7 @@ export const PlanOpSchema = z.discriminatedUnion('op', [
 export const PLANS_API = {
   // A new plan with Claude: its own conversation (in the project's main folder) and its page → the plan.
   // `agent`: who works its milestones and tasks (BLG-497); none: your default.
-  'plans.create': { args: z.tuple([z.object({ projectId: z.string().min(1).max(200), goal: z.string().min(1).max(8000), autonomy: autonomy.optional(), testsAt: z.enum(TESTS_AT).optional(), agent: AgentRef.optional() })]) },
+  'plans.create': { args: z.tuple([z.object({ projectId: z.string().min(1).max(200), goal: z.string().min(1), autonomy: autonomy.optional(), testsAt: z.enum(TESTS_AT).optional(), agent: AgentRef.optional() })]) },
   // Plan in this conversation (the composer's Plan with Tasks) → the plan.
   'plans.here': { args: z.tuple([z.string().min(1).max(200), autonomy.optional()]) },
   // The draft goes on the board (a new plan, or changes to one).
