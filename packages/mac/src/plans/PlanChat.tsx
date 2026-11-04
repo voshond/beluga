@@ -175,7 +175,10 @@ export function PlanChat({
    */
   const deliver = (message: PlanMessage, urgent = false): void => {
     setFailed(undefined);
-    sendPlanMessage(api, message, channel, urgent).catch((err: unknown) =>
+    const plan = client.store
+      .getState()
+      .questions.find((q) => q.channel === channel && q.question.kind === "plan");
+    sendPlanMessage(api, message, channel, urgent, plan?.qid).catch((err: unknown) =>
       setFailed({ message, error: errorText(err) }),
     );
   };

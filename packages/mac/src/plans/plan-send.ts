@@ -10,6 +10,7 @@ export interface PlanSendApi {
   readonly attachments: { expand(text: string, channel: string, only?: number[], shown?: number[]): Promise<string> };
   /** False (or a rejection) when it didn't go. */
   readonly session: { submit(text: string, opts: { channel: string; id: string; urgent?: boolean }): Promise<boolean | void> };
+  readonly questions: { answer(qid: string, answer: { kind: 'plan'; approve: false; feedback: string }): Promise<void> };
 }
 
 /** One message from the box, kept as is for Retry. */
@@ -33,9 +34,11 @@ export const hasImageRefs = (message: string): boolean => message.includes('[ima
 /**
  * `urgent`: now, while Claude works (the plan's conversation is where you run everything from, so
  * by default your message doesn't wait behind a long turn): read at its next step, or a long
- * command is interrupted for it (the agent host's steer).
+ * command is interrupted for it (the agent host's steer). `planQid`: Claude's plan waiting for
+ * your approval here: Claude's run is held on that card, so what you type is what to change in
+ * the plan (as in every message box), not a message the held run would never read.
  */
-export async function sendPlanMessage(api: PlanSendApi, message: PlanMessage, channel: string, urgent = false): Promise<void> {
+export async function sendPlanMessage(api: PlanSendApi, message: PlanMessage, channel: string, urgent = false, planQid?: string): Promise<void> {
   if (message.expanded === undefined) {
     let full = message.typed;
     if (hasImageRefs(full)) {
@@ -46,6 +49,14 @@ export async function sendPlanMessage(api: PlanSendApi, message: PlanMessage, ch
       }
     }
     message.expanded = full;
+  }
+  if (planQid && !message.expanded.startsWith('/')) {
+    try {
+      await api.questions.answer(planQid, { kind: 'plan', approve: false, feedback: message.expanded });
+    } catch (err) {
+      throw new Error(errorText(err));
+    }
+    return;
   }
   let went: boolean | void;
   try {

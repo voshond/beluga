@@ -3,14 +3,19 @@ import { attachment, expandChips, registerAttachment } from '../src/core/attachm
 import { type PlanSendApi, planMessage, sendPlanMessage } from '../packages/mac/src/plans/plan-send.js';
 
 /** A fake API: `expand` fails the first `failExpand` times, `submit` answers with `went`. */
-function fakeApi({ failExpand = 0, went = true as boolean | void } = {}): PlanSendApi & { sent: string[]; ids: string[]; expands: number } {
+function fakeApi({ failExpand = 0, went = true as boolean | void } = {}): PlanSendApi & { sent: string[]; ids: string[]; expands: number; answers: Array<[string, string]> } {
   const sent: string[] = [];
   const ids: string[] = [];
+  const answers: Array<[string, string]> = [];
   let fails = failExpand;
   const api = {
     sent,
     ids,
+    answers,
     expands: 0,
+    questions: {
+      answer: async (qid: string, answer: { feedback: string }) => void answers.push([qid, answer.feedback]),
+    },
     attachments: {
       expand: async (text: string) => {
         api.expands++;
@@ -64,6 +69,30 @@ describe('plan chat send (KLD-66)', () => {
     const plain = fakeApi();
     await sendPlanMessage(plain, planMessage('/compact [image 1]'), 'ws:plan');
     expect(plain.sent).toEqual(['/compact [image 1]']);
+  });
+});
+
+describe('plan chat while the plan waits for approval', () => {
+  it('what you type is what to change in the plan, not a message to the held run', async () => {
+    const api = fakeApi();
+    await sendPlanMessage(api, planMessage('split milestone 2 and see [image 3]'), 'ws:plan', true, 'q1');
+    expect(api.answers).toEqual([['q1', 'split milestone 2 and see ![image 3](/tmp/3.png)']]);
+    expect(api.sent).toEqual([]);
+  });
+
+  it('a command still goes to the conversation', async () => {
+    const api = fakeApi();
+    await sendPlanMessage(api, planMessage('/compact'), 'ws:plan', false, 'q1');
+    expect(api.answers).toEqual([]);
+    expect(api.sent).toEqual(['/compact']);
+  });
+
+  it('an answer that fails keeps its reason for Retry', async () => {
+    const api = fakeApi();
+    api.questions.answer = async () => {
+      throw new Error('not connected');
+    };
+    await expect(sendPlanMessage(api, planMessage('hi'), 'ws:plan', false, 'q1')).rejects.toThrow('not connected');
   });
 });
 
