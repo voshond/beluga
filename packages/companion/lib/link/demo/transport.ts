@@ -534,6 +534,39 @@ export class DemoTransport implements Transport {
         }
         return ok();
       }
+      // 1.41 (BLG-702): a reaction on a person's turn in a worktree's or the room's chat.
+      case 'session.react': {
+        const c = w.convs.get(`conv:${str(0)}` as Topic);
+        if (c) {
+          const emoji = str(2);
+          const on = args[3] !== false;
+          c.turns = c.turns.map((t) => {
+            if (t.id !== str(1)) return t;
+            const base = (t.reactions ?? []).map((r) => (r.emoji === emoji ? { ...r, who: r.who.filter((n) => n !== 'You') } : r));
+            const withMine = !on ? base : base.some((r) => r.emoji === emoji) ? base.map((r) => (r.emoji === emoji ? { ...r, who: ['You', ...r.who] } : r)) : [...base, { emoji, count: 1, mine: true, who: ['You'] }];
+            return { ...t, reactions: withMine.map((r) => ({ ...r, count: r.who.length, mine: r.who.includes('You') })).filter((r) => r.count > 0) };
+          });
+          this.touch(c.topic);
+        }
+        return ok();
+      }
+      // 1.41 (BLG-702): a reaction put on a message or taken back.
+      case 'network.messages.react': {
+        const topic = `chat:${str(0)}` as Topic;
+        const chat = w.chats.get(topic);
+        if (chat) {
+          const emoji = str(2);
+          const on = args[3] !== false;
+          chat.messages = chat.messages.map((m) => {
+            if (m.id !== str(1)) return m;
+            const base = (m.reactions ?? []).map((r) => (r.emoji === emoji ? { ...r, who: r.who.filter((n) => n !== 'You') } : r));
+            const withMine = !on ? base : base.some((r) => r.emoji === emoji) ? base.map((r) => (r.emoji === emoji ? { ...r, who: ['You', ...r.who] } : r)) : [...base, { emoji, count: 1, mine: true, who: ['You'] }];
+            return { ...m, reactions: withMine.map((r) => ({ ...r, count: r.who.length, mine: r.who.includes('You') })).filter((r) => r.count > 0) };
+          });
+          this.touch(topic, 'chats');
+        }
+        return ok();
+      }
       case 'network.read': {
         const chat = w.chats.get(`chat:${str(0)}` as Topic);
         if (chat) {

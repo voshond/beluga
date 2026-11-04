@@ -77,7 +77,8 @@ export async function startDemoNetwork(store: Store, name: string): Promise<Netw
   // bob answers with Claude (Opus), mia with Codex: the chat shows whose agent said what.
   const chats = { bob: demoChat(bob, path.join(base, 'bob'), pace, defaultAgentOf(DEMO_AGENTS.bob)), mia: demoChat(mia, path.join(base, 'mia'), pace, defaultAgentOf(DEMO_AGENTS.mia)) };
   const group = bob.createGroup('launch', [meId, mia.peerId]);
-  bob.sendGroup(group.id, 'Morning! Staging is green, ready when you are.');
+  const morning = bob.sendGroup(group.id, 'Morning! Staging is green, ready when you are.');
+  const launch = groupConversation(group.id);
   // bob shares the checklist and a screenshot: they come straight from his Mac.
   void (async () => {
     writeFileSync(path.join(base, 'release-checklist.md'), CHECKLIST);
@@ -87,9 +88,13 @@ export async function startDemoNetwork(store: Store, name: string): Promise<Netw
   })().catch(() => undefined);
   bob.sendDm(meId, 'Could you look at the deploy script later?');
   // mia writes once the group has reached her (in the background: the demo doesn't wait).
-  void until(() => mia.summary().groups.some((g) => g.id === group.id && g.active)).then((ok) => {
-    if (ok && !stopped) mia.sendGroup(group.id, 'Copy for the landing page is in. Can someone review?');
-  });
+  void until(() => mia.summary().groups.some((g) => g.id === group.id && g.active)).then(async (ok) => {
+    if (!ok || stopped) return;
+    const copy = mia.sendGroup(group.id, 'Copy for the landing page is in. Can someone review?');
+    // Reactions (BLG-702): mia cheers bob's morning note, and bob has a look at her copy.
+    if (await until(() => mia.conversation(launch).some((m) => m.id === morning.id)) && !stopped) mia.react(launch, morning.id, '🎉');
+    if (await until(() => bob.conversation(launch).some((m) => m.id === copy.id)) && !stopped) bob.react(launch, copy.id, '👀');
+  }).catch(() => undefined);
 
   // Their Claudes answer your Claude's tasks (core/gateway/demo.ts). You trust bob; mia asks you each time.
   const responders = { bob: demoResponder(bob, 'bob', meId, base), mia: demoResponder(mia, 'mia', meId, base) };

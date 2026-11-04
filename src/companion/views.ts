@@ -24,6 +24,8 @@ import type { Workspace } from '../workspaces/types.js';
 import { type MilestoneView, type PlanView as PlanProgress, agentNowWords, liveFrom, planView } from '../core/plans/progress.js';
 import { shortVersion } from '../net/mesh/features.js';
 import type { MessageView, PersonView } from '../net/mesh/views.js';
+import { type Reaction, quickReactions } from '../shared/reactions.js';
+import { chatReactions } from '../core/chat-reactions.js';
 import { chatPeople, claudePill, offlineNote, waitingIn, waitingLabel } from '../core/chat-people.js';
 import { type AgentRef, CLAUDE_AGENT, type Profile, defaultAgentOf } from '../protocol.js';
 import { providerCards } from '../ui/usage-cards.js';
@@ -438,7 +440,8 @@ function turnOf(state: DomainState, item: LogItem, outputs: readonly OutputView[
     const who = item.byAgent ? 'claude' : item.from === me ? 'you' : 'friend';
     const prose = who === 'claude' ? pictures(proseOf(item.text)) : proseOf(item.text);
     const edit = who === 'you' && !steer ? editOf(state, item.channel, item.text, prose) : undefined;
-    return { id: item.id, who, name: clip(who === 'you' ? myName(state) : item.name, 100), ...(who === 'claude' ? { agent: item.agent ?? CLAUDE_AGENT } : {}), prose, ts: item.ts, ...(steer && who === 'you' ? { steer: { request: clip(steer.request, 200), waiting: steer.waiting } } : {}), ...(edit ? { edit } : {}) };
+    const reactions = reactableChannel(item.channel) ? chipsView(state, chatReactions(item), me) : undefined;
+    return { id: item.id, who, name: clip(who === 'you' ? myName(state) : item.name, 100), ...(who === 'claude' ? { agent: item.agent ?? CLAUDE_AGENT } : {}), prose, ts: item.ts, ...(steer && who === 'you' ? { steer: { request: clip(steer.request, 200), waiting: steer.waiting } } : {}), ...(edit ? { edit } : {}), ...(reactableChannel(item.channel) ? { reactable: true } : {}), ...(reactions ? { reactions } : {}) };
   }
   if (item.type === 'system') {
     // Earlier lines of a shared workspace's conversation ("bob: …") read as that person's turn.
@@ -711,6 +714,7 @@ export function convView(state: DomainState, ctx: ViewContext, topic: Topic): Co
     ...pickerOf(state, channel, conv?.mine ?? false),
     ...tagsOf(state, channel),
     ...terminalOf(state, channel),
+    ...(reactableChannel(channel) ? { quick: quickRow(state) } : {}),
   };
 }
 
@@ -1318,6 +1322,31 @@ export function chatsView(state: DomainState): ChatsView {
   return { chats: [...dms, ...groups].sort((a, b) => (b.lastAt ?? 0) - (a.lastAt ?? 0)).slice(0, 600) };
 }
 
+/** Whose a reaction is, in words: "You", or their name as this Mac knows it. */
+function reactorName(state: DomainState, peerId: string): string {
+  if (peerId === myId(state) || peerId === state.network.self?.peerId) return 'You';
+  const net = state.network;
+  return state.peers.find((p) => p.peerId === peerId)?.name ?? net.friends.find((f) => f.peerId === peerId)?.name ?? net.groups.flatMap((g) => g.members).find((p) => p.peerId === peerId)?.name ?? 'someone';
+}
+
+/** 1.41 (BLG-702): a message's reactions as the phone draws them (`me`: your id where they're kept). */
+function chipsView(state: DomainState, reactions: readonly Reaction[] | undefined, me: string): ChatMessageView['reactions'] {
+  if (!reactions?.length) return undefined;
+  return reactions.slice(0, 20).map((r) => ({ emoji: r.emoji, count: r.by.length, mine: r.by.includes(me), who: r.by.slice(0, 20).map((p) => clip(reactorName(state, p), 100)) }));
+}
+
+const reactionsView = (state: DomainState, m: MessageView): ChatMessageView['reactions'] => chipsView(state, m.reactions, state.network.self?.peerId ?? myId(state));
+
+/** A chat that keeps reactions on its turns: the room's and workspaces'. */
+const reactableChannel = (channel: string): boolean => channel === 'room' || channel.startsWith('ws:');
+
+/** Your quick row: the emojis you use most anywhere (friends' chats, the room, workspaces), then the defaults. */
+function quickRow(state: DomainState): string[] {
+  const inLog = state.log.flatMap((l) => (l.type === 'chat' && l.reacts?.length ? [{ reactions: chatReactions(l) }] : []));
+  const me = [myId(state), state.network.self?.peerId].filter((x): x is string => Boolean(x));
+  return quickReactions([...Object.values(state.network.messages).flat(), ...inLog], me);
+}
+
 function messageView(state: DomainState, ctx: ViewContext, m: MessageView): ChatMessageView {
   const files = (m.files ?? []).flatMap((f) => {
     const here = state.network.files?.[f.sha];
@@ -1336,6 +1365,7 @@ function messageView(state: DomainState, ctx: ViewContext, m: MessageView): Chat
     ...(m.edited ? { edited: m.edited } : {}),
     ...(m.mine && !m.claude && !m.task && m.conversation.startsWith('dm:') && text === m.text && text.trim() ? { editable: true } : {}),
     ...(files.length ? { files: files.slice(0, 20) } : {}),
+    ...(m.reactions?.length ? { reactions: reactionsView(state, m) } : {}),
     ...(offerOf(state, m) ? { offer: offerOf(state, m) } : {}),
     ...(chatTaskOf(state, m) ? { task: chatTaskOf(state, m) } : {}),
   };
@@ -1404,6 +1434,7 @@ export function chatView(state: DomainState, ctx: ViewContext, topic: Topic): Ch
     ...(waiting.length ? { waiting: waiting.slice(0, 10).map((w) => ({ text: clip(waitingLabel(w), 300), you: w.on === 'you', ...(w.target.kind === 'task' ? { task: clip(w.target.id, 200) } : {}) })) } : {}),
     ...(note ? { note: clip(note, 200) } : {}),
     ...(unread ? { unread } : {}),
+    quick: quickRow(state),
   };
 }
 

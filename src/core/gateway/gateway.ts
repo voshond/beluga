@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import type { AgentBackend } from '../../agent/types.js';
 import { type NoticeEvent, presenceQuiet } from '../notify.js';
 import { type Action, type Store, peerName } from '../store.js';
-import { type TrustLevel, defaultTrust } from '../trust.js';
+import { type TrustLevel, trustOf } from '../trust.js';
 import { type Capabilities, Decision, type DecisionInput, type Rule, offersFor, sharesUsageWith } from './access.js';
 import { TaskBook } from './book.js';
 import type { SystemPort } from './device.js';
@@ -13,7 +13,7 @@ import { type DialogueEnvelope, type Expects, type GatewayMsg, MAX_QUESTIONS, MA
 import { describeForClaude, oneLine, questionPrompt, resumePrompt } from './result.js';
 import { RuleBook, type RuleInput } from './rule-book.js';
 import { validate } from './schema.js';
-import { type ApproveOpts, type Pending, type ServeShell, TaskServer, defaultScratch } from './serve.js';
+import { type ApproveOpts, type Pending, type ServeContext, type ServeShell, TaskServer, defaultScratch } from './serve.js';
 import { isSecretPath } from '../shares.js';
 import { FileFetcher, mergeFiles, wantedFiles } from './transfer.js';
 import { Courier, type MeshPort, type RoomPort, type Via } from './transport.js';
@@ -62,6 +62,8 @@ export interface GatewayDeps {
   /** Start a new turn of your Claude in a conversation, with this prompt (resume). */
   readonly resume: (channel: string, prompt: string) => void;
   readonly projectRoot: (name: string) => string | undefined;
+  /** A project's task board for a friend's request there (BLG-701). */
+  readonly board?: ServeContext['board'];
   /** Your projects friends may name. */
   readonly projects: () => readonly string[];
   /** Your "Ask me for…" note, and saving it. */
@@ -214,6 +216,7 @@ export class Gateway {
       access: { decide: (facts, trust) => this.rules.decide(facts, trust), remember: (facts, name, d) => this.rules.remember(facts, name, d), capabilities: () => this.rules.capabilities() },
       ...(deps.serveShell ? { serveShell: deps.serveShell } : {}),
       projectRoot: deps.projectRoot,
+      ...(deps.board ? { board: deps.board } : {}),
       // The label is the agent that runs it (BLG-503): Settings' model is Claude's, never another agent's.
       agentRef: () => {
         const st = deps.store.getState();
@@ -701,9 +704,8 @@ export class Gateway {
 
   /** Your trust in someone: chosen in the room, remembered from before, or your default. */
   trustFor(peerId: string): TrustLevel {
-    const state = this.deps.store.getState();
     if (peerId === this.deps.selfId()) return 'full';
-    return state.levels[peerId] ?? state.remembered[peerId]?.trust ?? defaultTrust(state);
+    return trustOf(this.deps.store.getState(), peerId);
   }
 
   /** Who you are to this person: your network address's id for friends (the same as in rooms, except in the demo). */

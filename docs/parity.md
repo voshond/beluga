@@ -144,6 +144,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `session.compact` | ✓ (context meter › Compact now) |
 | `session.btw` | ✓ (`/btw` in the composer: the side-question card above the box) |
 | `session.btwDismiss` | ✓ (the side-question card's ✕, or esc) |
+| `session.react` | ✓ hover a person's message in the group chat or a worktree's chat › the smiley-plus button (quick row, More for every emoji); click a chip under it to add or take back yours |
 | `session.setClaudeSharing` | ✓ |
 | `session.rename` | ✓ |
 | `session.zoom` | ✓ |
@@ -424,6 +425,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `network.read` | ✓ opening a conversation reads it (the `conversation` view is shown); Mark as Read on a group |
 | `network.messages.delete` | ✓ a direct message's right-click menu › Delete… (yours: Delete for them too) |
 | `network.messages.edit` | ✓ your direct message's right-click menu › Edit (in place: Return saves, Esc cancels) |
+| `network.messages.react` | ✓ hover a message › the smiley-plus button: your six quick reactions, or More for every emoji (search, categories); click a chip under a message to add or take back yours |
 | `network.clear` | ✓ a direct conversation's ⋯ menu › Clear Chat… |
 | `network.post` | ✓ a conversation's message box: words, files waiting in the box, and the Ask Your Agent menu (yours, everyone's, one person's); Send Again on an undelivered one |
 | `network.files.add` | ✓ the paper clip (Open panel), files dropped anywhere on a conversation |

@@ -32,6 +32,7 @@ export const PHONE: Record<Method, Side> = {
   'session.unshareFolder': 'mac',
   'session.follow': 'mac',
   'session.clearChat': 'mac',
+  'session.react': 'phone',
   'session.removePerson': 'mac',
   'session.newInviteLink': 'mac',
   'session.setRoomOpen': 'mac',
@@ -291,6 +292,7 @@ export const PHONE: Record<Method, Side> = {
   'network.read': 'phone',
   'network.messages.delete': 'phone',
   'network.messages.edit': 'phone',
+  'network.messages.react': 'phone',
   'network.clear': 'phone',
 
   'stripe.connect': 'mac',

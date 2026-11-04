@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AgentRef, ClaudeAnswer, GuestCan, WsRole } from '../protocol.js';
+import { EmojiSchema } from '../shared/reactions.js';
 import { BRANCH_PREFIX_RE, EFFORTS, KEEP_AWAKE, LOW_POWER, NotifySettings, THEMES, TRUST_LEVELS } from '../shared/settings-schema.js';
 import { AUTO_COMPACT_MAX, AUTO_COMPACT_MIN } from '../shared/context-usage.js';
 import { PARALLEL_RUNS_MAX, PARALLEL_RUNS_MIN } from '../shared/run-slots.js';
@@ -135,6 +136,8 @@ export const API = {
   'session.unshareFolder': args(id),
   'session.follow': args(opt(z.string().max(64))),
   'session.clearChat': args(channel, opt(z.object({ everyone: opt(bool), fresh: opt(bool) }))),
+  // BLG-702: put an emoji on a message of the group chat or a workspace chat (`true`), take yours off (`false`), or flip it (none): → its reactions.
+  'session.react': args(channel, z.string().regex(/^[\w:+/=.-]{1,200}$/), EmojiSchema, opt(bool)),
   'session.removePerson': args(id),
   'session.newInviteLink': args(),
   'session.setRoomOpen': args(bool),

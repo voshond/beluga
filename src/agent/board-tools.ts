@@ -4,7 +4,8 @@ import { DEFAULT_LABELS } from '../core/board/labels.js';
 import type { BoardTools } from './types.js';
 
 /**
- * The task board as Claude's tools (server `beluga_board`), in your own runs: read tasks, keep the
+ * The task board as Claude's tools (server `beluga_board`), in your own runs (and a trusted friend's,
+ * on their project's board only: BLG-701): read tasks, keep the
  * one it's doing true (its brief, decisions, notes for the next agent, proof), split work into
  * sub-tasks and mark what waits on what. Every change shows in the task's activity as Claude's.
  */

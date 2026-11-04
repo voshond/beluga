@@ -201,6 +201,46 @@ test('chats open as tabs; closing one keeps the conversation in the sidebar', as
   await page.keyboard.press('Escape');
 });
 
+test('reactions: the demo’s show under their messages; hover to add yours, click your chip to take it back (BLG-702)', async ({ page }) => {
+  await channel(page, 'launch').click();
+  const log = page.getByRole('log', { name: 'Channel launch' });
+  const morning = log.locator('[data-message]').filter({ hasText: 'Morning! Staging is green' }).first();
+  // In the demo, mia cheers bob's morning note (from her own Mac, through the group's log).
+  await expect(morning.getByRole('button', { name: /^🎉 1: mia reacted with 🎉/ })).toBeVisible({ timeout: 20_000 });
+  await expect(morning.getByRole('button', { name: /^🎉/ })).toHaveAttribute('aria-pressed', 'false');
+
+  // The hover button: your quick row, the defaults until you have reactions of your own.
+  await morning.hover();
+  await morning.getByRole('button', { name: 'Add Reaction' }).click();
+  const row = page.getByRole('group', { name: 'React' });
+  await expect(row.getByRole('button', { name: /^React with / })).toHaveCount(6);
+  await expect(row.getByRole('button', { name: 'React with 👍' })).toBeVisible();
+  await shot(page, 'chat-react-row');
+  await row.getByRole('button', { name: 'React with 👍' }).click();
+  const thumbs = morning.getByRole('button', { name: /^👍 1: you reacted with 👍/ });
+  await expect(thumbs).toHaveAttribute('aria-pressed', 'true');
+
+  // More: every emoji, by category or searched.
+  await morning.hover();
+  await morning.getByRole('button', { name: 'Add Reaction' }).click();
+  await page.getByRole('button', { name: 'More emoji' }).click();
+  await expect(page.getByRole('tablist', { name: 'Emoji categories' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'grinning face', exact: true })).toBeVisible({ timeout: 10_000 });
+  await shot(page, 'chat-react-picker-all');
+  await page.getByRole('textbox', { name: 'Search emoji' }).fill('rocket');
+  await shot(page, 'chat-react-picker');
+  await page.getByRole('button', { name: 'rocket', exact: true }).click();
+  await expect(morning.getByRole('button', { name: /^🚀 1: you reacted/ })).toBeVisible();
+  await expect(morning.getByRole('group', { name: 'Reactions' }).getByRole('button')).toHaveCount(3);
+  await page.mouse.move(0, 0);
+  await shot(page, 'chat-reactions');
+
+  // A click on your chip takes yours back; mia's stays.
+  await thumbs.click();
+  await expect(morning.getByRole('button', { name: /^👍/ })).toHaveCount(0);
+  await expect(morning.getByRole('button', { name: /^🎉 1: mia/ })).toBeVisible();
+});
+
 test('Settings has who may ask your Claude; turning the network off brings the Friends card back', async ({ page }) => {
   await page.keyboard.press('Meta+,');
   await page.getByRole('button', { name: 'People & access' }).click();

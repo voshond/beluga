@@ -79,6 +79,7 @@ export const HANDLERS = {
   'session.unshareFolder': (s, name) => s.unshareFolder(name),
   'session.follow': (s, name) => s.follow(name),
   'session.clearChat': (s, channel, opts) => s.clearChat(channel, opts),
+  'session.react': (s, channel, id, emoji, on) => s.reactChat(channel, id, emoji, on),
   'session.removePerson': (s, peerId) => s.removePerson(peerId),
   'session.newInviteLink': (s) => s.newInviteLink(),
   'session.setRoomOpen': (s, open) => s.setRoomOpen(open),

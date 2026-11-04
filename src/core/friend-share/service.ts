@@ -82,7 +82,7 @@ interface FolderGrant {
 }
 
 /** Room messages that may travel over a friend's link, and only about what you share. */
-const KINDS = new Set<Body['kind']>(['chat', 'agent_request', 'agent_event', 'agent_question', 'agent_answer', 'fs_list', 'fs_read', 'fs_fetch', 'fs_search', 'ws_diff', 'fs_list_result', 'fs_read_result', 'fs_chunk', 'fs_search_result', 'ws_diff_result', 'fs_changed', 'ws_roster', 'ws_leave', 'ws_handoff', 'ws_handoff_result', 'ws_handoff_check', 'ws_handoff_check_result']);
+const KINDS = new Set<Body['kind']>(['chat', 'chat_react', 'agent_request', 'agent_event', 'agent_question', 'agent_answer', 'fs_list', 'fs_read', 'fs_fetch', 'fs_search', 'ws_diff', 'fs_list_result', 'fs_read_result', 'fs_chunk', 'fs_search_result', 'ws_diff_result', 'fs_changed', 'ws_roster', 'ws_leave', 'ws_handoff', 'ws_handoff_result', 'ws_handoff_check', 'ws_handoff_check_result']);
 const RESULTS = new Set<Body['kind']>(['fs_list_result', 'fs_read_result', 'fs_chunk', 'fs_search_result', 'ws_diff_result']);
 /** A Claude's steps as they stream only go to who's linked now; these wait for an offline Mac. */
 const KEPT_EVENTS = new Set(['queued', 'awaiting_approval', 'started', 'done', 'error', 'denied', 'answered']);
@@ -433,8 +433,9 @@ export class FriendShares implements FriendSharing {
     const ws = 'channel' in body ? wsOf(body.channel) : undefined;
     const theirs = ws ? this.receivedWs(ws) : undefined;
     // In a friend's worktree, its owner passes what you say on to the others.
-    if (body.kind === 'chat' && theirs && theirs.owner !== to) return true;
-    const reliable = body.kind === 'chat' || body.kind === 'agent_request' || body.kind === 'agent_question' || body.kind === 'agent_answer' || (body.kind === 'agent_event' && KEPT_EVENTS.has(body.event));
+    // A reaction to a message there (BLG-702) goes the same way.
+    if ((body.kind === 'chat' || body.kind === 'chat_react') && theirs && theirs.owner !== to) return true;
+    const reliable = body.kind === 'chat' || body.kind === 'chat_react' || body.kind === 'agent_request' || body.kind === 'agent_question' || body.kind === 'agent_answer' || (body.kind === 'agent_event' && KEPT_EVENTS.has(body.event));
     const went = this.courier.send(to, { k: 'body', b: body }, { reliable });
     if (body.kind === 'agent_request' && !went) this.dispatch({ type: 'fshare_delivery', id: body.requestId, state: 'waiting' });
     return reliable ? true : went;
@@ -609,7 +610,7 @@ export class FriendShares implements FriendSharing {
     let author = from;
     if (m.as) {
       // Only a worktree's owner passes on what others said in it.
-      if (body.kind !== 'chat' || !theirs || m.as === this.opts.mesh.peerId) return;
+      if ((body.kind !== 'chat' && body.kind !== 'chat_react') || !theirs || m.as === this.opts.mesh.peerId) return;
       author = m.as;
     }
     if (body.kind === 'agent_request' && (!mine || body.project)) return;
@@ -627,7 +628,9 @@ export class FriendShares implements FriendSharing {
     if (RESULTS.has(body.kind) && !this.related(from)) return;
     void session.receiveFromFriend(author, body, frameId);
     // What someone says in your worktree goes on to the others in it.
-    if (body.kind === 'chat' && mine && !m.as && session.sharing.canPost(from, body.channel ?? '')) {
+    // Reactions too (BLG-702), from anyone who sees it (viewers may react, not post).
+    const passOn = body.kind === 'chat' ? session.sharing.canPost(from, body.channel ?? '') : body.kind === 'chat_react' && session.sharing.canSee(from, body.channel);
+    if (passOn && mine && !m.as) {
       for (const peer of Object.keys(session.sharing.members(ws!))) if (peer !== from) this.courier.send(peer, { k: 'body', b: body, as: from }, { reliable: true });
     }
   }

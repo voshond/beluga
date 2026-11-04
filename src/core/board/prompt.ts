@@ -191,6 +191,15 @@ export function boardNote(): string {
   ].join('\n');
 }
 
+/** A friend's run with the board (BLG-701): what it may reach, so Claude doesn't try the rest. */
+export function friendNote(name: string): string {
+  return [
+    '',
+    `${name} asked this, and may use this repo's task board through you: list, read, open and change its tasks.`,
+    'Only this board: never another repo’s or board’s, never a private task, never a new board. What you change shows as yours, for them.',
+  ].join('\n');
+}
+
 /**
  * A worktree doing no task, with a task per worktree on (BLG-683): Claude decides whether this work
  * is one. Real work gets its task (private, the user's); a question or a look around doesn't.

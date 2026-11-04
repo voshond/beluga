@@ -1,3 +1,4 @@
+import type { Reaction } from '../../shared/reactions.js';
 import type { Dm, DmStatus } from './dms.js';
 import { extrasFields } from './extras.js';
 import type { BelugaInfo } from './features.js';
@@ -35,13 +36,16 @@ export function person(ctx: ViewContext, peerId: string, name: string): PersonVi
   return { peerId, name, online: Boolean(link) && presence.state !== 'offline', presence, ...(link ? { via: link.via } : {}), ...(beluga ? { beluga } : {}), ...(update ? { update } : {}), ...(avatar ? { avatar } : {}) };
 }
 
-export function dmView(ctx: ViewContext, peerId: string, dm: Dm, status: DmStatus): MessageView {
+/** A message's reactions as a view's field: nothing when there are none. */
+const reactionFields = (reactions: readonly Reaction[] | undefined): { reactions?: readonly Reaction[] } => (reactions?.length ? { reactions } : {});
+
+export function dmView(ctx: ViewContext, peerId: string, dm: Dm, status: DmStatus, reactions?: readonly Reaction[]): MessageView {
   const mine = dm.from === ctx.me;
   const state = !mine ? undefined : status.delivered.has(dm.id) ? 'delivered' : status.expired.has(dm.id) ? 'expired' : 'waiting';
-  return { id: dm.id, conversation: dmConversation(peerId), from: dm.from, name: mine ? 'you' : ctx.nameOf(dm.from), text: dm.text, ts: dm.ts, mine, ...extrasFields(dm.x), ...(state ? { status: state } : {}), ...(dm.edited ? { edited: dm.edited } : {}) };
+  return { id: dm.id, conversation: dmConversation(peerId), from: dm.from, name: mine ? 'you' : ctx.nameOf(dm.from), text: dm.text, ts: dm.ts, mine, ...extrasFields(dm.x), ...(state ? { status: state } : {}), ...(dm.edited ? { edited: dm.edited } : {}), ...reactionFields(reactions) };
 }
 
-export function groupMessageView(ctx: ViewContext, groupId: string, m: ReadMessage): MessageView {
+export function groupMessageView(ctx: ViewContext, groupId: string, m: ReadMessage, reactions?: readonly Reaction[]): MessageView {
   const mine = m.entry.author === ctx.me;
   return {
     id: m.entry.id,
@@ -53,6 +57,7 @@ export function groupMessageView(ctx: ViewContext, groupId: string, m: ReadMessa
     mine,
     ...extrasFields(m.extras),
     ...(m.text === undefined ? { status: 'locked' as const } : {}),
+    ...reactionFields(reactions),
   };
 }
 

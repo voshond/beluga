@@ -37,6 +37,16 @@ describe('trust', () => {
     expect(trustOf(s, BOB)).toBe('ask');
   });
 
+  it('a friend who is not in the room keeps the trust you saved for them', () => {
+    // Bran posts in a shared worktree through the friends network: never a room peer, so no live level.
+    const s = reduce(withSelf('ask'), { type: 'remembered', people: { [BOB]: { name: 'Bran', trust: 'full' } } });
+    expect(trustOf(s, BOB)).toBe('full');
+    expect(reachOf(s, BOB)).toBe('full');
+    // A level chosen in the room now still wins over the saved one.
+    expect(trustOf(reduce(s, { type: 'trust_level', peerId: BOB, level: 'ask' }), BOB)).toBe('ask');
+    expect(trustOf(s, ANN)).toBe('ask');
+  });
+
   it('reachOf: full trust reaches everywhere, else your access choice, default folder', () => {
     let s = withSelf();
     expect(reachOf(s, BOB)).toBe('folder');

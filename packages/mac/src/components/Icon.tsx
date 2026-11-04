@@ -144,6 +144,8 @@ const PATHS = {
   epic: 'M8 2.5l5.5 2.75L8 8 2.5 5.25z M2.5 8L8 10.75 13.5 8 M2.5 10.75L8 13.5l5.5-2.75',
   /** A status's emoji, before you pick one: a smiling face. */
   smile: 'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z M5.6 9.2a2.9 2.9 0 0 0 4.8 0 M6.1 6.6v.01 M9.9 6.6v.01',
+  /** Add a reaction (BLG-702): a smile with a plus at its shoulder. */
+  smilePlus: 'M13 7.4A5.25 5.25 0 1 1 8.6 3 M5.4 9.3a2.8 2.8 0 0 0 4.6 0 M5.9 6.6v.01 M9.3 6.6v.01 M12.5 1.8v3.8 M10.6 3.7h3.8',
   palette: 'M8 2.5a5.5 5.5 0 1 0 0 11c.9 0 1.3-.6 1.3-1.2 0-.8-.7-1-.7-1.8 0-.6.5-1 1.1-1h1.4A2.4 2.4 0 0 0 13.5 7c0-2.5-2.5-4.5-5.5-4.5z M5.25 7.25h.01 M7.25 5.25h.01 M10 5.5h.01',
 } as const;
 

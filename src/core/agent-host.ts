@@ -71,7 +71,7 @@ export interface AgentHostDeps {
   /** Guests invited into one project only (not the whole room). */
   readonly isGuest?: (peerId: string) => boolean;
   /** The task board for a run in this conversation (your own runs): its tools and the task's brief. */
-  readonly board?: (channel: string, from: string, opts: { readonly plan: boolean }) => import('./board/work.js').RunBoard | undefined;
+  readonly board?: (channel: string, from: string, opts: { readonly plan: boolean; readonly friend?: import('./board/work.js').BoardFriend }) => import('./board/work.js').RunBoard | undefined;
   /** The Sentinel chat (core/sentinel/chat.ts, your own runs): where its Claude runs, its own folder and session. */
   readonly sentinelChat?: (channel: string, from: string) => AgentPlace | undefined;
   /** What a tool that always asks you (policy ALWAYS_ASK_YOU: deleting a sentinel or a dashboard) says on its card, in words. */
@@ -1055,6 +1055,17 @@ export class AgentHost {
     return this.deps.workspaces?.manager.list.find((p) => p.root && p.name === name)?.root;
   }
 
+  /**
+   * What a friend's run may do with your board (BLG-701), by how much you trust them: Full trust
+   * uses it freely, like you; Trusted reads freely and asks you before a change; Ask me each time
+   * asks for every look too. Blocked, or a guest invited by link: no board.
+   */
+  private boardAccess(from: string): 'free' | 'writes' | 'all' | undefined {
+    if (this.deps.isGuest?.(from)) return undefined;
+    const level = trustOf(this.store.getState(), from);
+    return level === 'full' ? 'free' : level === 'trusted' ? 'writes' : level === 'ask' ? 'all' : undefined;
+  }
+
   private async authorizeRequest(from: string, body: BodyOf<'agent_request'>): Promise<boolean> {
     if (from === this.selfId) return true;
     const state = this.store.getState();
@@ -1166,7 +1177,9 @@ export class AgentHost {
       // Sentinels (your own runs): a sentinel run's Claude step gets its brief, and the task tools (it makes tasks).
       const sentinel = from === this.selfId && !place?.syncMain ? this.deps.sentinel?.(body.channel, from) : undefined;
       const noBoard = place?.syncMain || (place?.askOnly && plans?.tools && !sentinel?.inRun);
-      const board = noBoard || from !== this.selfId ? undefined : this.deps.board?.(body.channel, from, { plan: planFirst });
+      // A friend's run gets its repo's board too, as their trust allows (BLG-701; see boardAccess).
+      const friendBoard = from === this.selfId ? undefined : this.boardAccess(from);
+      const board = noBoard || (from !== this.selfId && !friendBoard) ? undefined : this.deps.board?.(body.channel, from, { plan: planFirst && from === this.selfId, ...(friendBoard ? { friend: { id: from, name: requesterName } } : {}) });
       // A run stopped but not ending (wedged, or never started: no Claude Code yet) has its Claude
       // Code killed after a moment (at once when it's gone already), then is left behind so what
       // comes next in the conversation starts (BLG-402): never while its Claude Code could still
@@ -1220,6 +1233,7 @@ export class AgentHost {
         channel: body.channel,
         scope: from === this.selfId ? 'full' : reachOf(this.store.getState(), from),
         ...(from !== this.selfId && this.deps.isGuest?.(from) ? { guest: true } : {}),
+        ...(board?.tools && friendBoard && friendBoard !== 'free' ? { boardAsks: friendBoard } : {}),
         signal: controller.signal,
         onEvent: (kind, text) => {
           this.compactor.observe(body.channel, kind, text);

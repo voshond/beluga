@@ -713,7 +713,7 @@ export function makeWorld(now = Date.now()): DemoWorld {
           { id: 'm1', from: 'Mia', mine: false, text: 'is the phone app real?? 👀', ts: now - 3 * HOUR },
           { id: 'm2', from: 'You', mine: true, editable: true, text: 'getting there. I\'m approving deploys from the couch', ts: now - 3 * HOUR + 2 * MIN },
           { id: 'm3', from: 'Mia\'s Codex', mine: false, claude: true, agent: { runtime: 'codex', model: 'gpt-5', label: 'Codex' }, text: 'Here\'s Mia\'s desktop, as you asked: the radar build is open on the left.', ts: now - 2 * HOUR, files: [desktop] },
-          { id: 'm4', from: 'Mia', mine: false, text: 'view from the office today', ts: now - 41 * MIN, files: [sunset] },
+          { id: 'm4', from: 'Mia', mine: false, text: 'view from the office today', ts: now - 41 * MIN, files: [sunset], reactions: [{ emoji: '😍', count: 1, mine: true, who: ['You'] }] },
           { id: 'm5', from: 'Mia', mine: false, text: 'also my Codex wants a look at your screen for the radar thing, ok?', ts: now - 12 * MIN },
         ],
       },
@@ -740,7 +740,7 @@ export function makeWorld(now = Date.now()): DemoWorld {
         messages: [
           { id: 'g1', from: 'Sam', mine: false, text: 'offline maps branch is ready for someone to take over', ts: now - 55 * MIN },
           { id: 'g2', from: 'Ada', mine: false, text: 'push relay: are we doing FCM data messages only?', ts: now - 25 * MIN },
-          { id: 'g3', from: 'You', mine: true, text: 'yes, sealed to the phone\'s box key, the relay only sees ciphertext', ts: now - 24 * MIN },
+          { id: 'g3', from: 'You', mine: true, text: 'yes, sealed to the phone\'s box key, the relay only sees ciphertext', ts: now - 24 * MIN, reactions: [{ emoji: '👍', count: 2, mine: false, who: ['Ada', 'Sam'] }, { emoji: '🎉', count: 1, mine: false, who: ['Ada'] }] },
           { id: 'g4', from: 'Ada', mine: false, text: 'nice. the e2e numbers from my run:', ts: now - 9 * MIN, files: [txt('ada-e2e.txt', 'text', 'pairing 9.4s\nviews 6.0s\nlink 5.1s\n', undefined, 9 * MIN)] },
           { id: 'g5', from: 'Theo', mine: false, text: 'can someone let me into the room 🙏', ts: now - 3 * MIN },
         ],

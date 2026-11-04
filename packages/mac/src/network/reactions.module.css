@@ -1,0 +1,263 @@
+/* Emoji reactions on chat messages (BLG-702): chips under a message, the hover button, the quick row and the picker. */
+
+/* ---- the row a message sits in: its hover button shows while the pointer (or focus) is on it */
+
+.reactable {
+  position: relative;
+}
+.react {
+  position: absolute;
+  top: 2px;
+  right: 24px;
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.reactable:hover .react,
+.reactable:focus-within .react,
+.reactOpen {
+  opacity: 1;
+  pointer-events: auto;
+}
+.reactButton {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 24px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline-strong);
+  color: var(--text-2);
+}
+.reactButton:hover,
+.reactOpen .reactButton {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.reactButton:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 1px;
+}
+
+/* ---- the chips under a message */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+.chipsMine {
+  justify-content: flex-end;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px 0 6px;
+  border-radius: 12px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--hairline);
+  color: var(--text-2);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.chip:hover {
+  background: var(--bg-hover);
+  border-color: var(--hairline-strong);
+}
+/* Yours: the soft pastel of the accent, its count in the accent's ink. */
+.chipMine {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg));
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: color-mix(in srgb, var(--accent) 75%, var(--text));
+}
+.chipMine:hover {
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg));
+}
+.chip:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 1px;
+}
+.chipEmoji {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.chipCount {
+  font-weight: 600;
+}
+
+/* ---- the popover: the quick row, then (More) the picker */
+
+.card {
+  z-index: 62;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop), 0 12px 30px rgba(0, 0, 0, 0.12);
+  outline: none;
+  animation: pop var(--dur) var(--ease-out);
+  transform-origin: var(--radix-popover-content-transform-origin);
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+.quick {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.quickPick {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 19px;
+  line-height: 1;
+}
+.quickPick:hover,
+.quickPick:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+.quickPicked {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.quickMore {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-left: 2px;
+  border-radius: 8px;
+  color: var(--text-2);
+  border-left: 1px solid var(--hairline);
+}
+.quickMore:hover,
+.quickMore:focus-visible {
+  background: var(--bg-hover);
+  color: var(--text);
+  outline: none;
+}
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  width: 318px;
+  height: 360px;
+}
+.pickerSearch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  margin: 2px 2px 6px;
+  padding: 0 9px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  color: var(--text-3);
+}
+.pickerSearch input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+.pickerTabs {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2px 4px;
+  border-bottom: 1px solid var(--hairline);
+}
+.pickerTab {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--text-3);
+}
+.pickerTab:hover,
+.pickerTab:focus-visible {
+  background: var(--bg-hover);
+  color: var(--text);
+  outline: none;
+}
+.pickerGrid {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+.pickerSection {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
+}
+.pickerHead {
+  position: sticky;
+  top: 0;
+  padding: 6px 4px 4px;
+  background: var(--bg-raised);
+  color: var(--text-3);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+.pickerCells {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 1px;
+}
+.pickerCell {
+  display: grid;
+  place-items: center;
+  height: 32px;
+  border-radius: 7px;
+  font-size: 20px;
+  line-height: 1;
+}
+.pickerCell:hover,
+.pickerCell:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+.pickerNote {
+  padding: 24px 8px;
+  color: var(--text-3);
+  text-align: center;
+  font-size: 0.86rem;
+}
+.pickerFoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 6px;
+  border-top: 1px solid var(--hairline);
+}
+.pickerFootEmoji {
+  font-size: 20px;
+  line-height: 1;
+}
+.pickerFootName {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 0.84rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pickerFootName::first-letter {
+  text-transform: uppercase;
+}
+.pickerFootHint {
+  color: var(--text-3);
+  font-size: 0.84rem;
+}

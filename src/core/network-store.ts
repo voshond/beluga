@@ -1,4 +1,5 @@
 import type { ChatFileState, FriendOfferView, LiveClaude, MessageView, NetworkState, NetworkSummary } from '../net/mesh/views.js';
+import type { Reaction } from '../shared/reactions.js';
 
 /**
  * The Beluga network in the shared state: friends with their status, groups with members,
@@ -26,6 +27,8 @@ export type NetworkAction =
   | { type: 'net_unsent'; conversation: string; id: string }
   /** A conversation was cleared on this Mac. */
   | { type: 'net_cleared'; conversation: string }
+  /** A message's reactions changed (BLG-702): its chips now (one older than what's kept changes nothing here). */
+  | { type: 'net_reacted'; conversation: string; id: string; reactions: readonly Reaction[] }
   /** The latest messages of these conversations (on start). */
   | { type: 'net_messages'; messages: Readonly<Record<string, readonly MessageView[]>> }
   /** Chat files changed state (`null`: forget it). */
@@ -63,6 +66,12 @@ function withMessage(list: readonly MessageView[], m: MessageView): readonly Mes
   return [...list, m].slice(-KEEP_MESSAGES);
 }
 
+/** A message with these chips (none: the field goes). */
+function withReactions(m: MessageView, reactions: readonly Reaction[]): MessageView {
+  const { reactions: _was, ...rest } = m;
+  return reactions.length ? { ...rest, reactions } : rest;
+}
+
 export function reduceNetwork(state: NetworkSlice, action: NetworkAction): NetworkSlice {
   switch (action.type) {
     case 'net_summary': {
@@ -94,6 +103,12 @@ export function reduceNetwork(state: NetworkSlice, action: NetworkAction): Netwo
       const list = state.network.messages[action.conversation];
       if (!list?.some((m) => m.id === action.id)) return state;
       return { network: { ...state.network, messages: { ...state.network.messages, [action.conversation]: list.filter((m) => m.id !== action.id) } } };
+    }
+    case 'net_reacted': {
+      const list = state.network.messages[action.conversation];
+      if (!list?.some((m) => m.id === action.id)) return state;
+      const next = list.map((m) => (m.id === action.id ? withReactions(m, action.reactions) : m));
+      return { network: { ...state.network, messages: { ...state.network.messages, [action.conversation]: next } } };
     }
     case 'net_cleared':
       return { network: { ...state.network, messages: { ...state.network.messages, [action.conversation]: [] } } };

@@ -73,6 +73,8 @@ export type Actor =
       readonly ownerName: string;
       /** Which agent it was (BLG-498: Codex, a local model…); left out on older entries: Claude, as before. */
       readonly agent?: AgentRef;
+      /** Working for a friend who asked it (BLG-701): "Kayra's Claude, for Bran". */
+      readonly for?: { readonly id: string; readonly name: string };
     }
   | { readonly kind: 'beluga' };
 
@@ -611,7 +613,7 @@ export function actorName(actor: Actor, selfId: string): string {
     case 'person':
       return actor.id === selfId ? 'You' : actor.name;
     case 'claude':
-      return agentLabel(actor.agent, actor.ownerName, actor.owner === selfId, { capital: true });
+      return agentLabel(actor.agent, actor.ownerName, actor.owner === selfId, { capital: true }) + (actor.for ? `, for ${actor.for.id === selfId ? 'you' : actor.for.name}` : '');
     default:
       return 'Beluga';
   }

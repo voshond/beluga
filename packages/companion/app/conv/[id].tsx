@@ -13,6 +13,7 @@ import { Composer, QueueTray } from '../../components/Composer';
 import { AgentChips, Prose, StepTicker } from '../../components/Conv';
 import { answer, NeedButtons, NeedFace } from '../../components/Needs';
 import { Options } from '../../components/Options';
+import { QuickReactions, ReactionChips } from '../../components/Reactions';
 import { OutputGrid, OutputsTopic, TurnOutputs } from '../../components/Outputs';
 import { DeleteMacChat, MacChatsSheet, newMacChat } from '../../components/MacChats';
 import { Header, Screen, useScrolled } from '../../components/Screen';
@@ -87,6 +88,12 @@ export default function Conversation() {
   const [editing, setEditing] = useState<TurnView | undefined>();
   const [picking, setPicking] = useState(false);
   const canEdit = useSupports('editPrompt');
+  // 1.41 (BLG-702): a person's message in the room's or a workspace's chat takes emoji reactions.
+  const reacts = useSupports('reactions');
+  const [reacting, setReacting] = useState<TurnView | undefined>();
+  const react = (t: TurnView, emoji: string, on: boolean): void => void store.call(calls.reactTurn(topic, t.id, emoji, on), { queue: false }).catch((e: Error) => store.toast({ text: e.message, tone: 'error' }));
+  const chipsOf = (t: TurnView) => (reacts && t.reactions?.length ? <ReactionChips reactions={t.reactions} mine={t.who === 'you'} onToggle={(e, on) => react(t, e, on)} onWho={(text) => store.toast({ text, tone: 'info' })} /> : null);
+  const reactPress = (t: TurnView) => (reacts && t.reactable ? () => setReacting(t) : undefined);
   const older = async () => {
     if (!c) return;
     setOlderBusy(true);
@@ -205,7 +212,17 @@ export default function Conversation() {
             {c && isMacTopic(topic) && !turns.length && !pending.length ? <MacStarters topic={topic} /> : null}
             {turns.map((t, i) => (
               <Animated.View key={t.id} entering={i > turns.length - 3 ? FadeIn.duration(180) : undefined}>
-                {t.dialogue ? <DialogueTurn d={t.dialogue} /> : t.who === 'you' ? <YourTurn t={t} onLongPress={t.steer?.waiting === 'next_step' ? () => setUnread(t) : t.edit && canEdit ? () => setEditing(t) : undefined} /> : <ClaudeTurn t={t} all={all} onAgent={setAgent} topic={topic} runtime={c?.agent?.runtime} />}
+                {t.dialogue ? (
+                  <DialogueTurn d={t.dialogue} />
+                ) : t.who === 'you' ? (
+                  <YourTurn t={t} chips={chipsOf(t)} onLongPress={t.steer?.waiting === 'next_step' ? () => setUnread(t) : t.edit && canEdit ? () => setEditing(t) : reactPress(t)} />
+                ) : t.who === 'friend' && reactPress(t) ? (
+                  <Press onLongPress={reactPress(t)} haptics={false} scaleTo={0.99}>
+                    <ClaudeTurn t={t} all={all} onAgent={setAgent} topic={topic} runtime={c?.agent?.runtime} chips={chipsOf(t)} />
+                  </Press>
+                ) : (
+                  <ClaudeTurn t={t} all={all} onAgent={setAgent} topic={topic} runtime={c?.agent?.runtime} chips={chipsOf(t)} />
+                )}
               </Animated.View>
             ))}
             {pending.map((p) => (
@@ -282,6 +299,24 @@ export default function Conversation() {
         </Sheet>
         {c?.mergeable ? <MergeSheet topic={topic} visible={mergeOpen} onClose={() => setMergeOpen(false)} /> : null}
         <EditPromptSheet turn={editing} onClose={() => setEditing(undefined)} />
+        <Options
+          visible={Boolean(reacting)}
+          onClose={() => setReacting(undefined)}
+          head={
+            reacting ? (
+              <QuickReactions
+                quick={c?.quick}
+                reactions={reacting.reactions}
+                onPick={(e, on) => {
+                  const t = reacting;
+                  setReacting(undefined);
+                  react(t, e, on);
+                }}
+              />
+            ) : undefined
+          }
+          options={[]}
+        />
         <AgentPickerSheet topic={topic} picker={c?.agent} visible={picking} onClose={() => setPicking(false)} />
         <Options
           visible={Boolean(unread)}
@@ -337,13 +372,14 @@ export default function Conversation() {
 }
 
 /** Your message. Steered into Claude's turn and not read yet: dimmed, with a clock (long-press: Send now); else long-press edits it (1.28). */
-function YourTurn({ t, onLongPress }: { t: TurnView; onLongPress?: (() => void) | undefined }) {
+function YourTurn({ t, onLongPress, chips }: { t: TurnView; onLongPress?: (() => void) | undefined; chips?: React.ReactNode }) {
   const waiting = t.steer?.waiting;
   return (
     <Press onLongPress={onLongPress} disabled={!onLongPress} scaleTo={0.99} style={{ alignItems: 'flex-end', paddingLeft: 48 }}>
       <View style={{ backgroundColor: color.card, borderRadius: 20, borderBottomRightRadius: 6, paddingVertical: 10, paddingHorizontal: 14, opacity: waiting ? 0.6 : 1 }}>
         <Prose prose={t.prose} size={15} tasks />
       </View>
+      {chips ? <View style={{ marginTop: 4 }}>{chips}</View> : null}
       {waiting ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4, marginRight: 4 }}>
           <Clock color={color.text2} size={12} />
@@ -414,7 +450,7 @@ function DialogueTurn({ d }: { d: NonNullable<TurnView['dialogue']> }) {
 }
 
 /** An agent's turn, under its name with its mark (BLG-498: the agent the Mac sends; an older Mac's, by the name, else the conversation's runtime). */
-function ClaudeTurn({ t, all, onAgent, topic, runtime }: { t: TurnView; all: OutputView[]; onAgent: (a: SubAgentView) => void; topic: Topic; runtime?: string | undefined }) {
+function ClaudeTurn({ t, all, onAgent, topic, runtime, chips }: { t: TurnView; all: OutputView[]; onAgent: (a: SubAgentView) => void; topic: Topic; runtime?: string | undefined; chips?: React.ReactNode }) {
   const working = t.status === 'working';
   const outs = t.outputs ?? [];
   const mins = t.endTs ? Math.max(1, Math.round((t.endTs - t.ts) / 60000)) : undefined;
@@ -433,6 +469,7 @@ function ClaudeTurn({ t, all, onAgent, topic, runtime }: { t: TurnView; all: Out
         <T v="caption">{ago(t.ts)}</T>
       </View>
       {t.prose.text ? <Prose prose={t.prose} at={{ topic, turn: t.id }} tasks /> : null}
+      {chips}
       {working ? <LivePanel t={t} /> : <StepsFold t={t} />}
       {t.subagents?.length ? (
         working || t.subagents.length <= 3 ? (

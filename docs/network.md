@@ -250,6 +250,35 @@ bytes travel separately), `ask: { to: 'all' | peerIds }` calls agents in, `claud
 answer to message `for`, `task: { id, role: 'request' }` is a task's card (see *Tasks between Claudes*). Older Macs read only `text`. Names are cleaned (no folders, control or bidi
 characters); malformed extras are dropped.
 
+**Reactions** (BLG-702). Under a message, a chip per emoji with how many put it there (who, on hover; yours
+in the accent's soft tint; a click adds yours or takes it back). Hovering a message shows a smiley-plus
+button: your six quick reactions (the ones you use most in these chats, then 👍 ❤️ 😂 🎉 👀 ✅) and More, every
+emoji (Emojibase's set, `emojibase-data`, loaded when it first opens; searchable, in categories; nothing past
+Emoji 16, which today's Macs and phones can't draw). The model is `src/shared/reactions.ts`: one person's
+change at a time (this emoji on or off, at `at`), the newest per message, emoji and person wins and an off wins
+a tie, so every copy that got the same changes shows the same chips in any order. One emoji is an emoji only
+(32 UTF-16 units, no words), each person has it once on a message, a message shows at most 20 different
+ones, and one person keeps at most 20 on it. In a **direct conversation** a change is a `dm_react { id, e, on,
+at }` frame (`dm_react_ack` back), checked on arrival, kept next to the messages in
+`~/.beluga/dms/<peer>.reactions.jsonl` and, until their Mac says it got it, in `~/.beluga/dm-reactions.json`
+(sent again on every link, like an edit). In a **channel** it is an encrypted message of its author's in the
+group's log, `{ text, react: { to, e, on } }`, so it syncs, is kept and checked like any message and nobody
+outside sees who reacted; its log position orders one author's changes. Macs that know reactions fold those
+into their message and never show, count or hand them to agents as messages; older Macs show the `text`
+("Reacted 👍 to “Morning!…”"). Screens get a message's `reactions` (`MessageView`) and a change as
+`net_reacted`; `network.messages.react(conversation, id, emoji, on?)` makes one (none flips yours).
+
+The room's **group chat** and **workspace chats** (yours shared in the room, or a worktree shared with
+friends) have the same reactions, with the same rules, as a `chat_react { channel, to, e, on, at }` body
+(src/protocol.ts; an older Mac doesn't know the kind and drops it). A chat message now carries its own `mid`,
+so its id is `<from>:<mid>` in every copy (`chatMessageId`; an older Mac's keeps its frame's id). In the room
+the change goes into the room's history (`keep`), so someone who joins later gets it too; in a workspace it
+goes to each person in it, and in a friend's worktree through its owner's Mac, which passes it on (from
+anyone who sees the worktree: viewers may react, never post). Each chat item keeps its changes (`reacts`,
+`core/chat-reactions.ts`), so a workspace's reactions are saved with its conversation in
+`~/.beluga/history/<id>.json`. `session.react(channel, id, emoji, on?)` makes one. Earlier lines of a shared
+worktree (its history page, drawn as messages) aren't messages here and take none.
+
 Each person's agent is drawn in that person's color (its mark and its name), here and in rooms, so a
 conversation with several agents reads as who's who.
 

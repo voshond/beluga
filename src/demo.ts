@@ -16,6 +16,7 @@ import { ShareService } from './core/shares.js';
 import { Store, initialState } from './core/store.js';
 import { type RoomKeys } from './net/crypto.js';
 import { PeerClient } from './net/peer-client.js';
+import { chatMessageId } from './protocol.js';
 import { WorkspaceManager } from './workspaces/manager.js';
 import { WorkspaceStore } from './workspaces/store.js';
 
@@ -121,6 +122,7 @@ export function startDemoFriend(url: string, keys: RoomKeys, folder: string, nam
     }
   });
   let said = 0;
+  let reactedToYou = false;
   const say = (delay: number): void => {
     const line = friend.lines[said++];
     if (line) setTimeout(() => session.sendChat(line, false), delay);
@@ -138,6 +140,20 @@ export function startDemoFriend(url: string, keys: RoomKeys, folder: string, nam
     // Answer you (not each other), one line per message you send.
     const fromYou = msg.from !== client.peerId && !store.getState().peers.find((p) => p.peerId === msg.from && (p.name === 'bob' || p.name === 'mia'));
     if (fromYou && msg.body.kind === 'chat' && !msg.body.byAgent && said < friend.lines.length) say(name === 'bob' ? 1500 : 2400);
+    // Reactions (BLG-702): bob likes mia's lines in the group chat, and mia has a look at your first one.
+    const body = msg.body;
+    if (body.kind !== 'chat' || body.byAgent || body.channel !== 'room' || msg.from === client.peerId) return;
+    const fromMia = store.getState().peers.find((p) => p.peerId === msg.from)?.name === 'mia';
+    const emoji = name === 'bob' && fromMia ? '👍' : name === 'mia' && fromYou && !reactedToYou ? '👀' : undefined;
+    if (!emoji) return;
+    if (name === 'mia') reactedToYou = true;
+    setTimeout(() => {
+      try {
+        session.reactChat('room', chatMessageId(msg.from, body.mid, msg.id), emoji);
+      } catch {
+        // Not in the log (yet): the demo goes without it.
+      }
+    }, 900);
   });
   if (name === 'bob') answerDemoDiff(session, client);
   session.start();

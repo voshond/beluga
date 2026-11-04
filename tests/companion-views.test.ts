@@ -483,6 +483,20 @@ describe('the views of a known Mac', () => {
     expect(WorkView.parse(viewOf(state, ctx, 'work')).projects.find((p) => p.id === 'asked')?.conversations.map((c) => c.topic)).toEqual(['conv:task:t_screen000001']);
   });
 
+  it('a workspace chat’s turns carry their reactions, and the conversation your quick row (1.41, BLG-702)', () => {
+    const store = new Store(state);
+    store.dispatch({ type: 'chat_react', channel: 'ws:w1', id: 'c1', emoji: '🚀', by: BOB, on: true, at: 1 });
+    store.dispatch({ type: 'chat_react', channel: 'ws:w1', id: 'c1', emoji: '🚀', by: ME, on: true, at: 2 });
+    const conv = ConvView.parse(viewOf(store.getState(), ctx, 'conv:ws:w1'));
+    const turn = conv.turns.find((t) => t.id === 'c1');
+    expect(turn).toMatchObject({ who: 'you', reactable: true, reactions: [{ emoji: '🚀', count: 2, mine: true, who: ['bob', 'You'] }] });
+    expect(conv.quick).toEqual(['🚀', '👍', '❤️', '😂', '🎉', '👀']);
+    // Your own Mac's chats aren't shared: nothing to react to there.
+    const mac = ConvView.parse(viewOf(store.getState(), ctx, 'conv:mac:assistant'));
+    expect(mac.turns.every((t) => !t.reactable)).toBe(true);
+    expect(mac.quick).toBeUndefined();
+  });
+
   it('a message steered in that Claude hasn’t read yet says so on your turn, not as a turn of Claude’s (BLG-54)', () => {
     const store = new Store(state);
     store.dispatch({ type: 'agent_event', owner: ME, requestId: 'r9', requester: ME, event: 'started', text: '', ts: T0 + 20, channel: 'ws:w1' });
@@ -566,6 +580,22 @@ describe('the views of a known Mac', () => {
     expect(ChatsView.parse(viewOf(state, ctx, 'chats')).chats[0]).toMatchObject({ name: 'bob', kind: 'dm', unread: 2 });
     expect(PeopleView.parse(viewOf(state, ctx, 'people')).people[0]).toMatchObject({ name: 'bob', presence: 'away', note: 'lunch', offers: ['claude', 'screen', 'shell'] });
     expect(WorkView.parse(viewOf(state, ctx, 'work')).projects.find((p) => p.id === 'p1')?.conversations.map((c) => c.title)).toEqual(['tests', 'auth']);
+  });
+
+  it('a chat’s reactions and your quick row (1.41, BLG-702)', () => {
+    const conv = `dm:${BOB}`;
+    const list = state.network.messages[conv] ?? [];
+    const [first, ...rest] = list;
+    const reacted = { ...state, network: { ...state.network, messages: { ...state.network.messages, [conv]: [{ ...first!, reactions: [{ emoji: '🚀', by: [BOB, ME] }, { emoji: '👀', by: [BOB] }] }, ...rest] } } };
+    const chat = ChatView.parse(viewOf(reacted, ctx, `chat:${conv}`));
+    expect(chat.messages[0]?.reactions).toEqual([
+      { emoji: '🚀', count: 2, mine: true, who: ['bob', 'You'] },
+      { emoji: '👀', count: 1, mine: false, who: ['bob'] },
+    ]);
+    expect(chat.messages[1]?.reactions).toBeUndefined();
+    // The one you use comes first in your row, then the defaults.
+    expect(chat.quick).toEqual(['🚀', '👍', '❤️', '😂', '🎉', '👀']);
+    expect(ChatView.parse(viewOf(state, ctx, `chat:${conv}`)).quick).toEqual(['👍', '❤️', '😂', '🎉', '👀', '✅']);
   });
 
   it('people are friends only: someone only in your room isn’t listed, and their friend request needs you (BLG-202)', () => {

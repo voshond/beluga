@@ -38,6 +38,8 @@ import { EditPrompt } from './EditPrompt.js';
 import { findWorkspace } from '@beluga/ui/workspace-models.js';
 import { PersonButton } from '../network/PersonProfile.js';
 import { KnockCard } from '../team/Team.js';
+import { useChatReactions } from './ChatReactions.js';
+import r from '../network/reactions.module.css';
 import s from './chat.module.css';
 import { shortcutKeys } from '../lib/shortcuts.js';
 import { revealTerminal } from '../lib/panel.js';
@@ -165,11 +167,14 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
   const kind = useApp((st) => (wsId ? findWorkspace(st.projects, wsId)?.kind : undefined));
   const editable = Boolean(wsId) && (kind === 'worktree' || kind === 'chat') && !steer;
   const [editing, setEditing] = useState(false);
+  // Emoji reactions (BLG-702): the button a hover shows, and the chips under the message.
+  const reactions = useChatReactions(item, own);
   // Your own words: a tinted bubble on the right, no name or picture (it's plainly you).
   if (own)
     return (
       <ActionsContext items={() => messageItems({ ...menu, text, images, openImage: (img) => openLightbox(images, images.indexOf(img)), ...(editable ? { lead: [{ label: 'Edit Message', icon: 'pencil', onSelect: () => setEditing(true) }] } : {}) })}>
-        <div ref={row} className={cx(s.message, s.own, continued && s.continued, steer && s.unread)} data-mine="true" data-steer={steer ? 'waiting' : undefined}>
+        <div ref={row} className={cx(s.message, s.own, r.reactable, continued && s.continued, steer && s.unread)} data-mine="true" data-steer={steer ? 'waiting' : undefined} data-chat={item.id}>
+          {editing ? null : reactions.button}
           <div className={s.body}>
             {editing && wsId ? (
               <EditPrompt wsId={wsId} lineId={item.id} text={item.text} worktree={kind === 'worktree'} onClose={() => setEditing(false)} />
@@ -190,6 +195,7 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
               </div>
             ) : null}
             <ImageGrid images={images} />
+            {reactions.chips}
             {steer ? <SteerWaiting steer={steer} /> : null}
             {item.request && item.channel ? <Delivery request={item.request} channel={item.channel} /> : null}
           </div>
@@ -201,7 +207,8 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
   if (!item.byAgent)
     return (
       <ActionsContext items={() => messageItems({ ...menu, text, images, openImage: (img) => openLightbox(images, images.indexOf(img)) })}>
-        <div ref={row} className={cx(s.message, s.theirs, continued && s.continued, steer && s.unread)} data-steer={steer ? 'waiting' : undefined} style={{ ['--person' as string]: personColor(item.from) }}>
+        <div ref={row} className={cx(s.message, s.theirs, r.reactable, continued && s.continued, steer && s.unread)} data-steer={steer ? 'waiting' : undefined} data-chat={item.id} style={{ ['--person' as string]: personColor(item.from) }}>
+          {reactions.button}
           <div className={cx(s.gutter, s.gutterEnd)}>{ends ? (
               <PersonButton peerId={item.from} name={item.name}>
                 <Avatar name={item.name} id={item.from} size={26} />
@@ -224,6 +231,7 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
               </div>
             ) : null}
             <ImageGrid images={images} />
+            {reactions.chips}
             {steer ? <SteerWaiting steer={steer} /> : null}
           </div>
         </div>
@@ -231,7 +239,8 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
     );
   return (
     <ActionsContext items={() => messageItems({ ...menu, text, images, openImage: (img) => openLightbox(images, images.indexOf(img)) })}>
-      <div ref={row} className={cx(s.message, continued && s.continued, steer && s.unread)} data-steer={steer ? 'waiting' : undefined}>
+      <div ref={row} className={cx(s.message, r.reactable, continued && s.continued, steer && s.unread)} data-steer={steer ? 'waiting' : undefined} data-chat={item.id}>
+        {reactions.button}
         <div className={s.gutter}>{continued ? null : <Avatar name={item.name} id={item.from} claude={item.byAgent} agent={item.agent} size={26} />}</div>
         <div className={s.body}>
           {continued ? null : (
@@ -253,6 +262,7 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
             )
           ) : null}
           <ImageGrid images={images} />
+          {reactions.chips}
           {steer ? <SteerWaiting steer={steer} /> : null}
         </div>
       </div>

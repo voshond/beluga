@@ -27,6 +27,8 @@ import { PARALLEL_RUNS_DEFAULT, type SlotWait } from '../shared/run-slots.js';
 import { CHAT_LIMIT_DEFAULT } from '../shared/chat-limit.js';
 import { READS_AFTER_STEP, STOPPING_FOR } from '../shared/claude-notices.js';
 import type { CompanionSlice } from '../companion/protocol.js';
+import type { ReactionEvent } from '../shared/reactions.js';
+import { type ChatReactAction, reactOnLog } from './chat-reactions.js';
 
 export type { CompactMark, ContextInfo } from './context-log.js';
 
@@ -77,6 +79,8 @@ export type LogItem =
       readonly steer?: true;
       /** A turn of a chaired dialogue (core/dialogues): which one, and its number (0: a person's interjection). */
       readonly dialogue?: DialogueMark;
+      /** Emoji reactions on it (BLG-702): each person's latest change per emoji (core/chat-reactions.ts draws the chips). */
+      readonly reacts?: readonly ReactionEvent[];
     }
   | { readonly id: string; readonly type: 'system'; readonly channel: string; readonly text: string; readonly ts: number; readonly level: 'info' | 'warn' | 'error'; readonly said?: SaidBy; readonly compact?: CompactMark; readonly shipped?: ShippedMark; readonly dialogue?: DialogueMark }
   | {
@@ -581,6 +585,7 @@ export type Action =
   | { type: 'welcome'; self: PeerInfo }
   | { type: 'peers'; peers: readonly PeerInfo[] }
   | { type: 'chat'; id: string; from: string; text: string; ts: number; byAgent: boolean; channel?: string; request?: string; steer?: true; agent?: AgentRef; dialogue?: DialogueMark }
+  | ChatReactAction
   /** `id`/`ts` are stamped before reducing (see stampAction). */
   | { type: 'system'; text: string; level?: 'info' | 'warn' | 'error'; channel?: string; id?: string; ts?: number; said?: SaidBy; shipped?: ShippedMark; dialogue?: DialogueMark }
   | { type: 'shell'; item: ShellItem }
@@ -767,11 +772,11 @@ export function stampAction<A extends Action>(action: A): A {
 }
 
 /** Someone's name: in the room, yourself, a friend, or someone in a project a friend shared with you. */
-export const peerName = (state: Pick<DomainState, 'peers' | 'self'> & { readonly network?: Pick<DomainState['network'], 'friends'>; readonly sharedProjects?: DomainState['sharedProjects'] }, peerId: string): string =>
+export const peerName = (state: Pick<DomainState, 'peers' | 'self'> & { readonly network?: Pick<DomainState['network'], 'friends'>; readonly sharedProjects?: DomainState['sharedProjects']; readonly remembered?: DomainState['remembered'] }, peerId: string): string =>
   state.peers.find((p) => p.peerId === peerId)?.name ??
   (state.self?.peerId === peerId
     ? state.self.name
-    : (state.network?.friends.find((f) => f.peerId === peerId)?.name ?? state.sharedProjects?.flatMap((p) => p.members).find((m) => m.peerId === peerId)?.name ?? peerId.slice(0, 6)));
+    : (state.network?.friends.find((f) => f.peerId === peerId)?.name ?? state.sharedProjects?.flatMap((p) => p.members).find((m) => m.peerId === peerId)?.name ?? state.remembered?.[peerId]?.name ?? peerId.slice(0, 6)));
 
 /** One file, wherever it is: the key `written` is kept by. */
 export const fileKey = (at: Location): string => `${at.owner}\0${at.share}\0${at.path}`;
@@ -1008,6 +1013,10 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
           ...(action.dialogue ? { dialogue: action.dialogue } : {}),
         }),
       }, action.channel ?? 'room', true);
+    case 'chat_react': {
+      const log = reactOnLog(state.log, action);
+      return log === state.log ? state : { ...state, log };
+    }
     case 'system':
       return {
         ...state,
@@ -1197,6 +1206,7 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
     case 'net_message':
     case 'net_messages':
     case 'net_unsent':
+    case 'net_reacted':
     case 'net_cleared':
     case 'net_files':
     case 'net_live':

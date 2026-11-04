@@ -3,6 +3,7 @@ import { type MeshKeys, openSealed, sealTo } from '../keys.js';
 import { checkMessage, extrasFields, parseExtras } from '../extras.js';
 import { type Body, type Entry, type EntryType, MAX_PARENTS, type Profile } from '../schemas.js';
 import type { ChatExtras } from '../views.js';
+import { type GroupReact, parseGroupReact } from './reactions.js';
 import { bodyOf, signEntry } from './entry.js';
 import { GroupLog } from './log.js';
 import { type GroupModel, MAX_MEMBERS, buildModel, chainKey } from './model.js';
@@ -16,11 +17,14 @@ export interface ReadMessage {
   readonly entry: Entry;
   readonly text?: string;
   readonly extras?: ChatExtras;
+  /** Not a message: its author's reaction to one (BLG-702; `text` is what older Macs show). */
+  readonly react?: GroupReact;
 }
 
 interface Plain {
   readonly text: string;
   readonly extras?: ChatExtras;
+  readonly react?: GroupReact;
 }
 
 /**
@@ -137,6 +141,19 @@ export class GroupEngine {
   send(text: string, extras?: ChatExtras): Entry[] {
     this.mustMember();
     checkMessage(text, extras, MAX_TEXT);
+    return this.seal({ text, ...extrasFields(extras) });
+  }
+
+  /**
+   * Put an emoji on message `react.to` or take it off (BLG-702): an encrypted message like any
+   * other, read as a reaction by Macs that know them; `text` is what older ones show instead.
+   */
+  react(react: GroupReact, text: string): Entry[] {
+    this.mustMember();
+    return this.seal({ text: text.slice(0, MAX_TEXT), react });
+  }
+
+  private seal(payload: { readonly text: string } & Record<string, unknown>): Entry[] {
     const out: Entry[] = [];
     let chain = this.myChain();
     if (!chain) {
@@ -148,7 +165,7 @@ export class GroupEngine {
     if (!key) throw new Error('Your sending key for this group is unreadable');
     const n = this.nextN.get(chain) ?? 0;
     this.nextN.set(chain, n + 1);
-    const box = encrypt(this.ratchets.messageKey(chainKey(this.me, chain), key, n), JSON.stringify({ text, ...extrasFields(extras) }), messageAad(this.id, this.me, chain, n));
+    const box = encrypt(this.ratchets.messageKey(chainKey(this.me, chain), key, n), JSON.stringify(payload), messageAad(this.id, this.me, chain, n));
     out.push(this.write('message', { chain, n, ...box }));
     return out;
   }
@@ -161,7 +178,7 @@ export class GroupEngine {
   /** One message as you read it (its text and extras, when you hold the key). */
   readMessage(entry: Entry): ReadMessage {
     const plain = this.open(entry);
-    return plain === undefined ? { entry } : { entry, text: plain.text, ...(plain.extras ? { extras: plain.extras } : {}) };
+    return plain === undefined ? { entry } : { entry, text: plain.text, ...(plain.extras ? { extras: plain.extras } : {}), ...(plain.react ? { react: plain.react } : {}) };
   }
 
   read(entry: Entry): string | undefined {
@@ -181,7 +198,8 @@ export class GroupEngine {
         const parsed = plain === undefined ? undefined : (JSON.parse(plain) as { text?: unknown });
         if (typeof parsed?.text === 'string') {
           const extras = parseExtras(parsed);
-          out = { text: parsed.text.slice(0, MAX_TEXT), ...(extras ? { extras } : {}) };
+          const react = parseGroupReact(parsed);
+          out = { text: parsed.text.slice(0, MAX_TEXT), ...(extras ? { extras } : {}), ...(react ? { react } : {}) };
         }
       } catch {
         out = undefined;

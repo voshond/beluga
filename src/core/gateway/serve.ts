@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { AgentBackend, AgentPlace, TaskTools } from '../../agent/types.js';
+import type { AgentBackend, AgentPlace, BoardTools, TaskTools } from '../../agent/types.js';
 import { mentionsSecret, writesCode } from '../../agent/policy.js';
 import type { ClaudeAnswer, ClaudeQuestion } from '../../protocol.js';
 import { isNeverSent, isSecretPath, secretKindOf } from '../shares.js';
@@ -88,6 +88,8 @@ export interface ServeContext {
   readonly access: AccessPort;
   readonly serveShell?: ServeShell;
   readonly projectRoot: (name: string) => string | undefined;
+  /** A project's task board for a friend's request there (BLG-701): its tools, and what Claude is told. */
+  readonly board?: (project: string, friend: { readonly id: string; readonly name: string }) => { readonly tools?: BoardTools; readonly brief?: string } | undefined;
   readonly model: () => { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
   /** The agent that answers friends' asks here: your default, with your default model (you choose it, never the asker). */
   readonly agentRef?: () => AgentRef;
@@ -522,8 +524,12 @@ export class TaskServer {
     const settings = ctx.model();
     const model = picked ? (picked.agent.model ?? (picked.agent.runtime === 'claude' ? settings.model : undefined)) : settings.model;
     const runModel = { ...(model ? { model } : {}), ...(settings.effort ? { effort: settings.effort } : {}) };
-    const full = ctx.trustFor(task.peerId) === 'full';
+    const trust = ctx.trustFor(task.peerId);
+    const full = trust === 'full';
     const tools = this.toolsFor(task, req);
+    // Working in one of your projects, a friend you trust gets its board too (BLG-701): Full trust
+    // freely, Trusted with each change asking you (a talk dialogue only looks: none).
+    const board = req.project && found.where !== 'in a scratch folder' && (full || trust === 'trusted') && !(task.dialogue && task.dialogue.mode !== 'work') ? ctx.board?.(req.project, { id: task.peerId, name: task.peerName }) : undefined;
     const toolNames = [...(tools.screenshot ? ['screenshot'] : []), ...(tools.deviceInfo ? ['device_info'] : [])];
     const controller = new AbortController();
     this.controllers.set(task.id, controller);
@@ -575,6 +581,7 @@ export class TaskServer {
         canUseTool: (tool, input) => this.authorizeTool(task, tool, input, full, place.cwd),
         askUser: (question) => this.askRequester(task, question, controller.signal),
         ...(toolNames.length ? { taskTools: tools } : {}),
+        ...(board?.tools ? { board: board.tools, ...(board.brief ? { taskBrief: board.brief } : {}), ...(full ? {} : { boardAsks: 'writes' as const }) } : {}),
         ...runModel,
         maxTurns: MAX_TURNS,
       });

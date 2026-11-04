@@ -8,5 +8,12 @@ import type { LogItem } from '@beluga/core/store.js';
 export function asChatRow(item: LogItem): LogItem {
   if (item.type !== 'system' || !item.said) return item;
   const { from, name, text, byAgent, ts } = item.said;
-  return { id: item.id, type: 'chat', channel: item.channel, from, name, text, ts: ts || item.ts, byAgent };
+  const row: LogItem = { id: item.id, type: 'chat', channel: item.channel, from, name, text, ts: ts || item.ts, byAgent };
+  earlier.add(row);
+  return row;
 }
+
+const earlier = new WeakSet<LogItem>();
+
+/** A row asChatRow drew from an earlier line: not a message of its own here (nothing to react to, BLG-702). */
+export const isEarlierLine = (item: LogItem): boolean => earlier.has(item);

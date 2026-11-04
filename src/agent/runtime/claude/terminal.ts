@@ -102,7 +102,7 @@ export async function claudeTerminal(input: AgentRunInput, sink: TerminalSink, o
   const askOnly = place.askOnly;
   const autoEdit = !askOnly && place.autoEdit;
   const extraDirs = place.additionalDirectories;
-  const policy: PolicyContext = { cwd, roots: [cwd, ...extraDirs], autoEdit, scope: input.scope, guest: input.guest, dotenv: Boolean(input.canUseSecret) && !input.guest, askOnly: Boolean(askOnly), ...(place.alsoEdit?.length ? { alsoEdit: place.alsoEdit } : {}) };
+  const policy: PolicyContext = { cwd, roots: [cwd, ...extraDirs], autoEdit, scope: input.scope, guest: input.guest, boardAsks: input.boardAsks, dotenv: Boolean(input.canUseSecret) && !input.guest, askOnly: Boolean(askOnly), ...(place.alsoEdit?.length ? { alsoEdit: place.alsoEdit } : {}) };
   const bridge = input.channel && opts.bridge.inChannel ? opts.bridge.inChannel(input.channel) : opts.bridge;
   const mounted = await (opts.toolHost ?? toolHost()).mount(
     runToolSuites(input, bridge, new TerminalShelf(sink), cwd),

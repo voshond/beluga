@@ -32,6 +32,8 @@ export const PutResult =z.union([z.object({ received: z.number().int().min(0) })
 
 export const PhoneCalls = {
   'session.submit': entry('session.submit', done),
+  // 1.41 (BLG-702): an emoji reaction in a worktree's or the room's chat.
+  'session.react': entry('session.react', done),
   'host.answerApproval': entry('host.answerApproval', done),
   'host.promote': entry('host.promote', done),
   'host.sendNext': entry('host.sendNext', done),
@@ -91,6 +93,8 @@ export const PhoneCalls = {
   'network.messages.delete': entry('network.messages.delete', done),
   'network.messages.edit': entry('network.messages.edit', done),
   'network.clear': entry('network.clear', done),
+  // 1.41 (BLG-702): an emoji reaction put on a message or taken off (the quick row).
+  'network.messages.react': entry('network.messages.react', done),
   // 1.34 (BLG-466): a dialogue between agents, stopped or continued from the phone.
   'dialogues.stop': entry('dialogues.stop', done),
   'dialogues.continue': entry('dialogues.continue', done),

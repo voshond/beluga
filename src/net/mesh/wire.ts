@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AgentRef } from '../../protocol.js';
+import { EmojiSchema } from '../../shared/reactions.js';
 import { AVATAR_MAX } from './avatars.js';
 import { NameSchema, PeerIdSchema, PresenceSchema, ProfileSchema } from './schemas.js';
 
@@ -48,6 +49,9 @@ export const LinkMessage = z.discriminatedUnion('t', [
   /** The author deleted (no `text`) or edited one of their direct messages; `at` orders edits (BLG-425). */
   z.object({ t: z.literal('dm_change'), id: msgId, text: z.string().max(8_000).optional(), at: z.number().int().min(0) }),
   z.object({ t: z.literal('dm_change_ack'), id: msgId, at: z.number().int().min(0) }),
+  /** BLG-702: you put an emoji on a direct message (`on`) or took it off; `at` orders your changes to it. Older Macs ignore it. */
+  z.object({ t: z.literal('dm_react'), id: msgId, e: EmojiSchema, on: z.boolean(), at: z.number().int().min(0) }),
+  z.object({ t: z.literal('dm_react_ack'), id: msgId, e: EmojiSchema, at: z.number().int().min(0) }),
   /** The newest entries I have of a group we're both in. */
   z.object({ t: z.literal('g_heads'), group: groupId, heads: z.array(hex64).max(64) }),
   /** Send me what I'm missing (these are my newest entries). */

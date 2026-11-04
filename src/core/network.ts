@@ -131,6 +131,7 @@ export async function startNetwork(opts: NetworkOptions): Promise<NetworkService
   });
   mesh.on('unsent', (conversation, id) => store.dispatch({ type: 'net_unsent', conversation, id }));
   mesh.on('cleared', (conversation) => store.dispatch({ type: 'net_cleared', conversation }));
+  mesh.on('reacted', (conversation, id, reactions) => store.dispatch({ type: 'net_reacted', conversation, id, reactions }));
   const offAction = store.onAction((action) => {
     if (action.type === 'attention') readShown();
   });

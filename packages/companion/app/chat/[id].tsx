@@ -14,6 +14,7 @@ import { Thumb } from '../../components/Outputs';
 import { TaskWords } from '../../components/render/TaskChip';
 import { Header, Screen, useScrolled } from '../../components/Screen';
 import { Options } from '../../components/Options';
+import { QuickReactions, ReactionChips } from '../../components/Reactions';
 import { Sheet } from '../../components/Sheet';
 import { Avatar, Button, More, Press, T, haptic, hueOf, toneBg, toneInk } from '../../components/ui';
 import { ago, useSupports, useView } from '../../lib/hooks';
@@ -52,6 +53,9 @@ export default function Chat() {
   const meName = c?.members?.find((m) => m.me)?.name;
   // 1.30 (BLG-429): in a direct chat, long-press a message to delete it (or edit your own); Clear chat in the •••.
   const changes = useSupports('chatEdits') && c?.kind === 'dm';
+  // 1.41 (BLG-702): long-press a message for the quick reactions; a chip under it adds or takes back yours.
+  const reacts = useSupports('reactions');
+  const react = (m: ChatMessageView, emoji: string, on: boolean): void => act(calls.react(topic, m.id, emoji, on));
   const [acting, setActing] = useState<ChatMessageView | undefined>();
   const [editing, setEditing] = useState<ChatMessageView | undefined>();
   const [menu, setMenu] = useState(false);
@@ -96,8 +100,16 @@ export default function Chat() {
                   onLayout={m.task ? (e) => (cards.current[m.task!.id] = e.nativeEvent.layout.y) : undefined}
                   style={unread.has(m.id) ? unreadBand(m.id === firstUnread, m.id === lastUnread) : undefined}
                 >
-                  <Press onLongPress={changes ? () => (haptic.commit(), setActing(m)) : undefined} disabled={!changes} haptics={false}>
-                    <Bubble m={m} first={run.first} last={run.last} group={c.kind === 'group'} pics={pics} me={meName} />
+                  <Press onLongPress={changes || reacts ? () => (haptic.commit(), setActing(m)) : undefined} disabled={!changes && !reacts} haptics={false}>
+                    <Bubble
+                      m={m}
+                      first={run.first}
+                      last={run.last}
+                      group={c.kind === 'group'}
+                      pics={pics}
+                      me={meName}
+                      chips={m.reactions?.length ? <ReactionChips reactions={m.reactions} mine={m.mine && !m.claude && !m.task} onToggle={(e, on) => react(m, e, on)} onWho={(text) => store.toast({ text, tone: 'info' })} /> : null}
+                    />
                   </Press>
                 </Animated.View>
               </Fragment>
@@ -150,10 +162,23 @@ export default function Chat() {
       <Options
         visible={Boolean(acting)}
         onClose={() => setActing(undefined)}
+        head={
+          reacts && acting && !acting.task ? (
+            <QuickReactions
+              quick={c?.quick}
+              reactions={acting.reactions}
+              onPick={(e, on) => {
+                const m = acting;
+                setActing(undefined);
+                react(m, e, on);
+              }}
+            />
+          ) : undefined
+        }
         options={[
-          { Icon: Pencil, label: 'Edit', sub: `${c?.name ?? 'They'} sees it marked edited`, tone: 'sky', hidden: !acting?.editable, onPress: () => setEditing(acting) },
-          { Icon: Trash2, label: 'Delete for everyone', sub: `From your Mac and ${c?.name ?? 'theirs'}’s`, tone: 'rose', hidden: !acting?.mine, onPress: () => acting && act(calls.deleteMessage(topic, acting.id, true)) },
-          { Icon: Trash2, label: 'Delete for you', sub: acting?.mine ? 'From your Mac only' : `${c?.name ?? 'They'} still has it`, tone: 'rose', onPress: () => acting && act(calls.deleteMessage(topic, acting.id, false)) },
+          { Icon: Pencil, label: 'Edit', sub: `${c?.name ?? 'They'} sees it marked edited`, tone: 'sky', hidden: !changes || !acting?.editable, onPress: () => setEditing(acting) },
+          { Icon: Trash2, label: 'Delete for everyone', sub: `From your Mac and ${c?.name ?? 'theirs'}’s`, tone: 'rose', hidden: !changes || !acting?.mine, onPress: () => acting && act(calls.deleteMessage(topic, acting.id, true)) },
+          { Icon: Trash2, label: 'Delete for you', sub: acting?.mine ? 'From your Mac only' : `${c?.name ?? 'They'} still has it`, tone: 'rose', hidden: !changes, onPress: () => acting && act(calls.deleteMessage(topic, acting.id, false)) },
         ]}
       />
       <EditMessage m={editing} topic={topic} onClose={() => setEditing(undefined)} />
@@ -351,7 +376,7 @@ function UnreadLine({ count }: { count: number }) {
 /** The soft band under unread messages, edge to edge and unbroken by the list's gaps. */
 const unreadBand = (first: boolean, last: boolean) => ({ backgroundColor: `${color.info}12`, marginHorizontal: -14, paddingHorizontal: 14, ...(first ? { paddingTop: 4 } : {}), ...(last ? { paddingBottom: 8 } : { paddingBottom: 4, marginBottom: -4 }) });
 
-function Bubble({ m, first, last, group, pics, me }: { m: ChatMessageView; first: boolean; last: boolean; group: boolean; pics: OutputView[]; me?: string | undefined }) {
+function Bubble({ m, first, last, group, pics, me, chips }: { m: ChatMessageView; first: boolean; last: boolean; group: boolean; pics: OutputView[]; me?: string | undefined; chips?: React.ReactNode }) {
   const mine = m.mine;
   const files = m.files ?? [];
   if (m.task) {
@@ -375,6 +400,7 @@ function Bubble({ m, first, last, group, pics, me }: { m: ChatMessageView; first
           </T>
         ) : null}
         {m.offer ? <Offer offer={m.offer} name={owner} /> : null}
+        {chips}
       </ClaudeRow>
     );
   }
@@ -410,6 +436,7 @@ function Bubble({ m, first, last, group, pics, me }: { m: ChatMessageView; first
             </T>
           </View>
         ) : null}
+        {chips}
         {last || m.edited ? (
           <T v="caption" style={{ marginHorizontal: 4, fontSize: 11 }}>
             {[m.edited ? 'Edited' : '', last ? ago(m.ts) : ''].filter(Boolean).join(' · ')}

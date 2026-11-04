@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EmojiSchema } from '../shared/reactions.js';
 
 /**
  * The Beluga network's part of the API (see api.ts): friends, direct messages, groups and your
@@ -84,6 +85,9 @@ export const NETWORK_API = {
   'network.messages.delete': { args: z.tuple([conversation, z.string().regex(/^[\w-]{8,64}$/), z.object({ everyone: z.boolean().optional() }).optional()]) },
   // Change the text of a message you sent in a direct conversation (your friend sees it edited): → the message.
   'network.messages.edit': { args: z.tuple([conversation, z.string().regex(/^[\w-]{8,64}$/), text]) },
+  // Put an emoji on a message, or take yours off (BLG-702): `true` puts it there, `false` takes it off, none flips
+  // it. Your friend's Mac (or everyone in the group) sees it at once: → the message's reactions now.
+  'network.messages.react': { args: z.tuple([conversation, z.string().regex(/^[\w-]{8,64}$/), EmojiSchema, z.boolean().optional()]) },
   // Empty a direct conversation on this Mac (your friend keeps their copy).
   'network.clear': { args: z.tuple([conversation]) },
   // Mark a conversation read: `dm:<peerId>` or `group:<id>`.

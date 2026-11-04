@@ -37,7 +37,8 @@ const ALWAYS_OK = new Set([
   'mcp__beluga__end_dialogue',
   // The gateway's look-and-wait tools (core/gateway); ask_person and run_on ask, and the gateway checks trust itself.
   ...['who_can', 'wait_for', 'check', 'cancel', 'answer_question'].map((n) => `mcp__beluga__${n}`),
-  // The task board: only your own runs have it, and it only changes your tasks (each change is in their activity).
+  // The task board: your own runs, and a friend's you trust (BLG-701: only its repo's board, and a
+  // Trusted friend's changes ask you, see boardAsks); each change is in the task's activity.
   ...['task_define', 'task_get', 'task_list', 'task_create', 'board_create', 'task_update', 'task_brief_edit', 'task_note', 'task_relate', 'task_attach_proof'].map((n) => `mcp__beluga_board__${n}`),
   // Sentinels (core/sentinel): only your own runs have them; a new one starts paused until you turn it on,
   // and a change to what one can do pauses it. sentinel_remove and sentinel_delete_runs aren't here: deleting asks you.
@@ -60,6 +61,10 @@ const ALWAYS_OK = new Set([
   // to 'ask', then the owner-approval gate honours the phone's own setting (Off · Ask · Use · Full).
   ...['phone_status', 'phone_screenshot', 'phone_screen', 'phone_apps', 'phone_info', 'phone_pull', 'phone_notifications', 'phone_macro_list'].map((n) => `mcp__beluga_phone__${n}`),
 ]);
+
+/** The board tools that only look. */
+const BOARD_LOOKS = new Set(['mcp__beluga_board__task_get', 'mcp__beluga_board__task_list']);
+const asksForBoard = (toolName: string, asks: 'writes' | 'all'): boolean => toolName.startsWith('mcp__beluga_board__') && (asks === 'all' || !BOARD_LOOKS.has(toolName));
 
 /**
  * Tools that delete something of yours for good (a sentinel, a dashboard, docs/sentinel.md §12):
@@ -115,6 +120,8 @@ export interface PolicyContext {
   readonly guest?: boolean;
   /** Your own Claude, on your own computer: a .env file asks you (Decision 'secret') instead of being refused. */
   readonly dotenv?: boolean;
+  /** A friend's run with the board (BLG-701): its changes ('writes') or every board tool ('all') ask you first. */
+  readonly boardAsks?: 'writes' | 'all';
 }
 
 /**
@@ -197,6 +204,7 @@ function decideToolPlain(toolName: string, input: Record<string, unknown>, ctx: 
   const dotenv = ctx.dotenv === true && touchesDotenv(toolName, input, ctx);
   if (ctx.askOnly && changesMain(toolName, input, ctx)) return 'deny';
   if (ctx.guest && toolName.startsWith('mcp__beluga__')) return 'deny';
+  if (ctx.boardAsks && asksForBoard(toolName, ctx.boardAsks)) return 'ask';
   if (ALWAYS_OK.has(toolName)) return 'allow';
   // Sending a file reads it: same rules as Read (secrets never leave; outside shared folders asks).
   if (toolName === 'mcp__beluga__send_file') {

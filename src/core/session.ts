@@ -16,7 +16,7 @@ import { localRuntime } from '../agent/runtime/local.js';
 import { LOCAL_RUNTIME } from '../shared/local-endpoints.js';
 import type { LocalEndpoints } from './local-endpoints.js';
 import type { IncomingMessage, PeerClient } from '../net/peer-client.js';
-import { type AgentRef, Body, type BodyInput, type BodyOf, CLAUDE_AGENT, defaultAgentOf, type FsEntry, MAX_TEXT, type PeerInfo, type Profile } from '../protocol.js';
+import { type AgentRef, Body, type BodyInput, type BodyOf, CLAUDE_AGENT, chatMessageId, defaultAgentOf, type FsEntry, MAX_TEXT, type PeerInfo, type Profile } from '../protocol.js';
 import { type UsageUpdate, withUsage } from '../agent/usage.js';
 import { dialoguesOf } from './dialogues/registry.js';
 import { agentName } from '../shared/agent-label.js';
@@ -60,6 +60,7 @@ import { PowerSaver, paced } from './power-saver.js';
 import type { EnvVars } from './env-vars.js';
 import { gatewayOf } from './gateway/registry.js';
 import { receiveFriendOffer } from './friend-offers.js';
+import { onChatReact, reactInChat, type RoomReactDeps } from './room-reactions.js';
 
 /** Bigger, smaller, or back to normal text. */
 export type ZoomDir = 'in' | 'out' | 'reset';
@@ -581,20 +582,31 @@ export class Session {
    */
   sendChat(text: string, byAgent: boolean, channel = 'room', request?: string, steer = false): void {
     const agent = byAgent ? { agent: this.agentRef } : {};
+    // Its own id, the same in every copy, so reactions can name it (BLG-702).
+    const mid = randomUUID();
     if (channel !== 'room') {
       // Workspace conversations stay on this computer, plus the people you invited into them.
-      const id = randomUUID();
+      const id = chatMessageId(this.selfId, mid, '');
       this.store.dispatch({ type: 'chat', id, from: this.selfId, text: text.slice(0, MAX_TEXT), ts: Date.now(), byAgent, channel, ...agent, ...(request ? { request } : {}), ...(steer ? { steer: true as const } : {}) });
-      for (const to of this.sharing.recipients(channel)) this.send({ kind: 'chat', text: text.slice(0, MAX_TEXT), byAgent, channel, ...agent }, { to });
+      for (const to of this.sharing.recipients(channel)) this.send({ kind: 'chat', text: text.slice(0, MAX_TEXT), byAgent, channel, mid, ...agent }, { to });
       return;
     }
     if (this.store.getState().self?.guest && !this.store.getState().peers.find((p) => p.peerId === this.selfId && !p.guest)) {
       this.toast("You came in with a link to a project, so there's no group chat here. Open it in Projects", 'warn');
       return;
     }
-    if (!this.send({ kind: 'chat', text: text.slice(0, MAX_TEXT), byAgent, ...agent }, { keep: true })) {
+    if (!this.send({ kind: 'chat', text: text.slice(0, MAX_TEXT), byAgent, mid, ...agent }, { keep: true })) {
       this.toast('Not connected, so the message was not sent', 'error');
     }
+  }
+
+  /** Put an emoji on a message of the group chat or a workspace chat, or take yours off (BLG-702). → its chips now. */
+  reactChat(channel: string, id: string, emoji: string, on?: boolean): ReturnType<typeof reactInChat> {
+    return reactInChat(this.reactDeps, channel, id, emoji, on);
+  }
+
+  private get reactDeps(): RoomReactDeps {
+    return { store: this.store, selfId: () => this.selfId, send: (body, opts) => this.send(body, opts), sharing: this.sharing, ensureLoaded: (wsId) => void this.workspaces?.ensureLoaded(wsId) };
   }
 
   /** Ask an agent (ours or a peer's) to do something. Returns the request id. */
@@ -1243,12 +1255,18 @@ export class Session {
         return this.sharing.onRoster(from, body);
       case 'ws_leave':
         return this.sharing.onLeave(from, body);
-      case 'chat':
+      case 'chat': {
         // Workspace chats only reach people in that workspace, and only contributors may post.
         if (body.channel !== 'room' && !this.sharing.canPost(from, body.channel)) return;
         if (body.channel?.startsWith('ws:')) this.workspaces?.ensureLoaded(body.channel.slice(3));
-        this.store.dispatch({ type: 'chat', id, from, text: body.text, ts, byAgent: body.byAgent, channel: body.channel, ...(body.agent ? { agent: body.agent } : {}) });
+        const chatId = chatMessageId(from, body.mid, id);
+        // The same message again (sent once more after a lost acknowledgement): it's here already.
+        if (body.mid && this.store.getState().log.some((l) => l.id === chatId && l.channel === body.channel)) return;
+        this.store.dispatch({ type: 'chat', id: chatId, from, text: body.text, ts, byAgent: body.byAgent, channel: body.channel, ...(body.agent ? { agent: body.agent } : {}) });
         return;
+      }
+      case 'chat_react':
+        return onChatReact(this.reactDeps, from, body);
       case 'focus':
         return this.onFocus(from, ts, body);
       case 'agent_request':

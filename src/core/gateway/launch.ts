@@ -12,6 +12,7 @@ import type { Store } from '../store.js';
 import { pretendSystem } from './demo-system.js';
 import { Gateway, type MeshNode } from './gateway.js';
 import { attachGateway, detachGateway } from './registry.js';
+import { boardOf } from '../board/registry.js';
 import type { ApproveOpts, Pending } from './serve.js';
 
 /**
@@ -115,6 +116,7 @@ export function launchGateway(host: GatewayHost): () => void {
       session.runFor(session.selfId, channel, prompt);
     },
     projectRoot: (name) => projects().find((p) => p.name === name)?.root,
+    board: (project, friend) => boardOf(session)?.forFriendIn(project, friend),
     projects: () => (store.getState().prefs.friendWorktrees === 'ask' ? projects().map((p) => p.name) : []),
     loadNote: () => note,
     saveNote: (text) => {

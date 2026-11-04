@@ -93,6 +93,7 @@ export const NETWORK_HANDLERS = {
   'network.read': (s, conversation) => net(s).markRead(conversation),
   'network.messages.delete': (s, conversation, id, opts) => net(s).deleteMessage(conversation, id, opts?.everyone ?? false),
   'network.messages.edit': (s, conversation, id, text) => net(s).editMessage(conversation, id, text),
+  'network.messages.react': (s, conversation, id, emoji, on) => net(s).react(conversation, id, emoji, on),
   'network.clear': (s, conversation) => net(s).clearConversation(conversation),
   'network.post': (s, conversation, body) => post(s, conversation, body),
   'network.files.add': (s, paths) => chatOf(s).files.share(paths),

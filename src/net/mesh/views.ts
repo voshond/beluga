@@ -5,6 +5,7 @@
  */
 
 import type { AgentRef } from '../../protocol.js';
+import type { Reaction } from '../../shared/reactions.js';
 
 export type PresenceState = 'online' | 'away' | 'dnd' | 'offline';
 
@@ -103,6 +104,8 @@ export interface MessageView extends ChatExtras {
   readonly status?: 'waiting' | 'delivered' | 'expired' | 'locked';
   /** When its author last changed its text (direct messages). */
   readonly edited?: number;
+  /** Emoji reactions under it (BLG-702), in the order they were first put there; none: left out. */
+  readonly reactions?: readonly Reaction[];
 }
 
 export interface FriendView extends PersonView {

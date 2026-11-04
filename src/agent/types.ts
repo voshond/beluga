@@ -29,6 +29,8 @@ export interface AgentRunInput {
   readonly onAnswered?: (text: string) => void;
   /** Asked by a guest invited into one project: the room tools (other people, their files, the room chat) are off. */
   readonly guest?: boolean;
+  /** A friend's run with the board (BLG-701): which board tools ask you first ('writes': changes; 'all': every one). */
+  readonly boardAsks?: 'writes' | 'all';
   readonly signal: AbortSignal;
   readonly onEvent: (kind: 'text' | 'tool' | 'progress' | 'sub' | 'context' | 'compact' | 'usage', text: string) => void;
   /**

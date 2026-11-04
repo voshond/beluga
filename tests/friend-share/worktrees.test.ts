@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { remoteScratch } from '../../src/core/friend-share/scratch.js';
+import { chatReactions } from '../../src/core/chat-reactions.js';
 import { conversations, convView, workView } from '../../src/companion/views.js';
 import { peopleHere, waitingNote } from '../../src/core/friend-share-people.js';
 import { createDemoWorkspaces } from '../../src/demo.js';
@@ -72,6 +73,25 @@ describe('a worktree shared over the network', () => {
     const conv = conversations(kay.store.getState()).find((c) => c.channel === channel);
     expect(conv).toMatchObject({ project: 'ata · bob-api', mine: true });
     expect(workView(kay.store.getState(), ctx).projects.some((p) => p.name === 'ata · bob-api')).toBe(true);
+  }, 60_000 * SLOW);
+
+  it('reactions reach everyone in it, through its owner’s Mac for people who aren’t friends (BLG-702)', async () => {
+    const { ata, kay, mia, channel } = await sharedWorktree();
+    ata.session.sendChat('pushed the fix', false, channel);
+    await settle(() => chatSeen(kay, channel, 'pushed the fix') && chatSeen(mia, channel, 'pushed the fix'));
+    const item = (m: Mac) => m.store.getState().log.find((l) => l.type === 'chat' && l.channel === channel && l.text === 'pushed the fix');
+    // One id in every copy.
+    expect(new Set([ata, kay, mia].map((m) => item(m)?.id)).size).toBe(1);
+    const chips = (m: Mac) => {
+      const it = item(m);
+      return it?.type === 'chat' ? chatReactions(it) : [];
+    };
+    kay.session.reactChat(channel, item(kay)!.id, '🎉');
+    await settle(() => chips(ata).length === 1 && chips(mia).length === 1);
+    expect(chips(mia)).toEqual([{ emoji: '🎉', by: [kay.id] }]);
+    mia.session.reactChat(channel, item(mia)!.id, '🎉');
+    await settle(() => chips(kay)[0]?.by.length === 2);
+    expect(chips(kay)).toEqual([{ emoji: '🎉', by: [kay.id, mia.id] }]);
   }, 60_000 * SLOW);
 
   it("waits while the owner's Mac is offline, says so, and goes when it's back", async () => {
