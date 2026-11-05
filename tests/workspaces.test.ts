@@ -497,6 +497,15 @@ describe('choosing the base branch', () => {
     expect(new Set(branches).size).toBe(branches.length);
     await expect(mgr.branches('nope')).rejects.toThrow('Project not found');
   });
+
+  it('names the remotes by their GitHub repository, origin first', async () => {
+    sh(repo, 'remote', 'add', 'aaa', 'https://github.com/acme/app.git');
+    const { remotes } = await mgr.branches(repos()[0]!.id);
+    expect(remotes).toEqual([
+      { name: 'origin', label: 'origin' },
+      { name: 'aaa', label: 'acme/app' },
+    ]);
+  });
 });
 
 describe('helpers', () => {

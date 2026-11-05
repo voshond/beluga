@@ -285,7 +285,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `workspaces.newChat` | ✓ |
 | `workspaces.startChat` | ✓ New chat composer: starts on the first message with the selected Act/Plan mode |
 | `workspaces.startWorktree` | ✓ (→ the new worktree's id; `plan`: its agent plans first; `quiet`: the window stays put; `agent`: who works it, from the home composer's Create Worktree ▾ › Start with ▸ (BLG-506). The phone's Ask › a project › Worktree, with Plan first, since 1.5, and its agent chip (1.35); Your Mac's `start_worktree`) |
-| `workspaces.branches` | New worktree › Based on popup |
+| `workspaces.branches` | New worktree › Based on popup: a section per remote named for its GitHub repository (origin first), then this Mac’s branches |
 | `workspaces.fork` | ✓ |
 | `workspaces.editPrompt` | Edit on your own message (hover, or right-click › Edit Message) › the message opens in place: Rewind Here or New Fork, then ↩ |
 | `workspaces.continueInWorktree` | Continue in New Worktree… (toolbar and the ask banner) › sheet: Task, Based on, Agent (BLG-506: one that can't resume the conversation starts fresh, handed it, and the sheet says so), Name (the chat becomes the worktree) |

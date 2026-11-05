@@ -16,7 +16,7 @@ import { agentName } from '../shared/agent-label.js';
 import { carriedPrompt, transcriptOf } from './agent-switch.js';
 import { type ArrangeTarget, type WorkspaceManager, real } from '../workspaces/manager.js';
 import { type EnvChange, scanEnvFiles } from '../workspaces/env.js';
-import type { DeletePlan, Project, PullHead, RenameResult, Workspace } from '../workspaces/types.js';
+import type { BranchList, DeletePlan, Project, PullHead, RenameResult, Workspace } from '../workspaces/types.js';
 import { type MergeResult, git } from '../workspaces/git.js';
 import type { FoundConversation } from '../agent/runtime/claude/claude-sessions.js';
 import type { ShareService } from './shares.js';
@@ -906,7 +906,7 @@ export class WorkspaceController {
   }
 
   /** The branches a new worktree can start from, the project's default base first. */
-  branches(projectId: string): Promise<{ base: string; branches: string[] }> {
+  branches(projectId: string): Promise<BranchList> {
     return this.deps.manager.branches(projectId);
   }
 

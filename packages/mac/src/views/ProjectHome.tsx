@@ -3,7 +3,7 @@ import type { PullRequest } from "@beluga/core/work-store.js";
 import { describePr } from "@beluga/shared/format.js";
 import { isPlanOwned } from "@beluga/core/plans/owner.js";
 import { activityOf, stateOf } from "@beluga/ui/workspace-models.js";
-import type { Project, Workspace } from "@beluga/workspaces/types.js";
+import type { BranchList, Project, Workspace } from "@beluga/workspaces/types.js";
 import {
   AUTONOMIES,
   AUTONOMY_INFO,
@@ -40,7 +40,7 @@ import {
 import { type Issue, STATUS_INFO } from "@beluga/core/board/model.js";
 import { StatusIcon } from "../tasks/marks.js";
 import { useTaskActions } from "../tasks/use-tasks.js";
-import { branchOptions } from "../chat/WorktreeDraft.js";
+import { branchOptions } from "../chat/branch-options.js";
 import { useBoxSuggestions } from "../chat/BoxSuggestions.js";
 import { useAttachments } from "../chat/use-attachments.js";
 import { MentionHighlighter } from "../chat/MentionHighlighter.js";
@@ -198,14 +198,9 @@ function Header({ model }: { model: HomeModel }) {
 type Mode = "worktree" | "ask" | "plan";
 
 /** The branches a new worktree can start from (the default first). */
-function useBranches(
-  projectId: string,
-): { base: string; branches: readonly string[] } | undefined {
+function useBranches(projectId: string): BranchList | undefined {
   const api = useApi();
-  const [branches, setBranches] = useState<{
-    base: string;
-    branches: readonly string[];
-  }>();
+  const [branches, setBranches] = useState<BranchList>();
   useEffect(() => {
     let alive = true;
     setBranches(undefined);
@@ -514,7 +509,7 @@ function HomeComposer({ project }: { project: Project }) {
                     label="Based on"
                     value={chosen}
                     onChange={setBase}
-                    options={branchOptions(options, branches?.base)}
+                    options={branchOptions(options, branches?.base, branches?.remotes)}
                     searchPlaceholder="Find a branch"
                   />
                 </Tip>

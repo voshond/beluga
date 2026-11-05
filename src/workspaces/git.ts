@@ -115,6 +115,16 @@ export async function listBranches(repo: string): Promise<string[]> {
     .slice(0, MAX_BRANCHES);
 }
 
+/** The repo's remotes and their fetch URLs, in git's order. */
+export async function listRemotes(repo: string): Promise<Array<{ name: string; url: string }>> {
+  const out = (await tryGit(repo, ['config', '--get-regexp', '^remote\\..*\\.url$'])) ?? '';
+  return out
+    .split('\n')
+    .map((l) => /^remote\.(.+)\.url\s+(.+)$/.exec(l.trim()))
+    .filter((m): m is RegExpExecArray => !!m)
+    .map((m) => ({ name: m[1]!, url: m[2]! }));
+}
+
 /** Whether `ref` names a commit in `repo` (a branch, tag or hash). Never reads it as an option. */
 export async function isCommit(repo: string, ref: string): Promise<boolean> {
   if (!ref || ref.startsWith('-')) return false;

@@ -33,6 +33,19 @@ export interface UsageDay {
 
 export type WorkspaceKind = 'main' | 'worktree' | 'chat';
 
+/** A remote a branch can come from: its git name and what to call it ("owner/repo" on GitHub, else the name). */
+export interface BranchRemote {
+  readonly name: string;
+  readonly label: string;
+}
+
+/** The branches a new worktree can start from, the default base first, and the remotes they're on (origin first). */
+export interface BranchList {
+  readonly base: string;
+  readonly branches: string[];
+  readonly remotes: BranchRemote[];
+}
+
 /** What checking a pull request out in a worktree needs to know about it (BLG-633). */
 export interface PullHead {
   readonly number: number;

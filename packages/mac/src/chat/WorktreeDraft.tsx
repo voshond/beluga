@@ -1,7 +1,9 @@
 import type { AgentRef } from '@beluga/protocol.js';
 import { useEffect, useState } from 'react';
 import { Icon } from '../components/Icon.js';
-import { Select, type SelectOption } from '../components/Select.js';
+import type { BranchList } from '@beluga/workspaces/types.js';
+import { Select } from '../components/Select.js';
+import { branchOptions } from './branch-options.js';
 import { Tip } from '../components/ui.js';
 import { useApi, useApp } from '../lib/beluga.js';
 import s from './draft.module.css';
@@ -21,7 +23,7 @@ export interface WorktreeChoice {
 export function WorktreeDraft({ projectId, choice, onChange }: { projectId: string; choice: WorktreeChoice; onChange: (c: WorktreeChoice) => void }) {
   const api = useApi();
   const project = useApp((st) => st.projects.find((p) => p.id === projectId));
-  const [branches, setBranches] = useState<{ base: string; branches: readonly string[] }>();
+  const [branches, setBranches] = useState<BranchList>();
   useEffect(() => {
     let alive = true;
     setBranches(undefined);
@@ -44,7 +46,7 @@ export function WorktreeDraft({ projectId, choice, onChange }: { projectId: stri
       <label className={s.field}>
         <span className={s.fieldLabel}>Based on</span>
         <Tip label="The branch the new one starts from (origin branches are fetched first, so it's the latest)">
-          <Select className={s.select} size="small" mono label="Based on" value={base} onChange={(b) => onChange({ ...choice, base: b })} options={branchOptions(options, branches?.base)} searchPlaceholder="Find a branch" />
+          <Select className={s.select} size="small" mono label="Based on" value={base} onChange={(b) => onChange({ ...choice, base: b })} options={branchOptions(options, branches?.base, branches?.remotes)} searchPlaceholder="Find a branch" />
         </Tip>
       </label>
       <label className={s.field}>
@@ -68,9 +70,4 @@ export function WorktreeDraft({ projectId, choice, onChange }: { projectId: stri
       </label>
     </div>
   );
-}
-
-/** The branches a worktree can start from, for the Based on pop-up: the default one says so. */
-export function branchOptions(branches: readonly string[], base: string | undefined): Array<SelectOption<string>> {
-  return branches.map((b) => ({ value: b, label: b, ...(b === base ? { badge: 'default' } : {}) }));
 }

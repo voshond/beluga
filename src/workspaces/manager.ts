@@ -21,8 +21,8 @@ import { dropCodexSessions } from '../agent/runtime/codex/codex-sessions.js';
 import { dropOpenCodeFolder, dropOpenCodeSession } from '../agent/runtime/opencode/sessions.js';
 import { addDay, dayKey } from './usage-days.js';
 import type { AgentRef } from '../protocol.js';
-import type { DeletePlan, MergeWait, Project, ProjectGroup, PullHead, ProjectSync, ProjectsConfig, RenameResult, Workspace, WorkspaceRecord, WorkspaceUsage } from './types.js';
-import type { ForkOf } from './github.js';
+import type { BranchList, DeletePlan, MergeWait, Project, ProjectGroup, PullHead, ProjectSync, ProjectsConfig, RenameResult, Workspace, WorkspaceRecord, WorkspaceUsage } from './types.js';
+import { type ForkOf, ghHosts, parseGitHubRemote } from './github.js';
 import type { Effort } from '../shared/settings-schema.js';
 import { ArrangeError, type Item, type Layout, MAX_GROUP_NAME, arrangedOrder, groupKey, groupOfKey, isGroupKey, keyOf, move, settle } from './arrange.js';
 
@@ -921,11 +921,20 @@ export class WorkspaceManager {
   }
 
   /** The branches a new worktree can start from, the project's default base first. */
-  async branches(projectId: string): Promise<{ base: string; branches: string[] }> {
+  async branches(projectId: string): Promise<BranchList> {
     const project = this.projects.find((p) => p.id === projectId);
     if (!project?.root) throw new WorkspaceError('Project not found');
-    const all = await g.listBranches(project.root);
-    return { base: project.base, branches: [project.base, ...all.filter((b) => b !== project.base)] };
+    const [all, remotes] = await Promise.all([g.listBranches(project.root), g.listRemotes(project.root)]);
+    const hosts = ghHosts();
+    const labeled = remotes.map(({ name, url }) => {
+      const repo = parseGitHubRemote(url, hosts);
+      return { name, label: repo ? `${repo.owner}/${repo.repo}` : name };
+    });
+    return {
+      base: project.base,
+      branches: [project.base, ...all.filter((b) => b !== project.base)],
+      remotes: [...labeled.filter((r) => r.name === 'origin'), ...labeled.filter((r) => r.name !== 'origin')],
+    };
   }
 
   /** A folder for a new worktree that no live or archived workspace uses (adds -2, -3…). */
