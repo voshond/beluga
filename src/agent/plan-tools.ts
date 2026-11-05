@@ -10,7 +10,10 @@ import type { PlanTools } from './types.js';
  * task, and talk to a task's Claude. Starting and passing go through Beluga's scheduler.
  */
 
-export const PLAN_TOOL_NAMES = ['plan_get', 'plan_write', 'plan_update', 'plan_gate', 'plan_start_task', 'plan_message_task', 'plan_stop_task', 'plan_pause'].map((n) => `mcp__beluga_plan__${n}`);
+export const PLAN_TOOL_NAMES = ['plan_get', 'plan_write', 'plan_update', 'plan_gate', 'plan_start_task', 'plan_message_task', 'plan_stop_task', 'plan_pause', 'plan_ask', 'plan_handback'].map((n) => `mcp__beluga_plan__${n}`);
+
+/** A milestone's Claude's tools (BLG-6, BLG-7): only it has them, and it has only them. */
+const WORKER_TOOLS: readonly string[] = ['plan_ask', 'plan_handback'];
 
 const id = z.string().min(1).max(40).describe('A short stable id, like "auth-api" (letters, digits, dashes)');
 const lines = (max: number) => z.array(z.string().min(1).max(400)).max(max);
@@ -171,8 +174,28 @@ export function createPlanToolDefs(plan: PlanTools) {
       { paused: z.boolean().describe('true: pause; false: resume') },
       (a) => guarded(() => (plan.pause ? plan.pause(a.paused) : 'Pausing isn’t available here')),
     ),
+    tool(
+      'plan_ask',
+      'Ask the user a decision only they can make (a product or design choice, an account, a secret, which of two behaviours): one concrete question, 2 to 4 options and the one you recommend. It goes to the plan’s conversation and their phone; carry on with whatever doesn’t depend on it, and end your turn when nothing else is left: the answer comes to you here and is recorded on the task. Not for routine choices you can make yourself: decide those, and say what you assumed.',
+      {
+        task: z.string().max(40).optional().describe('The task it’s about (its key, or its id in the plan); left out, the one you’re on'),
+        question: z.string().min(1).max(1000).describe('One question, about one thing'),
+        why: z.string().max(300).optional().describe('One sentence: why it matters, or what changes with the answer'),
+        options: z.array(z.object({ label: z.string().min(1).max(120), description: z.string().max(400).optional() })).min(2).max(4).describe('The choices (they can always write their own instead)'),
+        recommended: z.string().max(120).optional().describe('The label of the option you recommend'),
+        multi: z.boolean().optional().describe('true: they may pick several'),
+      },
+      (a) => guarded(() => (plan.ask ? plan.ask(a) : 'Asking the user isn’t available here: decide, and say what you assumed in the task’s Decisions')),
+    ),
+    tool(
+      'plan_handback',
+      'Hand work you found that is outside your milestone’s tasks back to the plan (a bug elsewhere, a follow-up, something the user asked for that isn’t a task here). Don’t do it yourself and don’t drop it: the plan’s head turns it into a plan change the user approves. Then go on with your own tasks.',
+      { what: z.string().min(1).max(2000).describe('The work, in a few sentences: what and where'), why: z.string().min(1).max(500).describe('Why it isn’t yours: which task it would be outside of') },
+      (a) => guarded(() => (plan.handback ? plan.handback(a.what, a.why) : 'Handing work back isn’t available here: note it with task_note')),
+    ),
   ];
-  return plan.only ? defs.filter((d) => plan.only!.includes(d.name)) : defs;
+  const shown = plan.only ?? (plan.worker ? WORKER_TOOLS : defs.map((d) => d.name).filter((n) => !WORKER_TOOLS.includes(n)));
+  return defs.filter((d) => shown.includes(d.name));
 }
 
 export function createPlanTools(plan: PlanTools) {

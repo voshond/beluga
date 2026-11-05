@@ -1,4 +1,4 @@
-import type { PlanTools } from '../../agent/types.js';
+import type { PlanAskInput, PlanTools } from '../../agent/types.js';
 import type { AgentRef } from '../../protocol.js';
 import { agentName } from '../../shared/agent-label.js';
 import type { Actor, Issue } from '../board/model.js';
@@ -12,6 +12,7 @@ import { dropEpics, syncEpics } from './epics.js';
 import type { BodyInput, PlanOp, TaskInput } from './edit.js';
 import { type Autonomy, type Plan, type TestsAt, allTasks, checkerOf, planForHome, planTaskOfIssue, planTitle } from './model.js';
 import { type PilotDeps, PlanPilot } from './pilot.js';
+import type { TaskView } from './progress.js';
 import { type PlanGit, planGitOf } from './plan-git.js';
 import { type Plans, UNTITLED } from './plans.js';
 import { checkFailedPrompt, checkerBrief, describePlan, headBrief, milestoneNote, planningBrief, sizeWords, workerNote } from './prompt.js';
@@ -357,12 +358,89 @@ export class PlansWork {
       return m ? { tools: this.checkerTools(checking.plan.id, m.milestone.id), brief: checkerBrief(view, m) } : undefined;
     }
     const found = planForHome(this.plans.state(), channel);
-    if (!found) return undefined;
+    if (!found) return this.workerOf(channel);
     const plan = (said && this.plans.noteRequest(found.id, said)) || found;
     const board = this.deps.store.getState().board;
     const view = this.pilot.view(plan);
     const brief = plan.body ? headBrief(view) + planningBrief(plan, board, this.plans.planningStyle) : planningBrief(plan, board, this.plans.planningStyle);
     return { tools: this.toolsFor(plan.id), brief };
+  }
+
+  /** A worktree doing a running plan's tasks (its milestone's one Claude, or one task's): the plan and which tasks are its. */
+  private worktreeOf(wsId: string): { readonly plan: Plan; readonly tasks: readonly TaskView[] } | undefined {
+    for (const plan of this.plans.list()) {
+      if (plan.status !== 'active' || !plan.body) continue;
+      const tasks = this.pilot.view(plan).milestones.flatMap((m) => m.tasks).filter((t) => t.issue?.worktrees.includes(wsId) && !t.forYou);
+      if (tasks.length) return { plan, tasks };
+    }
+    return undefined;
+  }
+
+  /** A run in a plan task's worktree: a worker's plan tools (plan_ask, plan_handback), no brief (its board brief says the plan). */
+  private workerOf(channel: string): { readonly tools: PlanTools } | undefined {
+    if (!channel.startsWith(WS)) return undefined;
+    const wsId = channel.slice(WS.length);
+    const hit = this.worktreeOf(wsId);
+    return hit ? { tools: this.workerTools(hit.plan.id, wsId) } : undefined;
+  }
+
+  private workerTools(planId: string, wsId: string): PlanTools {
+    const refuse = (): never => {
+      throw new Error('You work on this milestone’s tasks: plan_ask and plan_handback are yours here');
+    };
+    return {
+      worker: true,
+      get: refuse,
+      write: refuse,
+      update: refuse,
+      start: async () => refuse(),
+      message: refuse,
+      gate: refuse,
+      ask: (input) => this.askUser(planId, wsId, input),
+      handback: (what, why) => this.handback(planId, wsId, what, why),
+    };
+  }
+
+  /** A worker's question (BLG-6): kept on the plan, asked in its conversation (PlanDecisions), answered back here. */
+  private askUser(planId: string, wsId: string, input: PlanAskInput): string {
+    const hit = this.worktreeOf(wsId);
+    if (!hit || hit.plan.id !== planId) throw new Error('This worktree isn’t doing a task of a running plan any more');
+    const t = this.workerTask(hit.tasks, input.task);
+    const question = input.question.replace(/\s+/g, ' ').trim();
+    const seen = new Set<string>();
+    const options = input.options
+      .map((o) => ({ label: o.label.replace(/\s+/g, ' ').trim(), ...(o.description?.trim() ? { description: o.description.trim() } : {}) }))
+      .filter((o) => o.label && !seen.has(o.label.toLowerCase()) && seen.add(o.label.toLowerCase()));
+    if (!question) throw new Error('Say what you ask');
+    if (options.length < 2) throw new Error('Give at least two different options (they can always write their own)');
+    const recommended = options.find((o) => o.label.toLowerCase() === input.recommended?.trim().toLowerCase())?.label;
+    const why = input.why?.replace(/\s+/g, ' ').trim();
+    const key = t.issue?.key ?? t.task.id;
+    const replaced = Boolean(hit.plan.asks?.[t.task.id]);
+    this.plans.setAsk(planId, t.task.id, { task: t.task.id, question, ...(why ? { why } : {}), options, ...(recommended ? { recommended } : {}), ...(input.multi ? { multi: true } : {}), worktree: wsId, at: Date.now() });
+    this.plans.note(planId, 'note', `${key} asks the user: ${question.slice(0, 200)}`, this.claude());
+    return [
+      `Asked the user about ${key}${replaced ? ' (in place of your earlier question on it)' : ''}: it’s in the plan’s conversation and on their phone.`,
+      'Carry on with what doesn’t depend on the answer. When nothing else is left, end your turn: the answer comes to you here, and is recorded in the task’s Decisions.',
+    ].join(' ');
+  }
+
+  /** The task a worker means: the one it names (its key or plan id), else the one it's on, else its next. */
+  private workerTask(tasks: readonly TaskView[], named?: string): TaskView {
+    const want = named?.trim().toLowerCase();
+    if (want) {
+      const t = tasks.find((x) => x.task.id.toLowerCase() === want || x.issue?.key.toLowerCase() === want);
+      if (!t) throw new Error(`“${named}” isn’t one of this worktree’s tasks: ${tasks.map((x) => x.issue?.key ?? x.task.id).join(', ')}`);
+      return t;
+    }
+    const on = tasks.find((t) => t.state === 'running' || t.state === 'asking' || t.state === 'idle' || t.state === 'stalled') ?? tasks.find((t) => t.state === 'ready');
+    if (!on) throw new Error('None of this worktree’s tasks is under way: name the task it’s about');
+    return on;
+  }
+
+  /** BLG-7: filled in by the hand-back change. */
+  private handback(_planId: string, _wsId: string, _what: string, _why: string): string {
+    throw new Error('Handing work back isn’t available yet: note it with task_note');
   }
 
   /** In a task's worktree: the plan it's part of. */

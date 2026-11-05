@@ -513,8 +513,10 @@ function milestoneHow(plan: Plan, only: boolean): string[] {
     '  then task_update with status in_review. Then the next task, without stopping.',
     `- ${taskTestsNote(plan).split('\n').join(' ')}`,
     '- No pull requests, no merging: this branch is merged into the plan when the milestone passes.',
-    '- A task only the user can decide: say what you need in one line with task_note on it, go on with the tasks that don\'t',
-    '  need it, and end your turn when nothing else is left (Beluga asks them, and tells you when they answered).',
+    '- A decision only the user can make (product or design, an account, a secret): ask it with plan_ask, one question with',
+    '  2 to 4 options and the one you recommend; go on with what doesn\'t need it, and end your turn when nothing else is left',
+    '  (the answer comes to you here). Routine choices are yours: decide, and write what you assumed in the task\'s Decisions.',
+    '- Work outside your tasks (a bug elsewhere, a follow-up): hand it back with plan_handback, don\'t do it or drop it.',
     only ? '- The user starts each task of this milestone: do only the task(s) you were given, then end your turn.' : '- When your last task is In Review, end your turn with one line per task.',
   ];
 }

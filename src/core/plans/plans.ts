@@ -24,6 +24,7 @@ import {
   type PlanEpics,
   type PlanRescue,
   type Plan,
+  type PlanAsk,
   type PlanBody,
   type PlanEvent,
   type PlanEventKind,
@@ -368,6 +369,14 @@ export class Plans {
   }
 
   /** The conversation that checks a milestone (undefined: none, it was archived). */
+  /** A question a task's Claude asked you (BLG-6), or none any more (answered, or the task finished). */
+  setAsk(id: string, task: string, ask: PlanAsk | undefined): Plan {
+    const plan = this.need(id);
+    const { [task]: _was, ...rest } = plan.asks ?? {};
+    const asks = ask ? { ...rest, [task]: ask } : rest;
+    return this.change(plan, { asks: Object.keys(asks).length ? asks : undefined }, []);
+  }
+
   /** The conversation fixing its merge conflicts, or none any more. */
   setFixer(id: string, fixer: string | undefined): Plan {
     return this.change(this.need(id), { fixer }, []);

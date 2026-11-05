@@ -594,7 +594,9 @@ describe('making a plan', () => {
     const t = setup();
     t.work.here('ws:main');
     const defs = createPlanToolDefs(t.work.forRun('ws:main', 'p-me')!.tools!);
-    expect(defs.map((d) => `mcp__beluga_plan__${d.name}`)).toEqual(PLAN_TOOL_NAMES);
+    // The plan's conversation has all but a milestone Claude's own two (BLG-6, BLG-7).
+    const worker = ['plan_ask', 'plan_handback'].map((n) => `mcp__beluga_plan__${n}`);
+    expect(defs.map((d) => `mcp__beluga_plan__${d.name}`)).toEqual(PLAN_TOOL_NAMES.filter((n) => !worker.includes(n)));
     for (const name of PLAN_TOOL_NAMES) expect(decideTool(name, {}, { cwd: '/tmp', roots: [], autoEdit: false, askOnly: true })).toBe('allow');
   });
 });

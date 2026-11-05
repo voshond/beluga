@@ -820,7 +820,7 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
     // Changing a sentinel (sentinel.ask): it reads the words, fills the sentinel in with its tools.
     if (input.sentinelTools?.asking) return mockSentinelAsk(input, input.sentinelTools, input.sentinelTools.asking, pace);
     // A plan's conversation: Claude writes, revises and checks the plan with its tools.
-    if (input.planTools && !/^\/compact/.test(input.prompt.trim())) return mockPlanning(input, input.planTools, pace);
+    if (input.planTools && !input.planTools.worker && !/^\/compact/.test(input.prompt.trim())) return mockPlanning(input, input.planTools, pace);
     // A main folder is questions only: a change request moves to a new worktree, as real Claude is told to.
     if (input.place?.askOnly && WANTS_CHANGE.test(input.prompt)) {
       if (!input.continueInWorktree) return "This is the project's main folder, which is read-only. Ask the owner to continue in a new worktree.";

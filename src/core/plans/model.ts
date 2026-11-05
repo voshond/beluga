@@ -61,6 +61,26 @@ export interface PlanTask {
   readonly issueId?: string;
 }
 
+/**
+ * A milestone's Claude asking you something while it works (plan_ask, BLG-6): a structured question,
+ * never buried in its prose. Beluga asks you in the plan's conversation (and on the phone), the Claude
+ * goes on with what doesn't need it, and your answer goes on the task and back to it.
+ */
+export interface PlanAsk {
+  /** The plan task it's about (its id in the plan). */
+  readonly task: string;
+  readonly question: string;
+  /** Why it matters, in a sentence (shown under the question). */
+  readonly why?: string;
+  readonly options: ReadonlyArray<{ readonly label: string; readonly description?: string }>;
+  /** The option it recommends (a label of one of them): shown first, marked Recommended. */
+  readonly recommended?: string;
+  readonly multi?: boolean;
+  /** The worktree that asked (workspace id): the answer goes there. */
+  readonly worktree: string;
+  readonly at: number;
+}
+
 /** A plan task that's yours, as a choice: the question, the options (pick one, or several), and always your own words. */
 export interface PlanDecision {
   readonly question: string;
@@ -287,6 +307,8 @@ export interface Plan {
    * the head's, so the plan's conversation never fills up with code work. Archived once no conflict is left.
    */
   readonly fixer?: string;
+  /** Questions its Claudes asked you that wait for an answer, by plan task id (one per task: a new one replaces it). */
+  readonly asks?: Readonly<Record<string, PlanAsk>>;
   /** Its shape on the board: an epic for the plan, one under it per milestone (see epics.ts). */
   readonly epics?: PlanEpics;
   /** Beluga moving its stalled milestones along (see the pilot's rescue), by milestone id: kept, so a restart doesn't start over. */

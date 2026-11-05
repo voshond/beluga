@@ -632,6 +632,8 @@ export class PlanPilot {
       for (const x of view.open) if (x.agent) channels.add(`${WS_PREFIX}${x.agent.worktree}`);
     }
     for (const c of channels) if (live.busy(c) || live.asking(c) || this.deps.alive?.(c)) return true;
+    // Its Claude asked you something (plan_ask): it waits on you, not stalled.
+    if (m?.tasks.some((t) => plan.asks?.[t.task.id])) return true;
     const key = (id: string): string => `${plan.id}:${id}`;
     if (m) {
       const k = key(m.milestone.id);

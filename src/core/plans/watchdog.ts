@@ -384,6 +384,8 @@ export class TaskWatchdog {
         if (w && !started) this.deps.plans.setWatch(plan.id, t.task.id, undefined);
         continue;
       }
+      // Its Claude asked you something (plan_ask) and ended its turn to wait: nothing to wake until you answer.
+      if (Object.values(plan.asks ?? {}).some((a) => a.worktree === t.worktree)) continue;
       // Paused: shown as it is, nobody woken.
       if (plan.paused || plan.status !== 'active' || this.waking.has(t.task.id)) continue;
       const channel = `ws:${t.worktree}`;
