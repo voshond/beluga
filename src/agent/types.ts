@@ -234,6 +234,22 @@ export interface PlanTools {
   stop?(task: string): string;
   /** Pause the plan (nothing new starts) or resume it. */
   pause?(paused: boolean): string;
+  /** A milestone's Claude (BLG-6): these are a worker's tools, not the plan's conversation's (only plan_ask and plan_handback). */
+  readonly worker?: boolean;
+  /** Ask the user a question about a task (left out: the one it's on), answered in the plan's conversation and sent back. */
+  ask?(input: PlanAskInput): string;
+  /** Hand work outside this milestone's tasks back to the plan's head (BLG-7). */
+  handback?(what: string, why: string): string;
+}
+
+/** A milestone Claude's question for the user (plan_ask). */
+export interface PlanAskInput {
+  readonly task?: string;
+  readonly question: string;
+  readonly why?: string;
+  readonly options: ReadonlyArray<{ readonly label: string; readonly description?: string }>;
+  readonly recommended?: string;
+  readonly multi?: boolean;
 }
 
 /**

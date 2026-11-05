@@ -11,7 +11,7 @@ import Animated, { LinearTransition, FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { convHref } from '../../components/Conv';
 import { answer, NeedButtons, NeedFace } from '../../components/Needs';
-import { MilestoneMap, PlanChat, PlanDrafting } from '../../components/PlanParts';
+import { MilestoneMap, PlanChat, PlanDecisions, PlanDrafting } from '../../components/PlanParts';
 import { Header, Screen, useScrolled } from '../../components/Screen';
 import { Card, More, Pill, Press, T, toneBg, toneInk, toneOf } from '../../components/ui';
 import { useView, useVisibleNeeds } from '../../lib/hooks';
@@ -177,6 +177,8 @@ export default function Plan() {
                 ))}
               </View>
             ) : null}
+
+            <PlanDecisions decisions={p.decisions ?? []} open={p.openQuestions ?? []} />
 
             {drafting ? (
               <View style={{ marginTop: 26, paddingHorizontal: 16 }}>

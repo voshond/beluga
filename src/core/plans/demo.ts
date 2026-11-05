@@ -94,6 +94,13 @@ export async function seedDemoPlan(store: Store, work: PlansWork, board: BoardWo
           ],
         },
       ],
+      // Settled while planning (BLG-8): what you answered, and what Claude chose without asking.
+      decisions: [
+        { question: 'Hosted Stripe Checkout, or the embedded Payment Element?', answer: 'Hosted Checkout', why: 'Least code to keep safe for launch; the embedded form can come later', by: 'user', tasks: ['auth'] },
+        { question: 'Can admins refund part of an order?', answer: 'Yes, any amount up to what was paid', by: 'user', tasks: ['refund-api', 'refund-button'] },
+        { question: 'How long are handled webhook ids kept?', answer: '30 days', why: 'Stripe retries for up to 3 days; 30 leaves room', tasks: ['retries'] },
+        { question: 'Where do the test fixtures live?', answer: 'test/fixtures/stripe', why: 'Next to the other fixtures', tasks: ['fixtures'] },
+      ],
     },
     claude,
   );

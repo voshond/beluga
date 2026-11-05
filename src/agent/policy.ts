@@ -50,7 +50,8 @@ const ALWAYS_OK = new Set([
   // dashboard_remove isn't here: deleting a dashboard asks you.
   ...['sentinel_measure', 'dashboard_list', 'dashboard_create', 'dashboard_update', 'dashboard_add_tile', 'dashboard_update_tile', 'dashboard_move_tile', 'dashboard_remove_tile', 'metric_list', 'metric_read'].map((n) => `mcp__beluga_dashboard__${n}`),
   // A plan's tools: only its home conversation has them (core/plans); changes to an approved plan wait for you.
-  ...['plan_get', 'plan_write', 'plan_update', 'plan_gate', 'plan_start_task', 'plan_message_task', 'plan_stop_task', 'plan_pause'].map((n) => `mcp__beluga_plan__${n}`),
+  // A milestone's Claude gets plan_ask (a question for you, BLG-6) and plan_handback (work outside its tasks, BLG-7): both only ask.
+  ...['plan_get', 'plan_write', 'plan_update', 'plan_gate', 'plan_start_task', 'plan_message_task', 'plan_stop_task', 'plan_pause', 'plan_ask', 'plan_handback'].map((n) => `mcp__beluga_plan__${n}`),
   // A friend's task only has these when its owner allowed them for that request (core/gateway/serve.ts).
   ...['screenshot', 'device_info'].map((n) => `mcp__beluga_task__${n}`),
   // "Your Mac": only its own conversation has these, in your own runs (core/assistant). They look at

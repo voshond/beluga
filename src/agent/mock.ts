@@ -261,6 +261,9 @@ async function mockPlan(input: AgentRunInput, pace: number): Promise<string> {
 }
 
 /** The demo's planner: a first plan from what you asked, a revision for what you say next, and milestone checks. */
+/** A goal that asks to be asked first (BLG-8): the mock leaves a question open, so approving waits on it. */
+const ASKS_FIRST = /\bask me\b|\bclarify\b/i;
+
 async function mockPlanning(input: AgentRunInput, plan: NonNullable<AgentRunInput['planTools']>, pace: number): Promise<string> {
   const check = /milestone “([^”]+)” is finished/i.exec(input.prompt) ?? /Every task of milestone “([^”]+)”/i.exec(input.prompt);
   if (check) {
@@ -279,6 +282,7 @@ async function mockPlanning(input: AgentRunInput, plan: NonNullable<AgentRunInpu
   const empty = /The plan is empty|no milestones/i.test(plan.get()) || !/## 1\./.test(plan.get());
   if (empty) {
     const what = input.prompt.replace(/\s+/g, ' ').trim().replace(/[.!?]$/, '');
+    const askFirst = ASKS_FIRST.test(what);
     input.onEvent('tool', 'plan_write');
     plan.write({
       // A name, as Claude would give it: never your message cut off.
@@ -317,6 +321,13 @@ async function mockPlanning(input: AgentRunInput, plan: NonNullable<AgentRunInpu
           ],
         },
       ],
+      // What a real Claude would write down instead of asking (BLG-8): sensible defaults, each with why.
+      decisions: [
+        { question: 'Which database holds the new data?', answer: 'The existing Postgres, via src/db.ts', why: 'No new service to run', tasks: ['model'] },
+        { question: 'Where is the API shape written down?', answer: 'docs/api.md', why: 'Beside the other API docs', tasks: ['api-shape', 'endpoints'] },
+        { question: 'Is it behind a feature flag?', answer: 'No, it ships to everyone', why: 'Small and tested end to end', tasks: ['release'] },
+      ],
+      ...(askFirst ? { openQuestions: ['Who signs off on the release before it goes out?'] } : {}),
     });
     return [
       'Here’s a plan in **3 milestones**:',
@@ -325,8 +336,24 @@ async function mockPlanning(input: AgentRunInput, plan: NonNullable<AgentRunInpu
       '2. **Build it** — endpoints and screens in parallel, then an end-to-end test.',
       '3. **Ship** — docs, then the release (yours).',
       '',
-      '**Risk:** the migration touches a busy table; it runs before anything else. Approve it, or tell me what to change.',
+      '**Defaults I chose** (say if one should go another way): the existing Postgres, the API shape in docs/api.md, no feature flag.',
+      '',
+      askFirst
+        ? '**Open question:** who signs off on the release before it goes out? Approving waits on your answer.'
+        : '**Risk:** the migration touches a busy table; it runs before anything else. Approve it, or tell me what to change.',
     ].join('\n');
+  }
+  // An open question waits: what you say next is its answer (BLG-8).
+  const openQ = /Open questions \(approval waits on them\):\n- (.+)/.exec(plan.get())?.[1];
+  if (openQ) {
+    const answer = input.prompt.replace(/\s+/g, ' ').trim().slice(0, 300);
+    input.onEvent('tool', 'plan_update');
+    try {
+      plan.update([{ op: 'decide', decision: { question: openQ, answer, by: 'user', tasks: ['release'] } }], 'your answer');
+    } catch (err) {
+      return `I couldn’t record that: ${err instanceof Error ? err.message : String(err)}`;
+    }
+    return `Got it: **${answer}**. That settles the last open question, so the plan is ready to approve.`;
   }
   input.onEvent('tool', 'plan_update');
   const added = input.prompt.replace(/\s+/g, ' ').trim().slice(0, 60) || 'Follow-up';
@@ -820,7 +847,7 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
     // Changing a sentinel (sentinel.ask): it reads the words, fills the sentinel in with its tools.
     if (input.sentinelTools?.asking) return mockSentinelAsk(input, input.sentinelTools, input.sentinelTools.asking, pace);
     // A plan's conversation: Claude writes, revises and checks the plan with its tools.
-    if (input.planTools && !/^\/compact/.test(input.prompt.trim())) return mockPlanning(input, input.planTools, pace);
+    if (input.planTools && !input.planTools.worker && !/^\/compact/.test(input.prompt.trim())) return mockPlanning(input, input.planTools, pace);
     // A main folder is questions only: a change request moves to a new worktree, as real Claude is told to.
     if (input.place?.askOnly && WANTS_CHANGE.test(input.prompt)) {
       if (!input.continueInWorktree) return "This is the project's main folder, which is read-only. Ask the owner to continue in a new worktree.";

@@ -1,4 +1,4 @@
-import type { PlanTools } from '../../agent/types.js';
+import type { PlanAskInput, PlanTools } from '../../agent/types.js';
 import type { AgentRef } from '../../protocol.js';
 import { agentName } from '../../shared/agent-label.js';
 import type { Actor, Issue } from '../board/model.js';
@@ -12,9 +12,10 @@ import { dropEpics, syncEpics } from './epics.js';
 import type { BodyInput, PlanOp, TaskInput } from './edit.js';
 import { type Autonomy, type Plan, type TestsAt, allTasks, checkerOf, planForHome, planTaskOfIssue, planTitle } from './model.js';
 import { type PilotDeps, PlanPilot } from './pilot.js';
+import type { TaskView } from './progress.js';
 import { type PlanGit, planGitOf } from './plan-git.js';
 import { type Plans, UNTITLED } from './plans.js';
-import { checkFailedPrompt, checkerBrief, describePlan, headBrief, milestoneNote, planningBrief, sizeWords, workerNote } from './prompt.js';
+import { checkFailedPrompt, checkerBrief, describePlan, handbackPrompt, headBrief, milestoneNote, planningBrief, sizeWords, workerNote } from './prompt.js';
 
 /**
  * Plans at work: making a plan (its own conversation, in the project's main folder where Claude
@@ -60,6 +61,8 @@ const WS = 'ws:';
 export class PlansWork {
   readonly plans: Plans;
   readonly pilot: PlanPilot;
+  /** Work handed back this session (plan id and the words), so the same thing reaches the head once. */
+  private readonly handedBack = new Set<string>();
 
   constructor(private readonly deps: PlansWorkDeps) {
     this.plans = deps.plans;
@@ -79,6 +82,12 @@ export class PlansWork {
             // On the plan's agent (BLG-503), like its workers; none picked: the project's.
             checkerChat: async (plan, milestone) => {
               const ws = await deps.controller!.newChat(plan.projectId, `Check: ${milestone.title}`.slice(0, 40), undefined, { quiet: true });
+              if (ws && plan.agent) deps.controller!.manager.setAgent(ws.id, plan.agent);
+              return ws?.id;
+            },
+            // Its merge conflicts (BLG-4): a conversation of its own, so the head Claude only routes.
+            fixerChat: async (plan) => {
+              const ws = await deps.controller!.newChat(plan.projectId, `Fix: ${planTitle(plan)}`.slice(0, 40), undefined, { quiet: true });
               if (ws && plan.agent) deps.controller!.manager.setAgent(ws.id, plan.agent);
               return ws?.id;
             },
@@ -174,9 +183,14 @@ export class PlansWork {
     return this.plans.create({ projectId: project.id, home: channel, ...(autonomy ? { autonomy } : {}) }, this.me());
   }
 
-  /** Approve the draft: its tasks go on the board, and the plan runs (or carries on with the changes). */
-  approve(id: string, by: Actor = this.me()): Plan {
+  /**
+   * Approve the draft: its tasks go on the board, and the plan runs (or carries on with the changes).
+   * Not while it has open questions (BLG-8): settle them first, or approve `anyway` (they stay on the plan, unsettled).
+   */
+  approve(id: string, by: Actor = this.me(), opts: { readonly anyway?: boolean } = {}): Plan {
     const plan = this.plans.need(id);
+    const open = plan.draft?.openQuestions ?? [];
+    if (open.length && !opts.anyway) throw new Error(`${open.length === 1 ? 'A question is' : `${open.length} questions are`} still open: ${open.map((q) => `“${q}”`).join(', ')}. Answer ${open.length === 1 ? 'it' : 'them'} in the plan’s conversation, or approve anyway.`);
     let applied: ReturnType<typeof applyDraft>;
     try {
       applied = applyDraft(plan, this.deps.board.board, { by, me: this.deps.board.me() });
@@ -338,8 +352,8 @@ export class PlansWork {
 
   // ------------------------------------------------------------------ for Claude
 
-  /** A run in a plan's home conversation (yours): the plan's tools, and how to plan or run it. */
-  forRun(channel: string, from: string): { readonly tools?: PlanTools; readonly brief?: string } | undefined {
+  /** A run in a plan's home conversation (yours): the plan's tools, and how to plan or run it. `said`: what you asked in it (kept as the plan's request until it's approved). */
+  forRun(channel: string, from: string, said?: string): { readonly tools?: PlanTools; readonly brief?: string } | undefined {
     const me = this.deps.board.me();
     if (me.kind !== 'person' || from !== me.id) return undefined;
     // A milestone's checker: its brief, and only plan_get and plan_gate.
@@ -350,12 +364,102 @@ export class PlansWork {
       const m = view.milestones.find((x) => x.milestone.id === checking.milestone);
       return m ? { tools: this.checkerTools(checking.plan.id, m.milestone.id), brief: checkerBrief(view, m) } : undefined;
     }
-    const plan = planForHome(this.plans.state(), channel);
-    if (!plan) return undefined;
+    const found = planForHome(this.plans.state(), channel);
+    if (!found) return this.workerOf(channel);
+    const plan = (said && this.plans.noteRequest(found.id, said)) || found;
     const board = this.deps.store.getState().board;
     const view = this.pilot.view(plan);
     const brief = plan.body ? headBrief(view) + planningBrief(plan, board, this.plans.planningStyle) : planningBrief(plan, board, this.plans.planningStyle);
     return { tools: this.toolsFor(plan.id), brief };
+  }
+
+  /** A worktree doing a running plan's tasks (its milestone's one Claude, or one task's): the plan and which tasks are its. */
+  private worktreeOf(wsId: string): { readonly plan: Plan; readonly tasks: readonly TaskView[] } | undefined {
+    for (const plan of this.plans.list()) {
+      if (plan.status !== 'active' || !plan.body) continue;
+      const tasks = this.pilot.view(plan).milestones.flatMap((m) => m.tasks).filter((t) => t.issue?.worktrees.includes(wsId) && !t.forYou);
+      if (tasks.length) return { plan, tasks };
+    }
+    return undefined;
+  }
+
+  /** A run in a plan task's worktree: a worker's plan tools (plan_ask, plan_handback), no brief (its board brief says the plan). */
+  private workerOf(channel: string): { readonly tools: PlanTools } | undefined {
+    if (!channel.startsWith(WS)) return undefined;
+    const wsId = channel.slice(WS.length);
+    const hit = this.worktreeOf(wsId);
+    return hit ? { tools: this.workerTools(hit.plan.id, wsId) } : undefined;
+  }
+
+  private workerTools(planId: string, wsId: string): PlanTools {
+    const refuse = (): never => {
+      throw new Error('You work on this milestone’s tasks: plan_ask and plan_handback are yours here');
+    };
+    return {
+      worker: true,
+      get: refuse,
+      write: refuse,
+      update: refuse,
+      start: async () => refuse(),
+      message: refuse,
+      gate: refuse,
+      ask: (input) => this.askUser(planId, wsId, input),
+      handback: (what, why) => this.handback(planId, wsId, what, why),
+    };
+  }
+
+  /** A worker's question (BLG-6): kept on the plan, asked in its conversation (PlanDecisions), answered back here. */
+  private askUser(planId: string, wsId: string, input: PlanAskInput): string {
+    const hit = this.worktreeOf(wsId);
+    if (!hit || hit.plan.id !== planId) throw new Error('This worktree isn’t doing a task of a running plan any more');
+    const t = this.workerTask(hit.tasks, input.task);
+    const question = input.question.replace(/\s+/g, ' ').trim();
+    const seen = new Set<string>();
+    const options = input.options
+      .map((o) => ({ label: o.label.replace(/\s+/g, ' ').trim(), ...(o.description?.trim() ? { description: o.description.trim() } : {}) }))
+      .filter((o) => o.label && !seen.has(o.label.toLowerCase()) && seen.add(o.label.toLowerCase()));
+    if (!question) throw new Error('Say what you ask');
+    if (options.length < 2) throw new Error('Give at least two different options (they can always write their own)');
+    const recommended = options.find((o) => o.label.toLowerCase() === input.recommended?.trim().toLowerCase())?.label;
+    const why = input.why?.replace(/\s+/g, ' ').trim();
+    const key = t.issue?.key ?? t.task.id;
+    const replaced = Boolean(hit.plan.asks?.[t.task.id]);
+    this.plans.setAsk(planId, t.task.id, { task: t.task.id, question, ...(why ? { why } : {}), options, ...(recommended ? { recommended } : {}), ...(input.multi ? { multi: true } : {}), worktree: wsId, at: Date.now() });
+    this.plans.note(planId, 'note', `${key} asks the user: ${question.slice(0, 200)}`, this.claude());
+    return [
+      `Asked the user about ${key}${replaced ? ' (in place of your earlier question on it)' : ''}: it’s in the plan’s conversation and on their phone.`,
+      'Carry on with what doesn’t depend on the answer. When nothing else is left, end your turn: the answer comes to you here, and is recorded in the task’s Decisions.',
+    ].join(' ');
+  }
+
+  /** The task a worker means: the one it names (its key or plan id), else the one it's on, else its next. */
+  private workerTask(tasks: readonly TaskView[], named?: string): TaskView {
+    const want = named?.trim().toLowerCase();
+    if (want) {
+      const t = tasks.find((x) => x.task.id.toLowerCase() === want || x.issue?.key.toLowerCase() === want);
+      if (!t) throw new Error(`“${named}” isn’t one of this worktree’s tasks: ${tasks.map((x) => x.issue?.key ?? x.task.id).join(', ')}`);
+      return t;
+    }
+    const on = tasks.find((t) => t.state === 'running' || t.state === 'asking' || t.state === 'idle' || t.state === 'stalled') ?? tasks.find((t) => t.state === 'ready');
+    if (!on) throw new Error('None of this worktree’s tasks is under way: name the task it’s about');
+    return on;
+  }
+
+  /** Work a worker found outside its tasks (BLG-7): to the plan's head, which proposes it as a plan change. Once per piece of work. */
+  private handback(planId: string, wsId: string, what: string, why: string): string {
+    const hit = this.worktreeOf(wsId);
+    if (!hit || hit.plan.id !== planId) throw new Error('This worktree isn’t doing a task of a running plan any more');
+    const said = what.replace(/\s+/g, ' ').trim();
+    const seen = `${planId}:${said.toLowerCase()}`;
+    if (this.handedBack.has(seen)) return 'You handed that back already: the plan’s head has it. Go on with your own tasks.';
+    this.handedBack.add(seen);
+    const on = hit.tasks.find((t) => t.state === 'running' || t.state === 'asking' || t.state === 'idle' || t.state === 'stalled') ?? hit.tasks[0]!;
+    const view = this.pilot.view(hit.plan);
+    const m = view.milestones.find((x) => x.milestone.id === on.milestoneId);
+    const from = on.issue?.key ?? on.task.id;
+    this.plans.note(planId, 'note', `${from} handed back: ${said.slice(0, 200)}`, this.claude());
+    this.deps.askClaude(handbackPrompt(from, m?.milestone.title ?? 'its milestone', what, why, (m?.autonomy ?? hit.plan.autonomy) === 'autopilot'), hit.plan.home, false);
+    return 'Handed back to the plan: its head proposes it as a plan change. Go on with your own tasks.';
   }
 
   /** In a task's worktree: the plan it's part of. */

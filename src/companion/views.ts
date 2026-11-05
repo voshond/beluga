@@ -864,6 +864,7 @@ export function planPageView(state: DomainState, id: string): PlanView | undefin
   const progress = planView(plan, state.board, liveFrom(state));
   const home = convTopic(plan.home);
   const goal = (plan.body ?? plan.draft)?.goal;
+  const notes = plan.draft ?? plan.body;
   const topic = planTopic(plan.id);
   return {
     id: clip(plan.id, 200),
@@ -899,6 +900,8 @@ export function planPageView(state: DomainState, id: string): PlanView | undefin
       ...agentNowOf(m),
     })),
     autonomy: plan.autonomy,
+    ...(notes?.decisions?.length ? { decisions: notes.decisions.slice(0, 40).map((d) => ({ question: clip(d.question, 400), answer: clip(d.answer, 400), by: d.by, ...(d.why ? { why: clip(d.why, 400) } : {}) })) } : {}),
+    ...(notes?.openQuestions?.length ? { openQuestions: notes.openQuestions.slice(0, 40).map((q) => clip(q, 400)) } : {}),
     ...(plan.paused ? { paused: true } : {}),
     parallel: plan.maxParallel,
     running: progress.active.length,

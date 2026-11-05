@@ -244,16 +244,20 @@ function gateItems(plan: Plan, progress: PlanProgress, title: string, at: Pick<N
   // Claude is still writing the first plan: nothing to approve yet (the Mac's Approve Plan waits too).
   if (next.kind === 'approve' && !progress.body?.milestones.length) return [];
   if (next.kind === 'approve' || next.kind === 'review_changes') {
+    // Questions still open (BLG-8): the card says which; answering them is in the plan's conversation, or approve anyway.
+    const open = plan.draft?.openQuestions ?? [];
+    const asked = open.length ? `${open.length === 1 ? 'A question is' : `${open.length} questions are`} still open:\n${open.map((q) => `• ${plainLine(q, 400)}`).join('\n')}` : '';
+    const detail = [asked, plan.draft?.goal ? plainLine(plan.draft.goal, 4000) : ''].filter(Boolean).join('\n\n');
     return [
       {
         id: `plan:${plan.id}:approve:${plan.draftRev}`,
         kind: 'decision',
         title: next.kind === 'approve' ? `Approve the plan “${title}”?` : `Approve the changes to “${title}”?`,
-        ...(plan.draft?.goal ? { detail: clip(plainLine(plan.draft.goal, 4000), 4000) } : {}),
+        ...(detail ? { detail: clip(detail, 4000) } : {}),
         ...at,
         askedAt: plan.updatedAt,
         actions: [
-          { label: 'Approve', tone: 'main', method: 'plans.approve', args: [plan.id] },
+          open.length ? { label: 'Approve Anyway', tone: 'main', method: 'plans.approve', args: [plan.id, { anyway: true }] } : { label: 'Approve', tone: 'main', method: 'plans.approve', args: [plan.id] },
           { label: 'Discard', tone: 'danger', method: 'plans.discard', args: [plan.id] },
         ],
       },

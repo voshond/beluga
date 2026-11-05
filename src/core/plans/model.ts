@@ -61,6 +61,26 @@ export interface PlanTask {
   readonly issueId?: string;
 }
 
+/**
+ * A milestone's Claude asking you something while it works (plan_ask, BLG-6): a structured question,
+ * never buried in its prose. Beluga asks you in the plan's conversation (and on the phone), the Claude
+ * goes on with what doesn't need it, and your answer goes on the task and back to it.
+ */
+export interface PlanAsk {
+  /** The plan task it's about (its id in the plan). */
+  readonly task: string;
+  readonly question: string;
+  /** Why it matters, in a sentence (shown under the question). */
+  readonly why?: string;
+  readonly options: ReadonlyArray<{ readonly label: string; readonly description?: string }>;
+  /** The option it recommends (a label of one of them): shown first, marked Recommended. */
+  readonly recommended?: string;
+  readonly multi?: boolean;
+  /** The worktree that asked (workspace id): the answer goes there. */
+  readonly worktree: string;
+  readonly at: number;
+}
+
 /** A plan task that's yours, as a choice: the question, the options (pick one, or several), and always your own words. */
 export interface PlanDecision {
   readonly question: string;
@@ -84,11 +104,33 @@ export interface PlanMilestone {
   readonly dependsOn?: readonly string[];
 }
 
+/**
+ * One thing settled while planning (BLG-8): what was asked, what was decided and why. `user`: you
+ * answered it; `default`: Claude chose it without asking (a sensible default you can override
+ * before approving). `tasks`: the plan tasks it bears on, whose briefs get it.
+ */
+export interface PlanDecisionEntry {
+  readonly question: string;
+  readonly answer: string;
+  readonly why?: string;
+  readonly by: 'user' | 'default';
+  readonly tasks?: readonly string[];
+}
+
 /** What a plan says: the part Claude writes and you approve. */
 export interface PlanBody {
   readonly title: string;
   readonly goal: string;
   readonly milestones: readonly PlanMilestone[];
+  /** What was settled while planning: your answers and Claude's defaults (BLG-8). Every agent on the plan reads them. */
+  readonly decisions?: readonly PlanDecisionEntry[];
+  /** What's still to be settled: the plan can't be approved while one is open. */
+  readonly openQuestions?: readonly string[];
+}
+
+/** The plan's decisions that bear on one task, as lines for its brief's Decisions. */
+export function decisionLines(body: PlanBody | undefined, taskId: string): string[] {
+  return (body?.decisions ?? []).filter((d) => d.tasks?.includes(taskId)).map((d) => `- ${d.question} → ${d.answer}${d.by === 'default' ? ' (a default, not asked)' : ''}${d.why ? ` — ${d.why}` : ''}`);
 }
 
 /** Claude's check of a milestone's pass criteria. */
@@ -246,6 +288,12 @@ export interface Plan {
   /** The conversation it's planned and run from (`ws:<id>`): its head Claude. */
   readonly home: string;
   readonly status: PlanStatus;
+  /**
+   * What you asked for, in your own words (BLG-3): the New Plan box, or what you said in its
+   * conversation before it was first approved. Never rewritten by Claude, and handed in full to
+   * every milestone's Claude and checker, so nothing is lost between handoffs.
+   */
+  readonly request?: string;
   /** What was approved (its tasks are on the board). */
   readonly body?: PlanBody;
   /** Claude's (and your) working copy, not on the board: a new plan, or changes to an approved one. */
@@ -276,6 +324,13 @@ export interface Plan {
   readonly shipped?: PlanShipped;
   /** Plans that ran before they had a branch were caught up once (passed milestones merged into one). */
   readonly caughtUp?: boolean;
+  /**
+   * The conversation fixing its merge conflicts (a workspace id, BLG-4): a Claude of its own, not
+   * the head's, so the plan's conversation never fills up with code work. Archived once no conflict is left.
+   */
+  readonly fixer?: string;
+  /** Questions its Claudes asked you that wait for an answer, by plan task id (one per task: a new one replaces it). */
+  readonly asks?: Readonly<Record<string, PlanAsk>>;
   /** Its shape on the board: an epic for the plan, one under it per milestone (see epics.ts). */
   readonly epics?: PlanEpics;
   /** Beluga moving its stalled milestones along (see the pilot's rescue), by milestone id: kept, so a restart doesn't start over. */
@@ -327,6 +382,8 @@ export interface PlansSlice {
 }
 
 export const KEEP_PLAN_ACTIVITY = 200;
+/** How much of what you asked for a plan keeps (your first words, then what you added while planning). */
+export const MAX_REQUEST = 8000;
 export const MAX_MILESTONES = 12;
 export const MAX_PLAN_TASKS = 80;
 export const DEFAULT_PARALLEL = 3;
@@ -381,6 +438,13 @@ export function planEpicOf(state: PlansState, issueId: string): { readonly plan:
     if (milestone) return { plan, milestone };
   }
   return undefined;
+}
+
+/** The plan whose merge conflicts a conversation fixes (see Plan.fixer). */
+export function fixerOf(state: PlansState, channel: string): Plan | undefined {
+  if (!channel.startsWith('ws:')) return undefined;
+  const id = channel.slice(3);
+  return state.plans.find((plan) => plan.fixer === id);
 }
 
 /** The plan and milestone a conversation checks (see MilestoneRun.checker). */
@@ -475,6 +539,8 @@ export interface PlanDiff {
   readonly changed: readonly string[];
   readonly removed: readonly string[];
   readonly milestones: number;
+  /** Decisions and open questions added, changed or taken out (BLG-8). */
+  readonly decisions: number;
 }
 
 export function diffBodies(before: PlanBody | undefined, after: PlanBody | undefined): PlanDiff {
@@ -489,7 +555,11 @@ export function diffBodies(before: PlanBody | undefined, after: PlanBody | undef
   });
   const ms = (b: PlanBody | undefined): string => (b?.milestones ?? []).map((m) => `${m.id}\0${m.title}\0${m.goal ?? ''}\0${m.criteria.join('\0')}\0${m.dependsOn?.join(',') ?? '-'}`).join('\n');
   const milestones = ms(before) === ms(after) ? 0 : Math.max(1, Math.abs((after?.milestones.length ?? 0) - (before?.milestones.length ?? 0)));
-  return { added, changed, removed, milestones };
+  const notes = (b: PlanBody | undefined): Set<string> => new Set([...(b?.decisions ?? []).map((d) => JSON.stringify(d)), ...(b?.openQuestions ?? []).map((q) => `?${q}`)]);
+  const was = notes(before);
+  const is = notes(after);
+  const decisions = [...is].filter((x) => !was.has(x)).length + [...was].filter((x) => !is.has(x)).length;
+  return { added, changed, removed, milestones, decisions };
 }
 
 /** What makes a task different, without what the board gave it. */
@@ -498,4 +568,4 @@ export function taskSignature(t: PlanTask): string {
   return JSON.stringify(rest);
 }
 
-export const isEmptyDiff = (d: PlanDiff): boolean => !d.added.length && !d.changed.length && !d.removed.length && !d.milestones;
+export const isEmptyDiff = (d: PlanDiff): boolean => !d.added.length && !d.changed.length && !d.removed.length && !d.milestones && !d.decisions;

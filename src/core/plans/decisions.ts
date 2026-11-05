@@ -1,7 +1,7 @@
 import type { ClaudeAnswer, ClaudeQuestion } from '../../protocol.js';
 import type { Actor, BoardState, Issue } from '../board/model.js';
 import type { Store } from '../store.js';
-import { type Plan, planTitle } from './model.js';
+import { type Plan, type PlanAsk, planTitle } from './model.js';
 import { FINISHED, type PlanView, type TaskState, type TaskView, planView } from './progress.js';
 
 /**
@@ -13,16 +13,25 @@ import { FINISHED, type PlanView, type TaskState, type TaskView, planView } from
  */
 
 const PREFIX = 'decide:';
+/** A question a task's Claude asked (plan_ask, BLG-6): asked the same way, the task isn't yours. */
+const ASK = 'ask:';
 
 /** The card's id for one plan task (stable, so it's asked once and found again after a restart). */
 export const decisionQid = (planId: string, taskId: string): string => `${PREFIX}${planId}:${taskId}`;
 
-/** The plan and task a decision card is about (undefined: it's not a decision). */
-export function parseDecisionQid(qid: string): { readonly plan: string; readonly task: string } | undefined {
-  if (!qid.startsWith(PREFIX)) return undefined;
-  const rest = qid.slice(PREFIX.length);
+/** The card's id for a question a task's Claude asked about it (one per task; asked at `at`, so a new one is a new card). */
+export const askQid = (planId: string, taskId: string, at: number): string => `${ASK}${planId}:${taskId}:${at}`;
+
+/** The plan and task a decision card is about (undefined: it's not a decision); `ask`: a task's Claude asked it. */
+export function parseDecisionQid(qid: string): { readonly plan: string; readonly task: string; readonly ask?: true } | undefined {
+  const ask = qid.startsWith(ASK);
+  if (!ask && !qid.startsWith(PREFIX)) return undefined;
+  const rest = qid.slice((ask ? ASK : PREFIX).length);
   const at = rest.indexOf(':');
-  return at > 0 && at < rest.length - 1 ? { plan: rest.slice(0, at), task: rest.slice(at + 1) } : undefined;
+  if (at <= 0 || at >= rest.length - 1) return undefined;
+  const plan = rest.slice(0, at);
+  const task = ask ? rest.slice(at + 1).replace(/:\d+$/, '') : rest.slice(at + 1);
+  return task ? { plan, task, ...(ask ? { ask: true as const } : {}) } : undefined;
 }
 
 export const isDecisionQid = (qid: string): boolean => parseDecisionQid(qid) !== undefined;
@@ -73,6 +82,32 @@ export function answerText(answer: ClaudeAnswer): string | undefined {
   return text || undefined;
 }
 
+/** The label a recommended option shows with (the way Claude marks one), taken off again in the answer. */
+const RECOMMENDED = ' (Recommended)';
+
+/** The card for a question a task's Claude asked: what it's about, why it matters, its options (the recommended one first). */
+export function askQuestion(ask: PlanAsk, key: string, title: string): Extract<ClaudeQuestion, { kind: 'question' }> {
+  const what = [`**${key} “${title}”**: its agent asks`, ask.question, ask.why ?? ''].filter(Boolean).join('\n\n');
+  const rec = ask.options.find((o) => o.label === ask.recommended);
+  const options = [...(rec ? [rec] : []), ...ask.options.filter((o) => o !== rec)].map((o) => ({ label: clip(o === rec ? `${o.label}${RECOMMENDED}` : o.label, 200), description: clip(o.description ?? '', 600) }));
+  return { kind: 'question', questions: [{ question: clip(what, 1000), header: clip(`${key} · Agent asks`, 40), options: options.slice(0, 6), multiSelect: Boolean(ask.multi) }] };
+}
+
+/** The questions tasks' Claudes asked that still wait (their task on the board and not finished), by plan. */
+export function asksDue(plans: readonly Plan[], board: BoardState): Array<{ readonly qid: string; readonly plan: Plan; readonly ask: PlanAsk; readonly issue: Issue; readonly title: string }> {
+  return plans.flatMap((plan) => {
+    if (plan.status !== 'active' || !plan.body || !plan.asks) return [];
+    return Object.values(plan.asks).flatMap((ask) => {
+      const task = plan.body!.milestones.flatMap((m) => m.tasks).find((t) => t.id === ask.task);
+      const issue = task?.issueId ? board.issues.find((i) => i.id === task.issueId) : undefined;
+      return task && issue && !ASK_OVER.has(issue.status) ? [{ qid: askQid(plan.id, ask.task, ask.at), plan, ask, issue, title: task.title }] : [];
+    });
+  });
+}
+
+/** A question about a task that got this far isn't waiting any more (the work went on without it). */
+const ASK_OVER: ReadonlySet<Issue['status']> = new Set(['in_plan', 'done', 'canceled']);
+
 /** The questions a card can ask about, by plan: every task of every running plan waiting on you. */
 export function decisionsDue(plans: readonly Plan[], board: BoardState): Array<{ readonly qid: string; readonly plan: Plan; readonly task: TaskView }> {
   return plans.flatMap((plan) => (plan.status === 'active' && plan.body ? awaitingYou(planView(plan, board)).map((task) => ({ qid: decisionQid(plan.id, task.task.id), plan, task })) : []));
@@ -80,7 +115,7 @@ export function decisionsDue(plans: readonly Plan[], board: BoardState): Array<{
 
 export interface PlanDecisionsDeps {
   readonly store: Store;
-  readonly plans: { readonly list: () => readonly Plan[]; readonly get: (id: string) => Plan | undefined; note(id: string, kind: 'finished', text: string, by: Actor): unknown };
+  readonly plans: { readonly list: () => readonly Plan[]; readonly get: (id: string) => Plan | undefined; note(id: string, kind: 'finished' | 'note', text: string, by: Actor): unknown; setAsk(id: string, task: string, ask: undefined): unknown };
   readonly board: {
     readonly me: () => Actor;
     readonly board: {
@@ -121,7 +156,9 @@ export class PlanDecisions {
     if (!force && this.seen.plans === state.plans && this.seen.board === state.board) return;
     this.seen = { plans: state.plans, board: state.board };
     const due = decisionsDue(this.deps.plans.list(), state.board);
-    const want = new Set(due.map((d) => d.qid));
+    const asks = asksDue(this.deps.plans.list(), state.board);
+    this.dropStaleAsks(asks);
+    const want = new Set([...due.map((d) => d.qid), ...asks.map((a) => a.qid)]);
     for (const qid of [...this.asked]) {
       if (want.has(qid)) continue;
       this.asked.delete(qid);
@@ -137,6 +174,56 @@ export class PlanDecisions {
         this.deps.store.dispatch({ type: 'system', channel: plan.home, text: `${task.issue?.key ?? task.task.id} “${task.task.title}” is yours: no worktree for it. Answer it here, and the plan carries on.`, level: 'info' });
       }
     }
+    for (const a of asks) {
+      if (this.asked.has(a.qid)) continue;
+      this.asked.add(a.qid);
+      this.deps.questions.pose(a.qid, a.plan.home, askQuestion(a.ask, a.issue.key, a.title), (answer) => this.answered(a.plan.id, a.ask, a.qid, answer));
+    }
+  }
+
+  /** Questions on the plan whose task finished, or went (the work went on without them): taken off it. */
+  private dropStaleAsks(live: ReadonlyArray<{ readonly plan: Plan; readonly ask: PlanAsk }>): void {
+    const keep = new Set(live.map((a) => `${a.plan.id}:${a.ask.task}`));
+    for (const plan of this.deps.plans.list()) for (const task of Object.keys(plan.asks ?? {})) if (plan.status === 'active' && !keep.has(`${plan.id}:${task}`)) this.deps.plans.setAsk(plan.id, task, undefined);
+  }
+
+  /** Your answer to a task's Claude: on the task's Decisions, off the plan, and sent back to the Claude that asked. */
+  private answered(planId: string, ask: PlanAsk, qid: string, answer: ClaudeAnswer): void {
+    this.asked.delete(qid);
+    const plan = this.deps.plans.get(planId);
+    const task = plan?.body?.milestones.flatMap((m) => m.tasks).find((t) => t.id === ask.task);
+    const issue = task?.issueId ? this.deps.board.board.get(task.issueId) : undefined;
+    const text = answerText(answer)?.split(RECOMMENDED).join('');
+    if (!plan || !task || !issue) return;
+    if (!text) {
+      this.seen = { plans: undefined, board: undefined };
+      this.sync();
+      return;
+    }
+    const me = this.deps.board.me();
+    try {
+      this.deps.board.board.editBrief(issue.id, 'decisions', `- ${ask.question} → ${text} (the user, asked by its agent)`, me, { mode: 'append', reason: 'answered in the plan’s conversation' });
+      this.deps.board.board.comment(issue.id, `Answered: ${text}`, me);
+      this.deps.plans.note(planId, 'note', `${issue.key}: the user answered “${text}”`, me);
+    } catch (err) {
+      this.deps.store.dispatch({ type: 'system', channel: plan.home, text: `Couldn’t record your answer on ${issue.key}: ${err instanceof Error ? err.message : String(err)}`, level: 'error' });
+      return;
+    }
+    if (this.deps.plans.get(planId)?.asks?.[ask.task]?.at === ask.at) this.deps.plans.setAsk(planId, ask.task, undefined);
+    this.deps.store.dispatch({ type: 'system', channel: plan.home, text: `You answered ${issue.key}: ${text}. Its agent has it.`, level: 'info' });
+    this.deps.askClaude(
+      [
+        `The user answered your question on ${issue.key} “${task.title}”:`,
+        '',
+        `> ${ask.question}`,
+        '',
+        text,
+        '',
+        'It’s recorded in the task’s Decisions. Go on with the work it was holding up, the same way as before.',
+      ].join('\n'),
+      `ws:${ask.worktree}`,
+    );
+    this.deps.schedule();
   }
 
   /** Your answer: on the task, the task done, the plan moving on, and the head Claude told. */

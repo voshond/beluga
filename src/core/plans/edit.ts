@@ -1,5 +1,5 @@
 import { ESTIMATES, PRIORITIES, type Priority } from '../board/model.js';
-import { AUTONOMIES, type Autonomy, MAX_MILESTONES, MAX_PLAN_TASKS, type PlanBody, type PlanDecision, type PlanMilestone, type PlanTask, allTasks } from './model.js';
+import { AUTONOMIES, type Autonomy, MAX_MILESTONES, MAX_PLAN_TASKS, type PlanBody, type PlanDecision, type PlanDecisionEntry, type PlanMilestone, type PlanTask, allTasks } from './model.js';
 
 /**
  * Writing a plan: a whole one (Claude's plan_write), or a change at a time (Claude's plan_update,
@@ -65,6 +65,17 @@ export interface BodyInput {
   readonly title: string;
   readonly goal: string;
   readonly milestones: readonly MilestoneInput[];
+  readonly decisions?: readonly DecisionInput[];
+  readonly openQuestions?: readonly string[];
+}
+
+/** A decision as Claude writes it (BLG-8): `by` left out is a default it chose. */
+export interface DecisionInput {
+  readonly question: string;
+  readonly answer: string;
+  readonly why?: string;
+  readonly by?: 'user' | 'default';
+  readonly tasks?: readonly string[];
 }
 
 export type PlanOp =
@@ -76,7 +87,11 @@ export type PlanOp =
   | { readonly op: 'update_task'; readonly id: string; readonly patch: Partial<TaskInput> }
   | { readonly op: 'remove_task'; readonly id: string }
   | { readonly op: 'move_task'; readonly id: string; readonly milestone: string; readonly before?: string }
-  | { readonly op: 'block'; readonly id: string; readonly by: string; readonly on: boolean };
+  | { readonly op: 'block'; readonly id: string; readonly by: string; readonly on: boolean }
+  /** Settle a question (a new decision, or a new answer to one): it's no longer open (BLG-8). */
+  | { readonly op: 'decide'; readonly decision: DecisionInput }
+  /** A question still to settle (on), or settled or dropped (off). */
+  | { readonly op: 'open_question'; readonly question: string; readonly on: boolean };
 
 const oneLine = (text: string, max: number): string => text.replace(/\s+/g, ' ').trim().slice(0, max);
 const block = (text: string | undefined, max: number): string | undefined => {
@@ -178,14 +193,65 @@ export function normalizeBody(input: BodyInput, previous?: readonly (PlanBody | 
     return milestone(m, id, tasks);
   });
   const goal = block(input.goal, MAX_GOAL) ?? '';
-  return checkBody({ title, goal, milestones });
+  const decisions = dedupeDecisions((input.decisions ?? []).map(decisionEntry));
+  const openQuestions = questionList(input.openQuestions ?? []).filter((q) => !decisions.some((d) => sameText(d.question, q)));
+  return checkBody({ title, goal, milestones, ...(decisions.length ? { decisions } : {}), ...(openQuestions.length ? { openQuestions } : {}) });
+}
+
+const MAX_DECISIONS = 40;
+const sameText = (a: string, b: string): boolean => oneLine(a, MAX_LINE).toLowerCase() === oneLine(b, MAX_LINE).toLowerCase();
+
+function decisionEntry(d: DecisionInput): PlanDecisionEntry {
+  const question = oneLine(d.question ?? '', MAX_LINE);
+  const answer = oneLine(d.answer ?? '', MAX_LINE);
+  if (!question || !answer) throw new PlanError('Every decision needs its question and its answer');
+  const why = d.why ? oneLine(d.why, MAX_LINE) : '';
+  const tasks = [...new Set((d.tasks ?? []).map((t) => t.trim()).filter(Boolean))];
+  return { question, answer, ...(why ? { why } : {}), by: d.by === 'user' ? 'user' : 'default', ...(tasks.length ? { tasks } : {}) };
+}
+
+/** One decision per question (a later one wins), at most MAX_DECISIONS. */
+function dedupeDecisions(list: readonly PlanDecisionEntry[]): PlanDecisionEntry[] {
+  const out: PlanDecisionEntry[] = [];
+  for (const d of list) {
+    const at = out.findIndex((x) => sameText(x.question, d.question));
+    if (at >= 0) out[at] = d;
+    else out.push(d);
+  }
+  if (out.length > MAX_DECISIONS) throw new PlanError(`A plan keeps at most ${MAX_DECISIONS} decisions: fold small ones together`);
+  return out;
+}
+
+function questionList(list: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const q of list.map((x) => oneLine(x, MAX_LINE)).filter(Boolean)) if (!out.some((x) => sameText(x, q))) out.push(q);
+  return out.slice(0, MAX_DECISIONS);
+}
+
+/** The body with its decisions and open questions as given (none: the fields go). */
+function withNotes(body: PlanBody, decisions: readonly PlanDecisionEntry[], open: readonly string[]): PlanBody {
+  const { decisions: _d, openQuestions: _q, ...rest } = body;
+  return { ...rest, ...(decisions.length ? { decisions } : {}), ...(open.length ? { openQuestions: open } : {}) };
 }
 
 /** Changes, one after another; the result is checked as a whole. */
 export function applyOps(body: PlanBody, ops: readonly PlanOp[]): PlanBody {
   let next = body;
   for (const op of ops) next = applyOp(next, op);
-  return checkBody(next);
+  return checkBody(prunedDecisions(next));
+}
+
+/** Decisions only name tasks still in the plan (a task taken out leaves them). */
+function prunedDecisions(body: PlanBody): PlanBody {
+  if (!body.decisions?.length) return body;
+  const ids = new Set(allTasks(body).map((t) => t.task.id));
+  const decisions = body.decisions.map((d) => {
+    if (!d.tasks?.some((id) => !ids.has(id))) return d;
+    const { tasks, ...rest } = d;
+    const kept = tasks!.filter((id) => ids.has(id));
+    return kept.length ? { ...rest, tasks: kept } : rest;
+  });
+  return { ...body, decisions };
 }
 
 function applyOp(body: PlanBody, op: PlanOp): PlanBody {
@@ -206,6 +272,17 @@ function applyOp(body: PlanBody, op: PlanOp): PlanBody {
     milestones: body.milestones.map((m) => ({ ...m, tasks: m.tasks.flatMap((t) => fn(t) ?? []) })),
   });
   switch (op.op) {
+    case 'decide': {
+      const d = decisionEntry(op.decision);
+      const decisions = dedupeDecisions([...(body.decisions ?? []), d]);
+      return withNotes(body, decisions, (body.openQuestions ?? []).filter((q) => !sameText(q, d.question)));
+    }
+    case 'open_question': {
+      const q = oneLine(op.question ?? '', MAX_LINE);
+      if (!q) throw new PlanError('Say the question');
+      const rest = (body.openQuestions ?? []).filter((x) => !sameText(x, q));
+      return withNotes(body, body.decisions ?? [], op.on ? questionList([...rest, q]) : rest);
+    }
     case 'retitle': {
       const title = op.title !== undefined ? oneLine(op.title, MAX_TITLE) : body.title;
       if (!title) throw new PlanError('The plan needs a title');
@@ -372,6 +449,7 @@ export function checkBody(body: PlanBody): PlanBody {
     state.set(id, 2);
   };
   for (const id of byId.keys()) visit(id, []);
+  for (const d of body.decisions ?? []) for (const id of d.tasks ?? []) if (!byId.has(id)) throw new PlanError(`The decision “${d.question}” names task "${id}", which isn't in the plan`);
   for (const { task: t } of tasks) {
     const seen = new Set([t.id]);
     for (let at = t.parent; at; at = byId.get(at)?.task.parent) {
