@@ -228,6 +228,9 @@ export function headline(view: PlanView): Headline {
   const running = view.active.filter((t) => t.state === 'running' || t.state === 'idle');
   const inMilestones = new Set(running.map((t) => t.milestoneId)).size;
   const alsoRunning = running.length ? ` · ${count(running.length, 'task')} running` : '';
+  // Questions still open (BLG-8): answering them comes before approving.
+  const open = plan.draft?.openQuestions?.length ?? 0;
+  if (open && view.milestones.length) return { who: 'you', text: `Answer ${open === 1 ? 'the open question' : `${open} open questions`} in the conversation, then approve the plan` };
   if (!plan.body) return view.milestones.length ? { who: 'you', text: `Approve the plan: ${count(view.milestones.length, 'milestone')} · ${count(view.total, 'task')} · a draft, not on the board yet` } : { who: 'claude', text: 'Your agent is writing the plan' };
   if (plan.draft) return { who: 'you', text: `Review your agent’s changes: ${changeWords(plan)}` };
   if (next.kind !== 'done' && next.kind !== 'answer' && next.kind !== 'failed') {

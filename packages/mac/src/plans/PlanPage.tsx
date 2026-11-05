@@ -74,7 +74,7 @@ export function PlanPage({ id, task }: { id: string; task?: string }) {
   const { openList } = usePlanActions();
   // A task taken out of the plan isn't picked any more.
   useEffect(() => {
-    if (picked && view && picked !== FEED && picked !== BRANCH && !picked.startsWith('gate:') && !view.milestones.some((m) => m.tasks.some((t) => t.task.id === picked))) setPicked(undefined);
+    if (picked && view && picked !== FEED && picked !== BRANCH && picked !== DECISIONS && !picked.startsWith('gate:') && !view.milestones.some((m) => m.tasks.some((t) => t.task.id === picked))) setPicked(undefined);
   }, [view, picked]);
   if (!plan || !view) return <Empty icon="flag" title="This plan is gone" detail="It was deleted. Its tasks stay on the board." action={<Button onClick={() => openList()}>Back to Plans</Button>} />;
   return <Page view={view} prefs={prefs} setPrefs={setPrefs} picked={picked} setPicked={setPicked} />;
