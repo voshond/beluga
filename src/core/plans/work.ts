@@ -338,8 +338,8 @@ export class PlansWork {
 
   // ------------------------------------------------------------------ for Claude
 
-  /** A run in a plan's home conversation (yours): the plan's tools, and how to plan or run it. */
-  forRun(channel: string, from: string): { readonly tools?: PlanTools; readonly brief?: string } | undefined {
+  /** A run in a plan's home conversation (yours): the plan's tools, and how to plan or run it. `said`: what you asked in it (kept as the plan's request until it's approved). */
+  forRun(channel: string, from: string, said?: string): { readonly tools?: PlanTools; readonly brief?: string } | undefined {
     const me = this.deps.board.me();
     if (me.kind !== 'person' || from !== me.id) return undefined;
     // A milestone's checker: its brief, and only plan_get and plan_gate.
@@ -350,8 +350,9 @@ export class PlansWork {
       const m = view.milestones.find((x) => x.milestone.id === checking.milestone);
       return m ? { tools: this.checkerTools(checking.plan.id, m.milestone.id), brief: checkerBrief(view, m) } : undefined;
     }
-    const plan = planForHome(this.plans.state(), channel);
-    if (!plan) return undefined;
+    const found = planForHome(this.plans.state(), channel);
+    if (!found) return undefined;
+    const plan = (said && this.plans.noteRequest(found.id, said)) || found;
     const board = this.deps.store.getState().board;
     const view = this.pilot.view(plan);
     const brief = plan.body ? headBrief(view) + planningBrief(plan, board, this.plans.planningStyle) : planningBrief(plan, board, this.plans.planningStyle);

@@ -18,6 +18,7 @@ import {
   type GateCheck,
   KEEP_PLAN_ACTIVITY,
   MAX_PARALLEL,
+  MAX_REQUEST,
   type MilestoneAgent,
   type MilestoneRun,
   type PlanEpics,
@@ -91,6 +92,7 @@ const SavedPlan = z
     testsAt: z.enum(TESTS_AT).catch('milestone'),
     // Who works it (BLG-497): one that doesn't read is let go (your default works it).
     agent: AgentRef.optional().catch(undefined),
+    request: z.string().optional().catch(undefined),
     body: Body.optional().catch(undefined),
     draft: Body.optional().catch(undefined),
     paused: z.boolean().default(false),
@@ -140,11 +142,13 @@ export class Plans {
   create(input: { readonly projectId: string; readonly home: string; readonly title?: string; readonly goal?: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentRef }, by: Actor): Plan {
     const at = this.now();
     const title = (input.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 80) || UNTITLED;
+    const request = input.goal?.trim().slice(0, MAX_REQUEST);
     const plan: Plan = {
       id: short('pl'),
       projectId: input.projectId,
       home: input.home,
       status: 'draft',
+      ...(request ? { request } : {}),
       draft: { title, goal: input.goal?.trim().slice(0, 4000) ?? '', milestones: [] },
       draftRev: 1,
       autonomy: input.autonomy ?? DEFAULT_AUTONOMY,
@@ -160,6 +164,19 @@ export class Plans {
     this.plans = [...this.plans, plan];
     this.publish(plan);
     return plan;
+  }
+
+  /**
+   * What you said in the plan's conversation while it was never approved: your words join what
+   * you asked for (the first message is the request, later ones are added as you said them).
+   * Once approved, it stays as it was: later messages steer the running plan, they aren't the ask.
+   */
+  noteRequest(id: string, text: string): Plan | undefined {
+    const plan = this.get(id);
+    const said = text.trim();
+    if (!plan || plan.body || !said || plan.request?.includes(said)) return undefined;
+    const request = (plan.request ? `${plan.request}\n\nThen: ${said}` : said).slice(0, MAX_REQUEST);
+    return request === plan.request ? undefined : this.change(plan, { request }, []);
   }
 
   /** Claude's whole plan (the draft). Tasks it named before keep their board tasks. */

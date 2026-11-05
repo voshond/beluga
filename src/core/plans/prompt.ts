@@ -73,6 +73,18 @@ const HOW_TO_PLAN = [
   '  Don\'t make every task run the full suite.',
 ].join('\n');
 
+/** What the user asked for, in their own words (BLG-3): handed on as it is, never retold by another Claude. */
+export function requestLines(plan: Pick<Plan, 'request'>): string[] {
+  const said = plan.request?.replace(/<\/?user_request>/gi, '').trim();
+  if (!said) return [];
+  return [
+    'What the user asked for, in their own words (the plan is a reading of it; where the plan is unclear or silent, their words decide):',
+    '<user_request>',
+    said,
+    '</user_request>',
+  ];
+}
+
 /** Under load (other worktrees testing too) a slow moment fails a test: it counts only if it fails alone too. */
 const UNDER_LOAD = 'A failure that looks like load (a timeout, "did not start", a flaky wait while the Mac is busy: see `uptime`) counts only if it fails again when re-run once, alone.';
 
@@ -126,6 +138,8 @@ export function planningBrief(plan: Plan, board: BoardState, style: string): str
     'This conversation is the plan\'s own: don\'t move it to a worktree. You can change files here when it\'s quick and the',
     'user asks (a note, a config value); real code changes are the plan\'s tasks, each in its own worktree.',
     body?.milestones.length ? 'The plan already has content: revise it with plan_update unless the user wants it rewritten.' : 'The plan is empty: understand what the user wants (ask only what you can\'t find out), read the code, then plan_write.',
+    'What the user says here before the plan is first approved is kept on the plan as their request, word for word, and every',
+    'agent that works on it or checks it reads it beside your plan: your goal and tasks are your reading of it, not a replacement.',
     'After writing, answer briefly: the milestones in a line each, which run side by side and which wait, risks and open questions. Then the user',
     'approves, or tells you what to change.',
     '',
@@ -281,6 +295,8 @@ export function checkPrompt(view: PlanView, m: MilestoneView, opts: { readonly c
           '',
         ]
       : []),
+    ...requestLines(view.plan),
+    ...(view.plan.request ? ['Check against what they asked too: work that meets the criteria but not their words is a gap.', ''] : []),
     `Every task of milestone “${m.milestone.title}” is finished. Check its pass criteria for real, one by one:`,
     ...(m.milestone.criteria.length ? m.milestone.criteria.map((c, i) => `${i + 1}. ${c}`) : ['(It has none of its own: check its tasks\' acceptance criteria below.)']),
     '',
@@ -467,6 +483,8 @@ function taskBlock(t: TaskView, i: number, view: PlanView, full: boolean): strin
   ];
 }
 
+const withGap = (lines: readonly string[]): string[] => (lines.length ? ['', ...lines] : []);
+
 const FINISHED_WORDS: ReadonlySet<TaskView['state']> = new Set(['review', 'planned', 'done', 'canceled', 'missing']);
 
 /** How a milestone's Claude works: fast, one task at a time, each one moved along on the board. */
@@ -500,6 +518,7 @@ export function milestonePrompt(view: PlanView, m: MilestoneView, tasks: readonl
     ...(view.body?.goal ? [`Plan goal: ${clip(view.body.goal.replace(/\s+/g, ' ').trim(), 600)}`] : []),
     ...(m.milestone.goal ? [`Milestone goal: ${clip(m.milestone.goal.replace(/\s+/g, ' ').trim(), 600)}`] : []),
     ...(m.milestone.criteria.length ? ['The milestone passes when:', ...m.milestone.criteria.map((c) => `- ${c}`)] : []),
+    ...withGap(requestLines(plan)),
     '',
     `Your tasks, in this order:`,
     ...tasks.flatMap((t, i) => taskBlock(t, i, view, true)),

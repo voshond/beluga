@@ -184,6 +184,7 @@ Two friends who each have the same GitHub repository as a project on their own M
 - **New Plan** (Plans, ⌘K): “Plan in {project}”, a big goal box that grows as you write (⌘↩ starts), and how it runs as three cards (names and sentences from `AUTONOMY_INFO`). Opened from a project it asks no project; `goal` prefills the box. It opens a conversation of its own in the project's main folder (the agent only reads there) and the plan's page. The agent reads the code and writes the plan with its tools (`beluga_plan`: `plan_get`, `plan_write`, `plan_update`); the graph fills in as it writes, and you talk it through in the conversation beside it.
 - **Plan with Tasks** in any conversation in a project (the composer's mode menu, or ⇧⇥: Act → Plan First → Plan with Tasks): that conversation becomes the plan's home. A strip above it shows the plan and its next step.
 - A plan task can adopt a task already on the board (`issue: "BOB-12"`).
+- **Your words are kept** (BLG-3). What you asked for (the New Plan box, and what you say in the plan's conversation before it's first approved, each later message added after "Then:") is the plan's `request`, up to 8000 characters. Claude's `plan_write` never replaces it: the plan's goal and tasks are its reading of it. Every milestone's Claude reads it in full in its first brief (`<user_request>`, where the plan is silent their words decide), and every checker checks against it too. After approval, what you say steers the running plan and isn't added.
 
 ### Running it (`pilot.ts`, `progress.ts`)
 

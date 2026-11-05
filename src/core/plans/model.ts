@@ -246,6 +246,12 @@ export interface Plan {
   /** The conversation it's planned and run from (`ws:<id>`): its head Claude. */
   readonly home: string;
   readonly status: PlanStatus;
+  /**
+   * What you asked for, in your own words (BLG-3): the New Plan box, or what you said in its
+   * conversation before it was first approved. Never rewritten by Claude, and handed in full to
+   * every milestone's Claude and checker, so nothing is lost between handoffs.
+   */
+  readonly request?: string;
   /** What was approved (its tasks are on the board). */
   readonly body?: PlanBody;
   /** Claude's (and your) working copy, not on the board: a new plan, or changes to an approved one. */
@@ -327,6 +333,8 @@ export interface PlansSlice {
 }
 
 export const KEEP_PLAN_ACTIVITY = 200;
+/** How much of what you asked for a plan keeps (your first words, then what you added while planning). */
+export const MAX_REQUEST = 8000;
 export const MAX_MILESTONES = 12;
 export const MAX_PLAN_TASKS = 80;
 export const DEFAULT_PARALLEL = 3;
