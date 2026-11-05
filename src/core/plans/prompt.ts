@@ -36,14 +36,25 @@ const MILESTONE_WORDS: Readonly<Record<MilestoneView['state'], string>> = {
   passed: 'passed',
 };
 
-/** Who the plan's own conversation is: the one place the user runs the whole plan from. */
+/**
+ * Who the plan's own conversation is once the plan runs: the one place the user steers it from, and
+ * a router (BLG-5): it routes work and words to the agents doing it, and does none of that work itself.
+ */
 const ORCHESTRATOR = [
   'This conversation is the orchestrator of the whole plan: the user steers everything from here. When they say',
   'stop, start, redirect, skip or change something (a task, a milestone, the whole plan), do it now with your tools',
   '(plan_stop_task, plan_start_task, plan_message_task, plan_update, plan_pause, plan_gate) rather than only describing',
   'it, and say in a line what you did. Their messages reach you even while you work: answer the newest first.',
-  'You may read and change files here when that is the quickest way to do what they ask (a note, a fix-up, a',
-  'config value); code work belongs to the plan\'s tasks, each in its own worktree.',
+  'You route; the milestone agents work. While the plan runs:',
+  '- Don\'t read code, logs or diffs to investigate, design a fix or solve an agent\'s blocker yourself: the agent on that',
+  '  task owns it. Ask it (plan_message_task), or stop and restart it with what to do instead. Checking a milestone',
+  '  (plan_gate) when the user asks is the one time you read the work.',
+  '- Pass the user\'s words on as they said them: quote them in plan_message_task, with at most one line of your own on why it',
+  '  goes to that agent. Don\'t turn a short ask into a list of steps, files or criteria: the agent reads the code and decides how.',
+  '- A change of what gets built is a plan change (plan_update): new or changed tasks, their goal in the user\'s words.',
+  '- Don\'t edit files here. Code work belongs to the plan\'s tasks, each in a worktree, and merge conflicts to the plan\'s fixer',
+  '  (unless Beluga hands you one to fix, in a hidden worktree it names).',
+  '- Keep progress to yourself: tell the user when something is theirs to do, finished, or stuck, not that work goes on.',
 ].join('\n');
 
 /** How plans are cut: what the planner Claude is told (plus the user's own style). */
@@ -135,8 +146,10 @@ export function planningBrief(plan: Plan, board: BoardState, style: string): str
     'Write the plan with the plan tools (mcp__beluga_plan__*): plan_write for the whole plan, plan_update for changes,',
     'plan_get to see it. Nothing reaches the task board until the user approves the plan; you can\'t approve it yourself.',
     plan.body && plan.autonomy === 'autopilot' ? 'This plan runs on autopilot: changes you make to it now apply at once and can start work, so change only what the plan needs.' : '',
-    'This conversation is the plan\'s own: don\'t move it to a worktree. You can change files here when it\'s quick and the',
-    'user asks (a note, a config value); real code changes are the plan\'s tasks, each in its own worktree.',
+    'This conversation is the plan\'s own: don\'t move it to a worktree.',
+    plan.body
+      ? 'While the plan runs you don\'t change files here: code changes are the plan\'s tasks, each in its own worktree.'
+      : 'You can change files here when it\'s quick and the user asks (a note, a config value); real code changes are the plan\'s tasks, each in its own worktree.',
     body?.milestones.length ? 'The plan already has content: revise it with plan_update unless the user wants it rewritten.' : 'The plan is empty: understand what the user wants (ask only what you can\'t find out), read the code, then plan_write.',
     'What the user says here before the plan is first approved is kept on the plan as their request, word for word, and every',
     'agent that works on it or checks it reads it beside your plan: your goal and tasks are your reading of it, not a replacement.',
@@ -168,7 +181,7 @@ export function headBrief(view: PlanView): string {
     'whose dependencies have passed, so independent milestones run side by side, each with its own check. Tasks',
     'assigned to the user are never an agent\'s: the user answers them in this conversation. You coordinate:',
     '- plan_get: the plan and the state of every task (who\'s working, what waits on what).',
-    '- plan_message_task: tell a task\'s agent (its milestone\'s agent) something. mode "queue" (default) waits until its current turn',
+    '- plan_message_task: tell a task\'s agent (its milestone\'s agent) something, the user\'s words quoted as they are. mode "queue" (default) waits until its current turn',
     '  ends, which can be after a 15-minute test run: for a heads-up, a decision it needs later, an FYI.',
     '  mode "steer" reaches it now, interrupting a long command or a stuck turn: only when waiting wastes',
     '  work: stop a run going the wrong way, or a correction that changes what it does. Beluga delivers a',
@@ -335,7 +348,7 @@ export function checkFailedPrompt(title: string, notes: string, autopilot: boole
     '',
     notes.trim(),
     '',
-    `Add the tasks that fix it to this milestone with plan_update (name the criterion each one fixes in its goal)${autopilot ? ': on Autopilot they apply at once and its Claude picks them up' : '; the user approves them'}.`,
+    `Add the tasks that fix it to this milestone with plan_update (name the criterion each one fixes in its goal, and put the checker's notes for it in its context as they are, not your own diagnosis)${autopilot ? ': on Autopilot they apply at once and its Claude picks them up' : '; the user approves them'}.`,
     autopilot ? 'Don\'t stop to ask the user: decide the fix tasks yourself.' : '',
   ]
     .filter((l, i, all) => l !== '' || all[i - 1] !== '')

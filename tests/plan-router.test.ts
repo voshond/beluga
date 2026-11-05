@@ -4,13 +4,13 @@ import { BoardWork } from '../src/core/board/work.js';
 import type { BodyInput } from '../src/core/plans/edit.js';
 import { MAX_REQUEST } from '../src/core/plans/model.js';
 import { Plans } from '../src/core/plans/plans.js';
-import { checkPrompt, planningBrief } from '../src/core/plans/prompt.js';
+import { checkFailedPrompt, checkPrompt, headBrief, planningBrief } from '../src/core/plans/prompt.js';
 import { PlansWork } from '../src/core/plans/work.js';
 import { Store, initialState } from '../src/core/store.js';
 import type { WorkspaceController, WorktreeEvent } from '../src/core/workspace-controller.js';
 import type { Project, Workspace } from '../src/workspaces/types.js';
 
-/** BLG-3: a plan keeps what you asked for in your own words, and every agent on it reads them. */
+/** A thin head (DeepSeek's router): BLG-3 a plan keeps what you asked for in your own words, and every agent on it reads them; BLG-5 the running plan's head routes and doesn't work. */
 
 const ws = (id: string, projectId: string, name: string, kind: Workspace['kind'] = 'worktree', extra: Partial<Workspace> = {}): Workspace => ({ id, projectId, name, path: `/tmp/${name}`, kind, projectRoot: '/tmp/p', branch: `klaud/${name}`, createdAt: 0, external: false, ...extra }) as unknown as Workspace;
 const project = (id: string, name: string, workspaces: Workspace[] = []): Project => ({ id, name, root: `/tmp/${name}`, base: 'main', workspaces });
@@ -115,5 +115,31 @@ describe('a plan keeps what you asked for (BLG-3)', () => {
     await tick(10);
     const v2 = bare.work.pilot.view(bare.plans.need(p2.id));
     expect(checkPrompt(v2, v2.milestones[0]!)).not.toContain('user_request');
+  });
+});
+
+describe('the running plan’s head is a router (BLG-5)', () => {
+  it('routes, quotes the user, and leaves code to the agents; drafting may still touch a note', async () => {
+    const t = setup();
+    const plan = t.plans.create({ projectId: 'api', home: 'ws:main', goal: 'Card payments' }, t.me);
+    const drafting = planningBrief(t.plans.need(plan.id), t.store.getState().board, '');
+    expect(drafting).toContain('You can change files here when it\'s quick and the user asks');
+    t.work.forRun('ws:main', 'p-me')!.tools!.write(BODY);
+    t.work.approve(plan.id);
+    await tick(10);
+    const brief = t.work.forRun('ws:main', 'p-me')!.brief!;
+    expect(brief).toContain('You route; the milestone agents work.');
+    expect(brief).toContain('Don\'t read code, logs or diffs to investigate');
+    expect(brief).toContain('Pass the user\'s words on as they said them');
+    expect(brief).toContain('Don\'t edit files here.');
+    expect(brief).toContain('the user\'s words quoted as they are');
+    expect(brief).toContain('While the plan runs you don\'t change files here');
+    expect(brief).not.toContain('You may read and change files here');
+    expect(brief).not.toContain('You can change files here when it\'s quick');
+    expect(headBrief(t.work.pilot.view(t.plans.need(plan.id)))).toContain('unless Beluga hands you one to fix');
+  });
+
+  it('a failed check’s fix tasks carry the checker’s notes, not the head’s diagnosis', () => {
+    expect(checkFailedPrompt('Safe payments', 'Replay charges twice', false)).toContain('put the checker\'s notes for it in its context as they are');
   });
 });
