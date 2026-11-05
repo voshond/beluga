@@ -282,6 +282,11 @@ export interface Plan {
   readonly shipped?: PlanShipped;
   /** Plans that ran before they had a branch were caught up once (passed milestones merged into one). */
   readonly caughtUp?: boolean;
+  /**
+   * The conversation fixing its merge conflicts (a workspace id, BLG-4): a Claude of its own, not
+   * the head's, so the plan's conversation never fills up with code work. Archived once no conflict is left.
+   */
+  readonly fixer?: string;
   /** Its shape on the board: an epic for the plan, one under it per milestone (see epics.ts). */
   readonly epics?: PlanEpics;
   /** Beluga moving its stalled milestones along (see the pilot's rescue), by milestone id: kept, so a restart doesn't start over. */
@@ -389,6 +394,13 @@ export function planEpicOf(state: PlansState, issueId: string): { readonly plan:
     if (milestone) return { plan, milestone };
   }
   return undefined;
+}
+
+/** The plan whose merge conflicts a conversation fixes (see Plan.fixer). */
+export function fixerOf(state: PlansState, channel: string): Plan | undefined {
+  if (!channel.startsWith('ws:')) return undefined;
+  const id = channel.slice(3);
+  return state.plans.find((plan) => plan.fixer === id);
 }
 
 /** The plan and milestone a conversation checks (see MilestoneRun.checker). */

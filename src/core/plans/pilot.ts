@@ -75,7 +75,12 @@ export interface PilotDeps {
    * free and milestones are checked side by side. Without it, the head Claude checks (as before).
    */
   readonly checkerChat?: (plan: Plan, milestone: PlanMilestone) => Promise<string | undefined>;
-  /** A checker's conversation is no longer needed (its milestone passed): archived, what was said kept. */
+  /**
+   * A conversation of its own to fix the plan's merge conflicts in (its workspace id, BLG-4): the head
+   * Claude routes and never fills up with code work. Without it, the head Claude fixes them (as before).
+   */
+  readonly fixerChat?: (plan: Plan) => Promise<string | undefined>;
+  /** A checker's (or fixer's) conversation is no longer needed: archived, what was said kept. */
   readonly retireChat?: (workspaceId: string) => void;
   /**
    * Tasks only you can do came up (ready, in an open milestone), each once: the hook for asking you
@@ -208,6 +213,7 @@ export function plansByChannel(plans: readonly Plan[], board: BoardState): Map<s
   const add = (channel: string, planId: string): void => void (out.get(channel) ?? out.set(channel, new Set()).get(channel)!).add(planId);
   for (const plan of plans) add(plan.home, plan.id);
   for (const plan of plans) for (const run of Object.values(plan.runs ?? {})) if (run?.checker) add(`${WS_PREFIX}${run.checker}`, plan.id);
+  for (const plan of plans) if (plan.fixer) add(`${WS_PREFIX}${plan.fixer}`, plan.id);
   for (const issue of board.issues) {
     const planId = planOfIssue.get(issue.id);
     if (planId) for (const ws of issue.worktrees) add(`${WS_PREFIX}${ws}`, planId);
@@ -620,6 +626,7 @@ export class PlanPilot {
       for (const t of m.tasks) for (const w of t.issue?.worktrees ?? []) channels.add(`${WS_PREFIX}${w}`);
       // The head Claude works on it for these (a merge's fix-up, fix tasks, its check before checkers).
       if (kind === 'merging' || kind === 'failed' || (kind === 'checking' && !m.run.checker)) channels.add(plan.home);
+      if (kind === 'merging') channels.add(this.fixupHome(plan.id));
     } else {
       channels.add(plan.home);
       for (const x of view.open) if (x.agent) channels.add(`${WS_PREFIX}${x.agent.worktree}`);
@@ -700,9 +707,8 @@ export class PlanPilot {
           this.stepMerges(plan);
           return `merged “${title}” again`;
         }
-        this.deps.allowFixup?.(plan.home, c.dir);
-        this.deps.askClaude(mergeFixupPrompt(title, plan.branch ?? planBranchName(plan), c.key ?? c.merging, c), plan.home, false);
-        return `asked the plan’s Claude to fix the merge conflict in ${c.files.slice(0, 3).join(', ')}`;
+        void this.askFixup(plan.id, mergeFixupPrompt(title, plan.branch ?? planBranchName(plan), c.key ?? c.merging, c), c.dir).catch(() => undefined);
+        return `asked ${this.deps.plans.need(plan.id).fixer ? 'the fixer' : 'the plan’s Claude'} to fix the merge conflict in ${c.files.slice(0, 3).join(', ')}`;
       }
       default:
         return tries <= 1 ? head() : undefined;
@@ -1045,8 +1051,9 @@ export class PlanPilot {
   private stepCombining(plan: Plan, view: PlanView): void {
     const combining = plan.combining ?? {};
     const tasks = view.milestones.flatMap((m) => m.tasks);
-    const busy = liveFrom(this.deps.store.getState()).busy(plan.home);
-    const last = this.lastRun(plan.home);
+    const fixing = this.fixupHome(plan.id);
+    const busy = liveFrom(this.deps.store.getState()).busy(fixing);
+    const last = this.lastRun(fixing);
     for (const id of Object.keys(combining)) {
       const t = tasks.find((x) => x.task.id === id);
       if (t?.issue && this.starting.has(t.issue.id)) continue;
@@ -1101,11 +1108,11 @@ export class PlanPilot {
       res = await combine(plan.projectId, issue.key, bases, plan.branch);
     } catch (err) {
       this.deps.plans.setCombining(plan.id, t.task.id, undefined);
-      this.deps.allowFixup?.(plan.home, undefined);
+      this.endFixup(plan.id);
       throw new Error(`couldn’t combine ${from.join(' and ')}: ${err instanceof Error ? err.message : String(err)}`);
     }
     if (res.ok) {
-      if (was?.conflict) this.deps.allowFixup?.(plan.home, undefined);
+      if (was?.conflict) this.endFixup(plan.id, { combining: t.task.id });
       this.fixAsked.delete(issue.id);
       this.stuckTried.delete(issue.id);
       return res.branch;
@@ -1114,16 +1121,64 @@ export class PlanPilot {
     const stuck = asks >= FIXUP_ASKS;
     const conflict = { at: was?.conflict?.stuck && stuck ? was.conflict.at : Date.now(), dir: res.dir, merging: res.merging, files: res.files, ...(stuck ? { stuck } : {}) };
     this.deps.plans.setCombining(plan.id, t.task.id, { at: was?.at ?? Date.now(), from, conflict });
-    this.deps.allowFixup?.(plan.home, res.dir);
     if (!stuck) {
-      const after = this.lastRun(plan.home);
-      this.fixAsked.set(issue.id, { asks: asks + 1, ...(after ? { after } : {}) });
       if (!asks) this.deps.plans.note(plan.id, 'problem', `combining ${from.join(' and ')} for ${issue.key}: ${res.merging} conflicts in ${res.files.join(', ')}; the agent is fixing it`, { kind: 'beluga' });
-      this.deps.askClaude(fixupPrompt(issue.key, t.task.title, from, res), plan.home, false);
+      await this.askFixup(plan.id, fixupPrompt(issue.key, t.task.title, from, res), res.dir, issue.id, asks);
     } else if (!was?.conflict?.stuck) {
       this.deps.plans.note(plan.id, 'problem', `combining ${from.join(' and ')} for ${issue.key}: the conflict in ${res.files.join(', ')} is still there; fix it in ${res.dir} and ${issue.key} starts`, { kind: 'beluga' });
     }
     return undefined;
+  }
+
+  /** Where the plan's merge conflicts are fixed: its fixer's conversation while it has one, else the head Claude's. */
+  private fixupHome(planId: string): string {
+    const plan = this.deps.plans.need(planId);
+    const ws = plan.fixer ? this.deps.store.getState().projects.flatMap((p) => p.workspaces).find((w) => w.id === plan.fixer) : undefined;
+    return ws && !ws.archived ? `${WS_PREFIX}${ws.id}` : plan.home;
+  }
+
+  /**
+   * A conflict to fix in a hidden worktree (`dir`): its fixer (made the first time, BLG-4) may edit
+   * there, and is asked. The head Claude hears one line; no fixer can be made: it fixes it, as before.
+   * `key`/`asks`: counted, so a conflict asked about twice waits for you.
+   */
+  private async askFixup(planId: string, prompt: string, dir: string, key?: string, asks = 0): Promise<void> {
+    const had = this.fixupHome(planId);
+    let channel = had;
+    const plan = this.deps.plans.need(planId);
+    if (channel === plan.home && this.deps.fixerChat) {
+      const made = await this.deps.fixerChat(plan).catch(() => undefined);
+      if (made) {
+        this.deps.plans.setFixer(planId, made);
+        channel = `${WS_PREFIX}${made}`;
+      }
+    }
+    this.deps.allowFixup?.(channel, dir);
+    if (key) {
+      const after = this.lastRun(channel);
+      this.fixAsked.set(key, { asks: asks + 1, ...(after ? { after } : {}) });
+    }
+    this.deps.askClaude(prompt, channel, false);
+    if (channel !== plan.home && channel !== had) this.deps.system(plan.home, 'A merge conflict came up: a Claude of its own is fixing it, so this conversation stays free. The plan goes on by itself once it’s fixed.');
+  }
+
+  /**
+   * A conflict is over (fixed, or given up): its conversation may no longer edit the hidden worktree,
+   * and once the plan has no conflict left, its fixer is archived (what it said is kept).
+   * `combining`/`merging`/`main`: the one just settled, still on the plan until the caller clears it.
+   */
+  private endFixup(planId: string, settled: { readonly combining?: string; readonly merging?: string; readonly main?: boolean } = {}): void {
+    const plan = this.deps.plans.need(planId);
+    const channel = this.fixupHome(planId);
+    this.deps.allowFixup?.(channel, undefined);
+    if (channel !== plan.home) this.deps.allowFixup?.(plan.home, undefined);
+    const open =
+      Object.entries(plan.combining ?? {}).some(([id, c]) => id !== settled.combining && c.conflict) ||
+      Object.entries(plan.merging ?? {}).some(([id, m]) => id !== settled.merging && m.conflict) ||
+      Boolean(!settled.main && plan.mainMerge?.conflict);
+    if (open || !plan.fixer) return;
+    this.deps.retireChat?.(plan.fixer);
+    this.deps.plans.setFixer(planId, undefined);
   }
 
   /** The latest run in a conversation (its request id). */
@@ -1187,7 +1242,8 @@ export class PlanPilot {
       this.stuckTried.set(key, Date.now());
     } else {
       const asked = this.fixAsked.get(key);
-      if (asked && (liveFrom(this.deps.store.getState()).busy(plan.home) || this.lastRun(plan.home) === asked.after)) return;
+      const fixing = this.fixupHome(plan.id);
+      if (asked && (liveFrom(this.deps.store.getState()).busy(fixing) || this.lastRun(fixing) === asked.after)) return;
     }
     void this.bringInMain(plan.id).catch(() => undefined);
   }
@@ -1218,18 +1274,15 @@ export class PlanPilot {
         const stuck = asks >= FIXUP_ASKS;
         const was = this.deps.plans.need(planId).mainMerge?.conflict;
         this.deps.plans.setMainMerge(planId, { at: plan.mainMerge?.at ?? Date.now(), main, conflict: { at: was?.stuck && stuck ? was.at : Date.now(), dir: res.dir, files: res.files, ...(stuck ? { stuck } : {}) } });
-        this.deps.allowFixup?.(plan.home, res.dir);
         if (!stuck) {
-          const after = this.lastRun(plan.home);
-          this.fixAsked.set(key, { asks: asks + 1, ...(after ? { after } : {}) });
           if (!asks) this.deps.plans.note(planId, 'problem', `merging ${main} into ${branch}: it conflicts in ${res.files.join(', ')}; Claude is fixing it`, beluga);
-          this.deps.askClaude(mainFixupPrompt(branch, main, plan.pr?.number, res), plan.home, false);
+          await this.askFixup(planId, mainFixupPrompt(branch, main, plan.pr?.number, res), res.dir, key, asks);
         } else if (!was?.stuck) {
           this.deps.plans.note(planId, 'problem', `merging ${main} into ${branch}: the conflict in ${res.files.join(', ')} is still there; fix it and it goes on`, beluga);
         }
         return this.deps.plans.need(planId);
       }
-      if (plan.mainMerge?.conflict) this.deps.allowFixup?.(plan.home, undefined);
+      if (plan.mainMerge?.conflict) this.endFixup(planId, { main: true });
       this.fixAsked.delete(key);
       this.stuckTried.delete(key);
       this.deps.plans.setMainMerge(planId, undefined);
@@ -1284,8 +1337,9 @@ export class PlanPilot {
 
   /** Merges waiting: started, or tried again once the head Claude's fix-up run came and went. */
   private stepMerges(plan: Plan): void {
-    const busy = liveFrom(this.deps.store.getState()).busy(plan.home);
-    const last = this.lastRun(plan.home);
+    const fixing = this.fixupHome(plan.id);
+    const busy = liveFrom(this.deps.store.getState()).busy(fixing);
+    const last = this.lastRun(fixing);
     for (const [id, merge] of Object.entries(plan.merging ?? {})) {
       const key = `merge:${plan.id}:${id}`;
       if (this.mergingNow.has(key)) continue;
@@ -1354,7 +1408,7 @@ export class PlanPilot {
         const why = err instanceof Error ? err.message : String(err);
         this.deps.plans.setMerging(planId, milestoneId, undefined);
         this.deps.plans.setMergeFailed(planId, milestoneId, why.split('\n').find((l) => l.trim())?.trim().slice(0, 300) ?? 'git said no');
-        this.deps.allowFixup?.(plan.home, undefined);
+        this.endFixup(planId, { merging: milestoneId });
         this.deps.plans.note(planId, 'problem', `couldn’t merge “${m.milestone.title}” into ${branch}: ${why}`, beluga);
         return;
       }
@@ -1368,19 +1422,16 @@ export class PlanPilot {
       const was = merge.conflict;
       const conflict = { at: was?.stuck && stuck ? was.at : Date.now(), dir: res.dir, merging: res.merging, key: conflictKey, files: res.files, ...(stuck ? { stuck } : {}) };
       this.deps.plans.setMerging(planId, milestoneId, { ...merge, conflict });
-      this.deps.allowFixup?.(plan.home, res.dir);
       if (!stuck) {
-        const after = this.lastRun(plan.home);
-        this.fixAsked.set(key, { asks: asks + 1, ...(after ? { after } : {}) });
         if (!asks) this.deps.plans.note(planId, 'problem', `merging “${m.milestone.title}” into ${branch}: ${conflictKey} conflicts in ${res.files.join(', ')}; the agent is fixing it`, beluga);
-        this.deps.askClaude(mergeFixupPrompt(m.milestone.title, branch, conflictKey, res), plan.home, false);
+        await this.askFixup(planId, mergeFixupPrompt(m.milestone.title, branch, conflictKey, res), res.dir, key, asks);
       } else if (!was?.stuck) {
         this.deps.plans.note(planId, 'problem', `merging “${m.milestone.title}” into ${branch}: the conflict in ${res.files.join(', ')} is still there; fix it in ${res.dir} and the milestone passes`, beluga);
       }
       return;
     }
     // In: its tasks are Merged into Plan, the milestone passes, and their worktrees go.
-    if (merge.conflict) this.deps.allowFixup?.(plan.home, undefined);
+    if (merge.conflict) this.endFixup(planId, { merging: milestoneId });
     this.fixAsked.delete(key);
     this.stuckTried.delete(key);
     for (const t of tasks) this.deps.work.board.planMoved(t.issue!.id, 'in_plan', `merged into ${branch}: “${m.milestone.title}” passed`);

@@ -368,6 +368,11 @@ export class Plans {
   }
 
   /** The conversation that checks a milestone (undefined: none, it was archived). */
+  /** The conversation fixing its merge conflicts, or none any more. */
+  setFixer(id: string, fixer: string | undefined): Plan {
+    return this.change(this.need(id), { fixer }, []);
+  }
+
   setChecker(id: string, milestone: string, checker: string | undefined): Plan {
     const plan = this.need(id);
     const { checker: _was, ...rest } = plan.runs[milestone] ?? {};

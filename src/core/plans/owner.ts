@@ -1,5 +1,5 @@
 import type { BoardState, Issue } from '../board/model.js';
-import { type Plan, type PlanMilestone, type PlanTask, type PlansState, allTasks, checkerOf, planById, planForHome } from './model.js';
+import { type Plan, type PlanMilestone, type PlanTask, type PlansState, allTasks, checkerOf, fixerOf, planById, planForHome } from './model.js';
 
 /**
  * Which plan a worktree belongs to: one doing a task of a plan that's still running (its task not
@@ -59,6 +59,8 @@ function foldMap(plans: PlansState, board: BoardState): ReadonlyMap<string, Plan
   for (const plan of plans.plans) if (isLivePlan(plan) && plan.home.startsWith('ws:')) map.set(plan.home.slice(3), plan);
   // The conversations that check its milestones.
   for (const plan of plans.plans) if (isLivePlan(plan)) for (const run of Object.values(plan.runs ?? {})) if (run?.checker) map.set(run.checker, plan);
+  // The conversation fixing its merge conflicts.
+  for (const plan of plans.plans) if (isLivePlan(plan) && plan.fixer) map.set(plan.fixer, plan);
   for (const [ws, id] of planWorktrees(plans, board)) map.set(ws, planById(plans, id)!);
   folds.set(plans, { board, map });
   return map;
@@ -89,6 +91,6 @@ export function planConversations(state: { readonly plans: PlansState; readonly 
 export function planOfPlace(plans: PlansState, board: BoardState, view: { readonly kind: string; readonly id?: string }): string | undefined {
   if (view.kind === 'plan') return view.id;
   if (view.kind !== 'workspace' || !view.id) return undefined;
-  const home = planForHome(plans, `ws:${view.id}`) ?? checkerOf(plans, `ws:${view.id}`)?.plan;
+  const home = planForHome(plans, `ws:${view.id}`) ?? checkerOf(plans, `ws:${view.id}`)?.plan ?? fixerOf(plans, `ws:${view.id}`);
   return home?.id ?? planOwnerOf(plans, board, view.id)?.plan.id;
 }

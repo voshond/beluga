@@ -82,6 +82,12 @@ export class PlansWork {
               if (ws && plan.agent) deps.controller!.manager.setAgent(ws.id, plan.agent);
               return ws?.id;
             },
+            // Its merge conflicts (BLG-4): a conversation of its own, so the head Claude only routes.
+            fixerChat: async (plan) => {
+              const ws = await deps.controller!.newChat(plan.projectId, `Fix: ${planTitle(plan)}`.slice(0, 40), undefined, { quiet: true });
+              if (ws && plan.agent) deps.controller!.manager.setAgent(ws.id, plan.agent);
+              return ws?.id;
+            },
             retireChat: (id) => void deps.controller!.archive(id, false, { quiet: true }).catch(() => undefined),
           }
         : {}),

@@ -12,7 +12,7 @@ import type { PlanPr } from '../src/core/plans/model.js';
 import { Store, initialState } from '../src/core/store.js';
 import type { WorkspaceController, WorktreeEvent } from '../src/core/workspace-controller.js';
 import type { Project, Workspace } from '../src/workspaces/types.js';
-import { planOf } from '../src/core/plans/owner.js';
+import { isPlanOwned, planOf } from '../src/core/plans/owner.js';
 import { PLAN_TOOL_NAMES, createPlanToolDefs, milestoneInput, toOps } from '../src/agent/plan-tools.js';
 import { decideTool } from '../src/agent/policy.js';
 import { createMockBackend } from '../src/agent/mock.js';
@@ -888,43 +888,54 @@ describe('a task that builds on several unfinished tasks starts from their combi
     expect(t.made.at(-1)).toMatchObject({ base: 'klaud/x-base' });
   });
 
-  it('a conflict goes to the head Claude as a fix-up there; after its run it’s tried again and starts', async () => {
+  it('a conflict goes to a fixer of its own (BLG-4), not the head Claude; after its run it’s tried again, starts, and the fixer is archived', async () => {
     let fixed = false;
     const t = await running((key) => (fixed ? ok(key) : { ok: false, branch: `klaud/${key.toLowerCase()}-base`, dir: '/tmp/.bases/p/two-base', merging: 'klaud/b', files: ['shared.txt'] }));
     const before = t.made.length;
     await t.review('A', 'B');
     expect(t.made).toHaveLength(before);
     expect(t.task('two')).toMatchObject({ state: 'running', step: `Combining ${t.issue('A').key} and ${t.issue('B').key}: the agent is fixing a conflict in shared.txt` });
-    const fixup = t.asked.filter((a) => a.channel === 'ws:main' && a.prompt.includes('/tmp/.bases/p/two-base'));
+    const fixer = t.plans.need(t.plan.id).fixer!;
+    expect(fixer).toBeDefined();
+    const fx = `ws:${fixer}`;
+    expect(t.asked.filter((a) => a.channel === 'ws:main' && a.prompt.includes('/tmp/.bases/p/two-base'))).toHaveLength(0);
+    const fixup = t.asked.filter((a) => a.channel === fx && a.prompt.includes('/tmp/.bases/p/two-base'));
     expect(fixup).toHaveLength(1);
     expect(fixup[0]!.prompt).toContain('shared.txt');
     expect(fixup[0]!.echo).toBe(false);
+    // The head Claude's conversation hears one line, and the fixer folds into the plan.
+    expect(t.store.getState().log.some((l) => l.type === 'system' && l.channel === 'ws:main' && l.text.includes('a Claude of its own is fixing it'))).toBe(true);
+    expect(isPlanOwned(t.store.getState(), fixer)).toBe(true);
     // Nothing tries again while its run hasn't come and gone.
     await tick(10);
     expect(t.calls).toHaveLength(1);
-    t.run('ws:main', 'started', 'fix-1');
+    t.run(fx, 'started', 'fix-1');
     await tick(10);
     expect(t.calls).toHaveLength(1);
     fixed = true;
-    t.run('ws:main', 'done', 'fix-1');
+    t.run(fx, 'done', 'fix-1');
     await tick(10);
     expect(t.calls).toHaveLength(2);
     expect(t.made.at(-1)).toMatchObject({ base: `klaud/${t.issue('Two').key.toLowerCase()}-base` });
     expect(t.issue('Two').status).toBe('in_progress');
     expect(t.plans.need(t.plan.id).combining).toBeUndefined();
+    expect(t.plans.need(t.plan.id).fixer).toBeUndefined();
+    expect(t.archived).toContain(fixer);
   });
 
   it('a conflict Claude can’t fix waits for you, saying where; Start (or fixing it) carries on', async () => {
     let fixed = false;
     const t = await running((key) => (fixed ? ok(key) : { ok: false, branch: 'b', dir: '/tmp/.bases/p/two-base', merging: 'klaud/b', files: ['shared.txt'] }));
     await t.review('A', 'B');
+    const fx = `ws:${t.plans.need(t.plan.id).fixer}`;
     for (const id of ['f1', 'f2']) {
-      t.run('ws:main', 'started', id);
+      t.run(fx, 'started', id);
       await tick(10);
-      t.run('ws:main', 'done', id);
+      t.run(fx, 'done', id);
       await tick(10);
     }
-    expect(t.asked.filter((a) => a.prompt.includes('/tmp/.bases/p/two-base'))).toHaveLength(2);
+    // Both asks went to the same fixer, which remembers the first try.
+    expect(t.asked.filter((a) => a.channel === fx && a.prompt.includes('/tmp/.bases/p/two-base'))).toHaveLength(2);
     expect(t.task('two')).toMatchObject({ state: 'blocked' });
     expect(t.task('two').why).toBe(`Combining ${t.issue('A').key} and ${t.issue('B').key}: fix the conflict in shared.txt (in /tmp/.bases/p/two-base): it starts once no markers are left`);
     expect(t.view().active.map((x) => x.task.id)).not.toContain('two');
@@ -1088,7 +1099,7 @@ describe('the plan’s branch: tasks start from it, milestones merge into it, on
     expect(t.view().milestones[1]!.tasks.find((x) => x.task.id === 'refund-api')?.base).toBeUndefined();
   });
 
-  it('a conflict goes to the head Claude as a fix-up; the plan says so and the milestone stays open until it’s merged', async () => {
+  it('a conflict goes to the plan’s fixer; the plan says so and the milestone stays open until it’s merged', async () => {
     const t = await running();
     let fixed = false;
     t.setConflict((branches) => (fixed ? undefined : { ok: false, branch: 'plan/payments', dir: '/tmp/.bases/p/plan-payments', merging: branches[0]!, files: ['src/webhooks.ts'] }));
@@ -1099,16 +1110,18 @@ describe('the plan’s branch: tasks start from it, milestones merge into it, on
     expect(t.view().next).toMatchObject({ kind: 'merging', text: `Fixing a merge conflict in ${key}` });
     expect(t.view().milestones[0]!.state).toBe('merging');
     expect(t.issue('Auth on payment routes').status).toBe('in_review');
-    const fixup = t.asked.filter((a) => a.channel === 'ws:main' && a.prompt.includes('/tmp/.bases/p/plan-payments'));
+    const fx = `ws:${t.plans.need(t.plan.id).fixer}`;
+    expect(fx).not.toBe('ws:main');
+    const fixup = t.asked.filter((a) => a.channel === fx && a.prompt.includes('/tmp/.bases/p/plan-payments'));
     expect(fixup).toHaveLength(1);
     expect(fixup[0]!.prompt).toContain('src/webhooks.ts');
     expect(t.issue('Refund endpoint').status).not.toBe('in_progress');
-    // Tried again once the head Claude's run came and went.
-    t.run('ws:main', 'started', 'fix-1');
+    // Tried again once the fixer's run came and went.
+    t.run(fx, 'started', 'fix-1');
     await tick(10);
     expect(t.log.merged).toHaveLength(1);
     fixed = true;
-    t.run('ws:main', 'done', 'fix-1');
+    t.run(fx, 'done', 'fix-1');
     await t.settle();
     expect(t.log.merged).toHaveLength(2);
     expect(t.plans.need(t.plan.id).runs.safe?.passedAt).toBeDefined();
