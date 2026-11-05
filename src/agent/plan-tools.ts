@@ -60,6 +60,15 @@ const MILESTONE = z.object({
   tasks: z.array(TASK).max(40),
 });
 
+/** One thing settled while planning (BLG-8): the user's answer, or a default you chose without asking. */
+const DECISION = z.object({
+  question: z.string().min(1).max(400).describe('What was settled, as a question'),
+  answer: z.string().min(1).max(400).describe('What was decided'),
+  why: z.string().max(400).optional().describe('One sentence on why (for a default: why it’s the sensible one)'),
+  by: z.enum(['user', 'default']).optional().describe('user: they answered it; default (the default): you chose it without asking'),
+  tasks: z.array(z.string().max(40)).max(20).optional().describe('Ids of the tasks it bears on: their briefs get it'),
+});
+
 type Task = z.infer<typeof TASK>;
 type Milestone = z.infer<typeof MILESTONE>;
 
@@ -98,6 +107,8 @@ const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('update_task'), id: z.string().max(40), patch: TASK.partial() }),
   z.object({ op: z.literal('remove_task'), id: z.string().max(40) }),
   z.object({ op: z.literal('move_task'), id: z.string().max(40), milestone: z.string().max(40), before: z.string().max(40).optional() }),
+  z.object({ op: z.literal('decide'), decision: DECISION }),
+  z.object({ op: z.literal('open_question'), question: z.string().min(1).max(400), on: z.boolean().describe('true: still to settle; false: settled or dropped') }),
   z.object({ op: z.literal('block'), id: z.string().max(40), by: z.string().max(40), on: z.boolean() }),
 ]);
 
@@ -136,12 +147,18 @@ export function createPlanToolDefs(plan: PlanTools) {
     tool(
       'plan_write',
       'Write the whole plan (replaces the draft). Milestones in order, each with pass criteria and its tasks; milestones run side by side unless depends_on (or a task’s blocked_by) ties them to an earlier one. Keep ids you used before. Nothing reaches the board until the user approves.',
-      { title: z.string().min(1).max(200), goal: z.string().max(4000), milestones: z.array(MILESTONE).min(1).max(12) },
-      (a) => guarded(() => plan.write({ title: a.title, goal: a.goal, milestones: a.milestones.map(milestoneInput) } as BodyInput)),
+      {
+        title: z.string().min(1).max(200),
+        goal: z.string().max(4000),
+        milestones: z.array(MILESTONE).min(1).max(12),
+        decisions: z.array(DECISION).max(40).optional().describe('What was settled while planning: the user’s answers (by user) and every default you chose without asking (by default)'),
+        open_questions: z.array(z.string().min(1).max(400)).max(40).optional().describe('What is still to settle: the plan can’t be approved while one is open'),
+      },
+      (a) => guarded(() => plan.write({ title: a.title, goal: a.goal, milestones: a.milestones.map(milestoneInput), ...(a.decisions ? { decisions: a.decisions } : {}), ...(a.open_questions ? { openQuestions: a.open_questions } : {}) } as BodyInput)),
     ),
     tool(
       'plan_update',
-      'Change the plan with ops, applied in order: retitle, add_milestone, update_milestone, remove_milestone, add_task, update_task (patch), remove_task, move_task, block (id waits on by; on false removes it). On an approved plan the changes are proposed for the user to approve (applied at once on autopilot).',
+      'Change the plan with ops, applied in order: retitle, add_milestone, update_milestone, remove_milestone, add_task, update_task (patch), remove_task, move_task, block (id waits on by; on false removes it), decide (record a decision: it closes the open question it answers), open_question (on: a question still to settle; off: drop it). On an approved plan the changes are proposed for the user to approve (applied at once on autopilot).',
       { ops: z.array(OP).min(1).max(40), reason: z.string().max(200).optional().describe('Why, in a few words (shown in the plan’s history)') },
       (a) => guarded(() => plan.update(toOps(a.ops), a.reason)),
     ),

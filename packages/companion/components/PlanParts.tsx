@@ -142,3 +142,44 @@ function MapNode({ m, i, onPress }: { readonly m: Milestone; readonly i: number;
     </Animated.View>
   );
 }
+
+/**
+ * What was settled while planning (BLG-8): what's still open first (approving waits on it), then
+ * each decision, marked You (you answered it) or Default (the agent chose it without asking).
+ */
+export function PlanDecisions({ decisions, open }: { readonly decisions: NonNullable<PlanView['decisions']>; readonly open: readonly string[] }) {
+  if (!decisions.length && !open.length) return null;
+  return (
+    <View style={{ marginTop: 26, paddingHorizontal: 16, gap: 10 }}>
+      <T v="eyebrow" style={{ paddingHorizontal: 4 }}>
+        Decided while planning
+      </T>
+      <Card style={{ padding: 16, gap: 14 }}>
+        {open.map((q) => (
+          <View key={q} style={{ gap: 6 }}>
+            <Pill label="Still open" tone="butter" style={{ alignSelf: 'flex-start' }} />
+            <T v="body">{q}</T>
+          </View>
+        ))}
+        {decisions.map((d) => (
+          <View key={d.question} style={{ gap: 4 }}>
+            <T v="caption" c={color.text2}>
+              {d.question}
+            </T>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <T v="body" style={{ flexShrink: 1 }}>
+                {d.answer}
+              </T>
+              <Pill label={d.by === 'user' ? 'You' : 'Default'} tone={d.by === 'user' ? 'lavender' : 'plain'} />
+            </View>
+            {d.why ? (
+              <T v="caption" c={color.text3}>
+                {d.why}
+              </T>
+            ) : null}
+          </View>
+        ))}
+      </Card>
+    </View>
+  );
+}

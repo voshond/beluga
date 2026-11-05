@@ -278,6 +278,10 @@ back, a long-press says who), and long-press on a message opens its sheet with y
 (`ChatView.quick`, the six you use most) on top (`network.messages.react`). The room's and workspaces'
 chats do the same on a person's turn (`TurnView.reactions`, `reactable`, `ConvView.quick`,
 `session.react`). An older Mac sends neither, and long-press stays as it was.
+1.42 (BLG-8) shows a plan's planning on the phone: the plan page lists what was decided (`PlanView.decisions`,
+each marked You or Default) and what's still open (`PlanView.openQuestions`). While a question is open, the
+approve card says which and offers Approve Anyway (`plans.approve` with `{ anyway: true }`). An older Mac
+sends neither, and its approve card is as before.
 - `chats` and `chat:<conversation>`: friends' DMs and channels.
 - `people`: friends, presence, their usage and what they let your agent do.
 

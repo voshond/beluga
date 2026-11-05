@@ -57,6 +57,27 @@ const ORCHESTRATOR = [
   '- Keep progress to yourself: tell the user when something is theirs to do, finished, or stuck, not that work goes on.',
 ].join('\n');
 
+/**
+ * Clarify first, then commit (BLG-8, after DeepSeek's dsh-superagent setup): look before asking,
+ * ask only what only the user can settle, each with a recommended answer, choose the rest as
+ * written-down defaults, and write the plan once. Approving it is the one confirmation.
+ */
+const CLARIFY = [
+  'How to plan: clarify first, then commit.',
+  '1. Look first. Read the code (and the board) before your first question, and keep what you find to yourself. Never ask what the',
+  '   code, the board or the user\'s words already answer.',
+  '2. Ask only what the user must settle, with AskUserQuestion: one thing per question (up to 3 related questions on one card), the',
+  '   option you recommend first with "(Recommended)" after its label, and one sentence in its description on why it matters, so',
+  '   they can accept with one click. Wait for the answers before you write the plan; don\'t start the work while asking.',
+  '3. Don\'t ask what has a sensible default: choose it, and write it down as a decision by "default" with why. Ask only where a',
+  '   wrong guess costs a lot: product behaviour, public interfaces, data and migrations, accounts, money, what ships to users.',
+  '4. Write the plan once with plan_write, with its decisions: each of the user\'s answers (by "user") and each default you chose',
+  '   (by "default"), naming the tasks it bears on (their briefs get it). What you still can\'t settle goes in open_questions:',
+  '   approving waits until it\'s settled. Answers that come later go in with plan_update op decide (it closes that open question).',
+  '5. Then answer in one short message: the milestones in a line each (which run side by side, which wait), the defaults you chose',
+  '   (so the user can overturn one), and any open question. Approving the plan is the one confirmation; then it runs.',
+].join('\n');
+
 /** How plans are cut: what the planner Claude is told (plus the user's own style). */
 const HOW_TO_PLAN = [
   'How to cut a good plan:',
@@ -83,6 +104,16 @@ const HOW_TO_PLAN = [
   '  suites run once per milestone, at its check, on the combined work (or only at the end, if the plan says so).',
   '  Don\'t make every task run the full suite.',
 ].join('\n');
+
+/** What was settled while planning (BLG-8): every agent on the plan holds to it. */
+export function decisionsLines(body: Pick<PlanBody, 'decisions' | 'openQuestions'> | undefined): string[] {
+  const decided = (body?.decisions ?? []).map((d) => `- ${d.question} → ${d.answer}${d.by === 'default' ? ' (a default)' : ' (the user)'}`);
+  const open = (body?.openQuestions ?? []).map((q) => `- ${q}`);
+  return [
+    ...(decided.length ? ['Decided while planning (hold to these; one that turns out wrong is a question for the user, plan_ask, not yours to change):', ...decided] : []),
+    ...(open.length ? ['Left open when the plan was approved (decide these as you go when they come up, and write what you chose in the task\'s Decisions):', ...open] : []),
+  ];
+}
 
 /** What the user asked for, in their own words (BLG-3): handed on as it is, never retold by another Claude. */
 export function requestLines(plan: Pick<Plan, 'request'>): string[] {
@@ -150,11 +181,13 @@ export function planningBrief(plan: Plan, board: BoardState, style: string): str
     plan.body
       ? 'While the plan runs you don\'t change files here: code changes are the plan\'s tasks, each in its own worktree.'
       : 'You can change files here when it\'s quick and the user asks (a note, a config value); real code changes are the plan\'s tasks, each in its own worktree.',
-    body?.milestones.length ? 'The plan already has content: revise it with plan_update unless the user wants it rewritten.' : 'The plan is empty: understand what the user wants (ask only what you can\'t find out), read the code, then plan_write.',
+    body?.milestones.length
+      ? 'The plan already has content: revise it with plan_update unless the user wants it rewritten. Keep its decisions true: what a change settles or reopens is a decide or open_question op.'
+      : 'The plan is empty: clarify first, then write it once (below).',
     'What the user says here before the plan is first approved is kept on the plan as their request, word for word, and every',
     'agent that works on it or checks it reads it beside your plan: your goal and tasks are your reading of it, not a replacement.',
-    'After writing, answer briefly: the milestones in a line each, which run side by side and which wait, risks and open questions. Then the user',
-    'approves, or tells you what to change.',
+    '',
+    CLARIFY,
     '',
     HOW_TO_PLAN,
     style.trim() ? `\nThe user's planning style (follow it):\n<planning_style>\n${style.replace(/<\/?planning_style>/gi, '').trim()}\n</planning_style>` : '',
@@ -221,6 +254,8 @@ export function describePlan(view: PlanView): string {
     const d = diffBodies(plan.body, plan.draft);
     lines.push(`Changes waiting for the user's approval: ${d.added.length} new, ${d.changed.length} changed, ${d.removed.length} removed (shown below as proposed).`);
   } else if (!plan.body) lines.push('Draft: not approved yet.');
+  if (body.decisions?.length) lines.push('', 'Decisions:', ...body.decisions.map((d) => `- ${d.question} → ${d.answer} (${d.by})${d.tasks?.length ? ` [tasks ${d.tasks.join(', ')}]` : ''}`));
+  if (body.openQuestions?.length) lines.push('', 'Open questions (approval waits on them):', ...body.openQuestions.map((q) => `- ${q}`));
   const titleOf = new Map(body.milestones.map((m) => [m.id, m.title]));
   body.milestones.forEach((m, i) => {
     const mv = view.milestones.find((x) => x.milestone.id === m.id);
@@ -310,6 +345,8 @@ export function checkPrompt(view: PlanView, m: MilestoneView, opts: { readonly c
       : []),
     ...requestLines(view.plan),
     ...(view.plan.request ? ['Check against what they asked too: work that meets the criteria but not their words is a gap.', ''] : []),
+    ...decisionsLines(view.body),
+    ...((view.body?.decisions ?? []).length ? ['Work that goes against a decision is a gap too.', ''] : []),
     `Every task of milestone “${m.milestone.title}” is finished. Check its pass criteria for real, one by one:`,
     ...(m.milestone.criteria.length ? m.milestone.criteria.map((c, i) => `${i + 1}. ${c}`) : ['(It has none of its own: check its tasks\' acceptance criteria below.)']),
     '',
@@ -551,6 +588,7 @@ export function milestonePrompt(view: PlanView, m: MilestoneView, tasks: readonl
     ...(m.milestone.goal ? [`Milestone goal: ${clip(m.milestone.goal.replace(/\s+/g, ' ').trim(), 600)}`] : []),
     ...(m.milestone.criteria.length ? ['The milestone passes when:', ...m.milestone.criteria.map((c) => `- ${c}`)] : []),
     ...withGap(requestLines(plan)),
+    ...withGap(decisionsLines(view.body)),
     '',
     `Your tasks, in this order:`,
     ...tasks.flatMap((t, i) => taskBlock(t, i, view, true)),

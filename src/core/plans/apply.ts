@@ -3,7 +3,7 @@ import { criteria, criterionLine } from '../board/criteria.js';
 import { labelsFor } from '../board/labels.js';
 import { type Actor, type Assignee, type BriefSection, type Issue, boardOf, isOpen } from '../board/model.js';
 import { PlanError } from './edit.js';
-import { type Plan, type PlanBody, type PlanTask, allTasks, diffBodies, milestoneDeps, taskById } from './model.js';
+import { type Plan, type PlanBody, type PlanTask, allTasks, decisionLines, diffBodies, milestoneDeps, taskById } from './model.js';
 
 /**
  * Approving a plan: its draft goes on the board. New tasks are made (in the plan's milestone, its
@@ -77,7 +77,7 @@ function applyInto(plan: Plan, board: Board, actors: ApplyActors, linked: Map<st
           ...(task.priority ? { priority: task.priority } : {}),
           ...(task.estimate ? { estimate: task.estimate } : {}),
           ...(task.labels?.length ? { labels: task.labels } : {}),
-          brief: briefOf(task),
+          brief: { ...briefOf(task), ...(decisionLines(draft, task.id).length ? { decisions: decisionLines(draft, task.id).join('\n') } : {}) },
           plan: link,
         },
         actors.by,
@@ -116,6 +116,10 @@ function applyInto(plan: Plan, board: Board, actors: ApplyActors, linked: Map<st
       const changed = old ? text !== (was[section] ?? '') : !now.brief[section];
       if (text && changed && text !== (now.brief[section] ?? '')) board.editBrief(existing.id, section, text, actors.by, { reason: 'the plan changed' });
     }
+    // Decisions the plan made for it (BLG-8) join its brief's Decisions; what's there already stays.
+    const had = now.brief.decisions ?? '';
+    const decided = decisionLines(draft, task.id).filter((l) => !had.includes(l));
+    if (decided.length) board.editBrief(existing.id, 'decisions', decided.join('\n'), actors.by, { mode: 'append', reason: 'decided while planning' });
   }
 
   // 2. Sub-tasks and blockers (all tasks exist now). Blockers from outside the plan are left alone.

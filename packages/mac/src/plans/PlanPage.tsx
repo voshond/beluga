@@ -26,6 +26,7 @@ import { mod, openExternal } from '../lib/system.js';
 import { MilestoneBar, PlanPrChip, PlanProgress, Said, TonePill } from './marks.js';
 import { PlanChat } from './PlanChat.js';
 import { BRANCH, FEED, PlanDetails } from './PlanDetails.js';
+import { DECISIONS, planNotes } from './PlanDecisions.js';
 import { PlanOutline } from './PlanOutline.js';
 import { CHAT_DEFAULT, DEFAULT_PLAN_LAYOUT, type Display, PLAN_LAYOUT_KEY, type PlanLayout, chatOpen, clampChatWidth, readPlanLayout, setChatOpen } from './plan-layout.js';
 import { barColumns, changeWords, headline, nextWords, shipAction, titleOf } from './plans-model.js';
@@ -133,6 +134,7 @@ function Page({ view, prefs, setPrefs, picked, setPicked }: { view: PlanView; pr
   useConversationLoaded(plan.home);
   const uiPrefs = usePrefs();
   const body = shownBody(plan);
+  const { decisions, open } = planNotes(plan);
   const keys = useMemo(() => new Map(view.milestones.flatMap((m) => m.tasks.flatMap((t) => (t.issue ? [[t.task.id, t.issue.key] as const] : [])))), [view]);
   const startable = useMemo(() => {
     if (!plan.body || plan.draft || !view.open.length) return new Set<string>();
@@ -191,6 +193,16 @@ function Page({ view, prefs, setPrefs, picked, setPicked }: { view: PlanView; pr
   // `with`: the same action by another agent, as the ▾ of a split button.
   const primary = ((): { label: string; run?: () => void; icon?: IconName; busy?: boolean; with?: { readonly label: string; readonly items: ActionItem[] } } | undefined => {
     if (step.busy) return { label: step.busy, busy: true };
+    // Questions still open (BLG-8): answering them comes first; approving anyway is under ▾.
+    if ((next.kind === 'approve' && body?.milestones.length) || next.kind === 'review_changes') {
+      if (open.length)
+        return {
+          label: `Answer ${open.length === 1 ? 'the Open Question' : `${open.length} Open Questions`}`,
+          icon: 'claude',
+          run: () => (showChat(true), setPicked(DECISIONS)),
+          with: { label: 'Approve anyway', items: [{ label: plan.body ? 'Apply Changes Anyway' : 'Approve Anyway', hint: 'The open questions stay open; agents decide them as they go', onSelect: () => void act(() => api.approve(plan.id, { anyway: true }), plan.body ? 'Changes applied' : 'Plan approved: its tasks are on the board') }] },
+        };
+    }
     switch (next.kind) {
       case 'approve':
         // Approve, worked by ▸: who works its milestones and tasks, set as it's approved.
@@ -379,8 +391,19 @@ function Page({ view, prefs, setPrefs, picked, setPicked }: { view: PlanView; pr
           <Button size="small" variant="quiet" onClick={() => void act(() => api.discard(plan.id))}>
             Discard
           </Button>
-          <Button size="small" variant="primary" onClick={() => void act(() => api.approve(plan.id), 'Changes applied')}>
-            Apply Changes
+          <Button size="small" variant="primary" onClick={() => void act(() => api.approve(plan.id, open.length ? { anyway: true } : undefined), 'Changes applied')}>
+            {open.length ? 'Apply Anyway' : 'Apply Changes'}
+          </Button>
+        </div>
+      ) : null}
+      {plan.draft && open.length ? (
+        <div className={p.openQuestions} role="status">
+          <Icon name="alert" size={13} />
+          <strong>{open.length === 1 ? 'A question is still open' : `${open.length} questions are still open`}</strong>
+          <span>Approving waits until they’re answered in the conversation.</span>
+          <span className={p.grow} />
+          <Button size="small" variant="quiet" onClick={() => setPicked(DECISIONS)}>
+            Show Questions
           </Button>
         </div>
       ) : null}
@@ -401,6 +424,12 @@ function Page({ view, prefs, setPrefs, picked, setPicked }: { view: PlanView; pr
             {drafting ? null : (
               <Button size="small" variant="quiet" icon="clock" onClick={() => setPicked(picked === FEED ? undefined : FEED)} aria-pressed={picked === FEED}>
                 What Happened
+              </Button>
+            )}
+            {/* What was settled while planning (BLG-8): your answers, the agent's defaults, what's still open. */}
+            {drafting || !(decisions.length || open.length) ? null : (
+              <Button size="small" variant="quiet" icon="check" onClick={() => setPicked(picked === DECISIONS ? undefined : DECISIONS)} aria-pressed={picked === DECISIONS}>
+                {open.length ? `Decisions · ${open.length} open` : `Decisions · ${decisions.length}`}
               </Button>
             )}
             {/* Where the work goes: each milestone into the plan's branch, the branch into main as one PR. */}

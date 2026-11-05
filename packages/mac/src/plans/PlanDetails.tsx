@@ -20,6 +20,7 @@ import type { AgentRef } from '@beluga/protocol.js';
 import { WaitingLine } from './WaitingLine.js';
 import p from './plans.module.css';
 import { revealLabel } from '../lib/os-words.js';
+import { DECISIONS, DecisionsHead, DecisionsList } from './PlanDecisions.js';
 
 /** The details pane shows what the plan did when this is picked. */
 export const FEED = 'feed';
@@ -33,10 +34,11 @@ export const BRANCH = 'branch';
 export function PlanDetails({ view, picked, canStart, onPick, onClose }: { view: PlanView; picked: string; canStart: boolean; onPick: (id: string) => void; onClose: () => void }) {
   const feed = picked === FEED;
   const branch = picked === BRANCH;
+  const decided = picked === DECISIONS;
   const gate = picked.startsWith('gate:') ? view.milestones.find((m) => `gate:${m.milestone.id}` === picked) : undefined;
-  const task = gate || feed || branch ? undefined : view.milestones.flatMap((m) => m.tasks).find((t) => t.task.id === picked);
+  const task = gate || feed || branch || decided ? undefined : view.milestones.flatMap((m) => m.tasks).find((t) => t.task.id === picked);
   const [scrolled, setScrolled] = useState(false);
-  const shown = Boolean(feed || branch || gate || task);
+  const shown = Boolean(feed || branch || decided || gate || task);
   // Another pick starts at its top (the body is keyed by it).
   useEffect(() => setScrolled(false), [picked]);
   // Esc closes it, unless you're typing or a sheet is open (those take Esc first).
@@ -53,13 +55,13 @@ export function PlanDetails({ view, picked, canStart, onPick, onClose }: { view:
   }, [shown, onClose]);
   if (!shown) return null;
   return (
-    <aside className={p.details} aria-label={feed ? 'What happened' : branch ? 'Where the work goes' : 'Details'}>
+    <aside className={p.details} aria-label={feed ? 'What happened' : branch ? 'Where the work goes' : decided ? 'Decided while planning' : 'Details'}>
       <header className={p.detailsHead} data-scrolled={scrolled ? 'true' : 'false'}>
-        <div className={p.detailsHeadText}>{feed ? <FeedHead /> : branch ? <BranchHead view={view} /> : gate ? <GateHead m={gate} /> : <TaskHead t={task!} />}</div>
+        <div className={p.detailsHeadText}>{feed ? <FeedHead /> : branch ? <BranchHead view={view} /> : decided ? <DecisionsHead plan={view.plan} /> : gate ? <GateHead m={gate} /> : <TaskHead t={task!} />}</div>
         <IconButton icon="x" label="Close" className={p.detailsClose} onClick={onClose} />
       </header>
       <div key={picked} className={p.detailsBody} onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 0)}>
-        {feed ? <PlanFeed plan={view.plan} /> : branch ? <BranchFlow view={view} /> : gate ? <GateDetails plan={view.plan} m={gate} onPick={onPick} /> : <TaskDetails view={view} t={task!} canStart={canStart} />}
+        {feed ? <PlanFeed plan={view.plan} /> : branch ? <BranchFlow view={view} /> : decided ? <DecisionsList plan={view.plan} /> : gate ? <GateDetails plan={view.plan} m={gate} onPick={onPick} /> : <TaskDetails view={view} t={task!} canStart={canStart} />}
       </div>
     </aside>
   );

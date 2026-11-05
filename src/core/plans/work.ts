@@ -183,9 +183,14 @@ export class PlansWork {
     return this.plans.create({ projectId: project.id, home: channel, ...(autonomy ? { autonomy } : {}) }, this.me());
   }
 
-  /** Approve the draft: its tasks go on the board, and the plan runs (or carries on with the changes). */
-  approve(id: string, by: Actor = this.me()): Plan {
+  /**
+   * Approve the draft: its tasks go on the board, and the plan runs (or carries on with the changes).
+   * Not while it has open questions (BLG-8): settle them first, or approve `anyway` (they stay on the plan, unsettled).
+   */
+  approve(id: string, by: Actor = this.me(), opts: { readonly anyway?: boolean } = {}): Plan {
     const plan = this.plans.need(id);
+    const open = plan.draft?.openQuestions ?? [];
+    if (open.length && !opts.anyway) throw new Error(`${open.length === 1 ? 'A question is' : `${open.length} questions are`} still open: ${open.map((q) => `“${q}”`).join(', ')}. Answer ${open.length === 1 ? 'it' : 'them'} in the plan’s conversation, or approve anyway.`);
     let applied: ReturnType<typeof applyDraft>;
     try {
       applied = applyDraft(plan, this.deps.board.board, { by, me: this.deps.board.me() });

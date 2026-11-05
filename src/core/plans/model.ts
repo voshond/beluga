@@ -104,11 +104,33 @@ export interface PlanMilestone {
   readonly dependsOn?: readonly string[];
 }
 
+/**
+ * One thing settled while planning (BLG-8): what was asked, what was decided and why. `user`: you
+ * answered it; `default`: Claude chose it without asking (a sensible default you can override
+ * before approving). `tasks`: the plan tasks it bears on, whose briefs get it.
+ */
+export interface PlanDecisionEntry {
+  readonly question: string;
+  readonly answer: string;
+  readonly why?: string;
+  readonly by: 'user' | 'default';
+  readonly tasks?: readonly string[];
+}
+
 /** What a plan says: the part Claude writes and you approve. */
 export interface PlanBody {
   readonly title: string;
   readonly goal: string;
   readonly milestones: readonly PlanMilestone[];
+  /** What was settled while planning: your answers and Claude's defaults (BLG-8). Every agent on the plan reads them. */
+  readonly decisions?: readonly PlanDecisionEntry[];
+  /** What's still to be settled: the plan can't be approved while one is open. */
+  readonly openQuestions?: readonly string[];
+}
+
+/** The plan's decisions that bear on one task, as lines for its brief's Decisions. */
+export function decisionLines(body: PlanBody | undefined, taskId: string): string[] {
+  return (body?.decisions ?? []).filter((d) => d.tasks?.includes(taskId)).map((d) => `- ${d.question} → ${d.answer}${d.by === 'default' ? ' (a default, not asked)' : ''}${d.why ? ` — ${d.why}` : ''}`);
 }
 
 /** Claude's check of a milestone's pass criteria. */
@@ -517,6 +539,8 @@ export interface PlanDiff {
   readonly changed: readonly string[];
   readonly removed: readonly string[];
   readonly milestones: number;
+  /** Decisions and open questions added, changed or taken out (BLG-8). */
+  readonly decisions: number;
 }
 
 export function diffBodies(before: PlanBody | undefined, after: PlanBody | undefined): PlanDiff {
@@ -531,7 +555,11 @@ export function diffBodies(before: PlanBody | undefined, after: PlanBody | undef
   });
   const ms = (b: PlanBody | undefined): string => (b?.milestones ?? []).map((m) => `${m.id}\0${m.title}\0${m.goal ?? ''}\0${m.criteria.join('\0')}\0${m.dependsOn?.join(',') ?? '-'}`).join('\n');
   const milestones = ms(before) === ms(after) ? 0 : Math.max(1, Math.abs((after?.milestones.length ?? 0) - (before?.milestones.length ?? 0)));
-  return { added, changed, removed, milestones };
+  const notes = (b: PlanBody | undefined): Set<string> => new Set([...(b?.decisions ?? []).map((d) => JSON.stringify(d)), ...(b?.openQuestions ?? []).map((q) => `?${q}`)]);
+  const was = notes(before);
+  const is = notes(after);
+  const decisions = [...is].filter((x) => !was.has(x)).length + [...was].filter((x) => !is.has(x)).length;
+  return { added, changed, removed, milestones, decisions };
 }
 
 /** What makes a task different, without what the board gave it. */
@@ -540,4 +568,4 @@ export function taskSignature(t: PlanTask): string {
   return JSON.stringify(rest);
 }
 
-export const isEmptyDiff = (d: PlanDiff): boolean => !d.added.length && !d.changed.length && !d.removed.length && !d.milestones;
+export const isEmptyDiff = (d: PlanDiff): boolean => !d.added.length && !d.changed.length && !d.removed.length && !d.milestones && !d.decisions;

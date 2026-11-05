@@ -11,6 +11,7 @@ import { useStartWith } from '../components/agent-options.js';
 import { SplitButton } from '../components/SplitButton.js';
 import type { AgentRef } from '@beluga/protocol.js';
 import p from './plans.module.css';
+import { planNotes } from './PlanDecisions.js';
 
 /**
  * Above a conversation that plans (a plan's home): the plan, its one sentence (who it waits
@@ -29,12 +30,15 @@ export function PlanStrip({ workspaceId }: { workspaceId: string }) {
   // An empty draft has nothing to show yet (the box below says what this mode does).
   if (home && view && (home.body || view.milestones.length)) {
     const canApprove = (view.next.kind === 'approve' && view.milestones.length > 0) || view.next.kind === 'review_changes';
+    // Questions still open (BLG-8): approving waits on them, unless you approve anyway.
+    const openQuestions = planNotes(home).open;
+    const anyway = openQuestions.length ? { anyway: true } : undefined;
     /** Approve (with `agent`: worked by that one from now on; null: your default), then on to the plan, where it runs. */
     const approve = (agent?: AgentRef | null): void =>
       void act(
         async () => {
           if (agent !== undefined) await api.setWorkAgent(home.id, agent);
-          await api.approve(home.id);
+          await api.approve(home.id, anyway);
           return true;
         },
         home.body ? 'Changes applied' : 'Plan approved: its tasks are on the board',
@@ -60,15 +64,20 @@ export function PlanStrip({ workspaceId }: { workspaceId: string }) {
                 Review Plan
               </Button>
             </Tip>
+            {openQuestions.length ? (
+              <Tip label="Approving waits until they’re answered here; Approve Anyway leaves them to the agents">
+                <span className={p.stripNext}>{openQuestions.length === 1 ? '1 question open' : `${openQuestions.length} questions open`}</span>
+              </Tip>
+            ) : null}
             {home.body ? (
               <Button size="small" variant="primary" onClick={() => approve()}>
-                Apply Changes
+                {openQuestions.length ? 'Apply Anyway' : 'Apply Changes'}
               </Button>
             ) : (
               // Approve, worked by ▸ (BLG-506): who works its milestones and tasks, set as it's approved.
               <SplitButton label="Approve, worked by another agent" items={startWith(home.agent, (a) => approve(a ?? null), 'Approve, worked by')}>
                 <Button size="small" variant="primary" onClick={() => approve()}>
-                  Approve Plan
+                  {openQuestions.length ? 'Approve Anyway' : 'Approve Plan'}
                 </Button>
               </SplitButton>
             )}
