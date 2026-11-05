@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { createMockBackend } from '../src/agent/mock.js';
 import { createPlanToolDefs, toOps } from '../src/agent/plan-tools.js';
+import type { AgentRunInput, PlanTools, RoomBridge } from '../src/agent/types.js';
 import { Board } from '../src/core/board/board.js';
 import { BoardWork } from '../src/core/board/work.js';
 import { planPageView } from '../src/companion/views.js';
@@ -177,5 +179,44 @@ describe('on the phone (BLG-8)', () => {
     const card = pv.needsYou.find((n) => n.id.startsWith(`plan:${t.plan.id}:approve`))!;
     expect(card.detail).toContain('A question is still open:\n• Do refunds send a receipt too?');
     expect(card.actions?.[0]).toMatchObject({ label: 'Approve Anyway', method: 'plans.approve', args: [t.plan.id, { anyway: true }] });
+  });
+});
+
+describe('the demo’s Claude plans this way too (BLG-8)', () => {
+  const bridge = { writeReport: async () => '' } as unknown as RoomBridge;
+  const run = (prompt: string, planTools: PlanTools): Promise<string> =>
+    createMockBackend(bridge, 0).run({
+      prompt,
+      requesterName: 'kay',
+      viaAgent: false,
+      context: [],
+      scope: 'full',
+      signal: new AbortController().signal,
+      onEvent: () => undefined,
+      onFileTouched: () => undefined,
+      canUseTool: async () => true,
+      planTools,
+    } as AgentRunInput);
+
+  it('writes its defaults down and leaves nothing open, so the plan approves as before', async () => {
+    const t = setup();
+    const said = await run('Add invoices to the admin', t.tools());
+    expect(said).toContain('**Defaults I chose**');
+    const draft = t.plans.need(t.plan.id).draft!;
+    expect(draft.decisions?.map((d) => d.by)).toEqual(['default', 'default', 'default']);
+    expect(draft.openQuestions).toBeUndefined();
+    expect(() => t.work.approve(t.plan.id)).not.toThrow();
+  });
+
+  it('asked to clarify, it leaves a question open; your reply settles it as yours, and the plan approves', async () => {
+    const t = setup();
+    expect(await run('Add invoices to the admin, ask me what you need', t.tools())).toContain('**Open question:**');
+    expect(() => t.work.approve(t.plan.id)).toThrow(/still open/);
+    expect(await run('Mia signs off', t.tools())).toContain('settles the last open question');
+    const draft = t.plans.need(t.plan.id).draft!;
+    expect(draft.openQuestions).toBeUndefined();
+    expect(draft.decisions?.at(-1)).toMatchObject({ question: 'Who signs off on the release before it goes out?', answer: 'Mia signs off', by: 'user' });
+    t.work.approve(t.plan.id);
+    expect(t.issue('Release').brief.decisions).toContain('Who signs off on the release before it goes out? → Mia signs off');
   });
 });
