@@ -15,7 +15,7 @@ import { type PilotDeps, PlanPilot } from './pilot.js';
 import type { TaskView } from './progress.js';
 import { type PlanGit, planGitOf } from './plan-git.js';
 import { type Plans, UNTITLED } from './plans.js';
-import { checkFailedPrompt, checkerBrief, describePlan, headBrief, milestoneNote, planningBrief, sizeWords, workerNote } from './prompt.js';
+import { checkFailedPrompt, checkerBrief, describePlan, handbackPrompt, headBrief, milestoneNote, planningBrief, sizeWords, workerNote } from './prompt.js';
 
 /**
  * Plans at work: making a plan (its own conversation, in the project's main folder where Claude
@@ -61,6 +61,8 @@ const WS = 'ws:';
 export class PlansWork {
   readonly plans: Plans;
   readonly pilot: PlanPilot;
+  /** Work handed back this session (plan id and the words), so the same thing reaches the head once. */
+  private readonly handedBack = new Set<string>();
 
   constructor(private readonly deps: PlansWorkDeps) {
     this.plans = deps.plans;
@@ -438,9 +440,21 @@ export class PlansWork {
     return on;
   }
 
-  /** BLG-7: filled in by the hand-back change. */
-  private handback(_planId: string, _wsId: string, _what: string, _why: string): string {
-    throw new Error('Handing work back isn’t available yet: note it with task_note');
+  /** Work a worker found outside its tasks (BLG-7): to the plan's head, which proposes it as a plan change. Once per piece of work. */
+  private handback(planId: string, wsId: string, what: string, why: string): string {
+    const hit = this.worktreeOf(wsId);
+    if (!hit || hit.plan.id !== planId) throw new Error('This worktree isn’t doing a task of a running plan any more');
+    const said = what.replace(/\s+/g, ' ').trim();
+    const seen = `${planId}:${said.toLowerCase()}`;
+    if (this.handedBack.has(seen)) return 'You handed that back already: the plan’s head has it. Go on with your own tasks.';
+    this.handedBack.add(seen);
+    const on = hit.tasks.find((t) => t.state === 'running' || t.state === 'asking' || t.state === 'idle' || t.state === 'stalled') ?? hit.tasks[0]!;
+    const view = this.pilot.view(hit.plan);
+    const m = view.milestones.find((x) => x.milestone.id === on.milestoneId);
+    const from = on.issue?.key ?? on.task.id;
+    this.plans.note(planId, 'note', `${from} handed back: ${said.slice(0, 200)}`, this.claude());
+    this.deps.askClaude(handbackPrompt(from, m?.milestone.title ?? 'its milestone', what, why, (m?.autonomy ?? hit.plan.autonomy) === 'autopilot'), hit.plan.home, false);
+    return 'Handed back to the plan: its head proposes it as a plan change. Go on with your own tasks.';
   }
 
   /** In a task's worktree: the plan it's part of. */

@@ -152,3 +152,22 @@ describe('a milestone’s Claude asks with a structured question (BLG-6)', () =>
     expect(t.plans.need(t.plan.id).asks).toBeUndefined();
   });
 });
+
+describe('a milestone’s Claude hands back work outside its tasks (BLG-7)', () => {
+  it('reaches the plan’s head as a plan change to propose, once, in the agent’s words', async () => {
+    const t = await running();
+    const key = t.issue('Idempotent webhooks').key;
+    const before = t.asked.length;
+    const said = t.workerTools().handback!('The refund email template double-escapes HTML in src/email/refund.ts.', 'Not a webhook task: it belongs with receipts or a new task.');
+    expect(said).toContain('Handed back to the plan');
+    const head = t.asked.slice(before).filter((a) => a.channel === 'ws:main');
+    expect(head).toHaveLength(1);
+    expect(head[0]!.prompt).toContain(`${key} (the agent of milestone “Safe payments”) handed back work`);
+    expect(head[0]!.prompt).toContain('<handback>\nThe refund email template double-escapes HTML in src/email/refund.ts.\n</handback>');
+    expect(head[0]!.prompt).toContain('Turn it into a plan change with plan_update');
+    expect(head[0]!.prompt).toContain('The user approves the change.');
+    expect(t.plans.need(t.plan.id).activity.at(-1)?.text).toContain(`${key} handed back: The refund email template`);
+    expect(t.workerTools().handback!('The refund email template  double-escapes HTML in src/email/refund.ts.', 'again')).toContain('already');
+    expect(t.asked.slice(before).filter((a) => a.channel === 'ws:main')).toHaveLength(1);
+  });
+});

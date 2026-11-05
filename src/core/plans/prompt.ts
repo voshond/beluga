@@ -355,6 +355,23 @@ export function checkFailedPrompt(title: string, notes: string, autopilot: boole
     .join('\n');
 }
 
+/** A milestone's Claude found work outside its tasks (plan_handback, BLG-7): the head Claude proposes it as a plan change. */
+export function handbackPrompt(from: string, milestone: string, what: string, why: string, autopilot: boolean): string {
+  return [
+    `${from} (the agent of milestone “${milestone}”) handed back work outside its tasks, rather than doing it or dropping it:`,
+    '',
+    '<handback>',
+    what.replace(/<\/?handback>/gi, '').trim(),
+    '</handback>',
+    `Why it isn't theirs: ${why.replace(/\s+/g, ' ').trim()}`,
+    '',
+    'Turn it into a plan change with plan_update: a task in the milestone it belongs to (or a new milestone), its goal in the agent\'s words above, not your own diagnosis.',
+    'If it is already a task of the plan, or clearly not worth doing, say so in one line instead and change nothing.',
+    autopilot ? 'The plan runs on Autopilot: the change applies at once.' : 'The user approves the change.',
+    'Don\'t investigate it yourself. Answer with one short line.',
+  ].join('\n');
+}
+
 /** The plan went quiet with Claude's work left: the head Claude decides what moves it. */
 export function stuckPrompt(what: string, tried: readonly string[], autopilot: boolean): string {
   return [
