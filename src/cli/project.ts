@@ -41,7 +41,7 @@ export const isGitUrl = (s: string): boolean => /^(https?|ssh|git|file):\/\//.te
 
 /** The folder a clone of this URL gets: its last part, without .git. */
 export function cloneName(url: string): string {
-  const last = url.replace(/[/\\]+$/, '').split(/[/:]/).pop() ?? '';
+  const last = url.replace(/[/\\]+$/, '').split(/[/\\:]/).pop() ?? '';
   return last.replace(/\.git$/, '') || 'project';
 }
 

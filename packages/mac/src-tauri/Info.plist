@@ -7,6 +7,8 @@
   <string>Claude can work with your other apps for you, such as Finder or Safari, when you ask it to.</string>
   <!-- Settings › Voice: speaking instead of typing, written down on this Mac. -->
   <key>NSMicrophoneUsageDescription</key>
-  <string>Beluga writes down what you say, on this Mac, so you can speak to Claude instead of typing. The recording never leaves your Mac.</string>
+  <string>Beluga writes down what you say, on this Mac, so you can speak to Claude instead of typing, and carries your voice in calls with friends. Recordings are written down here and never leave your Mac.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>Beluga shows your camera to the friends you're in a call with, straight from this Mac to theirs.</string>
 </dict>
 </plist>

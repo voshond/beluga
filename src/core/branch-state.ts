@@ -1,4 +1,6 @@
 import type { DomainState } from './store.js';
+import type { PullRequest } from './work-store.js';
+import type { ForkOf } from '../workspaces/github.js';
 import type { Workspace } from '../workspaces/types.js';
 
 /**
@@ -47,6 +49,7 @@ export type BranchStepId =
   | 'pr_claude'
   | 'pr_custom'
   | 'pr_draft'
+  | 'pr_original'
   | 'merge'
   | 'merge_base'
   | 'continue_after_merge'
@@ -82,8 +85,8 @@ export interface BranchOptions {
   readonly planned?: boolean;
 }
 
-/** "origin/main" or "fork/main" → "main". */
-const short = (ref: string): string => ref.replace(/^(refs\/heads\/|refs\/remotes\/)?(origin|fork)\//, '');
+/** "origin/main" → "main". */
+const short = (ref: string): string => ref.replace(/^(refs\/heads\/|refs\/remotes\/)?origin\//, '');
 
 /** Its project pushes somewhere and the GitHub CLI isn't known to be missing: PRs are the way to merge. */
 export function onGitHub(state: Pick<DomainState, 'projects' | 'gh'>, ws: Workspace): boolean {
@@ -92,6 +95,11 @@ export function onGitHub(state: Pick<DomainState, 'projects' | 'gh'>, ws: Worksp
 }
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** The fork's original, when `pr` was opened there (Create PR on the original) rather than on the fork. */
+export function prOnOriginal(fork: ForkOf | undefined, pr: Pick<PullRequest, 'url'> | undefined): ForkOf | undefined {
+  return fork && pr && pr.url.toLowerCase().startsWith(`${fork.url.toLowerCase()}/pull/`) ? fork : undefined;
+}
 
 /** A worktree's branch, or undefined for what has none (chats, the main folder, archived ones, a detached HEAD). */
 export function branchState(state: Pick<DomainState, 'projects' | 'gh' | 'prs' | 'conflicts'>, ws: Workspace, opts: BranchOptions = {}): BranchState | undefined {
@@ -103,6 +111,9 @@ export function branchState(state: Pick<DomainState, 'projects' | 'gh' | 'prs' |
   const changed = st?.changed ?? 0;
   const planned = Boolean(opts.planned);
   const github = onGitHub(state, ws);
+  // Its PR is on the fork's original (BLG-727): that repository's maintainers merge it.
+  const original = prOnOriginal(project?.fork, pr);
+  const originalName = project?.fork ? `${project.fork.owner}/${project.fork.repo}` : '';
   const at = (kind: BranchKind, label: string, tone: BranchTone, detail: string, steps: ReadonlyArray<BranchStep | false | undefined>): BranchState => ({
     kind,
     label,
@@ -138,6 +149,7 @@ export function branchState(state: Pick<DomainState, 'projects' | 'gh' | 'prs' |
   }
 
   if (pr?.state === 'MERGED') {
+    if (original) return at('merged', 'Merged', 'merged', `PR #${pr.number} merged into ${originalName} on GitHub: Sync Fork on the project’s home brings it into your fork’s ${into}`, planned ? [] : finish);
     return at('merged', 'Merged', 'merged', `PR #${pr.number} merged into ${into} on GitHub, so this worktree is done: archive it, or continue here with a new PR${changed ? ` (${plural(changed, 'change')} since)` : ''}`, planned ? [] : finish);
   }
   // Continued after its PR merged: the commits already in the base are that PR's, so nothing new is here yet (not Merged again).
@@ -187,6 +199,14 @@ export function branchState(state: Pick<DomainState, 'projects' | 'gh' | 'prs' |
     if (pr.review === 'CHANGES_REQUESTED') {
       return at('changes_requested', 'Changes requested', 'warn', `A reviewer asked for changes on ${n}`, [openPr, { id: 'review_claude', label: 'Ask Your Agent to Review…', hint: 'Your agent reviews the branch and suggests what to change', claude: true }, commit, admin]);
     }
+    // On the original, its maintainers review and merge: open it there first; merging stays in the menu for those who can.
+    if (original) {
+      return at('review', `On ${originalName}`, 'wait', `${n} is on ${originalName}: its maintainers review and merge it${pr.checks === 'pending' ? ' (its checks are running)' : ''}`, [
+        openPr,
+        { id: 'merge_pr', label: 'Squash and Merge', hint: `On ${originalName}, if you can merge there` },
+        commit,
+      ]);
+    }
     if (pr.checks === 'pending') return at('checks_running', 'Checks running', 'wait', `${n}’s checks are running`, [auto, admin, openPr, commit]);
     if (pr.review === 'REVIEW_REQUIRED') return at('review', 'Waiting for review', 'wait', `${n} needs an approving review`, [auto, admin, openPr, commit]);
     if (pr.mergeState === 'blocked') return at('blocked', 'Blocked', 'warn', `${into}’s rules don’t let ${n} merge yet`, [auto, admin, openPr, commit]);
@@ -209,7 +229,8 @@ export function branchState(state: Pick<DomainState, 'projects' | 'gh' | 'prs' |
           { id: 'pr_claude', label: 'Create PR with Your Agent', hint: 'Your agent commits what belongs, then writes the title and description: what, why, how to test', claude: true },
           { id: 'pr_custom', label: 'Create PR with Instructions…', hint: 'Tell your agent anything extra for this one (a draft, an issue to mention…)', claude: true },
           { id: 'pr_draft', label: 'Create Draft PR', hint: `Like Create PR, as a draft: it can’t merge until it’s marked ready` },
-          { id: 'merge_base', label: `Merge into ${into}…`, hint: `No pull request: ${changed ? 'commits what’s left, ' : ''}merges ${ws.branch} into ${into} on GitHub and pushes it there` },
+          ...(project?.fork ? [{ id: 'pr_original' as const, label: `Create PR on ${originalName}`, hint: `Pushes ${ws.branch} to your fork and opens a pull request into ${originalName}’s ${project.fork.branch}, for its maintainers` }] : []),
+          { id: 'merge_base', label: `Merge into ${into}…`, hint: `No pull request: ${changed ? 'commits what’s left, ' : ''}merges ${ws.branch} into origin/${into} and pushes it there` },
         ]
       : [];
   if (pr?.state === 'CLOSED' && !changed && !ahead) return at('closed', 'PR closed', 'muted', `PR #${pr.number} was closed without merging`, planned ? [] : [archive, remove]);

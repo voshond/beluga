@@ -159,6 +159,7 @@ server (vite, the e2e demo) is a plain browser and keeps its development behavio
 | `lib/updates.ts`, `dialogs/UpdateSettings.tsx` | checks, downloads and installs updates | hidden: the server's Beluga updates, not the page |
 | `dialogs/Settings.tsx` Menu Bar pane, Reduce transparency | the menu bar icon, vibrancy | hidden |
 | `dialogs/VoiceSettings.tsx` From any app, `lib/dictation.ts` global shortcut | a shortcut that works in any app | hidden: the shortcut works while the page has focus |
+| `layout/AppMenu.tsx`, `lib/app-menu-model.ts` the menu bar | the menu bar: Settings… (⌘,) and the rest | a gear button at the sidebar's top left (in the toolbar while the sidebar is hidden): Settings…, Keys and Commands, Everything You Can Do…, then File, View and Go, run as the menu bar's items are. Left out: what does nothing in a browser (updates, Window, Quit, Open the Log) and the Conversation and Workspace menus, which the toolbar shows |
 | `lib/shortcuts.ts` menu keys | the app's menu shows your shortcuts | nothing to send (the page has no menu bar) |
 | `lib/sounds/*` | macOS sounds, installed for banners | Beluga's own sounds in the page; macOS system sounds are left out |
 | `lib/sounds/access.ts`, `lib/privacy.ts` | asks macOS about notifications, the screen, the microphone | the browser's permissions |

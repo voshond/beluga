@@ -27,8 +27,10 @@ import { plansOf } from './plans/registry.js';
 import { assistantOf } from './assistant/registry.js';
 import { companionOf } from '../companion/registry.js';
 import { stopTestProcesses } from '../workspaces/test-procs.js';
+import { ghRepoEnv } from '../workspaces/github.js';
 import { AgentTerminals } from './agent-term.js';
 import { claudeHome } from './claude-code/launch.js';
+import { callNotesToolsOf } from './calls/launch.js';
 
 /** Everything a session is made of, wired to each other and to the session. */
 export interface SessionParts {
@@ -87,6 +89,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
           if (host.runningIn(channel)) host.stopRun(channel);
           await host.idle(channel);
         },
+        endRuns: (channel, why) => host.endIn(channel, why),
         forgetContext: (channel) => host.forgetContext(channel),
         findConversation: opts.findConversation
           ? async (dir, o) => {
@@ -209,7 +212,8 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       approvalTimeoutMs: () => session.approvalTimeoutMs,
       refreshUsage: () => session.refreshUsage(),
       canEditIn: (peerId, channel) => invites.canEditIn(peerId, channel),
-      envFor: (channel, dir) => env.envFor(channel.startsWith('ws:') ? { workspaceId: channel.slice(3), dir } : { dir }, { claude: true }),
+      // Claude's gh works on origin's repository, as Beluga does: a fork's own, not the original (yours win when set).
+      envFor: (channel, dir) => ({ ...ghRepoEnv(dir), ...env.envFor(channel.startsWith('ws:') ? { workspaceId: channel.slice(3), dir } : { dir }, { claude: true }) }),
       dotenvAccess: env.dotenvAccess,
       stopTests: (dir) => stopTestProcesses(dir),
       nameTask: (prompt) => session.nameTask(prompt),
@@ -223,6 +227,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       // "Your Mac"'s chats, and your own asks in friends' chats (BLG-207): both work in its folder.
       assistant: (channel, from) => assistantOf(session)?.forRun(channel, from) ?? assistantOf(session)?.forChat(channel, from),
       phone: (scratchDir) => companionOf(session)?.control.toolsFor(scratchDir),
+      callNotes: () => callNotesToolsOf(session),
       phoneUse: () => companionOf(session)?.control.useLevel() ?? 'off',
       setup: (channel) => workbench?.setupForRun(channel.slice(3)),
       terminalDriving: (channel) => agentTerms?.driving(channel) ?? false,

@@ -83,6 +83,8 @@ export interface AgentHostDeps {
   /** "Your Mac" (core/assistant), your own runs in its conversation: where it runs, its tools, what Claude is told. */
   readonly assistant?: (channel: string, from: string) => { readonly place: AgentPlace; readonly tools: MacTools; readonly brief: string } | undefined;
   /** Your phone (core/phone, BLG-150), your own runs: tools to act on it, saving screenshots in `scratchDir`. `env` lets Bash use adb/scrcpy (BLG-174). */
+  /** The notes of calls you were in (core/calls, BLG-715), as tools for your own runs. */
+  readonly callNotes?: () => import('../agent/types.js').CallNotesTools | undefined;
   readonly phone?: (scratchDir?: string) => { readonly tools: import('../agent/types.js').PhoneTools; readonly brief: string; readonly env?: Record<string, string> } | undefined;
   /** How freely Claude may use the phone now (off · ask · use · full), for the owner-approval gate. */
   /** Your own worktree runs: the project's setup, and Claude's tool to correct it (core/workbench). */
@@ -577,6 +579,28 @@ export class AgentHost {
       for (const { from, body, compact } of cancelled) if (!compact) this.emitAgent(body.requestId, from, 'error', 'Cancelled by owner', body.channel);
     }
     this.toast('Stopping your agent everywhere (queued requests cancelled)', 'warn');
+  }
+
+  /**
+   * A conversation's worktree is going (deleted or archived): everything your Claude has there
+   * ends, quietly, whoever asked for it. Its run stops (its approvals denied, its questions
+   * skipped) and what waits there is dropped, saying `why`. Resolves once nothing runs there, so
+   * no card lands in a conversation that's gone and no Claude works in a folder that's gone.
+   */
+  endIn(channel: string, why: string): Promise<void> {
+    const lane = this.lanes.get(channel);
+    if (!lane || (!lane.current && !lane.waiting.length)) return Promise.resolve();
+    for (const [id, at] of [...this.toolApprovals]) if (at === channel) this.answerApproval('no', id);
+    this.deps.questions.cancelChannel(channel);
+    const dropped = lane.waiting;
+    lane.waiting = [];
+    for (const { from, body, compact } of dropped) if (!compact) this.emitAgent(body.requestId, from, 'error', why, body.channel);
+    if (lane.current) {
+      lane.interruptedBy = 'beluga';
+      lane.interruptNote = why;
+      lane.current.abort();
+    }
+    return this.idle(channel);
   }
 
   /**
@@ -1168,6 +1192,8 @@ export class AgentHost {
       const scratch = place && !place.askOnly && this.store.getState().prefs.scratchFolder && (await ensureScratch(place.cwd)) ? SCRATCH_DIR : undefined;
       // Your phone (core/phone): your own runs can drive it; a screenshot lands in this run's scratch.
       const phone = from === this.selfId ? this.deps.phone?.(scratch && place ? path.join(place.cwd, scratch) : undefined) : undefined;
+      // Calls you were in (BLG-715): your own runs look up what was said, a page at a time.
+      const callNotes = from === this.selfId ? this.deps.callNotes?.() : undefined;
       // A plan's home conversation (a main folder's chat, often): the plan's tools.
       const plans = from !== this.selfId || place?.syncMain ? undefined : this.deps.plans?.(body.channel, from);
       // Your own runs get the board: a run doing a task gets it, and the tools to keep it true. A main
@@ -1223,6 +1249,7 @@ export class AgentHost {
         ...(plans?.brief ? { planBrief: plans.brief } : {}),
         ...(mac ? { macTools: mac.tools, macBrief: mac.brief } : {}),
         ...(phone ? { phoneTools: phone.tools, phoneBrief: phone.brief } : {}),
+        ...(callNotes ? { callNotesTools: callNotes } : {}),
         ...(sentinel ? { sentinelTools: sentinel.tools, sentinelBrief: sentinel.brief, ...(sentinel.dashboard ? { dashboardTools: sentinel.dashboard } : {}) } : {}),
         prompt: this.promptOf(body),
         ...this.promptIdOf(body),

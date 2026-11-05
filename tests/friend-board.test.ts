@@ -62,7 +62,8 @@ function hostSetup(trust: TrustLevel | undefined, opts: { guest?: boolean } = {}
   const ask = async (from = BRAN): Promise<AgentRunInput | undefined> => {
     const before = runs.length;
     await host.onAgentRequest(from, { kind: 'agent_request', requestId: `r-${from}-${before}`, prompt: 'open a task', viaAgent: false, channel: TREE, urgent: false, plan: false });
-    await waitFor(() => runs.length > before, 500).catch(() => undefined);
+    // Ample for a slow runner (Windows took over 500ms); every caller expects a run, so it's only waited when one is late.
+    await waitFor(() => runs.length > before, 5_000).catch(() => undefined);
     return runs.length > before ? runs.at(-1) : undefined;
   };
   return { store, ask, boards };

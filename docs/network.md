@@ -353,6 +353,130 @@ the prompt's own sections (`<chat>`, `<message>`, `<file>` in them are defused).
 it reaches you (you were offline) isn't answered, and each is answered once (`~/.beluga/chat-claude.json`).
 If your agent can't answer, you get a notification; the others just see it stop.
 
+## Calls (BLG-706)
+
+Voice, cameras and screen sharing in a DM, a channel or a room, with no call server. The call stays in its
+conversation, and it's the same chat.
+
+- **Setup over the links you already have.** `call` link frames (core/calls, checked there, only
+  between people in that conversation): `ring`, `here` (I'm in it: muted, sharing, joined at; every
+  10 s), `bye`, `decline`, and `sig`, WebRTC setup for one person's window (64 KB at most). Nobody
+  runs a call: each Mac keeps the roster from what it hears and drops whoever was quiet for 32 s.
+  Two people pressing Call at once end up in the same call (the lower id wins on every Mac).
+- **Only someone who can answer.** A call whose `ring` would reach nobody (everyone offline, so no
+  link to send it on) doesn't start, and the Call button says so before you press it. The caller
+  hears it ring at the others' (a bright ring-ring, then a moment of quiet, as a phone does) until
+  someone joins; the window wakes
+  its sound on that click, since WebKit keeps sound started without one silent.
+- **Missed calls.** A ring that stops before you answered or said Not Now (nobody picked up in
+  45 s, or the caller hung up) leaves "Ann tried calling you at 14:05" where it rang in the
+  conversation, with Call Back, and in the inbox (core/calls/missed.ts, kept in
+  `~/.beluga/missed-calls.json` for a month, so it's still there when you open Beluga again).
+- **Media goes Mac to Mac.** The window makes the call with WebRTC (packages/mac/src/call): Opus
+  voice with echo cancellation and noise suppression to everyone in it (a mesh), DTLS-SRTP
+  encrypted. Public STUN only finds each Mac's address; there's no TURN yet, so two networks that
+  block UDP can't call each other.
+- **Screen sharing through a tree.** A share is tuned for text (`contentHint: text`, resolution
+  kept before frame rate, H.264 first: the Mac's hardware encodes it). The sharer feeds the first
+  three viewers; each viewer passes it on to at most two more (`shareTree` in shared/calls.ts), so
+  the sharer's upload stays the same however big the call gets. Every Mac draws the same tree from
+  the roster, in join order.
+- **Pointing at it.** The laser, ink that fades after a few seconds and Ask Claude's marked area go
+  as vectors on a WebRTC data channel (fractions of the picture), never through the daemons. Ask
+  Claude puts a snapshot of the share (with the ink on it) in the chat as a question for your own
+  Claude; its answer is a chat message, shown on the stage for everyone in the call.
+- **One window makes your side.** The Mac screen that started or joined it (or the first to say
+  so after you answered from the phone) gets the setup and says it's still there every few
+  seconds. If it goes quiet for 32 s, you leave the call.
+- **Pointing, without tools** (BLG-717). On a shared screen a click sends a ripple everyone sees,
+  and dragging draws; your pointer shows only once you choose to (below). Strokes a moment apart are one sketch (a word,
+  a circle and an arrow); drawing again after a pause clears your old sketch, and left alone it
+  dissolves a few seconds later by itself. The Box tool (or Shift as you drag) marks a box instead;
+  it goes as a stroke along its sides, so it fades and can be asked about like any sketch. Beside
+  your sketch, Ask your agent sends the part it covers, ink and all, to the chat; the sketch stays up
+  while you type the question. The sharer picks Sharp (text) or Smooth (motion) behind •••; Full
+  Screen gives the picture the whole display. Nothing is written over the shared screen while the
+  chat shows beside it.
+- **Everyone's pointer** (BLG-733). Off until you turn on Show My Pointer in the stage's bar (each
+  share starts with it off). Then your pointer shows for the others as an arrow in your colour with
+  your picture and name, and you see the same mark under your own mouse in place of the usual
+  arrow, so it looks the same on both ends. It's sent 60 times a second on a second data channel,
+  unordered and never resent (only the newest spot counts), once the other Mac says it has one
+  (`pointers` in `streams`); older Macs get it on the stage channel. Each screen glides it to its
+  last spot on a critically damped spring (call/glide.ts), so it moves smoothly however the
+  network delivers.
+- **Microphone and speaker** (BLG-737). The chevron beside Mute picks which microphone and speaker
+  the call uses; a new microphone goes on every line at once, and the choice is kept on this Mac.
+  Picking a speaker needs WebKit's `setSinkId`; without it, macOS's own output is used.
+- **The chat where it can't be seen.** Full Screen and Face to Face cover the chat, so what the
+  others write from then on pops up on the right, dissolves once there was time to read it, and a
+  line under it answers in the same chat (call/ChatPops.tsx). Messages that were already there
+  never pop up; timing counts from when each message reached this Mac, not its sender's clock.
+- **What can be shared.** Share opens macOS's own picker (WebKit's ScreenCaptureKit picker): one
+  window, or one whole display, any of them with several monitors. A whole app (all its windows)
+  isn't something WebKit's capture offers.
+- **The sharer.** Sharing, you're likely looking at another app, not Beluga. While you are, the
+  floating card says you're sharing, in the call's colour, with Stop, and tucks away for the rest
+  of that share (˄), leaving only the frame; a click-through window
+  covers the shared screen (src-tauri/src/call_overlay.rs) with a soft frame around it, the
+  others' sketches, pointers and clicks where they made them, and what they write in the chat
+  bottom right. Both ask macOS to leave them out of captures (`NSWindowSharingNone`), so the
+  others don't see them. Since macOS 15, ScreenCaptureKit doesn't always listen, so the overlay
+  first shows a few pixels of two colours in turn in its top-left corner and the sharer's window
+  looks for them in its own capture (call/leak-probe.ts, BLG-736). Found: the overlay stays away
+  for the call (a toast says why), and nobody sees their own pointer or ink twice. Sharing one window, the frame and the ink stay off (its place on screen
+  isn't known); the chat still pops up. In Beluga, the strip, the stage and the sidebar's pill say
+  you're sharing, and the pill can stop it. In full screen the stage's bar floats over the
+  bottom and steps aside after a couple of seconds without the pointer moving.
+- **Calls of 5–10.** Each Mac measures what it can send (WebRTC's own estimate per line) and says so
+  with `here`; the share tree puts the best uploads closest to the sharer, each feeding as many as
+  its upload carries (one to five), and weak connections only watch (`shareTreeBy`). Each window
+  says how big it shows each camera (face to face or a small collage: big; a tile: small; not on
+  screen: none), and each sender splits its upload by that, sending nothing to whoever doesn't look.
+- **Cameras** (BLG-714). Each camera goes to everyone in the call, smaller as it grows (full size
+  for two, about a third of the bitrate past four). A line says once on the data channel which of
+  its streams is the camera and which the screen. Faces show as a band under the strip, or a
+  filmstrip over a shared screen. Face to Face puts the call over the whole window, like FaceTime:
+  one other person fills it, a group is a collage, and you're a picture you drag to any corner.
+- **Notes** (BLG-715, BLG-718). Only once someone else is in the call: a call nobody picked up is
+  never written down and leaves no notes. Nobody records anyone else: each Mac records only its own
+  microphone (the call's echo-cancelled stream), cut at its pauses into phrases, keeping no sound
+  once a phrase is written down. Each phrase is written down by whichever Mac in the call will
+  finish it soonest (shared/scribe-plan.ts): every few seconds each Mac says whether it has a voice
+  model, how fast it writes down, how much waits for it, its CPU load and whether it's on battery
+  (`scribe` on the data channel). Its own Mac when that's close enough (no sound leaves it), else
+  the phrase's WAV goes in parts (`clip`) to the soonest one, which sends the words back
+  (`clip-text`). So someone with no model, or a slow or busy Mac, still gets notes.
+  **The best model, one language** (BLG-738): each Mac also says which voice models it has, and a
+  phrase goes to the best one in the call for its language (Whisper Turbo over Parakeet, which
+  doesn't know Turkish; a lesser model only when the best is far behind), its own Mac when that's
+  among the best. Each Mac counts how many seconds of its phrases came out in which language and
+  says so too (`langs`); once one language clearly leads across the call (8 s heard, 60% of it),
+  every phrase is written down in it (`lang` on `clip`), so a short Turkish phrase can't come out
+  as Russian, and the early phrases that came out in another language are written down again. A
+  language set in Settings › Voice always wins for your own words. The Notes button says which
+  model writes on which Mac, and the call's language once it settled. And not word
+  by word at any cost: with time to spare each phrase is written down at once; busy (load per
+  core over 0.7) or on battery, phrases wait and go together, up to 28 seconds of speech in one
+  go, never waiting more than a minute. As you leave, your words go to the others who were in
+  the call (`notes` frames, accepted only from someone who was in a call you were in); everyone keeps one merged transcript (`~/.beluga/call-notes/<call>.json`), a
+  one-line chip in the chat however long the call was. It opens in a reader beside the chat, made
+  for long calls: your words on the right and everyone else's on the left, search (⌘F), one
+  person's words only, and the call's timeline to jump along. Notes never go into a prompt:
+  agents look them up with tools (server `beluga_calls`, and inside a chat answer `beluga_chat`):
+  `call_notes_list`, `call_notes_search` and `call_notes_read`. Your own runs reach every call you
+  were in; an answer in a chat only that chat's calls, and its prompt only says they exist. Its
+  ••• › Talk About It opens a chat with your own agent that only you see, its message a
+  `call:<id>` chip, never the transcript. Notes need a voice model on at least one Mac in the
+  call: a call never downloads one.
+- **Rooms** (BLG-716). The same calls in a room's chat: `call` bodies sent through the hub to one
+  person at a time (never kept for latecomers), everyone connected and not a guest is in it, and
+  the media still goes Mac to Mac. Its latest notes sit folded on top of the room's chat.
+- **Wherever you are.** In the conversation, a strip under its header; elsewhere in Beluga, a pill
+  at the bottom of the sidebar; with Beluga behind other apps, a small floating card
+  (src-tauri/src/call_float.rs). Someone ringing you is a card at the top of the window with the
+  ringtone, a notification, and a Needs you item on the phone (Answer on Mac, Decline).
+
 ## Tasks between Claudes (the gateway)
 
 Code: `src/core/gateway/` (protocol, the gateway, the receiving side, files), `src/agent/gateway-tools.ts`
@@ -372,7 +496,11 @@ Code: `src/core/gateway/` (protocol, the gateway, the receiving side, files), `s
   sent to one person. Requests, results and cancels wait in `~/.beluga/tasks/outbox.json` until
   acknowledged (resent every 20 s while reachable, 7 days at most); updates and cards are only
   sent to someone reachable now. Over the network only friends are heard; a result is only taken
-  from the person the task went to, and only once.
+  from the person the task went to, and only once. A request to a friend whose Mac is off waits for
+  them for those 7 days; the ack adds "Reached <name>'s Mac" to its steps, and only from then does
+  a day without word fail it (not in the 10 minutes after either Mac wakes, starts or links again,
+  so a waiting result arrives first). A request that ends on your Mac without their answer leaves
+  nothing in the outbox, and your Claude's conversation hears it like a result (BLG-705).
 - **Receiving**: your rules and capability settings decide (see *Approvals and rules* below):
   declined (with the reason), let in at once (you trust them, or a rule of yours covers it), or you
   are asked. It runs in the project it names (if there is one) or a scratch folder

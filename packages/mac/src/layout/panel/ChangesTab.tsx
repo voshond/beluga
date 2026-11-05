@@ -10,6 +10,7 @@ import { useApi, useApp, useBeluga } from '../../lib/beluga.js';
 import { useMyAgentName } from '../../lib/agent-words.js';
 import { focusFor, openFocus, showPanelTab, forgetChangeAsk, peekChangeAsk, usePanelRuntime } from '../../lib/panel.js';
 import { SPLIT_DEFAULT, SPLIT_MAX, SPLIT_MIN, clampShare } from '../../lib/panel-model.js';
+import { dirOf, groupByFolder, shownOrder } from '../../lib/changes-model.js';
 import { setPrefs, usePrefs } from '../../lib/prefs.js';
 import { chordLabel } from '../../lib/shortcuts-model.js';
 import { useWsBusy, whileBusy } from '../../lib/ws-busy.js';
@@ -54,7 +55,7 @@ function useChanges(wsId: string): { data: Review | undefined; loading: boolean;
   return { data: mine?.data ?? last.current, loading: !!mine?.loading, error: mine?.error, reload };
 }
 
-function Summary({ data, loading, onReload }: { data: Review; loading: boolean; onReload: () => void }) {
+function Summary({ data, loading, grouped, onReload }: { data: Review; loading: boolean; grouped: boolean; onReload: () => void }) {
   const totals = data.files.reduce((t, f) => ({ add: t.add + f.added, del: t.del + f.removed }), { add: 0, del: 0 });
   const commitItems = useCommitItems();
   const [showCommits, setShowCommits] = useState(false);
@@ -67,6 +68,7 @@ function Summary({ data, loading, onReload }: { data: Review; loading: boolean; 
         <span className={d.add}>+{totals.add}</span>
         <span className={d.del}>−{totals.del}</span>
         <span className={s.flex} />
+        <IconButton icon="folder" label={grouped ? 'Show as One List' : 'Group by Folder'} active={grouped} aria-pressed={grouped} onClick={() => setPrefs({ changesByFolder: !grouped })} />
         <IconButton icon="refresh" label={loading ? 'Looking for changes…' : 'Look again'} className={cx(loading && s.spinning)} onClick={onReload} />
       </div>
       <div className={s.summaryMeta}>
@@ -241,8 +243,18 @@ export function ChangesTab({ wsId }: { wsId: string }) {
   const [open, setOpen] = useState<string>();
   const inFocus = usePanelRuntime((r) => r.focus?.wsId === wsId && r.focus.kind === 'diff');
   const box = useRef<HTMLDivElement>(null);
-  const files = data?.files ?? [];
+  const files = useMemo(() => data?.files ?? [], [data]);
   const at = open ? files.findIndex((f) => f.path === open) : -1;
+  // Grouped by folder (a button at the top): each folder folds; the arrows walk what's shown.
+  const grouped = prefs.changesByFolder;
+  const groups = useMemo(() => (grouped ? groupByFolder(files) : []), [files, grouped]);
+  const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set());
+  const order = grouped ? shownOrder(groups, folded) : files.map((_, i) => i);
+  const fold = (dir: string): void => setFolded((was) => (was.has(dir) ? new Set([...was].filter((x) => x !== dir)) : new Set([...was, dir])));
+  // The file you're looking at is never hidden in a folded folder.
+  useEffect(() => {
+    if (open && grouped && folded.has(dirOf(open))) fold(dirOf(open));
+  }, [open, grouped]);
   // A reload of this workspace's changes (Claude edited, a commit) selects the first file again:
   // once it's done, go back to the one you're looking at, or close it if it's gone.
   const wasLoading = useRef(reviewLoading);
@@ -282,13 +294,16 @@ export function ChangesTab({ wsId }: { wsId: string }) {
     const i = at < 0 ? -1 : at;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      show(Math.max(0, Math.min(files.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1))));
+      const pos = order.indexOf(i);
+      const next = pos < 0 ? (e.key === 'ArrowDown' ? 0 : order.length - 1) : pos + (e.key === 'ArrowDown' ? 1 : -1);
+      const to = order[Math.max(0, Math.min(order.length - 1, next))];
+      if (to !== undefined) show(to);
     } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       if (i >= 0) openFocus('diff', wsId);
-    } else if (e.key === 'Enter' && i < 0 && files.length) {
+    } else if (e.key === 'Enter' && i < 0 && order.length) {
       e.preventDefault();
-      show(0);
+      show(order[0]!);
     } else if (e.key === 'Escape' && open && !focusFor(wsId)) {
       // (In the focus view, Esc goes back to the chat first.)
       e.preventDefault();
@@ -307,35 +322,56 @@ export function ChangesTab({ wsId }: { wsId: string }) {
     );
   }
   const split = clampShare(prefs.panelSplit, SPLIT_MIN, SPLIT_MAX);
+  // A changed file's row: in a folder, just its name (the folder says where).
+  const fileRow = (f: Review['files'][number], i: number, inFolder: boolean) => {
+    const st = STATE[f.state];
+    const name = f.path.split('/').pop() ?? f.path;
+    const dir = inFolder ? '' : dirOf(f.path);
+    const on = f.path === open;
+    const items = (): ReturnType<typeof fileItems> => fileItems(f, i).map((it, k) => (k === 0 ? { ...it, onSelect: () => show(i) } : it));
+    return (
+      <ActionsContext key={f.path} items={items}>
+        <div role="option" aria-selected={on} className={cx(s.row, inFolder && s.rowInFolder, on && s.rowOn)} title={f.path} onClick={() => show(i)} onDoubleClick={() => (show(i), openFocus('diff', wsId))}>
+          <span className={cx(d.letter, st.tone)}>{st.letter}</span>
+          <span className={s.rowName}>
+            {name}
+            {dir ? <span className={s.rowDir}>{dir}</span> : null}
+          </span>
+          <span className={s.rowCounts}>
+            {f.added ? <span className={d.add}>+{f.added}</span> : null}
+            {f.removed ? <span className={d.del}>−{f.removed}</span> : null}
+          </span>
+        </div>
+      </ActionsContext>
+    );
+  };
   // Open full size, the diff is across the center: no second, smaller copy of it here.
   const shown = inFocus ? undefined : open;
   return (
     <div ref={box} className={s.stack}>
       <div className={s.top} style={shown ? { flex: `0 0 ${Math.round(split * 100)}%` } : undefined}>
-        <Summary data={data} loading={loading} onReload={reload} />
+        <Summary data={data} loading={loading} grouped={grouped} onReload={reload} />
         <div ref={listRef} className={s.list} role="listbox" aria-label="Changed files" tabIndex={0} onKeyDown={onKey}>
-          {files.map((f, i) => {
-            const st = STATE[f.state];
-            const name = f.path.split('/').pop() ?? f.path;
-            const dir = f.path.slice(0, f.path.length - name.length).replace(/\/$/, '');
-            const on = f.path === open;
-            const items = (): ReturnType<typeof fileItems> => fileItems(f, i).map((it, k) => (k === 0 ? { ...it, onSelect: () => show(i) } : it));
-            return (
-              <ActionsContext key={f.path} items={items}>
-                <div role="option" aria-selected={on} className={cx(s.row, on && s.rowOn)} title={f.path} onClick={() => show(i)} onDoubleClick={() => (show(i), openFocus('diff', wsId))}>
-                  <span className={cx(d.letter, st.tone)}>{st.letter}</span>
-                  <span className={s.rowName}>
-                    {name}
-                    {dir ? <span className={s.rowDir}>{dir}</span> : null}
-                  </span>
-                  <span className={s.rowCounts}>
-                    {f.added ? <span className={d.add}>+{f.added}</span> : null}
-                    {f.removed ? <span className={d.del}>−{f.removed}</span> : null}
-                  </span>
-                </div>
-              </ActionsContext>
-            );
-          })}
+          {grouped
+            ? groups.map((g) => {
+                const shut = folded.has(g.dir);
+                return (
+                  <div key={g.dir} role="group" aria-label={g.dir || 'Top level'}>
+                    <button type="button" tabIndex={-1} className={s.folderRow} aria-expanded={!shut} title={g.dir || 'Top level'} onClick={() => fold(g.dir)}>
+                      <Icon name={shut ? 'chevronRight' : 'chevronDown'} size={9} />
+                      <Icon name="folder" size={13} />
+                      <span className={cx(s.rowName, !g.dir && s.dim)}>{g.dir || 'Top level'}</span>
+                      <span className={s.rowCounts}>
+                        <span className={s.dim}>{g.files.length}</span>
+                        {g.added ? <span className={d.add}>+{g.added}</span> : null}
+                        {g.removed ? <span className={d.del}>−{g.removed}</span> : null}
+                      </span>
+                    </button>
+                    {shut ? null : g.files.map(({ file, index }) => fileRow(file, index, true))}
+                  </div>
+                );
+              })
+            : files.map((f, i) => fileRow(f, i, false))}
         </div>
         {shown ? null : <Actions wsId={wsId} />}
       </div>

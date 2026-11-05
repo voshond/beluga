@@ -167,7 +167,7 @@ describe('Create PR when the SSH key is refused (Workbench)', () => {
     const manager = { list: [{ id: 'p1', workspaces: [ws] }], find: (id: string) => (id === ws.id ? ws : undefined), commitAll: vi.fn() };
     const calls: Array<{ https?: boolean }> = [];
     const toasts: string[] = [];
-    const useHttpsRemote = vi.fn(async () => ({ remote: 'origin', from: 'git@github.com:me/app.git', to: 'https://github.com/me/app.git' }));
+    const useHttpsRemote = vi.fn(async () => ({ from: 'git@github.com:me/app.git', to: 'https://github.com/me/app.git' }));
     const wb = new Workbench({
       store,
       controller: { manager, refresh: async () => undefined, open: () => undefined } as unknown as WorkspaceController,

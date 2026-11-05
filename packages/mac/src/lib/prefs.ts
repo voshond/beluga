@@ -98,6 +98,8 @@ export interface UiPrefs {
   readonly chatTabs: readonly string[];
   /** A changed file shows its diff, or the file as itself (Markdown formatted). Pictures and PDFs always as themselves. */
   readonly changeLook: 'diff' | 'file';
+  /** The Changes tab lists its files under their folders (BLG-739), not as one list. */
+  readonly changesByFolder: boolean;
   /** The panel has a Scratch tab: the workspace's .beluga/scratch/ folder, live. */
   readonly scratchTab: boolean;
   /** Your phone shows its live screen (BLG-196). Off: Claude still uses the phone, you just don't watch. */
@@ -189,6 +191,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   readerWrap: false,
   chatTabs: [],
   changeLook: 'diff',
+  changesByFolder: false,
   scratchTab: true,
   phoneScreen: false,
   scratchSort: 'newest',

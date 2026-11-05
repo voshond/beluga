@@ -18,9 +18,9 @@ const PILL_ICON: Record<BranchTone, IconName> = { merged: 'merge', ok: 'check', 
 
 export type BranchFold = 'none' | 'pill' | 'all';
 
-const STEP_ICON: Partial<Record<BranchStep['id'], IconName>> = { merge_pr: 'merge', merge: 'merge', merge_base: 'merge', merge_auto: 'clock', cancel_auto: 'x', update_branch: 'refresh', mark_ready: 'check', open_pr: 'pr', continue_after_merge: 'branch', archive: 'archive', delete: 'x', commit: 'commit', pr: 'pr', pr_draft: 'pr' };
+const STEP_ICON: Partial<Record<BranchStep['id'], IconName>> = { merge_pr: 'merge', merge: 'merge', merge_base: 'merge', merge_auto: 'clock', cancel_auto: 'x', update_branch: 'refresh', mark_ready: 'check', open_pr: 'pr', continue_after_merge: 'branch', archive: 'archive', delete: 'x', commit: 'commit', pr: 'pr', pr_draft: 'pr', pr_original: 'pr' };
 
-const STEP_SHORT: Partial<Record<BranchStep['id'], string>> = { pr: 'Create PR', open_pr: 'Open PR', pr_draft: 'Draft PR', pr_claude: 'Create PR', pr_custom: 'Create PR', merge_pr: 'Merge', merge: 'Merge', merge_base: 'Merge', merge_auto: 'Auto-merge', merge_admin: 'Merge', cancel_auto: 'Cancel', update_branch: 'Update', mark_ready: 'Ready', review_claude: 'Review', fix_checks: 'Fix', resolve_pr: 'Resolve', merge_claude: 'Resolve' };
+const STEP_SHORT: Partial<Record<BranchStep['id'], string>> = { pr: 'Create PR', open_pr: 'Open PR', pr_draft: 'Draft PR', pr_original: 'Create PR', pr_claude: 'Create PR', pr_custom: 'Create PR', merge_pr: 'Merge', merge: 'Merge', merge_base: 'Merge', merge_auto: 'Auto-merge', merge_admin: 'Merge', cancel_auto: 'Cancel', update_branch: 'Update', mark_ready: 'Ready', review_claude: 'Review', fix_checks: 'Fix', resolve_pr: 'Resolve', merge_claude: 'Resolve' };
 
 /** A step in a word or two, for the folded toolbar: the icon alone didn't say enough ("PR" alone didn't either). */
 export const shortLabel = (step: BranchStep): string => STEP_SHORT[step.id] ?? step.label.replace(/…$/, '').split(' ')[0]!;
@@ -79,6 +79,9 @@ export function BranchControl({ wsId, branch, fold = 'none' }: { wsId: string; b
       case 'pr_draft':
         // Straight to GitHub, no Claude in between (Workbench toasts how it went; trouble reaching GitHub opens its card).
         return void whileBusy(wsId, async () => showGitTrouble(wsId, await api.workbench.quickPr(wsId, step.id === 'pr_draft' ? { draft: true } : {}), step.id === 'pr_draft' ? 'pr_draft' : 'pr'));
+      case 'pr_original':
+        // Into the fork's original (BLG-727): pushed to the fork, opened there for its maintainers.
+        return void whileBusy(wsId, async () => showGitTrouble(wsId, await api.workbench.quickPr(wsId, { original: true }), 'pr_original'));
       case 'pr_claude':
         return void api.workbench.createPr(wsId);
       case 'merge_base':

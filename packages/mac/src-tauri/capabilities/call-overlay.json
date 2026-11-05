@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "call-overlay",
+  "description": "What the others point at, over the sharer's own screen (BLG-717): it may listen for what to draw",
+  "windows": ["call-overlay"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

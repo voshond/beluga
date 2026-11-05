@@ -1,5 +1,6 @@
 import type { ChatFileState, FriendOfferView, LiveClaude, MessageView, NetworkState, NetworkSummary } from '../net/mesh/views.js';
 import type { Reaction } from '../shared/reactions.js';
+import type { CallNotesView, CallsView, MissedCallView } from '../shared/calls.js';
 
 /**
  * The Beluga network in the shared state: friends with their status, groups with members,
@@ -40,6 +41,12 @@ export type NetworkAction =
   /** A friend request with someone in your room came or went out (`gone`: it's answered or withdrawn). */
   | { type: 'net_offer'; offer: FriendOfferView }
   | { type: 'net_offer_gone'; peerId: string; dir: 'in' | 'out' }
+  /** The calls in your conversations now (BLG-706). */
+  | { type: 'net_calls'; calls: CallsView }
+  /** Every conversation's call notes now (BLG-715). */
+  | { type: 'net_call_notes'; notes: Readonly<Record<string, readonly CallNotesView[]>> }
+  /** Every conversation's missed calls now. */
+  | { type: 'net_missed_calls'; missed: Readonly<Record<string, readonly MissedCallView[]>> }
   /** The network stopped. */
   | { type: 'net_off' };
 
@@ -75,10 +82,10 @@ function withReactions(m: MessageView, reactions: readonly Reaction[]): MessageV
 export function reduceNetwork(state: NetworkSlice, action: NetworkAction): NetworkSlice {
   switch (action.type) {
     case 'net_summary': {
-      const { files, live, main } = state.network;
+      const { files, live, main, calls, callNotes, missedCalls } = state.network;
       // A friend request is over once you're friends (either side may have used it).
       const offers = state.network.offers?.filter((o) => !action.summary.friends.some((f) => f.peerId === o.peerId));
-      return { network: { ...action.summary, messages: state.network.messages, ...(files ? { files } : {}), ...(live ? { live } : {}), ...(main ? { main } : {}), ...(offers?.length ? { offers } : {}) } };
+      return { network: { ...action.summary, messages: state.network.messages, ...(files ? { files } : {}), ...(live ? { live } : {}), ...(main ? { main } : {}), ...(offers?.length ? { offers } : {}), ...(calls && Object.keys(calls).length ? { calls } : {}), ...(callNotes ? { callNotes } : {}), ...(missedCalls ? { missedCalls } : {}) } };
     }
     case 'net_offer': {
       const o = action.offer;
@@ -126,12 +133,25 @@ export function reduceNetwork(state: NetworkSlice, action: NetworkAction): Netwo
       const { main: _old, ...rest } = state.network;
       return { network: action.groupId ? { ...rest, main: action.groupId } : rest };
     }
+    case 'net_calls': {
+      const { calls: _was, ...rest } = state.network;
+      return { network: Object.keys(action.calls).length ? { ...rest, calls: action.calls } : rest };
+    }
+    case 'net_call_notes': {
+      const { callNotes: _was, ...rest } = state.network;
+      return { network: Object.keys(action.notes).length ? { ...rest, callNotes: action.notes } : rest };
+    }
+    case 'net_missed_calls': {
+      const { missedCalls: _was, ...rest } = state.network;
+      return { network: Object.keys(action.missed).length ? { ...rest, missedCalls: action.missed } : rest };
+    }
     case 'net_messages':
       return { network: { ...state.network, messages: { ...state.network.messages, ...Object.fromEntries(Object.entries(action.messages).map(([k, v]) => [k, v.slice(-KEEP_MESSAGES)])) } } };
     case 'net_off': {
       // Friend requests came through the room: they're still there when the network comes back on.
-      const offers = state.network.offers;
-      return { network: offers?.length ? { ...NO_NETWORK, offers } : NO_NETWORK };
+      // So are the calls you missed (the room's too): they're kept on disk, not by the network.
+      const { offers, missedCalls } = state.network;
+      return { network: { ...NO_NETWORK, ...(offers?.length ? { offers } : {}), ...(missedCalls ? { missedCalls } : {}) } };
     }
     default:
       return state;

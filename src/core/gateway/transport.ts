@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { BelugaInfo } from '../../net/mesh/features.js';
 import type { ChatExtras } from '../../net/mesh/views.js';
-import { OUTBOX_TTL_MS, type TaskBook } from './book.js';
+import { OUTBOX_TTL_MS, type Outgoing, type TaskBook } from './book.js';
 import { type Frame, type GatewayMsg, type GatewayMsgInput, parseFrame } from './protocol.js';
 
 /**
@@ -57,6 +57,8 @@ export class Courier {
   constructor(
     private readonly book: TaskBook,
     private readonly ports: { readonly mesh: () => MeshPort | undefined; readonly room: () => RoomPort | undefined },
+    /** They acknowledged something that waited in the outbox (a request: it reached their Mac). */
+    private readonly onAcked?: (o: Outgoing) => void,
   ) {}
 
   /** How this person can be reached right now, if at all. */
@@ -88,7 +90,8 @@ export class Courier {
     const frame = parseFrame(raw);
     if (!frame) return undefined;
     if ('ack' in frame) {
-      this.book.acked(from, frame.ack);
+      const hit = this.book.acked(from, frame.ack);
+      if (hit) this.onAcked?.(hit);
       return undefined;
     }
     // Always acknowledged (the ack may be what got lost), handed on only once; by mail when it came by mail.

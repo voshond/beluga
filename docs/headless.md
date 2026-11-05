@@ -142,6 +142,11 @@ beluga web --off         # close browser access, every way in
 
 Browser access stays on across restarts until `beluga web --off`.
 
+A browser has no menu bar, so the gear at the top left of the sidebar holds it: **Settings…**
+first, then Keys and Commands, Everything You Can Do… (⌘K), and the File, View and Go menus.
+Settings there change the Beluga on the server, as the Mac app's do; how it looks (appearance,
+text size) is kept by each browser.
+
 ### Through Tailscale
 
 You need Tailscale on the server and on your laptop or phone, logged in to the same tailnet. Then,

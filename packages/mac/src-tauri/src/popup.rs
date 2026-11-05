@@ -129,7 +129,7 @@ const FLOAT_LEVEL: isize = 101;
 /// with Beluga hidden or in the Dock, and it never hides when Beluga isn't the active app. It
 /// still never takes the keyboard (the window isn't focusable). Needs no macOS permission.
 #[cfg(target_os = "macos")]
-fn float_over_everything<R: Runtime>(window: &tauri::WebviewWindow<R>) {
+pub(crate) fn float_over_everything<R: Runtime>(window: &tauri::WebviewWindow<R>) {
     use objc2::msg_send;
     use objc2::runtime::AnyObject;
     let Ok(ptr) = window.ns_window() else {

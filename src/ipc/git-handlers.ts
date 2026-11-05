@@ -29,6 +29,12 @@ export const GIT_HANDLERS = {
     return out;
   },
   'git.askClaude': (s, projectId, situation) => ctl(s).mainSync.askClaude(projectId, situation),
+  'git.syncFork': (s, projectId) => ctl(s).mainSync.syncFork(projectId),
+  'git.syncForkWithClaude': async (s, projectId, situation) => {
+    const wsId = await ctl(s).mainSync.syncForkWithClaude(projectId, situation);
+    if (wsId) ctl(s).open(wsId);
+    return wsId;
+  },
   'git.github': (s, projectId, force) => ctl(s).mainSync.githubInfo(projectId, force ?? false),
   'git.githubRepo': (s, projectId) => ctl(s).mainSync.githubRepo(projectId),
   'git.log': (s, id, opts) => {

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Session } from '../core/session.js';
 import { sharedVoice } from '../core/voice.js';
+import { ON_MAINS, readPowerSource } from '../core/power-source.js';
 import type { Args, Method } from './api.js';
 
 /** What each `voice.*` method does (see voice-api.ts). */
@@ -13,6 +14,11 @@ type VoiceHandlers = { readonly [M in VoiceMethod]: (s: Session, ...args: Args<M
 
 export const VOICE_HANDLERS = {
   'voice.models': () => sharedVoice().status(),
+  'voice.load': async () => {
+    const power = await readPowerSource().catch(() => ON_MAINS);
+    const cores = Math.max(1, os.cpus().length);
+    return { cpu: Math.round((os.loadavg()[0]! / cores) * 100) / 100, cores, battery: power.battery || power.lowPower };
+  },
   'voice.prepare': (_s, model) => sharedVoice().prepare(model),
   'voice.transcribe': async (_s, wav, a) => {
     const bytes = Buffer.from(wav, 'base64');

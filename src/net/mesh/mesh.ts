@@ -78,6 +78,8 @@ interface MeshEvents {
   share: [string, unknown];
   /** A team boards frame from a friend (core/team checks it): which repos you share, the board, shared plans. */
   team: [string, unknown];
+  /** A call frame from someone you're linked to (core/calls checks it, and that you share its conversation). */
+  call: [string, unknown];
   /** A link to someone came up (what waited for them can go now). */
   link: [string];
   /** Someone's Claude started or stopped answering message `for` in a conversation. */
@@ -585,6 +587,14 @@ export class Mesh extends EventEmitter<MeshEvents> {
     return true;
   }
 
+  /** Hand a call frame to someone linked now (a friend, or someone in a group with you); false when they're not. */
+  sendCall(peerId: string, payload: unknown): boolean {
+    const link = this.links.get(peerId);
+    if (!link?.isOpen) return false;
+    link.send({ t: 'call', p: payload });
+    return true;
+  }
+
   // ---- status and reading
 
   setPresence(next: Presence): Presence {
@@ -899,6 +909,9 @@ export class Mesh extends EventEmitter<MeshEvents> {
         return;
       case 'team':
         if (this.friends.has(from)) this.emit('team', from, msg.p);
+        return;
+      case 'call':
+        this.emit('call', from, msg.p);
         return;
       case 'live': {
         const conversation = msg.g ? groupConversation(msg.g) : dmConversation(from);

@@ -346,6 +346,29 @@ function offerItems(state: DomainState): NeedsYou[] {
     }));
 }
 
+/** Someone rings you (BLG-706): answer on your Mac (its window picks up the call) or decline. */
+function callItems(state: DomainState): NeedsYou[] {
+  return Object.values(state.network.calls ?? {})
+    .filter((c) => c.mine === 'ringing')
+    .map((c) => {
+      const by = state.network.friends.find((f) => f.peerId === c.ringBy)?.name ?? c.people.find((p) => p.peerId === c.ringBy)?.name ?? 'Someone';
+      const group = c.conversation.startsWith('group:') ? state.network.groups.find((g) => g.id === c.conversation.slice(6)) : undefined;
+      return {
+        id: `call:${c.id}`,
+        kind: 'call',
+        title: clip(`${by} is calling${group ? ` in #${group.name}` : ''}`, 500),
+        detail: c.people.length > 1 ? clip(`${c.people.map((p) => p.name).join(', ')} are in the call`, 500) : 'Your Mac picks it up when you answer',
+        from: clip(by, 100),
+        topic: 'chats' as const,
+        ...(c.ringSince ? { askedAt: c.ringSince } : {}),
+        actions: [
+          { label: 'Answer on Mac', tone: 'main' as const, method: 'calls.join', args: [c.conversation] },
+          { label: 'Decline', tone: 'danger' as const, method: 'calls.decline', args: [c.conversation] },
+        ],
+      };
+    });
+}
+
 /** A friend on the same GitHub repository: team up on it (BLG-221). Only offers waiting on you. */
 function teamOfferItems(state: DomainState): NeedsYou[] {
   return state.team.offers
@@ -531,6 +554,7 @@ export function waitingNeeds(state: DomainState): NeedsYou[] {
     ...knockItems(state),
     ...joinItems(state),
     ...offerItems(state),
+    ...callItems(state),
     ...teamOfferItems(state),
     ...assignedItems(state),
     ...worktreeKnockItems(state),

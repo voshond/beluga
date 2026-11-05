@@ -1,5 +1,6 @@
 .menu {
-  z-index: 60;
+  /* Above full-screen call views (80–87): a menu opened there shows over them. */
+  z-index: 88;
   min-width: 220px;
   max-width: 380px;
   max-height: min(70vh, 560px);

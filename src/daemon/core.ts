@@ -22,6 +22,7 @@ import { launchDialogues } from '../core/dialogues/launch.js';
 import { launchSentinel } from '../core/sentinel/launch.js';
 import { launchAssistant } from '../core/assistant/launch.js';
 import { launchChat } from '../core/chat/launch.js';
+import { launchCalls } from '../core/calls/launch.js';
 import { launchGateway } from '../core/gateway/launch.js';
 import { launchFriendShares } from '../core/friend-share/launch.js';
 import { launchEarnings } from '../core/stripe-launch.js';
@@ -353,6 +354,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
   let stopClaudeCode = (): void => undefined;
   let stopGateway = (): void => undefined;
   let stopChat = (): void => undefined;
+  let stopCalls = (): void => undefined;
   let stopFriendShares = (): void => undefined;
   let stopBoard = (): void => undefined;
   let stopDialogues = (): void => undefined;
@@ -373,6 +375,8 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     if (opts.network) stopGateway = launchGateway({ session, store, demo: Boolean(demo) });
     // Chats: files shared Mac to Mac, Claudes called into a conversation, your main channel.
     if (opts.network) stopChat = launchChat({ session, store, demo: Boolean(demo) });
+    // Calls in a conversation with friends: ringing, who's in, and WebRTC setup between windows (core/calls).
+    if (opts.network) stopCalls = launchCalls({ session, store, demo: Boolean(demo) });
     // Projects, worktrees and folders shared with friends over the network, nobody hosting.
     if (opts.network) stopFriendShares = launchFriendShares({ session, store, demo: Boolean(demo) });
     // Tasks (the board): opened by worktrees, moved by pull requests, kept true by Claude.
@@ -420,6 +424,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     closeAllTunnels();
     await leaveNetwork(session);
     stopGateway();
+    stopCalls();
     stopChat();
     stopFriendShares();
     stopAssistant();

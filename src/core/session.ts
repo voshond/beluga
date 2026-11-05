@@ -61,6 +61,7 @@ import type { EnvVars } from './env-vars.js';
 import { gatewayOf } from './gateway/registry.js';
 import { receiveFriendOffer } from './friend-offers.js';
 import { onChatReact, reactInChat, type RoomReactDeps } from './room-reactions.js';
+import { receiveRoomCall } from './calls/launch.js';
 
 /** Bigger, smaller, or back to normal text. */
 export type ZoomDir = 'in' | 'out' | 'reset';
@@ -1206,6 +1207,10 @@ export class Session {
         // Tasks between Claudes (core/gateway): sent to one person; the gateway checks who may say what.
         gatewayOf(this)?.onRoomFrame(from, body.frame);
         return;
+      case 'call':
+        // A call in the room's chat (core/calls): the call service checks who may say what.
+        receiveRoomCall(this, from, body.p);
+        return;
       case 'friend_offer':
         // Someone in the room wants to be friends on the network (BLG-202): shown, never acted on by itself.
         return receiveFriendOffer(this, from, body);
@@ -1494,7 +1499,7 @@ export class Session {
     this.sayWhoAnswers(from, body);
     // Your Claude asked from a workspace: follow the friend's Claude there (only from the one you asked).
     const channel = waiter?.mirror && waiter.peer === from && body.requester === this.selfId ? waiter.mirror : body.channel;
-    this.store.dispatch({ type: 'agent_event', owner: from, requestId: body.requestId, requester: body.requester, event: body.event, text: body.text, ts, channel, ...(body.slotWait ? { slotWait: body.slotWait } : {}), ...(body.agent ? { agent: body.agent } : {}) });
+    if (!this.workspaces?.deletedChannel(channel)) this.store.dispatch({ type: 'agent_event', owner: from, requestId: body.requestId, requester: body.requester, event: body.event, text: body.text, ts, channel, ...(body.slotWait ? { slotWait: body.slotWait } : {}), ...(body.agent ? { agent: body.agent } : {}) });
     if (!waiter || waiter.peer !== from || !['done', 'error', 'denied'].includes(body.event)) return;
     clearTimeout(waiter.timer);
     this.agentWaiters.delete(body.requestId);

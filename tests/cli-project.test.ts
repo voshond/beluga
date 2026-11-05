@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { attach } from '../src/cli/attach.js';
 import type { Io } from '../src/cli/io.js';
+import { tilde } from '../src/cli/paths.js';
 import { addProject, cloneName, findProject, isGitUrl, listProjects, projectLinkOf, removeProject } from '../src/cli/project.js';
 import { parseConfig } from '../src/config.js';
 import { clearDaemonInfo, readDaemonInfo, releaseLock } from '../src/daemon/files.js';
@@ -58,7 +59,7 @@ describe('beluga project', () => {
     const dir = repo(path.join(tmp(), 'shop'));
     const io = capture();
     expect(await addProject(link, dir, io)).toBe(0);
-    expect(io.text()).toContain(`Added shop (${dir})`);
+    expect(io.text()).toContain(`Added shop (${tilde(dir)})`);
     expect(io.text()).toMatch(/New worktrees run `npm (ci|install)[^`]*` first \(found from its files\)/);
     expect(io.text()).toContain('The phone can start a worktree in it now');
 
@@ -72,7 +73,7 @@ describe('beluga project', () => {
 
     const gone = capture();
     expect(await removeProject(link, 'SHOP', gone)).toBe(0);
-    expect(gone.text()).toContain(`Removed shop from Beluga. Its folder stays at ${dir}`);
+    expect(gone.text()).toContain(`Removed shop from Beluga. Its folder stays at ${tilde(dir)}`);
     expect(link.projects().some((p) => p.root === dir)).toBe(false);
     expect(git(dir, 'log', '--oneline')).toContain('first');
   });
@@ -84,7 +85,7 @@ describe('beluga project', () => {
     symlinkSync(dir, via);
     const io = capture();
     expect(await addProject(link, via, io)).toBe(0);
-    expect(io.text()).toContain(`Added linked (${dir})`);
+    expect(io.text()).toContain(`Added linked (${tilde(dir)})`);
     expect(io.errors()).not.toContain("didn't add");
     // Removed by the same path.
     const gone = capture();
@@ -101,7 +102,7 @@ describe('beluga project', () => {
     const io = capture();
     expect(await addProject(link, `file://${bare}`, io, { into })).toBe(0);
     expect(io.errors()).toContain(`Cloning file://${bare} into`);
-    expect(io.text()).toContain(`Added tool (${path.join(into, 'tool')})`);
+    expect(io.text()).toContain(`Added tool (${tilde(path.join(into, 'tool'))})`);
     expect(io.text()).toContain('No setup command found');
     // Cloned already: added as it is.
     await removeProject(link, 'tool', capture());
@@ -153,13 +154,16 @@ describe('reading what was given', () => {
     expect(cloneName('https://github.com/kayraucklnc/beluga.git')).toBe('beluga');
     expect(cloneName('git@github.com:kayraucklnc/site')).toBe('site');
     expect(cloneName('https://github.com/a/b/')).toBe('b');
+    // A Windows folder in a file:// URL (BLG-728).
+    expect(cloneName('file://C:\\Users\\me\\tool.git')).toBe('tool');
   });
 
   it('finds a project by name, id or folder', () => {
-    const p = (id: string, name: string, root: string) => ({ id, name, root, base: 'main', workspaces: [] });
+    // Roots as this system writes them (`D:\d\web` on Windows).
+    const p = (id: string, name: string, root: string) => ({ id, name, root: path.resolve(root), base: 'main', workspaces: [] });
     const list = [p('1', 'api', '/c/api'), p('2', 'web', '/c/web'), p('3', 'web', '/d/web')];
     expect(findProject(list, 'API')).toMatchObject({ id: '1' });
-    expect(findProject(list, '/d/web')).toMatchObject({ id: '3' });
+    expect(findProject(list, path.resolve('/d/web'))).toMatchObject({ id: '3' });
     expect(findProject(list, 'web', '/c')).toMatchObject({ id: '2' });
     expect(findProject(list, 'web', '/elsewhere')).toMatch(/2 projects are called/);
     expect(findProject(list, 'x', '/elsewhere')).toMatch(/No project is called “x”/);

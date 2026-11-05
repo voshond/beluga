@@ -50,6 +50,8 @@ export interface ChatAnswerRequest {
   readonly signal: AbortSignal;
   /** Earlier messages of this conversation only (read_earlier), when there are more than the prompt shows. */
   readonly earlier?: (opts: EarlierAsk) => EarlierPage;
+  /** This conversation's call notes, to look up (BLG-715): never in the prompt itself. */
+  readonly notes?: import('../../agent/types.js').CallNotesTools;
 }
 
 export interface EarlierAsk {
@@ -241,8 +243,10 @@ export interface PromptFile {
   readonly missing?: string;
 }
 
-export function userPrompt(opts: { history: readonly string[]; ask: MessageView; asker: string; files: readonly PromptFile[]; since: readonly string[]; earlier?: boolean }): string {
+export function userPrompt(opts: { history: readonly string[]; ask: MessageView; asker: string; files: readonly PromptFile[]; since: readonly string[]; earlier?: boolean; notesHint?: string }): string {
   const parts: string[] = [];
+  // Calls in this chat (BLG-715): that they exist and how to look, never what was said.
+  if (opts.notesHint) parts.push(opts.notesHint);
   if (opts.history.length) parts.push(`The chat so far (${opts.earlier ? 'its latest messages; ' : ''}context only):\n<chat>\n${opts.history.join('\n')}\n</chat>`);
   if (opts.earlier)
     parts.push(

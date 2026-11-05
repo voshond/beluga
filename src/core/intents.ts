@@ -14,6 +14,8 @@ export type Intent =
   | { readonly type: 'toast'; readonly text: string; readonly level: Toast['level'] }
   /** A workspace (yours, or one shared with you) is gone: close its tab, and leave it if it's showing. */
   | { readonly type: 'close_tab'; readonly id: string }
+  /** WebRTC setup for the window in a call (BLG-706, core/calls): from `from`'s window, for this Mac's. */
+  | { readonly type: 'call_signal'; readonly conversation: string; readonly call: string; readonly from: string; readonly data: string }
   /** You asked to leave (/quit): the client closes. */
   | { readonly type: 'quit' };
 

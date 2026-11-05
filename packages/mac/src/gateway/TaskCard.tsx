@@ -10,6 +10,7 @@ import { Avatar, Button, Dot } from '../components/ui.js';
 import { revealInFinder } from '../lib/files.js';
 import { useApi, useApp, useBeluga } from '../lib/beluga.js';
 import { openRequest } from './request-native.js';
+import { TaskStep } from './TaskStep.js';
 import a from './access.module.css';
 import s from './gateway.module.css';
 import { fileManager, revealLabel, yourComputer } from '../lib/os-words.js';
@@ -340,10 +341,7 @@ export const TaskCard = memo(function TaskCard({ task, inChat }: { task: TaskVie
           {live && task.steps.length ? (
             <div className={s.steps} aria-label="Steps">
               {task.steps.slice(-4).map((step, i) => (
-                <div key={i} className={s.step}>
-                  <Icon name="chevronRight" size={10} />
-                  <span>{step}</span>
-                </div>
+                <TaskStep key={i} line={step} owner={sent ? task.peerName : undefined} className={s.step} />
               ))}
             </div>
           ) : null}

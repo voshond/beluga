@@ -85,7 +85,7 @@ export default defineConfig({
     target: 'safari16',
     outDir: 'dist',
     sourcemap: true,
-    // The window, and the request pop-up's own window (src-tauri/src/popup.rs).
-    rollupOptions: { input: { main: path.join(import.meta.dirname, 'index.html'), popup: path.join(import.meta.dirname, 'popup.html') } },
+    // The window, the request pop-up's own window (src-tauri/src/popup.rs) and the floating call card (call_float.rs).
+    rollupOptions: { input: { main: path.join(import.meta.dirname, 'index.html'), popup: path.join(import.meta.dirname, 'popup.html'), call: path.join(import.meta.dirname, 'call.html'), overlay: path.join(import.meta.dirname, 'overlay.html') } },
   },
 });

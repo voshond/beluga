@@ -5,6 +5,7 @@ import { assistantOf } from '../assistant/registry.js';
 import { busyChannels } from '../board/work.js';
 import { assistantChannel, assistantChatOf } from '../../shared/assistant.js';
 import { commandEnv, fetchSource } from '../views/sources.js';
+import { ghRepoEnv } from '../../workspaces/github.js';
 import type { Source } from '../../shared/view-spec.js';
 import { gatewayOf } from '../gateway/registry.js';
 import { isFinal } from '../gateway/model.js';
@@ -50,7 +51,8 @@ export function launchSentinel(host: SentinelHost): () => void {
     selfId: () => session.selfId,
     claude,
     places: places(session),
-    envFor: (cwd) => commandEnv(cwd),
+    // A script step's gh works on origin's repository (a fork's own, not the original), as Beluga does.
+    envFor: (cwd) => ({ ...ghRepoEnv(cwd), ...commandEnv(cwd) }),
     notify: (e) => session.notifier.notify(e),
     // The demo's pull requests open, pass and merge without GitHub.
     github: host.demo ? demoGitHub() : github(session, store),

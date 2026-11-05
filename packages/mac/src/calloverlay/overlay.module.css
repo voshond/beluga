@@ -1,0 +1,38 @@
+/* The sharer's overlay (BLG-717): a frame, the others' ink and the chat, over the shared screen. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+.ink {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+/* The screen is on show: a soft frame around it, in the call's colour. */
+.frame {
+  position: absolute;
+  inset: 0;
+  border: 3px solid color-mix(in srgb, var(--call) 75%, transparent);
+  border-radius: 10px;
+  animation: frameIn 400ms var(--ease-out);
+}
+@keyframes frameIn {
+  from {
+    opacity: 0;
+  }
+}
+/* The chat, bottom right, clear of the Dock's usual middle. */
+.pops {
+  position: absolute;
+  right: 24px;
+  bottom: 28px;
+  width: 360px;
+}
+/* A few pixels of a colour nothing else uses, top left, while Beluga checks it isn't in the capture (BLG-736). */
+.probe {
+  position: absolute;
+  left: 0;
+  top: 0;
+}

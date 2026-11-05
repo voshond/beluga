@@ -66,6 +66,21 @@ describe('side questions (/btw)', () => {
     await expect(d.ask('room', 'q')).rejects.toThrow(/worktree or project/);
   });
 
+  it('an empty answer fails out loud instead of leaving a blank card (BLG-729)', async () => {
+    const { store, d } = desk(async () => '  \n');
+    await d.ask('ws:a', 'q');
+    expect(store.getState().btw['ws:a']).toMatchObject({ state: 'failed', error: 'The answer came back empty' });
+  });
+
+  it('keeps what was streamed when the final answer is empty', async () => {
+    const { store, d } = desk(async (req) => {
+      req.onText('Streamed words');
+      return '';
+    });
+    await d.ask('ws:a', 'q');
+    expect(store.getState().btw['ws:a']).toMatchObject({ state: 'done', text: 'Streamed words' });
+  });
+
   it('tells Claude it has no tools and nothing is kept', () => {
     const p = btwPrompt(' why? ');
     expect(p).toMatch(/side question/);

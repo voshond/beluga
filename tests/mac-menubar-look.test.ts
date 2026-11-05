@@ -61,7 +61,8 @@ describe('the spout', () => {
         for (let x = 0; x < ICON_W; x++) expect(a.at(x, 0), `splash ${splash}, t ${t.toFixed(2)}, top x ${x}`).toBe(0);
       }
     }
-  });
+    // Draws dozens of frames: about 6s on a Mac, past the usual 30s on a Windows runner.
+  }, 120_000);
 });
 
 describe('the tray whale off the Mac', () => {

@@ -1,0 +1,1308 @@
+/*
+ * Calls in a conversation (BLG-706). Soft pastels and icons: a mint for a call going on, a quiet
+ * red only for leaving. No glow: rings are flat, motion is short and eases out.
+ */
+
+/* ---- the room: the strip on top, the stage and the same chat side by side */
+
+.room {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.roomBody {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.roomChat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.staged .roomChat {
+  flex: 0 0 340px;
+  border-left: 1px solid var(--hairline);
+  animation: toSide 280ms var(--ease-out);
+}
+@keyframes toSide {
+  from {
+    flex-basis: 100%;
+  }
+}
+
+/* ---- the strip */
+
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 6px 12px 6px 16px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--bg-sunken);
+  animation: drop 240ms var(--ease-out);
+}
+.stripIn {
+  background: color-mix(in srgb, var(--call) 8%, var(--bg));
+}
+.stripRinging {
+  background: color-mix(in srgb, var(--call) 12%, var(--bg));
+}
+@keyframes drop {
+  from {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+}
+.liveDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--call);
+  flex: none;
+  animation: breathe 2.4s ease-in-out infinite;
+}
+@keyframes breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+.stripTime {
+  font-variant-numeric: tabular-nums;
+  color: var(--call-ink);
+  font-weight: 600;
+  font-size: 12px;
+  min-width: 36px;
+}
+.stripTitle {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.stripNote {
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.grow {
+  flex: 1;
+}
+.problem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--warn);
+  font-size: 12px;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ringIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--call) 22%, transparent);
+  color: var(--call-ink);
+  animation: nudge 1.6s var(--ease-out) infinite;
+}
+@keyframes nudge {
+  0%,
+  60%,
+  100% {
+    transform: rotate(0);
+  }
+  10%,
+  30% {
+    transform: rotate(-12deg);
+  }
+  20%,
+  40% {
+    transform: rotate(12deg);
+  }
+}
+
+/* ---- people */
+
+.people {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.person {
+  display: inline-flex;
+}
+.avatar {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  --voice: 0;
+}
+.voiceRing {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid var(--call);
+  opacity: 0;
+  transform: scale(calc(1 + var(--voice) * 0.14));
+  transition: opacity var(--dur) var(--ease-out);
+  pointer-events: none;
+}
+.speaking .voiceRing {
+  opacity: 0.9;
+}
+.badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg-raised);
+  color: var(--error);
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+.badgeShare {
+  color: var(--call-ink);
+}
+
+/* ---- buttons */
+
+.controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.control {
+  all: unset;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--text);
+  background: var(--bg-hover);
+  transition:
+    background var(--dur-fast),
+    transform var(--dur-fast),
+    color var(--dur-fast);
+}
+.control:hover {
+  background: var(--bg-press);
+}
+/* Beside Mute: which microphone and speaker (BLG-737). Narrow, tucked against it. */
+.controlMore {
+  width: 18px;
+  margin-left: -3px;
+  border-radius: 9px;
+  color: var(--text-2);
+}
+.control:active {
+  transform: scale(0.93);
+}
+.control:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.controlOff {
+  background: color-mix(in srgb, var(--error) 15%, transparent);
+  color: var(--error);
+}
+.controlOff:hover {
+  background: color-mix(in srgb, var(--error) 22%, transparent);
+}
+.controlOn {
+  background: color-mix(in srgb, var(--call) 24%, transparent);
+  color: var(--call-ink);
+}
+.leave {
+  width: 44px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--error) 18%, var(--bg));
+  color: var(--error);
+}
+.leave:hover {
+  background: color-mix(in srgb, var(--error) 28%, var(--bg));
+}
+.compact .control {
+  width: 26px;
+  height: 26px;
+}
+.compact .leave {
+  width: 34px;
+}
+
+.pillJoin,
+.pillQuiet {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 14px;
+  font-weight: 600;
+  font-size: 12.5px;
+  transition:
+    background var(--dur-fast),
+    transform var(--dur-fast);
+}
+.pillJoin {
+  background: color-mix(in srgb, var(--call) 26%, var(--bg));
+  color: var(--call-ink);
+}
+.pillJoin:hover {
+  background: color-mix(in srgb, var(--call) 36%, var(--bg));
+}
+.pillQuiet {
+  white-space: nowrap;
+  color: var(--text-2);
+  background: var(--bg-hover);
+}
+.pillQuiet:hover {
+  background: var(--bg-press);
+}
+.pillJoin:active,
+.pillQuiet:active {
+  transform: scale(0.96);
+}
+.pillJoin:focus-visible,
+.pillQuiet:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.callButton {
+  all: unset;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius);
+  color: var(--text-2);
+  transition:
+    background var(--dur-fast),
+    color var(--dur-fast);
+}
+.callButton:hover {
+  background: color-mix(in srgb, var(--call) 16%, transparent);
+  color: var(--call-ink);
+}
+.callButton:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.callButton[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: default;
+}
+.callButton[aria-disabled='true']:hover {
+  background: none;
+  color: var(--text-2);
+}
+
+/* ---- a call you missed, in its conversation */
+
+.missed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: var(--chat-max);
+  margin: 10px auto;
+  padding: 0 24px;
+  color: var(--text-2);
+  font-size: 0.85rem;
+}
+.missedIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--call) 18%, transparent);
+  color: var(--call-ink);
+}
+.missedBack {
+  all: unset;
+  cursor: pointer;
+  color: var(--call-ink);
+  font-weight: 600;
+}
+.missedBack:hover {
+  text-decoration: underline;
+}
+.missedBack:focus-visible {
+  outline: 2px solid var(--accent);
+  border-radius: 4px;
+}
+
+/* ---- someone rings you */
+
+.incomingStack {
+  position: fixed;
+  top: calc(var(--titlebar-h) + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 60;
+}
+.incoming {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 380px;
+  padding: 10px 10px 10px 14px;
+  border-radius: 22px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  animation: ringIn 340ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+@keyframes ringIn {
+  from {
+    transform: translateY(-14px) scale(0.96);
+    opacity: 0;
+  }
+}
+.incomingWho {
+  all: unset;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.ripples {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 36px;
+  height: 36px;
+  margin-top: -18px;
+  pointer-events: none;
+}
+.ripples span {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--call);
+  animation: ripple 2.2s var(--ease-out) infinite;
+}
+.ripples span + span {
+  animation-delay: 1.1s;
+}
+@keyframes ripple {
+  from {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+.incomingText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.incomingText strong {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.incomingText span {
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.incomingActions {
+  display: inline-flex;
+  gap: 8px;
+}
+.roundDecline,
+.roundJoin {
+  all: unset;
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  transition:
+    background var(--dur-fast),
+    transform var(--dur-fast);
+}
+.roundDecline {
+  background: color-mix(in srgb, var(--error) 17%, var(--bg-raised));
+  color: var(--error);
+}
+.roundDecline:hover {
+  background: color-mix(in srgb, var(--error) 26%, var(--bg-raised));
+}
+.roundJoin {
+  background: color-mix(in srgb, var(--call) 26%, var(--bg-raised));
+  color: var(--call-ink);
+}
+.roundJoin:hover {
+  background: color-mix(in srgb, var(--call) 38%, var(--bg-raised));
+}
+.roundDecline:active,
+.roundJoin:active {
+  transform: scale(0.93);
+}
+.roundDecline:focus-visible,
+.roundJoin:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- the sidebar's call pill */
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 8px;
+  padding: 6px 6px 6px 8px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--call) 12%, var(--bg-sidebar-solid));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--call) 22%, transparent);
+  animation: drop 240ms var(--ease-out);
+}
+/* You're sharing your screen: the pill says so with a firmer edge. */
+.pillSharing {
+  background: color-mix(in srgb, var(--call) 18%, var(--bg-sidebar-solid));
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--call) 50%, transparent);
+}
+.pillMain {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.pillFaces {
+  display: inline-flex;
+}
+.pillFaces > * + * {
+  margin-left: -6px;
+}
+.pillText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+.pillText strong {
+  font-weight: 600;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pillText span {
+  font-size: 11.5px;
+  color: var(--call-ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- the stage: a shared screen */
+
+.stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-sunken);
+  animation: fadeIn 280ms var(--ease-out);
+  container-type: inline-size;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+.stageFrame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 12px 12px 0;
+  border-radius: var(--radius-l);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text) 7%, var(--bg-sunken));
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  touch-action: none;
+}
+.tool_point {
+  cursor: crosshair;
+}
+.tool_draw {
+  cursor: crosshair;
+}
+.tool_ask {
+  cursor: cell;
+}
+.stageVideo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.stageInk {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.region {
+  position: absolute;
+  border: 2px solid var(--accent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: 0 0 0 9999px rgba(10, 12, 16, 0.35);
+  pointer-events: none;
+}
+.stageBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 12px;
+}
+.stageWho {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.stageWho span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@container (max-width: 520px) {
+  .stageWho span {
+    display: none;
+  }
+}
+.toolGroup {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--bg-hover);
+}
+.tool {
+  all: unset;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 26px;
+  border-radius: 9px;
+  color: var(--text-2);
+  transition:
+    background var(--dur-fast),
+    color var(--dur-fast);
+}
+.tool:hover {
+  color: var(--text);
+}
+.toolOn {
+  background: var(--bg-raised);
+  color: var(--text);
+  box-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.12);
+}
+.tool:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.askButton {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 15px;
+  font-weight: 600;
+  font-size: 12.5px;
+  white-space: nowrap;
+  color: var(--claude);
+  background: color-mix(in srgb, var(--claude) 13%, var(--bg));
+  transition:
+    background var(--dur-fast),
+    transform var(--dur-fast);
+}
+.askButton:hover {
+  background: color-mix(in srgb, var(--claude) 20%, var(--bg));
+}
+.askButton:active {
+  transform: scale(0.97);
+}
+.askButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.askOn {
+  background: color-mix(in srgb, var(--claude) 24%, var(--bg));
+}
+
+/* ---- asking Claude about the screen */
+
+.askBox {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 340px;
+  max-width: calc(100% - 24px);
+  padding: 6px 6px 6px 12px;
+  border-radius: 16px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  animation: drop 200ms var(--ease-out);
+  z-index: 2;
+}
+.askMark {
+  color: var(--claude);
+  flex: none;
+}
+.askBox input {
+  all: unset;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+.askBox input::placeholder {
+  color: var(--text-3);
+}
+.askSend {
+  all: unset;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--claude);
+  background: color-mix(in srgb, var(--claude) 15%, transparent);
+}
+.askSend:disabled {
+  opacity: 0.6;
+}
+.spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--claude) 30%, transparent);
+  border-top-color: var(--claude);
+  animation: spin 800ms linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Beside the shared screen, bottom right: your agent about it, and (full screen) the chat. */
+.stageRail {
+  position: absolute;
+  right: 24px;
+  bottom: 64px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  width: min(360px, calc(100% - 48px));
+  pointer-events: none;
+}
+.askCard {
+  width: 100%;
+  max-height: 50vh;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  animation: ringIn 320ms cubic-bezier(0.34, 1.3, 0.64, 1);
+  overflow: hidden;
+}
+.askHead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 10px 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--claude);
+}
+.askHead span {
+  flex: 1;
+}
+.askClose {
+  all: unset;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: var(--text-3);
+}
+.askClose:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.askBody {
+  padding: 0 14px 12px;
+  overflow-y: auto;
+  font-size: 13px;
+}
+.askWait {
+  display: flex;
+  gap: 5px;
+  padding: 4px 14px 16px;
+}
+.askWait span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--claude) 55%, transparent);
+  animation: breathe 1.2s ease-in-out infinite;
+}
+.askWait span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.askWait span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+.askCardDone {
+  box-shadow:
+    var(--shadow-pop),
+    inset 0 0 0 1px color-mix(in srgb, var(--claude) 18%, transparent);
+}
+
+/* ---- the stage, without tools: hints, the marked box's choices, Sharp / Smooth, full screen (BLG-713) */
+
+.stageFrame {
+  cursor: crosshair;
+}
+.stageHint {
+  color: var(--text-3);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+@container (max-width: 640px) {
+  .stageHint {
+    display: none;
+  }
+}
+.modeOption {
+  all: unset;
+  padding: 0 10px;
+  height: 26px;
+  line-height: 26px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  transition:
+    background var(--dur-fast),
+    color var(--dur-fast);
+}
+.modeOption:hover {
+  color: var(--text);
+}
+.modeOption:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.modeBadge {
+  font-size: 11.5px;
+  color: var(--text-2);
+  padding: 3px 9px;
+  border-radius: 9px;
+  background: var(--bg-hover);
+}
+.regionChosen {
+  border-style: solid;
+  animation: settle 220ms var(--ease-out);
+}
+@keyframes settle {
+  from {
+    transform: scale(1.015);
+  }
+}
+.markMenu {
+  position: absolute;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  transform-origin: top right;
+  animation: bloom 260ms cubic-bezier(0.34, 1.45, 0.64, 1);
+  z-index: 3;
+}
+.markMenuUp {
+  transform-origin: bottom right;
+}
+@keyframes bloom {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+.markItem {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--text);
+  opacity: 0;
+  animation: itemIn 220ms var(--ease-out) forwards;
+}
+.markItem:nth-child(2) {
+  animation-delay: 30ms;
+}
+.markItem:nth-child(3) {
+  animation-delay: 60ms;
+}
+@keyframes itemIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.markItem:hover,
+.markItem:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+.markAsk {
+  color: var(--claude);
+}
+.markAsk:hover,
+.markAsk:focus-visible {
+  background: color-mix(in srgb, var(--claude) 12%, transparent);
+}
+.theater {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: var(--bg);
+}
+.theater .stageFrame {
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* Full screen: the bar floats over the bottom and steps aside while you just look. */
+.theater .stageBar {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 4;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 28px);
+  padding: 6px 8px 6px 14px;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
+  box-shadow: var(--shadow-pop);
+  transition:
+    opacity 260ms var(--ease-out),
+    transform 260ms var(--ease-out);
+}
+.theater .barAway {
+  opacity: 0;
+  transform: translate(-50%, 10px);
+  pointer-events: none;
+}
+.theater .stageRail {
+  bottom: 24px;
+}
+.theaterIdle,
+.theaterIdle .stageFrame {
+  cursor: none;
+}
+
+/* ---- cameras (BLG-714): a band of faces, or a filmstrip over the shared screen */
+
+.faces {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--call) 5%, var(--bg));
+  animation: drop 240ms var(--ease-out);
+}
+.faces .tileWrap {
+  flex: 0 0 auto;
+  width: 220px;
+}
+.filmstrip {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 168px;
+  z-index: 2;
+  cursor: default;
+}
+.tile {
+  position: relative;
+  margin: 0;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-sunken);
+  box-shadow: 0 0 0 1px var(--hairline);
+  transition: box-shadow var(--dur) var(--ease-out);
+}
+.filmstrip .tile {
+  box-shadow: var(--shadow-pop);
+}
+.tileSpeaking {
+  box-shadow: 0 0 0 2.5px var(--call);
+}
+.tileVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.mirrored {
+  transform: scaleX(-1);
+}
+.tileName {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-raised) 85%, transparent);
+}
+.control:disabled {
+  opacity: 0.4;
+}
+
+/* ---- face to face (BLG-714): the call over the whole window, like FaceTime */
+
+.tileButton {
+  all: unset;
+  display: block;
+  width: 100%;
+  border-radius: 12px;
+  cursor: zoom-in;
+}
+.tileButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.facesOpen {
+  all: unset;
+  align-self: center;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--text-2);
+  background: var(--bg-hover);
+  flex: none;
+}
+.facesOpen:hover {
+  background: var(--bg-press);
+  color: var(--text);
+}
+.faceView {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  background: #15171b;
+  color: #f2f2f4;
+  animation: fadeIn 260ms var(--ease-out);
+}
+.faceHead {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 14px;
+  border-radius: 14px;
+  background: rgba(30, 32, 37, 0.9);
+  font-size: 13px;
+  z-index: 2;
+}
+.faceHead span {
+  color: #a9adb6;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+.collage {
+  position: absolute;
+  inset: 56px 16px 88px;
+  display: grid;
+  gap: 10px;
+}
+.solo {
+  inset: 0;
+  gap: 0;
+}
+.collageCell {
+  min-width: 0;
+  min-height: 0;
+}
+.faceTile {
+  position: relative;
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #22252b;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+  transition: box-shadow var(--dur) var(--ease-out);
+}
+.solo .faceTile {
+  border-radius: 0;
+  box-shadow: none;
+}
+.faceTile.tileSpeaking {
+  box-shadow: 0 0 0 3px var(--call);
+}
+.faceEmpty {
+  display: grid;
+  place-items: center;
+}
+.faceVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.faceWaiting {
+  align-self: center;
+  justify-self: center;
+  color: #a9adb6;
+  font-size: 14px;
+}
+.pip {
+  position: absolute;
+  width: 220px;
+  aspect-ratio: 16 / 10;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #2a2d34;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  cursor: grab;
+  touch-action: none;
+  z-index: 3;
+  transition:
+    top 320ms var(--ease-out),
+    left 320ms var(--ease-out),
+    right 320ms var(--ease-out),
+    bottom 320ms var(--ease-out);
+}
+.pipDragging {
+  transition: none;
+  cursor: grabbing;
+}
+.pip_br {
+  right: 18px;
+  bottom: 96px;
+}
+.pip_bl {
+  left: 18px;
+  bottom: 96px;
+}
+.pip_tr {
+  right: 18px;
+  top: 60px;
+}
+.pip_tl {
+  left: 18px;
+  top: 60px;
+}
+.faceBar {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 22px;
+  background: rgba(30, 32, 37, 0.92);
+  z-index: 4;
+}
+.faceBar .control {
+  color: #f2f2f4;
+  background: rgba(255, 255, 255, 0.1);
+}
+.faceBar .control:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+.faceBar .controlOn {
+  background: color-mix(in srgb, var(--call) 40%, transparent);
+}
+.faceBack {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #f2f2f4;
+  background: rgba(255, 255, 255, 0.1);
+}
+.faceBack:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+.faceBack:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.faceBar .leave {
+  background: color-mix(in srgb, var(--error) 75%, #15171b);
+  color: #ffffff;
+}
+.faceBar .leave:hover {
+  background: var(--error);
+}
+
+/* ---- drawing on a share: Ask beside your sketch (BLG-717) */
+
+.askPill {
+  all: unset;
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: 13px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--claude);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  z-index: 3;
+  animation: bloom 240ms cubic-bezier(0.34, 1.45, 0.64, 1);
+  transform-origin: left center;
+}
+.askPill:hover {
+  background: color-mix(in srgb, var(--claude) 10%, var(--bg-raised));
+}
+.askPill:focus-visible {
+  outline: 2px solid var(--accent);
+}
+/* Face to face covers the chat: it pops up on the right, over your picture's corner. */
+.faceRail {
+  position: absolute;
+  right: 18px;
+  bottom: 248px;
+  z-index: 3;
+  width: min(340px, calc(100% - 36px));
+}
+
+/* ---- everyone's pointers over a shared screen (BLG-733): an arrow in their colour, their picture and name */
+
+.pointers {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+.pointer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+  transition: opacity 160ms linear;
+}
+.pointerArrow {
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.28));
+}
+.pointerTag {
+  position: absolute;
+  left: 13px;
+  top: 17px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 2px;
+  border-radius: 11px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  color: #1d1f24;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+.pointerTag > :first-child {
+  box-shadow: 0 0 0 1.5px #ffffff;
+  border-radius: 50%;
+}
+/* Showing your pointer: the mark everyone sees takes the place of the arrow under your mouse. */
+.stageOwnPointer,
+.stageOwnPointer video,
+.stageOwnPointer canvas {
+  cursor: none;
+}

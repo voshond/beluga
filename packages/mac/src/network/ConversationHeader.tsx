@@ -12,6 +12,7 @@ import { STATE_LABEL, conversationOf, openGroupInvitation } from './net-model.js
 import { openNet } from './net-sheets.js';
 import { useSay } from './use-net.js';
 import { channelName } from './chat-model.js';
+import { CallButton } from '../call/CallStrip.js';
 import s from './network.module.css';
 
 export interface HeaderParts {
@@ -82,9 +83,12 @@ export function useConversationHeader(id: string): HeaderParts {
         </span>
       ),
       right: (
-        <ActionsDropdown items={items}>
-          <IconButton icon="more" label={`More for ${f.name}`} />
-        </ActionsDropdown>
+        <>
+          <CallButton id={id} label={f.name} />
+          <ActionsDropdown items={items}>
+            <IconButton icon="more" label={`More for ${f.name}`} />
+          </ActionsDropdown>
+        </>
       ),
     };
   }
@@ -122,6 +126,7 @@ export function useConversationHeader(id: string): HeaderParts {
       ...(g.active ? {} : { subtitle: <span>You’re no longer in this channel</span> }),
       right: (
         <>
+          {g.active ? <CallButton id={id} label={`#${g.name}`} /> : null}
           <MembersButton g={g} />
           <ActionsDropdown items={items}>
             <IconButton icon="more" label={`More for ${g.name}`} />

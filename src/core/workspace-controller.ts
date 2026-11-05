@@ -16,7 +16,7 @@ import { agentName } from '../shared/agent-label.js';
 import { carriedPrompt, transcriptOf } from './agent-switch.js';
 import { type ArrangeTarget, type WorkspaceManager, real } from '../workspaces/manager.js';
 import { type EnvChange, scanEnvFiles } from '../workspaces/env.js';
-import type { DeletePlan, Project, PullHead, Workspace } from '../workspaces/types.js';
+import type { DeletePlan, Project, PullHead, RenameResult, Workspace } from '../workspaces/types.js';
 import { type MergeResult, git } from '../workspaces/git.js';
 import type { FoundConversation } from '../agent/runtime/claude/claude-sessions.js';
 import type { ShareService } from './shares.js';
@@ -59,6 +59,8 @@ export interface ControllerDeps {
   readonly showAsk?: (prompt: string, channel: string) => string;
   /** Stop your Claude in a conversation, resolving once nothing runs there (editing a message cuts it there). */
   readonly stopHere?: (channel: string) => Promise<void>;
+  /** A worktree is going: end your Claude's run and queue in its conversation, quietly, resolving once nothing runs there. */
+  readonly endRuns?: (channel: string, why: string) => Promise<void>;
   /** A conversation went back to an earlier point: forget how full its context was. */
   readonly forgetContext?: (channel: string) => void;
   /** Compact a conversation's context in your Claude's queue (falls back to asking Claude for /compact). */
@@ -97,6 +99,8 @@ const WS_PREFIX = 'ws:';
 /** What Claude starts with in a worktree you continued into without saying what to do. */
 export const CONTINUE_PROMPT = 'We moved here from the main folder so you can make changes. Go ahead with what we discussed.';
 const CONTINUE_WAIT_MS = 60_000;
+/** How long deleting or archiving waits for the Claude working there to stop before it goes on anyway. */
+const END_RUNS_WAIT_MS = 10_000;
 
 /** How a conversation goes on in a new worktree (see continueInWorktree). */
 export interface ContinueOptions {
@@ -153,6 +157,8 @@ export class WorkspaceController {
   private readonly worktreeListeners = new Set<(event: WorktreeEvent) => void>();
   private readonly goingListeners = new Set<(ws: Workspace) => void>();
   private readonly loaded = new Set<string>();
+  /** Conversations of worktrees deleted here: their agent's last words, echoed back late, don't land (deletedChannel). */
+  private readonly deleted = new Set<string>();
   private reviewToken = 0;
   /** Saves the loaded conversations that changed (see history-saver.ts). */
   private readonly saver: HistorySaver;
@@ -180,6 +186,15 @@ export class WorkspaceController {
   private readonly pulling = new Map<string, Promise<Workspace | undefined>>();
 
   /** Hear about worktrees opening, merging, going and coming back. */
+  /**
+   * A worktree deleted here: nothing more goes in its conversation. Its stopped run's last event
+   * comes back through the room hub, and on a slow computer that's after the conversation was
+   * cleared (Windows' runners showed it).
+   */
+  deletedChannel(channel: string): boolean {
+    return this.deleted.has(channel);
+  }
+
   onWorktree(listener: (event: WorktreeEvent) => void): () => void {
     this.worktreeListeners.add(listener);
     return () => void this.worktreeListeners.delete(listener);
@@ -205,6 +220,18 @@ export class WorkspaceController {
     }
   }
 
+  /**
+   * Before a worktree's folder goes: the Claude working there stops and its queue empties (it
+   * would go on in a folder that's gone, and its card land in a conversation that's gone).
+   */
+  private async endRunsIn(id: string, why: string): Promise<void> {
+    if (!this.deps.endRuns) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<void>((resolve) => (timer = setTimeout(resolve, END_RUNS_WAIT_MS)));
+    await Promise.race([this.deps.endRuns(`${WS_PREFIX}${id}`, why).catch(() => undefined), late]);
+    clearTimeout(timer);
+  }
+
   private emit(event: WorktreeEvent): void {
     for (const l of this.worktreeListeners) {
       try {
@@ -217,6 +244,7 @@ export class WorkspaceController {
 
   /** A worktree opened: the workbench (setup) and the listeners hear of it. */
   private created(ws: Workspace, extra: { from?: string; about?: string } = {}): void {
+    this.deleted.delete(`${WS_PREFIX}${ws.id}`);
     this.deps.onWorktreeCreated?.(ws);
     this.emit({ kind: 'created', ws, ...extra });
   }
@@ -850,10 +878,11 @@ export class WorkspaceController {
     return ws;
   }
 
-  /** Set the workspace name and publish it to connected screens. */
-  async rename(id: string, name: string): Promise<void> {
-    this.deps.manager.rename(id, name);
+  /** Set the workspace name (a worktree's branch follows) and publish it to connected screens. */
+  async rename(id: string, name: string): Promise<RenameResult> {
+    const done = await this.deps.manager.renameByUser(id, name);
     await this.refresh();
+    return done;
   }
 
   /** An automatic title follows the plan until the user sets a name. */
@@ -1148,6 +1177,7 @@ export class WorkspaceController {
     const phase = (p?: ArchivePhase): void => void this.deps.store.dispatch({ type: 'archiving', id, ...(p ? { phase: p } : {}) });
     let manifest: ArchiveManifest | undefined;
     const answers = this.answersIn(id);
+    await this.endRunsIn(id, 'Stopped: its worktree was archived');
     const done = await this.inLane(ws?.projectRoot || ws?.path || id, () =>
       this.act(
         "Couldn't archive",
@@ -1302,6 +1332,7 @@ export class WorkspaceController {
     this.going(id);
     const settle = ws && ws.kind !== 'main' ? this.leaveNow(id, 'delete') : () => undefined;
     const answers = this.answersIn(id);
+    await this.endRunsIn(id, 'Stopped: its worktree was deleted');
     const done = await this.inLane(ws?.projectRoot || ws?.path || id, () =>
       this.act(
         "Couldn't delete",
@@ -1317,6 +1348,7 @@ export class WorkspaceController {
       this.loaded.delete(`${WS_PREFIX}${id}`);
       // Its conversation went with it on disk; the copy loaded here goes too, or search still finds it.
       this.deps.store.dispatch({ type: 'history', channel: `${WS_PREFIX}${id}`, items: [] });
+      this.deleted.add(`${WS_PREFIX}${id}`);
       this.deps.intend({ type: 'close_tab', id });
       // Its views' rows go, and their scripts and handed-over rows unless another conversation shows them.
       forgetViews(answers, 'deleted', () => this.answersElsewhere(id));

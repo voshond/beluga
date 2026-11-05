@@ -25,7 +25,7 @@ import { type MilestoneView, type PlanView as PlanProgress, agentNowWords, liveF
 import { shortVersion } from '../net/mesh/features.js';
 import type { MessageView, PersonView } from '../net/mesh/views.js';
 import { type Reaction, quickReactions } from '../shared/reactions.js';
-import { chatReactions } from '../core/chat-reactions.js';
+import { chatReactions, reactableChannel } from '../core/chat-reactions.js';
 import { chatPeople, claudePill, offlineNote, waitingIn, waitingLabel } from '../core/chat-people.js';
 import { type AgentRef, CLAUDE_AGENT, type Profile, defaultAgentOf } from '../protocol.js';
 import { providerCards } from '../ui/usage-cards.js';
@@ -1336,9 +1336,6 @@ function chipsView(state: DomainState, reactions: readonly Reaction[] | undefine
 }
 
 const reactionsView = (state: DomainState, m: MessageView): ChatMessageView['reactions'] => chipsView(state, m.reactions, state.network.self?.peerId ?? myId(state));
-
-/** A chat that keeps reactions on its turns: the room's and workspaces'. */
-const reactableChannel = (channel: string): boolean => channel === 'room' || channel.startsWith('ws:');
 
 /** Your quick row: the emojis you use most anywhere (friends' chats, the room, workspaces), then the defaults. */
 function quickRow(state: DomainState): string[] {

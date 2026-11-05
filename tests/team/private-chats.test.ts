@@ -6,7 +6,7 @@ import { TeamMsg } from '../../src/core/team/protocol.js';
 import { TeamBoards } from '../../src/core/team/service.js';
 import { Board } from '../../src/core/board/board.js';
 import type { Project } from '../../src/workspaces/types.js';
-import { type Crowd, befriend, crowd, settle } from '../mesh/helpers.js';
+import { type Crowd, SLOW, befriend, crowd, settle } from '../mesh/helpers.js';
 import { type Mac, mac } from '../friend-share/helpers.js';
 
 /** BLG-226: teaming up never shares a conversation; one is shared on purpose, live, and can be stopped. */
@@ -76,5 +76,5 @@ describe('conversations in a team', () => {
     ata.session.sharing.unshareFriend({ peerId: kay.id, workspaceId: ws.id });
     await settle(() => !kay.store.getState().shared.some((w) => w.id === ws.id));
     expect(teamShareChoices(ata.store.getState().team, ata.store.getState().members[ws.id], project.id).sharedWith).toEqual([]);
-  }, 60_000);
+  }, 60_000 * SLOW);
 });

@@ -128,6 +128,8 @@ export interface AgentRunInput {
   readonly sentinelBrief?: string;
   /** Your own runs: dashboards and the numbers sentinels keep (server `beluga_dashboard`; sentinel_measure inside a run). */
   readonly dashboardTools?: DashboardTools;
+  /** Your own runs: the notes of calls you were in (core/calls, BLG-715), to look up, never pasted in. */
+  readonly callNotesTools?: CallNotesTools;
   /** A turn of a chaired dialogue (core/dialogues): its brief and end_dialogue tool. */
   readonly dialogue?: import('./dialogue-tools.js').DialogueTurnTools;
 }
@@ -562,4 +564,14 @@ export interface RoomBridge {
   readonly gateway?: import('./gateway-tools.js').GatewayBridge;
   /** The same tools bound to one conversation (a run's: chat, asks and their answers go there). */
   inChannel?(channel: string): RoomBridge;
+}
+
+/** Call notes as tools (core/calls/notes-tools.ts): each answers in words an agent reads. */
+export interface CallNotesTools {
+  /** The calls with notes, newest first. */
+  list(limit?: number): string;
+  /** Where something was said: the call, the time into it, who, and the words around it. */
+  search(query: string, call?: string, limit?: number): string;
+  /** A page of one call, from a turn (`from`) or a time into it (`at`: "12:30", or minutes). */
+  read(call: string, opts?: { readonly from?: number; readonly at?: string | number; readonly limit?: number }): string;
 }

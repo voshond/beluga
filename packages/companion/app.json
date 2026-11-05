@@ -2,7 +2,7 @@
   "expo": {
     "name": "Beluga",
     "slug": "beluga-companion",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "scheme": "beluga",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
@@ -25,7 +25,7 @@
         "android.permission.RECORD_AUDIO"
       ],
       "softwareKeyboardLayoutMode": "resize",
-      "versionCode": 33
+      "versionCode": 34
     },
     "ios": {
       "bundleIdentifier": "sh.ratel.beluga",

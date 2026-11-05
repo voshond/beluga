@@ -33,6 +33,8 @@ import { PrivateMark, shareWithTeamItems } from '../team/Team.js';
 import s from './Toolbar.module.css';
 import { shortcutKeys } from '../lib/shortcuts.js';
 import { sentinelSubtitle } from '../sentinel/sentinel-model.js';
+import { CallButton } from '../call/CallStrip.js';
+import { AppMenu } from './AppMenu.js';
 
 /** Room the title keeps, and the window buttons on the right (search, bell, panel). */
 const TITLE_MIN = 210;
@@ -74,6 +76,8 @@ function Shell({ title, subtitle, center, right, headerRef }: { title: ReactNode
     <header ref={headerRef} className={cx(s.toolbar, !prefs.sidebar && s.noSidebar)} data-tauri-drag-region>
       {prefs.sidebar ? null : (
         <span className={s.lead}>
+          {/* The sidebar's menu-bar button (a browser's), beside it while the sidebar is hidden. */}
+          <AppMenu />
           <IconButton icon="sidebar" label="Show sidebar" keys={shortcutKeys('toggle-sidebar')} onClick={() => setPrefs({ sidebar: true })} />
         </span>
       )}
@@ -314,7 +318,8 @@ export function Toolbar() {
 
   if (view.kind === 'room') {
     const solo = state.peers.length <= 1;
-    return <Shell headerRef={headerRef} title={solo ? 'Chat' : state.room} subtitle={<span className={s.meta}>{solo ? 'You and your agent' : `${state.peers.length} people · everyone’s agent can join in`}</span>} />;
+    // A call in the room (BLG-716): once there's someone to call.
+    return <Shell headerRef={headerRef} title={solo ? 'Chat' : state.room} subtitle={<span className={s.meta}>{solo ? 'You and your agent' : `${state.peers.length} people · everyone’s agent can join in`}</span>} right={solo ? undefined : <CallButton id="room" label="the Room" />} />;
   }
 
   if (view.kind === 'draft' || view.kind === 'draft_worktree') {

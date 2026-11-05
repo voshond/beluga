@@ -219,7 +219,7 @@ export function questionPrompt(task: TaskView): string {
 }
 
 /** The prompt that starts a new turn when a result arrives after your Claude's turn ended. */
-export function resumePrompt(task: TaskView): string {
-  const who = task.kind === 'run' ? `The command you ran on ${task.peerName}'s Mac finished` : task.kind === 'file' ? `${task.peerName}'s Mac answered your file request` : `${task.peerName}'s agent replied`;
+export function resumePrompt(task: TaskView, endedHere = false): string {
+  const who = endedHere ? `Your request to ${task.peerName} ended without an answer` : task.kind === 'run' ? `The command you ran on ${task.peerName}'s Mac finished` : task.kind === 'file' ? `${task.peerName}'s Mac answered your file request` : `${task.peerName}'s agent replied`;
   return [`[beluga] ${who} (task ${task.id}, which you sent earlier in this conversation: "${oneLine(task.ask, 200)}").`, '', describeForClaude(task), '', "Continue where you left off with this information. Don't send the same ask again: if it didn't work, or was stopped or declined, tell your user what happened and let them decide. Ask again only for something new."].join('\n');
 }

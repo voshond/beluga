@@ -13,6 +13,9 @@ import { webWords } from '../src/cli/status.js';
 import { type Reply, builtUi } from './web-helpers.js';
 import { waitFor } from './helpers.js';
 
+/** The fake cloudflared is a `#!node` script: Windows skips it on PATH (and would find a real cloudflared.exe), so that test is for macOS and Linux. */
+const WINDOWS = process.platform === 'win32';
+
 /** A Cloudflare that opens tunnels on demand: each gets a new name, and can be made to die. */
 function fakeCloudflare(): { open: (port: number, onDied: (reason: string) => void) => Promise<Tunnel>; opened: Array<{ port: number; url: string; closed: boolean; die: () => void }> } {
   const opened: Array<{ port: number; url: string; closed: boolean; die: () => void }> = [];
@@ -136,7 +139,7 @@ describe('beluga web --public (BLG-658)', () => {
     expect(web.status().public).toBeUndefined();
   });
 
-  it('opens cloudflared at the web port, and a new one when it exits', async () => {
+  it.skipIf(WINDOWS)('opens cloudflared at the web port, and a new one when it exits', async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'beluga-cf-'));
     const log = path.join(dir, 'calls.log');
     // A cloudflared that says its address like the real one (on stderr), then dies on the first run.

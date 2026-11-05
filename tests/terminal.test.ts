@@ -58,9 +58,14 @@ describe('TerminalSession output', () => {
     const s = sh(String.raw`printf '\033[31mred\033[0m plain \033[1;4;7mB\033[0m'; sleep 2`, { palette });
     await waitText(s, 'red plain B');
     const line = s.snapshot().lines[0] ?? [];
-    expect(line[0]).toEqual({ text: 'red', color: '#aa0000' });
-    expect(line[1]).toEqual({ text: ' plain ' });
-    expect(line[2]).toEqual({ text: 'B', bold: true, underline: true, inverse: true });
+    // Each word by its run: Windows' console repaints the line and may carry a colour onto the space after a word (BLG-728).
+    const run = (word: string) => {
+      const found = line.find((x) => x.text.trim() === word);
+      return found && { ...found, text: found.text.trim() };
+    };
+    expect(run('red')).toEqual({ text: 'red', color: '#aa0000' });
+    expect(run('plain')).toEqual({ text: 'plain' });
+    expect(run('B')).toEqual({ text: 'B', bold: true, underline: true, inverse: true });
   });
 
   it('maps truecolor and 256-color to hex', async () => {

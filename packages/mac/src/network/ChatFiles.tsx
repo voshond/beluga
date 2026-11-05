@@ -83,13 +83,13 @@ function fileItems(f: ChatFile, state: ChatFileState | undefined, ctx: { client:
   ];
 }
 
-/** A picture in the chat, read from the store once it's here. */
-function Picture({ f, state }: { f: ChatFile; state: ChatFileState | undefined }) {
+/** A picture's data URL, read from the store once it's here (undefined until then, and for other files). */
+function usePreview(f: ChatFile, state: ChatFileState | undefined): string | undefined {
   const { client } = useBeluga();
   const [url, setUrl] = useState(() => previews.get(f.sha));
   const here = state?.state === 'here';
   useEffect(() => {
-    if (!here || url) return;
+    if (!f.image || !here || url) return;
     let alive = true;
     client.api.network['files.preview'](f.sha).then(
       (p) => {
@@ -102,12 +102,30 @@ function Picture({ f, state }: { f: ChatFile; state: ChatFileState | undefined }
     return () => {
       alive = false;
     };
-  }, [here, url, f.sha]);
-  if (!url) return null;
+  }, [f.image, here, url, f.sha]);
+  return f.image ? url : undefined;
+}
+
+/**
+ * A picture in the chat: the picture is the card. Its name and size show on it as you point at
+ * it, with Show in Finder beside them; everything else is on its right-click menu.
+ */
+function Picture({ f, state, url, detail }: { f: ChatFile; state: ChatFileState | undefined; url: string; detail: string }) {
+  const { client } = useBeluga();
+  const say = useSay();
   return (
-    <button type="button" className={s.picture} onClick={() => void openHere(client, f, state)} aria-label={`Open ${f.name}`}>
-      <img src={url} alt={f.name} draggable={false} />
-    </button>
+    <div className={s.picture} role="group" aria-label={`${f.name}, ${detail}`}>
+      <button type="button" className={s.pictureOpen} onClick={() => void openHere(client, f, state).catch((err: unknown) => say(errorText(err), 'error'))} aria-label={`Open ${f.name}`}>
+        <img src={url} alt={f.name} draggable={false} />
+      </button>
+      <span className={s.pictureCaption} aria-hidden="true">
+        <span className={s.pictureName}>{f.name}</span>
+        <span>{detail}</span>
+      </span>
+      <button type="button" className={s.pictureAction} aria-label={webServed() ? `Download ${f.name}` : revealLabel(f.name)} onClick={() => void revealHere(client, f, state).catch((err: unknown) => say(errorText(err), 'error'))}>
+        <Icon name={webServed() ? 'download' : 'folder'} size={12} />
+      </button>
+    </div>
   );
 }
 
@@ -133,10 +151,19 @@ export const FileCard = memo(function FileCard({ f, conversation, mine }: { f: C
       : here
         ? `${kindLabel(f)} · ${sizeLabel(f.size)}`
         : `${kindLabel(f)} · ${sizeLabel(f.size)} · ${mine ? 'sent' : 'not downloaded'}`;
+  const url = usePreview(f, state);
+  if (url && here) {
+    return (
+      <ActionsContext items={() => fileItems(f, state, { client, say, conversation })}>
+        <div className={s.fileWrap} data-file={f.sha}>
+          <Picture f={f} state={state} url={url} detail={detail} />
+        </div>
+      </ActionsContext>
+    );
+  }
   return (
     <ActionsContext items={() => fileItems(f, state, { client, say, conversation })}>
       <div className={s.fileWrap} data-file={f.sha}>
-        {f.image ? <Picture f={f} state={state} /> : null}
         <div className={cx(s.file, state?.state === 'failed' && s.fileFailed)} role="group" aria-label={`${f.name}, ${detail}`}>
           <button type="button" className={s.fileMain} onClick={primary} title={here ? `Open ${f.name}` : coming ? undefined : `Download ${f.name}`}>
             <span className={s.fileIcon}>

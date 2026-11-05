@@ -1,0 +1,184 @@
+/* The floating call card (BLG-706): a soft pill over other apps. No glow: a hairline and a quiet shadow. */
+.card {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 56px;
+  margin: 4px;
+  padding: 0 10px 0 6px;
+  border-radius: 28px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  color: var(--text);
+  font: 13px/1.25 var(--font);
+  animation: arrive 260ms var(--ease-out);
+}
+.ringing {
+  background: color-mix(in srgb, var(--call) 9%, var(--bg-raised));
+}
+/* Your screen is on show: the card wears the call's colour for as long as it lasts. */
+.sharing {
+  background: color-mix(in srgb, var(--call) 14%, var(--bg-raised));
+  box-shadow:
+    var(--shadow-pop),
+    inset 0 0 0 1.5px color-mix(in srgb, var(--call) 55%, transparent);
+}
+.text .onShow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--call-ink);
+  font-weight: 500;
+}
+.liveDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--call);
+  animation: breathe 2s ease-in-out infinite;
+}
+@keyframes breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .liveDot {
+    animation: none;
+  }
+}
+.stop {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px 0 9px;
+  border-radius: 15px;
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--call-ink);
+  background: color-mix(in srgb, var(--call) 26%, var(--bg-raised));
+  transition: background var(--dur-fast);
+}
+.stop:hover {
+  background: color-mix(in srgb, var(--call) 36%, var(--bg-raised));
+}
+.stop:active {
+  transform: scale(0.96);
+}
+.tuck {
+  all: unset;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: -2px;
+  border-radius: 50%;
+  flex: none;
+  color: var(--text-3);
+  transition:
+    background var(--dur-fast),
+    color var(--dur-fast);
+}
+.tuck:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+@keyframes arrive {
+  from {
+    transform: translateY(-10px) scale(0.97);
+    opacity: 0;
+  }
+}
+.main {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  cursor: default;
+}
+.faces {
+  display: flex;
+  padding-left: 4px;
+}
+.faces .face + .face {
+  margin-left: -8px;
+}
+.face {
+  display: inline-flex;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg-raised);
+  transition: box-shadow var(--dur) var(--ease-out);
+}
+.speaking {
+  box-shadow:
+    0 0 0 2px var(--bg-raised),
+    0 0 0 4px color-mix(in srgb, var(--call) 70%, transparent);
+}
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.text strong {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.text span {
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.round,
+.decline,
+.join {
+  all: unset;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex: none;
+  transition:
+    background var(--dur-fast),
+    transform var(--dur-fast);
+}
+.round:active,
+.decline:active,
+.join:active {
+  transform: scale(0.94);
+}
+.round {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.round:hover {
+  background: var(--bg-press);
+}
+.off {
+  background: color-mix(in srgb, var(--error) 16%, transparent);
+  color: var(--error);
+}
+.decline {
+  background: color-mix(in srgb, var(--error) 18%, var(--bg-raised));
+  color: var(--error);
+}
+.decline:hover {
+  background: color-mix(in srgb, var(--error) 26%, var(--bg-raised));
+}
+.join {
+  background: color-mix(in srgb, var(--call) 24%, var(--bg-raised));
+  color: var(--call-ink);
+}
+.join:hover {
+  background: color-mix(in srgb, var(--call) 34%, var(--bg-raised));
+}

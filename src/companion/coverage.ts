@@ -465,6 +465,8 @@ export const PHONE: Record<Method, Side> = {
   'git.moveAndUpdate': 'mac',
   'git.switchToDefault': 'mac',
   'git.askClaude': 'mac',
+  'git.syncFork': 'mac',
+  'git.syncForkWithClaude': 'mac',
   'git.github': 'mac',
   'git.githubRepo': 'mac',
   'git.log': 'mac',
@@ -537,6 +539,19 @@ export const PHONE: Record<Method, Side> = {
   'voice.models': 'mac',
   'voice.prepare': 'mac',
   'voice.transcribe': 'mac',
+  'voice.load': 'mac',
+  // Calls (BLG-706): the Mac's window makes the sound. The phone answers one on your Mac, declines
+  // it, or hangs up; starting one, muting, sharing and the WebRTC setup are the Mac's.
+  'calls.start': 'mac',
+  'calls.join': 'phone',
+  'calls.leave': 'phone',
+  'calls.decline': 'phone',
+  'calls.set': 'mac',
+  'calls.signal': 'mac',
+  'calls.list': 'mac',
+  // Call notes (BLG-715): written down by the Mac's window, kept and read on the Mac.
+  'calls.notes': 'mac',
+  'calls.forgetNotes': 'mac',
   // Settings › Terminal › Import from…, and the welcome's terminal step: Mac settings only.
   'terminalImport.detect': 'mac',
   // The agent's own terminal in a conversation (BLG-534) opens on the Mac, and its visuals open

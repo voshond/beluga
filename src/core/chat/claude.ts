@@ -10,6 +10,7 @@ import type { ChatFile, MessageView } from '../../net/mesh/views.js';
 import type { TrustLevel } from '../trust.js';
 import { ACT_HISTORY, type ChatAnswerRequest, type ChatImage, type EarlierAsk, IMAGE_BYTES, MAX_IMAGES, type PromptFile, TEXT_FILE_BYTES, earlierPage, fitTexts, historyLines, isImageFile, isTextFile, olderThanWindow, parseRequest, sinceLines, sizeLabel, splitAnswer, systemPrompt, userPrompt } from './claude-prompt.js';
 import type { ChatFiles } from './files.js';
+import type { CallNotesTools } from '../../agent/types.js';
 
 /**
  * Claudes called into chats. Nobody's Claude reads along: it answers only a message that asks
@@ -66,6 +67,11 @@ export interface ChatClaudeOptions {
   readonly onLive?: (conversation: string, id: string, state: 'thinking' | 'idle', agent: AgentRef) => void;
   /** Something you should know (your Claude couldn't answer). */
   readonly onProblem?: (conversation: string, text: string) => void;
+  /**
+   * This conversation's call notes (BLG-715): a line saying they exist, and tools to look them up.
+   * The notes themselves never go in the prompt; an agent searches and reads what it needs.
+   */
+  readonly notes?: (conversation: string) => { readonly hint: string; readonly tools: CallNotesTools } | undefined;
   /** Words as this Mac reads them (a team task by its own key: core/team/mentions.ts). */
   readonly localize?: (text: string) => string;
   /** Where answered asks are remembered. */
@@ -268,6 +274,8 @@ export class ChatClaude {
     // A short recent window (BLG-428); a toolless answer reads further back itself when it must
     // (read_earlier), a turn with its tools has none and gets the longer window instead.
     const earlier = !tools && olderThanWindow(before, owner) > 0;
+    // Calls in this chat: only this chat's, looked up with tools (a turn with its own tools has them all).
+    const notes = tools ? undefined : this.opts.notes?.(m.conversation);
     return {
       system: systemPrompt({ owner, where: group ? `the group “${group.name}”` : `a direct message with ${friend ?? 'a friend'}`, people, asker, askedAll: m.ask?.to === 'all', agent: this.agentRef(), ...(tools ? { tools: true } : {}) }),
       prompt: userPrompt({
@@ -276,9 +284,11 @@ export class ChatClaude {
         asker,
         files,
         since: at >= 0 ? sinceLines(all.slice(at + 1), owner) : [],
+        ...(notes ? { notesHint: notes.hint } : {}),
         ...(earlier ? { earlier: true } : {}),
       }),
       images,
+      ...(notes ? { notes: notes.tools } : {}),
       ...(earlier ? { earlier: (ask: EarlierAsk) => earlierPage(this.before(m.conversation, m.id), owner, ask) } : {}),
       ...(this.agentRef().model ? { model: this.agentRef().model } : {}),
       signal,

@@ -49,6 +49,9 @@ test('the project home shows main behind origin, with Update main and the latest
   await expect(page.getByRole('button', { name: 'Update main' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Fetch' })).toBeVisible();
   await expect(page.getByText(/fetched .*ago|fetched just now/)).toBeVisible();
+  // Not a fork: nothing fork-only shows (BLG-726).
+  await expect(page.getByRole('button', { name: 'Sync Fork' })).toHaveCount(0);
+  await expect(page.getByText(/ new on /)).toHaveCount(0);
   const history = page.getByRole('region', { name: 'History' });
   await expect(history.getByText('3 incoming from origin/main', { exact: false })).toBeVisible();
   const latest = history.getByRole('listbox', { name: 'Latest commits' });

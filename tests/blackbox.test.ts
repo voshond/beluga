@@ -7,6 +7,7 @@ import { Recorder, SLOW_CALL_MS, type Snapshot, TEXT_MAX } from '../src/core/bla
 import { makeReport } from '../src/core/blackbox/report.js';
 import { KEEP_INCIDENTS, startBlackbox } from '../src/daemon/blackbox.js';
 import { problemIssueUrl } from '../packages/mac/src/lib/report.js';
+import { waitFor } from './helpers.js';
 
 const lag = { p50: 1, p95: 2, max: 3 };
 const memory = { rss: 100 * 1024 * 1024, heapUsed: 40 * 1024 * 1024 };
@@ -80,7 +81,8 @@ describe('the black box on disk', () => {
     for (let i = 3; i < 30; i++) r.record('log', `line ${i} ${'x'.repeat(40)}`);
     await new Promise((res) => setTimeout(res, 60));
     r.record('log', 'last');
-    await new Promise((res) => setTimeout(res, 60));
+    // Until its save after the burst has rewritten it (a slow disk takes longer than a few saves: BLG-728).
+    await waitFor(() => readJournal(paths.current)?.entries.at(-1)?.text === 'last', 5_000).catch(() => undefined);
     box.stop();
     // Rewritten from the ring (4 entries), so the burst before it isn't all there twice.
     const after = readJournal(paths.current)?.entries.map((e) => e.text) ?? [];

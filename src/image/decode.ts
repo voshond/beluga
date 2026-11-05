@@ -58,15 +58,24 @@ export function sanitizeSvg(svg: string): string {
   return svg.replace(/(\s(?:xlink:)?href\s*=\s*)(["'])(?!\s*(?:#|data:))[^"']*\2/gi, '$1$2$2');
 }
 
+/**
+ * Whether an SVG draws text, so needs the system's fonts. Loading them takes resvg a while (whole
+ * seconds on Windows), so an SVG without text skips it and looks the same.
+ */
+export function svgNeedsFonts(svg: string): boolean {
+  return /<(?:[\w-]+:)?text[\s>/]/i.test(svg);
+}
+
 function decodeSvg(bytes: Uint8Array): Bitmap {
   const source = sanitizeSvg(Buffer.from(bytes).toString('utf8'));
-  const probe = new Resvg(source, { fitTo: { mode: 'original' } });
+  // Its size comes from the root element, never its text: no fonts needed to learn it.
+  const probe = new Resvg(source, { fitTo: { mode: 'original' }, font: { loadSystemFonts: false } });
   if (!probe.width || !probe.height) throw new Error('The image is empty');
   // Rasterize so the longest side is KEEP_SIDE, whatever size the file claims to be.
   const zoom = KEEP_SIDE / Math.max(probe.width, probe.height);
   checkSize(probe.width * zoom, probe.height * zoom);
   if (Math.min(probe.width, probe.height) * zoom < 1) throw new Error('The image is too thin to show');
-  const img = new Resvg(source, { fitTo: { mode: 'zoom', value: zoom } }).render();
+  const img = new Resvg(source, { fitTo: { mode: 'zoom', value: zoom }, font: { loadSystemFonts: svgNeedsFonts(source) } }).render();
   return { width: img.width, height: img.height, data: new Uint8Array(img.pixels) };
 }
 

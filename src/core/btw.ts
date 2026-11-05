@@ -72,7 +72,9 @@ export class BtwDesk {
         },
       });
       if (timer) clearTimeout(timer);
-      put({ text: answer.trim() || btw.text, state: 'done' });
+      const said = answer.trim() || (pending ?? btw.text).trim();
+      // Nothing to show is a failure, never a blank card that looks like nothing happened (BLG-729).
+      put(said ? { text: said, state: 'done' } : { text: '', state: 'failed', error: 'The answer came back empty' });
     } catch (err) {
       if (timer) clearTimeout(timer);
       // Closed or replaced: nothing to say.

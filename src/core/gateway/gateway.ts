@@ -6,7 +6,7 @@ import { type NoticeEvent, presenceQuiet } from '../notify.js';
 import { type Action, type Store, peerName } from '../store.js';
 import { type TrustLevel, trustOf } from '../trust.js';
 import { type Capabilities, Decision, type DecisionInput, type Rule, offersFor, sharesUsageWith } from './access.js';
-import { TaskBook } from './book.js';
+import { type Outgoing, TaskBook } from './book.js';
 import type { SystemPort } from './device.js';
 import { type GatewayState, type PeerCard, type TaskFile, type TaskView, isFinal } from './model.js';
 import { type DialogueEnvelope, type Expects, type GatewayMsg, MAX_QUESTIONS, MAX_REQUEST_SUMMARY, type Need, type PeerCardMsg, type TaskKind, type TaskQuestion, type TaskResult, type TaskUpdate } from './protocol.js';
@@ -148,8 +148,12 @@ export interface MeshNode extends MeshPort {
 }
 
 const TICK_MS = 10_000;
-/** A request you sent that was handed over and then heard nothing for this long: it failed. */
+/** A request you sent that reached their Mac and then heard nothing for this long: it failed. */
 const SILENT_MS = 24 * 3600_000;
+/** Just back (this Mac woke or started, or they came online): what waited for you gets this long to arrive first. */
+const BACK_GRACE_MS = 10 * 60_000;
+/** Ticks this far apart: the Mac slept in between. */
+const SLEPT_MS = 6 * TICK_MS;
 const DEFAULT_CONFIRM_MS = 10 * 60_000;
 const MAX_STEPS = 12;
 /** Requests one conversation's Claude may send the same person in a while (BLG-427: no asking on and on). */
@@ -179,6 +183,13 @@ export class Gateway {
   /** Results a wait_for picked up (it hands them to your Claude, so no new turn starts for them). */
   private readonly claimed = new Set<string>();
   private readonly told = new Map<string, string>();
+  /** When each person was last heard from or linked (the silence check waits a little after). */
+  private readonly seenAt = new Map<string, number>();
+  /** Requests that ended on this Mac without their answer (expired, or silence): your Claude hears so. */
+  private readonly endedHere = new Set<string>();
+  /** When this Mac last started or woke up (on the gateway's clock), and the last tick (real time). */
+  private wokeAt: number;
+  private lastTickAt = Date.now();
   private readonly ticker: NodeJS.Timeout;
   private readonly offStore: Array<() => void> = [];
   private cardsQueued = false;
@@ -202,7 +213,8 @@ export class Gateway {
       now: () => this.now(),
       onProblem: (title, body) => deps.notify?.({ kind: 'problems', title, body }),
     });
-    this.courier = new Courier(this.book, { mesh: () => this.mesh, room: () => deps.room?.() });
+    this.wokeAt = this.now();
+    this.courier = new Courier(this.book, { mesh: () => this.mesh, room: () => deps.room?.() }, (o) => this.onDelivered(o));
     this.server = new TaskServer({
       book: this.book,
       courier: this.courier,
@@ -294,6 +306,7 @@ export class Gateway {
       frame: (from, payload) => this.onFrame(from, 'mesh', payload),
       leaving: () => this.courier.mailAll(),
       link: (peerId) => {
+        this.seenAt.set(peerId, this.now());
         this.courier.flush(peerId, true);
         this.told.delete(peerId);
         this.queueCards();
@@ -324,6 +337,7 @@ export class Gateway {
     if (this.stopped || from === this.deps.selfId() || from === this.mesh?.peerId) return;
     // Over the network only friends get through; in a room, anyone in it (guests never reach here).
     if (via === 'mesh' && !this.mesh?.isFriend(from)) return;
+    this.seenAt.set(from, this.now());
     const msg = this.courier.receive(from, via, raw);
     if (msg) this.onMessage(from, msg);
   }
@@ -810,6 +824,24 @@ export class Gateway {
     return this.put({ ...task, state: status, result: { status, summary, files: [], log: task.steps }, endedAt: this.now(), updatedAt: this.now(), delivered: task.delivered ?? false });
   }
 
+  /** It ended here without their answer: nothing of it goes out later, and whoever asked hears so (like a result). */
+  private failHere(task: TaskView, summary: string): void {
+    this.book.dropTask(task.id);
+    const done = this.finishLocal(task, 'failed', summary);
+    this.endedHere.add(done.id);
+    this.announce(done);
+    this.settle(done);
+  }
+
+  /** Their Mac acknowledged your request: it's there (the silence check counts from now). */
+  private onDelivered(o: Outgoing): void {
+    if (o.frame.m.t !== 'task_request') return;
+    const task = this.book.get(o.frame.m.id);
+    if (!task || task.direction !== 'sent' || isFinal(task.state)) return;
+    const step = `Reached ${task.peerName}'s Mac`;
+    if (!task.steps.includes(step)) this.put({ ...task, steps: [...task.steps, step].slice(-MAX_STEPS), updatedAt: this.now() });
+  }
+
   private onUpdate(from: string, msg: TaskUpdate): void {
     const task = this.book.get(msg.id);
     if (!task || task.direction !== 'sent' || task.peerId !== from || isFinal(task.state) || task.state === 'confirm' || this.book.pending()[task.id]) return;
@@ -972,7 +1004,7 @@ export class Gateway {
     const current = this.book.get(task.id) ?? task;
     if (current.delivered || !current.conversation) return;
     this.markDelivered(current);
-    this.deps.resume(current.conversation, resumePrompt(current));
+    this.deps.resume(current.conversation, resumePrompt(current, this.endedHere.delete(current.id)));
   }
 
   /** Your Claude is working (or about to) in this conversation. */
@@ -1051,16 +1083,23 @@ export class Gateway {
 
   private tick(): void {
     if (this.stopped) return;
-    for (const gone of this.book.expire(this.now())) {
+    const now = this.now();
+    // Ticks far apart: this Mac slept, and what came for it meanwhile is still on its way.
+    const real = Date.now();
+    if (real - this.lastTickAt > SLEPT_MS) this.wokeAt = now;
+    this.lastTickAt = real;
+    for (const gone of this.book.expire(now)) {
       if (!('m' in gone.frame) || gone.frame.m.t !== 'task_request') continue;
       const task = this.book.get(gone.frame.m.id);
-      if (task && !isFinal(task.state)) this.finishLocal(task, 'failed', `${task.peerName} didn't come online in time`);
+      if (task && !isFinal(task.state)) this.failHere(task, `${task.peerName} didn't come online in time`);
     }
-    // Handed over, then silence: a friend's Mac that lost it (an older Beluga that quit mid-task)
-    // never answers, so after a day without news it stops showing as running here.
-    const now = this.now();
+    // It reached their Mac, then silence: a friend's Mac that lost it (an older Beluga that quit
+    // mid-task) never answers, so after a day without news it stops showing as running here. One
+    // still waiting to reach them has the outbox's week instead (their laptop is closed: BLG-705),
+    // and just after either of you is back, what waited gets its chance to arrive first.
     for (const t of this.book.all()) {
-      if (t.direction === 'sent' && t.state !== 'confirm' && !isFinal(t.state) && !this.book.pending()[t.id] && now - t.updatedAt > SILENT_MS) this.finishLocal(t, 'failed', `No word from ${t.peerName} in a day`);
+      if (t.direction !== 'sent' || t.state === 'confirm' || isFinal(t.state) || this.book.pending()[t.id] || this.book.undelivered(t.id)) continue;
+      if (now - t.updatedAt > SILENT_MS && now - Math.max(this.wokeAt, this.seenAt.get(t.peerId) ?? 0) >= BACK_GRACE_MS) this.failHere(t, `No word from ${t.peerName} in a day`);
     }
     this.courier.flush();
     this.queueCards();

@@ -6,6 +6,7 @@ import { type InlineElement, readInline, relative } from './inline-model.js';
 import { parseColor, toHex, toHsl, toneOf } from './format.js';
 import { PlanChip, TaskChip, WorktreeChip } from '../../tasks/TaskRef.js';
 import { SentinelChip } from '../../sentinel/marks.js';
+import { CallNotesChip } from '../../call/NotesBox.js';
 import v from './inline.module.css';
 
 /**
@@ -75,6 +76,8 @@ function InlineView({ el, raw }: { el: InlineElement; raw: string }) {
       return <PlanChip id={el.id} />;
     case 'sentinel':
       return <SentinelChip id={el.id} />;
+    case 'call':
+      return <CallNotesChip id={el.id} />;
   }
 }
 

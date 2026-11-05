@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "call-float",
+  "description": "The floating call card (BLG-706): it may listen for the call's state (app commands, as for every window, need no permission here)",
+  "windows": ["call-float"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+}

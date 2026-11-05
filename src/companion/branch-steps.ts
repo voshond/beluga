@@ -61,6 +61,10 @@ export async function branchStep(s: Session, topic: string, step: PhoneBranchSte
       const r = await needBench().quickPr(id, step === 'pr_draft' ? { draft: true } : {});
       return { ok: r.ok, message: r.message };
     }
+    case 'pr_original': {
+      const r = await needBench().quickPr(id, { original: true });
+      return { ok: r.ok, message: r.message };
+    }
     case 'pr_claude':
       needBench().createPr(id);
       return claude('opening the pull request');

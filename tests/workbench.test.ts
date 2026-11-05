@@ -485,6 +485,41 @@ describe('models, usage, space and search', () => {
     expect(kay.state().search.hits).toEqual([]);
   });
 
+  it('deleting or archiving a worktree stops the Claude working in it, and nothing lands in its conversation after', async () => {
+    hub = await startHub({ keys });
+    // A Claude that works until it's stopped (a slow one: Windows' runners showed it, BLG-728).
+    const stopped: string[] = [];
+    const kay = await solo(repo(), {
+      script: (i) =>
+        new Promise((resolve) => {
+          const t = setTimeout(() => resolve('finished anyway'), 20_000);
+          i.signal.addEventListener('abort', () => (clearTimeout(t), stopped.push(i.prompt), resolve('stopped')));
+        }),
+    });
+    const p = projectOf(kay.workspaces);
+    for (const [name, leave] of [
+      ['deleted', (id: string) => kay.session.workspaces!.remove(id)],
+      ['archived', (id: string) => kay.session.workspaces!.archive(id)],
+    ] as const) {
+      const ws = await kay.session.workspaces!.newWorktree(p.id, name);
+      kay.session.askOwnClaude(`work in ${name}`, `ws:${ws!.id}`);
+      await waitFor(() => kay.runs.some((r) => r.prompt.includes(`work in ${name}`)), 4000);
+      await leave(ws!.id);
+      expect(stopped.some((x) => x.includes(`work in ${name}`))).toBe(true);
+      expect(kay.session.host.runningIn(`ws:${ws!.id}`)).toBe(false);
+      if (name === 'deleted') {
+        await new Promise((r) => setTimeout(r, 100));
+        expect(kay.state().log.some((l) => l.channel === `ws:${ws!.id}`)).toBe(false);
+        // Its run's last words, echoed back by the hub after the clear (on a slow computer): they don't land either.
+        const self = kay.session.selfId;
+        kay.session.send({ kind: 'agent_event', requestId: 'late', requester: self, event: 'error', text: 'Stopped: its worktree was deleted', channel: `ws:${ws!.id}` }, { to: self });
+        kay.session.send({ kind: 'agent_event', requestId: 'marker', requester: self, event: 'error', text: 'after', channel: 'room' }, { to: self });
+        await waitFor(() => kay.state().log.some((l) => l.channel === 'room' && 'text' in l && l.text === 'after'), 4000);
+        expect(kay.state().log.some((l) => l.channel === `ws:${ws!.id}`)).toBe(false);
+      }
+    }
+  });
+
   it('saves your own templates', async () => {
     hub = await startHub({ keys });
     const kay = await solo(repo());

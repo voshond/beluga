@@ -94,6 +94,11 @@ export class TaskBook {
     return this.outbox.filter((o) => (to === undefined || o.to === to) && o.expiresAt > now);
   }
 
+  /** This task's request still waits for their Mac to acknowledge it. */
+  undelivered(taskId: string): boolean {
+    return this.outbox.some((o) => o.frame.m.t === 'task_request' && o.frame.m.id === taskId);
+  }
+
   queue(to: string, frame: Outgoing['frame'], sentAt?: number): void {
     if (this.outbox.length >= MAX_OUTBOX) throw new Error('Too many requests are waiting to be delivered; wait for people to come online');
     this.saveOutbox([...this.outbox, { to, frame, expiresAt: Date.now() + OUTBOX_TTL_MS, ...(sentAt ? { sentAt } : {}) }]);

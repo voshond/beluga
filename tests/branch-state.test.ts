@@ -72,6 +72,32 @@ describe('branchState', () => {
   });
 });
 
+describe('a fork (BLG-727)', () => {
+  const fork = { host: 'github.com', owner: 'rstagi', repo: 'app', url: 'https://github.com/rstagi/app', branch: 'trunk', forkBranch: 'main' };
+  const inFork = (w: Workspace, p?: PullRequest) => branchState({ projects: [{ ...project(w), fork }], gh: true, prs: p ? { [w.id]: p } : {}, conflicts: {} }, w);
+
+  it('offers Create PR on the original among Create PR’s other ways, and only in a fork', () => {
+    const step = inFork(ws())!.steps.find((x) => x.id === 'pr_original');
+    expect(step).toMatchObject({ label: 'Create PR on rstagi/app' });
+    expect(step?.hint).toContain('into rstagi/app’s trunk');
+    expect(at(ws())!.steps.some((x) => x.id === 'pr_original')).toBe(false);
+  });
+
+  it('a PR on the original waits on its maintainers: Open PR first, merging only in the menu', () => {
+    const b = inFork(ws(), pr({ url: 'https://github.com/rstagi/app/pull/301', number: 301 }))!;
+    expect([b.kind, b.label, b.tone]).toEqual(['review', 'On rstagi/app', 'wait']);
+    expect(b.steps.map((x) => x.id)).toEqual(['open_pr', 'merge_pr']);
+    // The fork's own PR is as before.
+    expect(inFork(ws(), pr({ url: 'https://github.com/kay/app/pull/4', number: 4 }))?.kind).toBe('ready');
+    // Failing checks still lead with fixing them.
+    expect(inFork(ws(), pr({ url: 'https://github.com/rstagi/app/pull/301', checks: 'failing' }))?.kind).toBe('checks_failing');
+  });
+
+  it('once merged on the original, says Sync Fork brings it home', () => {
+    expect(inFork(ws(), pr({ url: 'https://github.com/rstagi/app/pull/301', number: 301, state: 'MERGED' }))?.detail).toBe('PR #301 merged into rstagi/app on GitHub: Sync Fork on the project’s home brings it into your fork’s main');
+  });
+});
+
 describe('status notices work merged outside Beluga', () => {
   let dir = '';
   afterEach(() => rmSync(dir, { recursive: true, force: true }));

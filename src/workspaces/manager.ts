@@ -21,7 +21,8 @@ import { dropCodexSessions } from '../agent/runtime/codex/codex-sessions.js';
 import { dropOpenCodeFolder, dropOpenCodeSession } from '../agent/runtime/opencode/sessions.js';
 import { addDay, dayKey } from './usage-days.js';
 import type { AgentRef } from '../protocol.js';
-import type { DeletePlan, MergeWait, Project, ProjectGroup, PullHead, ProjectSync, ProjectsConfig, Workspace, WorkspaceRecord, WorkspaceUsage } from './types.js';
+import type { DeletePlan, MergeWait, Project, ProjectGroup, PullHead, ProjectSync, ProjectsConfig, RenameResult, Workspace, WorkspaceRecord, WorkspaceUsage } from './types.js';
+import type { ForkOf } from './github.js';
 import type { Effort } from '../shared/settings-schema.js';
 import { ArrangeError, type Item, type Layout, MAX_GROUP_NAME, arrangedOrder, groupKey, groupOfKey, isGroupKey, keyOf, move, settle } from './arrange.js';
 
@@ -123,7 +124,9 @@ export class WorkspaceManager {
   private readonly folderRefreshes = new Map<string, Promise<boolean>>();
   /** Fetching state per project root (in flight, the last failure), shown with the default branch. */
   private fetchState = new Map<string, Pick<ProjectSync, 'fetching' | 'fetchError'>>();
-  /** Remote default branches learned while fetching, keyed by project root and remote. */
+  /** What each project's origin was forked from (by root), as gh last said. */
+  private forks = new Map<string, ForkOf>();
+  /** A remote's default branch learned while fetching, for repos without origin/HEAD (by root). */
   private remoteDefaults = new Map<string, string>();
 
   /** What new branches start with (Settings › Workspaces; the session points this at your choice). */
@@ -566,17 +569,17 @@ export class WorkspaceManager {
         const branch = w.kind === 'worktree' || w.kind === 'main' ? (trees.find((t) => real(t.path) === real(w.path))?.branch ?? now.branch) : now.branch;
         return { ...now, ...(branch ? { branch } : {}), base: now.base ?? base, projectId: id, external: false, ...(w.askOnly ? { askOnly: true } : {}), ...(w.status ? { status: w.status } : {}) };
       };
-      return { id, name, root, base, workspaces: withStatus.map(current).sort(order), scripts: resolveScripts(root, this.config.scripts?.[root]), ...(syncInfo ? { sync: syncInfo } : {}) };
+      const fork = this.forks.get(root);
+      return { id, name, root, base, workspaces: withStatus.map(current).sort(order), scripts: resolveScripts(root, this.config.scripts?.[root]), ...(syncInfo ? { sync: syncInfo } : {}), ...(fork ? { fork } : {}) };
     } catch (err) {
       return { id, name, root, base: 'HEAD', workspaces: [], error: err instanceof Error ? err.message : String(err) };
     }
   }
 
-  /** The project's remote default, including one learned while fetching. */
+  /** origin's default branch ("origin/main"), or the one learned from the remote when origin/HEAD isn't set. */
   async baseOf(root: string): Promise<string> {
-    const remote = await g.projectRemote(root);
-    const learned = remote && this.remoteDefaults.get(`${root}\0${remote}`);
-    if (remote && learned && (await g.isCommit(root, `${remote}/${learned}`))) return `${remote}/${learned}`;
+    const learned = this.remoteDefaults.get(root);
+    if (learned && (await g.isCommit(root, `origin/${learned}`))) return `origin/${learned}`;
     return g.defaultBase(root);
   }
 
@@ -611,15 +614,14 @@ export class WorkspaceManager {
 
   // ------------------------------------------------------------- a plan's branch
 
-  /** A plan's branch: made from the latest default branch unless it already exists. */
+  /** A plan's branch: made from the latest default branch unless it's there (here, or on origin) → whether it was made. */
   async planBranch(projectId: string, branch: string): Promise<{ made: boolean }> {
     const { root } = this.repoProject(projectId);
     if (!/^plan\/[\w.-]+$/.test(branch)) throw new WorkspaceError(`“${branch}” isn’t a plan branch name`);
     if (await g.isCommit(root, `refs/heads/${branch}`)) return { made: false };
-    const remote = await g.projectRemote(root);
-    if (remote) await g.tryGit(root, ['fetch', remote, '--prune']);
-    if (remote && await g.isCommit(root, `refs/remotes/${remote}/${branch}`)) {
-      await g.git(root, ['branch', '--track', branch, `${remote}/${branch}`]);
+    if (await g.hasRemote(root)) await g.tryGit(root, ['fetch', 'origin', '--prune']);
+    if (await g.isCommit(root, `refs/remotes/origin/${branch}`)) {
+      await g.git(root, ['branch', '--track', branch, `origin/${branch}`]);
       return { made: false };
     }
     await g.git(root, ['branch', '--no-track', branch, await this.baseOf(root)]);
@@ -645,11 +647,10 @@ export class WorkspaceManager {
     return g.combineBranches(project.root, hidden, branch, branches);
   }
 
-  /** The remote's default branch, fetched first, else the local one. */
+  /** The default branch as GitHub has it now ("origin/main", fetched first), else the local one. */
   async latestBase(projectId: string): Promise<string> {
     const { root } = this.repoProject(projectId);
-    const remote = await g.projectRemote(root);
-    if (remote) await g.tryGit(root, ['fetch', remote, '--prune']);
+    if (await g.hasRemote(root)) await g.tryGit(root, ['fetch', 'origin', '--prune']);
     return this.baseOf(root);
   }
 
@@ -668,7 +669,7 @@ export class WorkspaceManager {
   async mergeBranchIntoMain(projectId: string, branch: string): Promise<g.MergeResult> {
     const { root } = this.repoProject(projectId);
     const base = await this.baseOf(root);
-    const target = base === 'HEAD' ? undefined : (await sync.splitBase(root, base)).branch;
+    const target = base.startsWith('origin/') ? base.slice('origin/'.length) : base === 'HEAD' ? undefined : base;
     const res = await g.mergeInto(root, branch, target);
     await this.refresh();
     return res;
@@ -676,8 +677,21 @@ export class WorkspaceManager {
 
   /** The default branch's name, without the remote ("main"). */
   async defaultBranchName(projectId: string): Promise<string> {
-    const root = this.repoProject(projectId).root;
-    return (await sync.splitBase(root, await this.baseOf(root))).branch;
+    const base = await this.baseOf(this.repoProject(projectId).root);
+    return base.replace(/^origin\//, '');
+  }
+
+  /** Record what a project's origin was forked from (undefined: not a fork), shown right away. */
+  setFork(projectId: string, fork: ForkOf | undefined): void {
+    const project = this.projects.find((p) => p.id === projectId && p.root);
+    if (!project) return;
+    if (fork) this.forks.set(project.root, fork);
+    else this.forks.delete(project.root);
+    this.projects = this.projects.map((p) => {
+      if (p !== project) return p;
+      const { fork: _f, ...rest } = p;
+      return fork ? { ...rest, fork } : rest;
+    });
   }
 
   /** Mark a project as fetching (or record how its last fetch went), shown right away. */
@@ -692,10 +706,10 @@ export class WorkspaceManager {
     });
   }
 
-  /** A remote's default branch, learned while fetching. */
-  learnRemoteDefault(projectId: string, remote: string, branch: string): void {
+  /** A remote's default branch, learned while fetching (used when origin/HEAD isn't set). */
+  learnRemoteDefault(projectId: string, branch: string): void {
     const project = this.projects.find((p) => p.id === projectId && p.root);
-    if (project && /^[\w./-]+$/.test(branch)) this.remoteDefaults.set(`${project.root}\0${remote}`, branch);
+    if (project && /^[\w./-]+$/.test(branch)) this.remoteDefaults.set(project.root, branch);
   }
 
   /**
@@ -925,9 +939,11 @@ export class WorkspaceManager {
     }
   }
 
-  private async freeBranch(repo: string, wanted: string): Promise<string> {
+  /** `mine`: the branch being renamed, free for itself (renaming foo-2 back to foo-2 keeps it). */
+  private async freeBranch(repo: string, wanted: string, mine?: string): Promise<string> {
     for (let i = 1; ; i++) {
       const name = i === 1 ? wanted : `${wanted}-${i}`;
+      if (name === mine) return name;
       try {
         await g.git(repo, ['rev-parse', '--verify', '--quiet', `refs/heads/${name}`]);
       } catch {
@@ -1351,12 +1367,11 @@ export class WorkspaceManager {
 
   // ---------------------------------------------------------------- handoff
 
-  /** The project whose selected remote points at the same repository as `remote` (any URL style). */
+  /** The project whose origin points at the same repository as `remote` (any URL style). */
   async projectForRemote(remote: string): Promise<Project | undefined> {
     const want = normalizeRemote(remote);
     for (const p of this.projects.filter((x) => x.root)) {
-      const selected = await g.projectRemote(p.root);
-      const url = selected ? await g.git(p.root, ['remote', 'get-url', selected]).then((s) => s.trim(), () => '') : '';
+      const url = await g.git(p.root, ['remote', 'get-url', 'origin']).then((s) => s.trim(), () => '');
       if (url && normalizeRemote(url) === want) return p;
     }
     return undefined;
@@ -1365,8 +1380,7 @@ export class WorkspaceManager {
   async remoteOf(projectId: string): Promise<string | undefined> {
     const project = this.projects.find((p) => p.id === projectId);
     if (!project?.root) return undefined;
-    const remote = await g.projectRemote(project.root);
-    return remote ? g.git(project.root, ['remote', 'get-url', remote]).then((s) => s.trim() || undefined, () => undefined) : undefined;
+    return g.git(project.root, ['remote', 'get-url', 'origin']).then((s) => s.trim() || undefined, () => undefined);
   }
 
   /** A new worktree on an existing branch (e.g. one fetched from a friend's handoff). */
@@ -1407,13 +1421,62 @@ export class WorkspaceManager {
   async renameWorktree(id: string, name: string): Promise<void> {
     const ws = this.require(id);
     const s = slug(name);
-    if (ws.kind !== 'worktree' || !s || s === ws.name) return;
-    const pushed = ws.branch && (await g.tryGit(ws.path, ['for-each-ref', '--count=1', `refs/remotes/*/${ws.branch}`]))?.trim();
+    // You named it meanwhile: yours stays.
+    if (ws.kind !== 'worktree' || ws.nameSetByUser || !s || s === ws.name) return;
     const prefix = this.branchPrefix();
-    const branch = ws.branch && isOwnBranch(ws.branch, ws.name, prefix) && !pushed ? await this.freeBranch(ws.path, `${prefix}${s}`) : undefined;
+    const branch = ws.branch && isOwnBranch(ws.branch, ws.name, prefix) && !(await this.onRemote(ws.path, ws.branch)) ? await this.freeBranch(ws.path, `${prefix}${s}`) : undefined;
     if (branch) await g.git(ws.path, ['branch', '-m', ws.branch!, branch]);
     this.patchRecord(id, { name: s, ...(branch ? { branch } : {}) });
     await this.refresh();
+  }
+
+  /**
+   * You renamed a workspace. A worktree's branch takes the name too: beluga/<name> (or your prefix)
+   * for one Beluga made, the same folder for one of yours (feature/<name>), or exactly what you typed
+   * when it has a / in it. A branch already on a remote keeps its name (its pull request follows it),
+   * and the folder stays where it is (sessions and terminals run in it).
+   */
+  async renameByUser(id: string, typed: string): Promise<RenameResult> {
+    const ws = this.require(id);
+    if (ws.kind !== 'worktree') {
+      this.rename(id, typed);
+      return { name: this.require(id).name };
+    }
+    const text = typed.trim();
+    const exact = text.includes('/') ? await this.validBranch(ws.path, text) : undefined;
+    const label = exact ? exact.slice(exact.lastIndexOf('/') + 1) : text;
+    if (!/[a-z0-9]/i.test(label)) throw new WorkspaceError('A worktree needs a name with a letter or a digit in it');
+    const s = slug(label);
+    const old = ws.branch;
+    const kept = !old ? undefined : (await this.onRemote(ws.path, old)) ? ('pushed' as const) : undefined;
+    let branch = old;
+    if (old && !kept) {
+      const prefix = this.branchPrefix();
+      const wanted = exact ?? (isOwnBranch(old, ws.name, prefix) ? `${prefix}${s}` : `${old.slice(0, old.lastIndexOf('/') + 1)}${s}`);
+      branch = exact ? await this.takenOrFree(ws.path, exact, old) : await this.freeBranch(ws.path, wanted, old);
+      if (branch !== old) await g.git(ws.path, ['branch', '-m', old, branch]);
+    }
+    this.patchRecord(id, { name: s, nameSetByUser: true, ...(branch ? { branch } : {}) });
+    await this.refresh();
+    return { name: s, ...(branch ? { branch } : {}), ...(kept ? { branchKept: kept } : {}) };
+  }
+
+  /** Is this branch on a remote already (a remote branch of the same name)? Its upstream alone says nothing: a new worktree's is origin/main. */
+  private async onRemote(repo: string, branch: string): Promise<boolean> {
+    return Boolean((await g.tryGit(repo, ['for-each-ref', '--count=1', `refs/remotes/*/${branch}`]))?.trim());
+  }
+
+  /** The branch name you typed, as git accepts it, or why not. */
+  private async validBranch(repo: string, name: string): Promise<string> {
+    const ok = (await g.tryGit(repo, ['check-ref-format', '--branch', name]))?.trim();
+    if (!ok || ok !== name) throw new WorkspaceError(`“${name}” can’t be a branch name`);
+    return ok;
+  }
+
+  /** An exact branch name you asked for: refused when another branch has it already. */
+  private async takenOrFree(repo: string, wanted: string, mine: string): Promise<string> {
+    if (wanted === mine || (await this.freeBranch(repo, wanted, mine)) === wanted) return wanted;
+    throw new WorkspaceError(`A branch named ${wanted} is there already`);
   }
 
   /** `runtime`: the one that made `sessionId` (unset: Claude). */
@@ -1444,22 +1507,22 @@ export class WorkspaceManager {
     const ws = this.require(id);
     if (ws.kind !== 'worktree' || !ws.branch) throw new WorkspaceError('Only worktrees can be merged');
     if ((ws.status?.changed ?? 0) > 0) throw new WorkspaceError(`${ws.name} has uncommitted changes. Commit them first.`);
-    const result = await g.mergeInto(ws.projectRoot, ws.branch, await this.mergeTarget(ws));
+    const result = await g.mergeInto(ws.projectRoot, ws.branch, this.mergeTarget(ws));
     await this.refresh();
     return result;
   }
 
   /** The branch a worktree merges into: its base, without the remote (undefined: whatever main is on). */
-  private async mergeTarget(ws: Workspace): Promise<string | undefined> {
+  private mergeTarget(ws: Workspace): string | undefined {
     const base = ws.base ?? this.projectOf(ws).base;
-    return base === 'HEAD' ? undefined : (await sync.splitBase(ws.projectRoot, base)).branch;
+    return base.startsWith('origin/') ? base.slice('origin/'.length) : base === 'HEAD' ? undefined : base;
   }
 
   /** What merging this worktree would do (see merge-preview.ts). */
   async mergePreview(id: string): Promise<MergePreview> {
     const ws = this.require(id);
     if (ws.kind !== 'worktree' || !ws.branch) throw new WorkspaceError('Only worktrees can be merged');
-    const into = await this.mergeTarget(ws);
+    const into = this.mergeTarget(ws);
     return mergePreview({ folder: ws.projectRoot, from: ws.branch, ...(into ? { into } : {}), uncommitted: ws.status?.changed ?? 0 });
   }
 

@@ -34,6 +34,10 @@ export const GIT_API = {
   'git.switchToDefault': { args: z.tuple([id, z.enum(['clean', 'stash', 'move'])]) },
   // Let Claude handle it: a main-folder conversation whose run may sync git → its workspace id.
   'git.askClaude': { args: z.tuple([id, z.string().max(2000).optional()]) },
+  // Sync fork (origin is a GitHub fork): GitHub brings the original's new commits into the fork's default branch, then Update main → { kind: synced (how, update) | conflict | failed }.
+  'git.syncFork': { args: z.tuple([id]) },
+  // Sync fork stopped on conflicts: a worktree where your agent merges the original in and opens a PR into the fork → its workspace id.
+  'git.syncForkWithClaude': { args: z.tuple([id, z.string().max(2000).optional()]) },
   // The project's GitHub repository and what gh says about it (cached an hour; true: ask again).
   'git.github': { args: z.tuple([id, z.boolean().optional()]) },
   // Just the project's GitHub page, from its remote (no gh, no network) → { host, owner, repo, url } or undefined.

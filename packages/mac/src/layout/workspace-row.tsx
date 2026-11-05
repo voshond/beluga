@@ -15,6 +15,7 @@ import { askBeforeWork } from '../lib/work-confirm.js';
 import { isPlanAction, runPlanAction } from '../lib/plan-task.js';
 import { Row } from './sidebar-parts.js';
 import { outsideLocation } from './outside-model.js';
+import { isAgentWorktree } from '../claude-code/subagents-model.js';
 import s from './Sidebar.module.css';
 import o from './other-worktrees.module.css';
 
@@ -28,7 +29,7 @@ export function workspaceItems(state: AppState, ws: Workspace, run: ReturnType<t
   const sections = inSections([...(primary ? [primary] : []), ...icons, ...more.flat()]);
   return [
     { label: 'Open', icon: 'chevronRight', onSelect: () => run({ type: 'open_ws', id: ws.id }) },
-    ...(ws.kind === 'chat' && rename ? [{ label: 'Rename…', icon: 'pencil' as const, onSelect: rename }] : []),
+    ...(renamable(ws) && rename ? [{ label: 'Rename…', icon: 'pencil' as const, onSelect: rename }] : []),
     ...sections.flatMap((section) =>
       section.map((a, i) => ({
         label: a.label,
@@ -41,6 +42,20 @@ export function workspaceItems(state: AppState, ws: Workspace, run: ReturnType<t
       })),
     ),
   ];
+}
+
+/** Chats, and worktrees of yours (a sub-agent's is Claude's): a worktree's branch takes the new name too. */
+const renamable = (ws: Workspace): boolean => ws.kind === 'chat' || (ws.kind === 'worktree' && !isAgentWorktree(ws));
+
+/** Rename it, then say what happened to its branch when it isn't what you'd expect. */
+function renameWorkspace(client: ReturnType<typeof useBeluga>['client'], ws: Workspace, name: string): void {
+  const what = ws.kind === 'worktree' ? 'worktree' : 'chat';
+  client.api.workspaces.rename(ws.id, name).then(
+    (done) => {
+      if (done?.branchKept === 'pushed') toast(client, `Renamed. The branch stays ${done.branch}: it’s pushed already, and its pull request follows that name.`, 'info');
+    },
+    (err: unknown) => toast(client, err instanceof Error ? err.message : `Cannot rename the ${what}`, 'error'),
+  );
 }
 
 /** What archiving is doing now, in words. */
@@ -143,9 +158,10 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold }: { w
           renaming ? (
             <WorkspaceNameField
               initial={ws.name}
+              kind={ws.kind === 'worktree' ? 'worktree' : 'chat'}
               onDone={(name) => {
                 setRenaming(false);
-                if (name !== undefined && name !== ws.name) void client.api.workspaces.rename(ws.id, name).catch((err: unknown) => toast(client, err instanceof Error ? err.message : 'Cannot rename the chat', 'error'));
+                if (name !== undefined && name !== ws.name) renameWorkspace(client, ws, name);
               }}
             />
           ) : (
@@ -178,8 +194,11 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold }: { w
   );
 });
 
-/** Edit the chat name. Enter or clicking away saves it (as in Finder); Escape, or an empty name, cancels it. */
-function WorkspaceNameField({ initial, onDone }: { initial: string; onDone: (name: string | undefined) => void }) {
+/**
+ * Edit the name. Enter or clicking away saves it (as in Finder); Escape, or an empty name, cancels it.
+ * A worktree's branch follows (type feature/login for exactly that branch).
+ */
+function WorkspaceNameField({ initial, kind, onDone }: { initial: string; kind: 'chat' | 'worktree'; onDone: (name: string | undefined) => void }) {
   const [name, setName] = useState(initial);
   const box = useRef<HTMLInputElement>(null);
   const done = useRef(false);
@@ -199,7 +218,8 @@ function WorkspaceNameField({ initial, onDone }: { initial: string; onDone: (nam
     <input
       ref={box}
       className={s.renameField}
-      aria-label="Chat name"
+      aria-label={kind === 'worktree' ? 'Worktree name' : 'Chat name'}
+      title={kind === 'worktree' ? 'Its branch takes the name too. Type a / for an exact branch, like feature/login.' : undefined}
       aria-invalid={!name.trim()}
       value={name}
       maxLength={200}

@@ -19,10 +19,11 @@ const { StepBook } = await import('../src/core/step-book.js');
 
 const rec = (id: string, extra: Partial<StepRecord> = {}): StepRecord => ({ id, kind: 'tool', tool: 'Bash', title: `Bash ${id}`, status: 'done', startedAt: 1, input: { command: id }, output: `out ${id}`, ...extra });
 const saved = (dir: string): { version: number; steps: StepRecord[] } => JSON.parse(readFileSync(path.join(dir, readdirSync(dir).find((f) => f.endsWith('.json'))!), 'utf8'));
-/** Waits on the disk, not on timers (they're faked in some tests). */
+/** Waits on the disk, not on timers (they're faked in some tests); by the clock, as a slow disk (Windows) takes more turns. */
 const tick = () => new Promise((r) => setImmediate(r));
-const until = async (ok: () => boolean): Promise<void> => {
-  for (let i = 0; i < 5_000 && !ok(); i++) await tick();
+const until = async (ok: () => boolean, ms = 10_000): Promise<void> => {
+  const end = Date.now() + ms;
+  while (!ok() && Date.now() < end) await tick();
 };
 
 let dir: string;

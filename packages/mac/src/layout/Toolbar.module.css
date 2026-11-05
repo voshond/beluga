@@ -16,7 +16,13 @@
   padding-left: 18px;
 }
 .lead {
+  display: inline-flex;
+  gap: 2px;
   margin-left: -6px;
+}
+/* A browser has no traffic lights either (and the menu-bar button sits in .lead). */
+:global(html:not([data-app])) .noSidebar {
+  padding-left: 18px;
 }
 .titles {
   min-width: 0;

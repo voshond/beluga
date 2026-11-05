@@ -28,6 +28,11 @@
 :global(html:not([data-os='mac'])) .trafficSpace {
   width: 8px;
 }
+/* A browser: the menu bar's button (AppMenu) where the traffic lights would be. */
+.appMenu {
+  display: inline-flex;
+  padding-left: 10px;
+}
 
 .scroll {
   flex: 1;

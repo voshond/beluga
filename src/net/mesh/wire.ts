@@ -69,6 +69,8 @@ export const LinkMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('share'), p: z.unknown() }),
   /** Team boards (core/team): friends on the same GitHub repo; a frame it checks itself, between friends only. */
   z.object({ t: z.literal('team'), p: z.unknown() }),
+  /** Calls in a conversation (core/calls, BLG-706): ringing, who's in, and WebRTC setup; a frame it checks itself, between people in that conversation. */
+  z.object({ t: z.literal('call'), p: z.unknown() }),
 ]);
 export type LinkMessage = z.infer<typeof LinkMessage>;
 

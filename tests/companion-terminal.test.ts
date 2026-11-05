@@ -101,9 +101,14 @@ async function setup() {
   attachCompanion(session, host);
   cleanup.push(async () => {
     await host.stop();
+    // The shells end first, and are waited for (closing forgets them at once): Windows holds a
+    // shell's folder until it has really exited, and a moment after (BLG-728).
+    const shells = terminals.list().filter((p) => !p.exited);
+    const ended = shells.map((p) => new Promise<void>((resolve) => p.onExit(() => resolve())));
+    for (const p of shells) p.kill();
+    await Promise.race([Promise.all(ended), new Promise((resolve) => setTimeout(resolve, 5_000))]);
     terminals.closeAll();
-    // Windows lets go of a closed shell's folder a moment later.
-    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   });
   await host.start();
 

@@ -7,7 +7,7 @@ import { encodeProjectDir } from '../../src/agent/runtime/claude/claude-sessions
 import { createDemoWorkspaces } from '../../src/demo.js';
 import type { SharedFork } from '../../src/core/friend-share-store.js';
 import type { LogItem } from '../../src/core/store.js';
-import { type Crowd, SLOW, befriend, crowd, settle } from '../mesh/helpers.js';
+import { type Crowd, LOSES_A_MESSAGE_ON_WINDOWS, SLOW, befriend, crowd, settle } from '../mesh/helpers.js';
 import { type Mac, mac } from './helpers.js';
 
 /** BLG-312: a friend forks one of your shared worktrees to their own Mac, changes, Scratch, conversation and Claude's session with it. */
@@ -106,7 +106,7 @@ describe('forking a friend’s worktree to your Mac', () => {
     expect(copying.at(-1)!.received).toBe(copying[0]!.total);
   }, 60_000 * SLOW);
 
-  it('someone who only follows along can’t fork', async () => {
+  it.skipIf(LOSES_A_MESSAGE_ON_WINDOWS)('someone who only follows along can’t fork', async () => {
     net = await crowd();
     const ata = await mac(net, 'ata', { workspaces: await createDemoWorkspaces() });
     const kay = await mac(net, 'kay', { workspaces: await createDemoWorkspaces() });

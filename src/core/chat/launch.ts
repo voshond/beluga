@@ -18,6 +18,7 @@ import { ChatFiles } from './files.js';
 import { MainChannel } from './main-channel.js';
 import { AnswerRequests } from './requests.js';
 import { localMentions } from '../team/mentions.js';
+import { chatNotesOf } from '../calls/launch.js';
 
 /**
  * Chats for the daemon (the Mac app's Beluga), whenever the network is on: files in chats,
@@ -67,6 +68,7 @@ export function startChat(opts: { mesh: Mesh; store: Store; session?: Session; d
     model: () => store.getState().prefs.model,
     ...(session ? { agent: () => session.agentRef } : {}),
     localize: (text) => localMentions(text, store.getState().board.issues),
+    ...(session ? { notes: (conversation: string) => chatNotesOf(session, conversation) } : {}),
     handledFile: path.join(opts.dir, 'chat-claude.json'),
     onLive: (conversation, id, state, agent) => store.dispatch({ type: 'net_live', conversation, state, live: { peerId: mesh.peerId, name: nameOf(mesh.peerId), for: id, since: Date.now(), agent } }),
     onProblem: (conversation, text) => session?.notifier.notify({ kind: 'problems', title: `${agentLabel(session.agentRef, undefined, true, { capital: true })} couldn’t answer`, body: text, channel: conversation }),

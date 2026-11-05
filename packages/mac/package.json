@@ -1,7 +1,7 @@
 {
   "name": "@beluga/mac",
   "private": true,
-  "version": "2.2.1",
+  "version": "2.3.0",
   "description": "Beluga for macOS: the same Beluga as the terminal UI, as a native app.",
   "type": "module",
   "scripts": {

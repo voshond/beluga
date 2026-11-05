@@ -15,7 +15,9 @@ import s from './main-sync.module.css';
  * Under the project's name: Update main (fetch and fast-forward), Fetch and when it last did, the
  * main folder being on another branch (Switch to main), and Claude updating main. What can't
  * simply fast-forward asks: set your changes aside, move them to a worktree, or let Claude do it
- * (in a worktree of its own; in the main folder only for what's stuck in its files).
+ * (in a worktree of its own; in the main folder only for what's stuck in its files). A fork also
+ * gets Sync Fork when the original has new commits (BLG-726): GitHub brings them into the fork,
+ * then main updates here.
  */
 
 type Dialog =
@@ -23,7 +25,9 @@ type Dialog =
   /** `inMain`: stuck in the main folder's own files, so Claude works there (else in a worktree). */
   | { readonly kind: 'claude'; readonly title: string; readonly message: string; readonly inMain?: boolean }
   | { readonly kind: 'conflicts'; readonly files: readonly string[]; readonly message: string }
-  | { readonly kind: 'switch'; readonly dirty: number };
+  | { readonly kind: 'switch'; readonly dirty: number }
+  /** Sync fork stopped: the fork and the original change the same lines. */
+  | { readonly kind: 'fork'; readonly message: string };
 
 /** A fetch that failed, as the dialog that offers Claude (git's own words go along). */
 const fetchDialog = (message: string, detail?: string): Dialog => ({ kind: 'claude', title: 'Couldn’t fetch', message: detail && !message.includes(detail) ? `${message} Git said: ${detail}` : message });
@@ -53,7 +57,7 @@ export function MainSyncBar({ project, line }: { project: Project; line: MainLin
   const { client } = useBeluga();
   const actions = useActions();
   const sync = project.sync;
-  const [busy, setBusy] = useState<'update' | 'switch' | 'claude'>();
+  const [busy, setBusy] = useState<'update' | 'switch' | 'claude' | 'fork'>();
   const [dialog, setDialog] = useState<Dialog>();
   const now = useNow(30_000);
   const claude = useClaudeUpdating(project);
@@ -67,7 +71,7 @@ export function MainSyncBar({ project, line }: { project: Project; line: MainLin
   if (!sync) return null;
   const upstream = sync.upstream ?? `origin/${branch}`;
 
-  const run = async <T,>(what: 'update' | 'switch' | 'claude', job: () => Promise<T>): Promise<T | undefined> => {
+  const run = async <T,>(what: 'update' | 'switch' | 'claude' | 'fork', job: () => Promise<T>): Promise<T | undefined> => {
     setBusy(what);
     try {
       return await job();
@@ -106,6 +110,16 @@ export function MainSyncBar({ project, line }: { project: Project; line: MainLin
   };
 
   const update = (): void => void run('update', () => api.git.updateMain(project.id)).then((out) => out && decide(out));
+  const syncFork = (): void =>
+    void run('fork', () => api.git.syncFork(project.id)).then((out) => {
+      if (out?.kind === 'synced') decide(out.update);
+      else if (out?.kind === 'conflict') setDialog({ kind: 'fork', message: out.message });
+    });
+  const forkWithClaude = (): void => {
+    const said = dialog?.kind === 'fork' ? dialog.message : undefined;
+    setDialog(undefined);
+    void run('claude', () => api.git.syncForkWithClaude(project.id, said));
+  };
   const fetchNow = (): void => void api.git.fetch(project.id).catch((err: unknown) => toast(client, errorText(err), 'error'));
   /** What the dialog said goes along, so Claude starts from git's own words. */
   const askClaude = (): void => {
@@ -133,6 +147,10 @@ export function MainSyncBar({ project, line }: { project: Project; line: MainLin
 
   const diverged = sync.ahead > 0 && sync.behind > 0;
   const showUpdate = Boolean(sync.upstream) && (line.canUpdate || diverged || Boolean(sync.operation));
+  const fork = project.fork;
+  const original = fork ? `${fork.owner}/${fork.repo}` : '';
+  // Only when there's something to bring in (unknown counts too: GitHub didn't say).
+  const showFork = Boolean(fork) && (fork?.behind ?? 1) > 0;
   const fetchedLabel = sync.fetching ? 'Fetching…' : sync.fetchedAt ? `fetched ${agoText(sync.fetchedAt, now)}` : 'never fetched';
 
   return (
@@ -169,12 +187,24 @@ export function MainSyncBar({ project, line }: { project: Project; line: MainLin
             </Button>
           </Tip>
         ) : null}
+        {showFork && fork ? (
+          <Tip label={`Bring ${original}’s new commits into your fork’s ${fork.forkBranch} on GitHub, then update ${branch} here`}>
+            <Button size="small" variant={showUpdate ? undefined : 'primary'} icon="merge" disabled={busy === 'fork' || Boolean(claude)} onClick={syncFork}>
+              {busy === 'fork' ? 'Syncing…' : 'Sync Fork'}
+            </Button>
+          </Tip>
+        ) : null}
         {sync.upstream ? (
           <Tip label={`Fetch ${sync.remote ?? 'origin'} now (Beluga also fetches quietly every 15 minutes)`}>
             <Button size="small" variant="quiet" icon="refresh" className={cx(sync.fetching && s.spinning)} disabled={sync.fetching} onClick={fetchNow}>
               Fetch
             </Button>
           </Tip>
+        ) : null}
+        {showFork && fork?.behind ? (
+          <span className={s.status} aria-label={`${plural(fork.behind, 'new commit')} on ${original}`}>
+            {fork.behind} new on {original}
+          </span>
         ) : null}
         {sync.fetchError ? (
           <Tip label={`${sync.fetchError.message} Click to let your agent look into it.`}>
@@ -227,6 +257,21 @@ export function MainSyncBar({ project, line }: { project: Project; line: MainLin
           {...(dialog.files.length ? { table: { caption: 'Conflicts in', columns: ['File'], rows: dialog.files.slice(0, 8).map((f) => [<code key={f}>{f}</code>]) } } : {})}
           confirm={{ label: `Let ${agent} Handle It`, onClick: askClaude }}
           cancel="I’ll Handle It"
+          onCancel={() => setDialog(undefined)}
+        />
+      ) : null}
+      {dialog?.kind === 'fork' ? (
+        <Alert
+          title={`Your fork and ${original} conflict`}
+          icon="claude"
+          tone="info"
+          message={
+            <>
+              {dialog.message}
+              <span className={s.alertNote}> Your agent merges {original} in, in a worktree of its own, resolves the conflicts, and opens a pull request into your fork’s {fork?.forkBranch ?? branch}. Nothing goes to {original}.</span>
+            </>
+          }
+          confirm={{ label: `Let ${agent} Handle It`, onClick: forkWithClaude }}
           onCancel={() => setDialog(undefined)}
         />
       ) : null}

@@ -36,12 +36,13 @@ describe('the plan pilot hears runs', () => {
     const store = new Store(initialState('room'));
     const plans = [plan('A', 'ws:homeA'), plan('B', 'ws:homeB')];
     const ticks: Array<string[] | 'all'> = [];
-    vi.spyOn(PlanPilot.prototype, 'tick').mockImplementation((only?: ReadonlySet<string>) => void ticks.push(only ? [...only].sort() : 'all'));
+    const times: number[] = [];
+    vi.spyOn(PlanPilot.prototype, 'tick').mockImplementation((only?: ReadonlySet<string>) => void (ticks.push(only ? [...only].sort() : 'all'), times.push(Date.now())));
     const fakePlans = { list: () => plans, need: (id: string) => plans.find((p) => p.id === id)! } as unknown as Plans;
     pilot = new PlanPilot({ store, plans: fakePlans, work: {} as BoardWork, askClaude: () => undefined, system: () => undefined, delayMs: 10, eventMs: 150 });
     let n = 0;
     const event = (channel: string): void => store.dispatch({ type: 'agent_event', owner: 'me', requestId: `r${n++}`, requester: 'me', event: 'started', text: '', ts: Date.now(), channel });
-    return { store, ticks, event };
+    return { store, ticks, times, event };
   }
 
   it('looks only at the plans whose conversations had events, and at none for other conversations', async () => {
@@ -60,6 +61,7 @@ describe('the plan pilot hears runs', () => {
     const t = setup();
     await wait(30);
     t.ticks.length = 0;
+    t.times.length = 0;
     const began = Date.now();
     for (let i = 0; i < 30; i++) {
       t.event(i % 2 ? 'ws:homeA' : 'ws:homeB');
@@ -68,7 +70,11 @@ describe('the plan pilot hears runs', () => {
     // Windows' timers tick every ~15 ms, so the same stream lasts three times longer there.
     const streamed = Date.now() - began;
     await wait(250);
-    expect(t.ticks.length).toBeLessThanOrEqual(Math.floor(streamed / 150) + 1);
+    // One look as it starts, at most one per eventMs while it goes on, and one after it ends
+    // for what came since (BLG-728: a stream ending just after a look counted one too many).
+    expect(t.ticks.length).toBeLessThanOrEqual(Math.floor(streamed / 150) + 2);
+    // Each look at least eventMs after the one before (less a Windows timer tick).
+    for (let i = 1; i < t.times.length; i++) expect(t.times[i]! - t.times[i - 1]!).toBeGreaterThanOrEqual(150 - 20);
     expect(t.ticks.flat().filter((x) => x !== 'all').sort()).toEqual(expect.arrayContaining(['A', 'B']));
     t.ticks.length = 0;
     t.store.dispatch({ type: 'question_add', question: { id: 'q', channel: 'ws:x', from: 'me', name: 'me', text: '?', ts: 0, options: [] } } as never);

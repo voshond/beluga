@@ -2,7 +2,7 @@ import { PNG } from 'pngjs';
 import jpeg from 'jpeg-js';
 import { describe, expect, it } from 'vitest';
 import { createBitmap, fitPixels, resize } from '../src/image/bitmap.js';
-import { decodeImage, detectFormat, isImagePath, sanitizeSvg } from '../src/image/decode.js';
+import { decodeImage, detectFormat, isImagePath, sanitizeSvg, svgNeedsFonts } from '../src/image/decode.js';
 
 function png(w: number, h: number, rgba: [number, number, number, number]): Buffer {
   const img = new PNG({ width: w, height: h });
@@ -30,6 +30,14 @@ describe('image engine', () => {
     const s = decodeImage(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="5"><rect width="10" height="5" fill="#00ff00"/></svg>'));
     expect(s.width / s.height).toBeCloseTo(2);
     expect(s.data[1]).toBe(255);
+  });
+
+  it('loads the system fonts only for an SVG that draws text (slow on Windows)', () => {
+    expect(svgNeedsFonts('<svg><text x="1">Hi</text></svg>')).toBe(true);
+    expect(svgNeedsFonts('<svg><svg:text>Hi</svg:text></svg>')).toBe(true);
+    expect(svgNeedsFonts('<svg><text\n x="1">Hi</text></svg>')).toBe(true);
+    expect(svgNeedsFonts('<svg><rect width="1" height="1"/><textPath/></svg>')).toBe(false);
+    expect(svgNeedsFonts('<svg><title>text</title><rect/></svg>')).toBe(false);
   });
 
   it('rejects non-images with a friendly message', () => {

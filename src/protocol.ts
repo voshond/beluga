@@ -301,6 +301,8 @@ export const ReportBody = z.object({
 export const RoomClearedBody = z.object({ kind: z.literal('room_cleared') });
 /** The gateway (tasks between Claudes, core/gateway) over a room: one frame, to one person; it checks the frame itself. */
 export const GatewayBody = z.object({ kind: z.literal('gateway'), frame: z.unknown() });
+/** A call in the room's chat (core/calls, BLG-716): ringing, who's in, WebRTC setup, notes; sent to one person, checked there. */
+export const CallBody = z.object({ kind: z.literal('call'), p: z.unknown() });
 /**
  * Someone in the room wants to be friends on the Beluga network (BLG-202): a one-time friend
  * invitation made only for you. Accepting it pairs your Macs over the network. Older Macs drop it.
@@ -531,6 +533,7 @@ export const Body = z.discriminatedUnion('kind', [
   FileOfferBody,
   RoomClearedBody,
   GatewayBody,
+  CallBody,
   FriendOfferBody,
   ShareOfferBody,
   AgentQuestionBody,

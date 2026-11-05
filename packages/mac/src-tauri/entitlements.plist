@@ -16,5 +16,8 @@
   <!-- Speaking instead of typing (Settings › Voice): the hardened runtime needs this for the microphone. -->
   <key>com.apple.security.device.audio-input</key>
   <true/>
+  <!-- Calls (BLG-714): your camera, when you turn it on in a call. -->
+  <key>com.apple.security.device.camera</key>
+  <true/>
 </dict>
 </plist>

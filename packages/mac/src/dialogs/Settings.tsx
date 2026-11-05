@@ -1,12 +1,12 @@
 import { baseName } from '@beluga/shared/os-path.js';
 import * as Dialog from '@radix-ui/react-dialog';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { TRUST_INFO, trustOf } from '@beluga/core/trust.js';
 import { BRANCH_PREFIX_RE, EFFORTS, type LowPower } from '@beluga/shared/settings-schema.js';
 import { agentChoices, agentForChoice, choiceForAgent } from '@beluga/ui/agent-choice.js';
 import { EFFORT_INFO, agentEntries, modelInfo, myModel, myRuntime, setMyAgent } from '../chat/ModelPicker.js';
 import { HIDEABLE_BUTTONS, TUNNEL_LABELS, TUNNEL_ORDER } from '@beluga/ui/settings-menus.js';
-import { Icon, type IconName } from '../components/Icon.js';
+import { Icon } from '../components/Icon.js';
 import { Avatar, Button, Dot, cx } from '../components/ui.js';
 import { runtimeMark } from '@beluga/shared/agent-marks.js';
 import type { RuntimeState } from '@beluga/shared/agent-runtimes.js';
@@ -33,6 +33,8 @@ import { VoiceSettings } from './VoiceSettings.js';
 import { KeyboardSettings } from './KeyboardSettings.js';
 import { WebAccessSettings } from './WebAccessSettings.js';
 import { Group, Row, Select, Switch } from './settings-controls.js';
+import { PANES } from './settings-index.js';
+import { SettingsSearchField, SettingsSearchResults, useSettingsSearch } from './SettingsSearch.js';
 import { MaintainerChip } from './SupportSheets.js';
 import s from './settings.module.css';
 import { TerminalSettings } from './TerminalSettings.js';
@@ -47,25 +49,7 @@ import { GITHUB_URL, openSupport } from '../lib/support.js';
 import { openExternal } from '../lib/system.js';
 import { shortcutKeys } from '../lib/shortcuts.js';
 import { keyPlatform } from '../lib/shortcuts-model.js';
-import { cmdReturn, returnName, revealLabel, trayName, yourComputer } from '../lib/os-words.js';
-
-const PANES: ReadonlyArray<{ id: SettingsPane; label: string; icon: IconName }> = [
-  { id: 'general', label: 'General', icon: 'gear' },
-  { id: 'appearance', label: 'Appearance', icon: 'eye' },
-  { id: 'claude', label: 'Agent', icon: 'spark' },
-  { id: 'notifications', label: 'Notifications', icon: 'bell' },
-  { id: 'workspaces', label: 'Workspaces', icon: 'branch' },
-  { id: 'terminal', label: 'Terminal', icon: 'terminal' },
-  { id: 'fire', label: 'Fire & Confetti', icon: 'flame' },
-  { id: 'menubar', label: trayName(), icon: 'laptop' },
-  { id: 'environment', label: 'Environment', icon: 'lock' },
-  { id: 'people', label: 'People & access', icon: 'people' },
-  { id: 'phone', label: 'Phone', icon: 'phone' },
-  { id: 'voice', label: 'Voice', icon: 'mic' },
-  { id: 'keyboard', label: 'Keyboard', icon: 'command' },
-  { id: 'advanced', label: 'Advanced', icon: 'wrench' },
-  { id: 'about', label: 'About', icon: 'globe' },
-];
+import { cmdReturn, returnName, revealLabel, yourComputer } from '../lib/os-words.js';
 
 /** Your profile picture: friends and people in your groups get it once and keep it (net/mesh/avatars.ts). */
 function PictureRow() {
@@ -651,10 +635,19 @@ const APP_ONLY: ReadonlySet<SettingsPane> = new Set(['menubar']);
 
 /** Beluga's settings: this window's look on the left panes, Beluga's shared settings on the rest. */
 export function Settings() {
-  const { ui } = useBeluga();
   const pane = useUi((u) => u.settings);
-  if (!pane) return null;
-  const panes = webServed() ? PANES.filter((p) => !APP_ONLY.has(p.id)) : PANES;
+  return pane ? <SettingsWindow pane={pane} /> : null;
+}
+
+/**
+ * The window, with the search above the panes (BLG-740): opened, the field has focus; ⌘F comes
+ * back to it, Esc clears it, and a second Esc closes the window.
+ */
+function SettingsWindow({ pane }: { pane: SettingsPane }) {
+  const { ui } = useBeluga();
+  const panes = useMemo(() => (webServed() ? PANES.filter((p) => !APP_ONLY.has(p.id)) : PANES), []);
+  const scroll = useRef<HTMLDivElement>(null);
+  const search = useSettingsSearch(panes, pane, (id) => ui.patch({ settings: id }), scroll);
   const Body = BODY[pane];
   // Opened from the welcome (Set Up… on Your agents): over it, not hidden behind it.
   const overWelcome = document.querySelector('[data-welcome]') ? '' : undefined;
@@ -662,11 +655,33 @@ export function Settings() {
     <Dialog.Root open onOpenChange={(v) => (v ? undefined : ui.patch({ settings: undefined }))}>
       <Dialog.Portal>
         <Dialog.Overlay className={s.overlay} data-over-welcome={overWelcome} />
-        <Dialog.Content className={s.window} data-over-welcome={overWelcome} aria-describedby={undefined} onOpenAutoFocus={(e) => e.preventDefault()}>
+        <Dialog.Content
+          className={s.window}
+          data-over-welcome={overWelcome}
+          aria-describedby={undefined}
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            search.field.current?.focus();
+          }}
+          onEscapeKeyDown={(e) => {
+            if (!search.query) return;
+            e.preventDefault();
+            search.clear();
+          }}
+        >
           <nav className={s.nav}>
             <Dialog.Title className={s.title}>Settings</Dialog.Title>
+            <SettingsSearchField search={search} />
             {panes.map((p) => (
-              <button key={p.id} type="button" className={cx(s.navItem, p.id === pane && s.navOn)} onClick={() => ui.patch({ settings: p.id })}>
+              <button
+                key={p.id}
+                type="button"
+                className={cx(s.navItem, p.id === pane && !search.showing && s.navOn, search.showing && !search.matched.has(p.id) && s.navDim)}
+                onClick={() => {
+                  ui.patch({ settings: p.id });
+                  search.browse();
+                }}
+              >
                 <Icon name={p.icon} size={14} />
                 {p.label}
               </button>
@@ -674,13 +689,13 @@ export function Settings() {
           </nav>
           <div className={s.body}>
             <div className={s.bodyHead}>
-              <h2 className={s.paneTitle}>{PANES.find((p) => p.id === pane)?.label}</h2>
+              <h2 className={s.paneTitle}>{search.showing ? 'Search' : PANES.find((p) => p.id === pane)?.label}</h2>
               <Dialog.Close className={s.close} aria-label="Close">
                 <Icon name="x" size={12} />
               </Dialog.Close>
             </div>
-            <div className={s.scroll}>
-              <Body />
+            <div ref={scroll} className={s.scroll}>
+              {search.showing ? <SettingsSearchResults search={search} panes={panes} /> : <Body />}
             </div>
           </div>
         </Dialog.Content>

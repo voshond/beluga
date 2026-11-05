@@ -40,6 +40,7 @@ import { FILES_EDIT_HANDLERS } from './files-handlers.js';
 import { COMPANION_HANDLERS } from './companion-handlers.js';
 import { ASSISTANT_HANDLERS } from './assistant-handlers.js';
 import { VOICE_HANDLERS } from './voice-handlers.js';
+import { CALLS_HANDLERS } from './calls-handlers.js';
 import { TERMINAL_IMPORT_HANDLERS } from './terminal-import-handlers.js';
 import { AGENT_TERM_HANDLERS } from './agent-term-handlers.js';
 import { waitingNeeds } from '../companion/needs-you.js';
@@ -413,6 +414,7 @@ export const HANDLERS = {
   ...COMPANION_HANDLERS,
   ...ASSISTANT_HANDLERS,
   ...VOICE_HANDLERS,
+  ...CALLS_HANDLERS,
   ...TERMINAL_IMPORT_HANDLERS,
   ...AGENT_TERM_HANDLERS,
 } satisfies Handlers;

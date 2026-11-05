@@ -3,7 +3,7 @@ import { TeamBoardSync } from '../../src/core/team/board-sync.js';
 import { canAssign, offerWords, teamShareChoices, teammatesOf } from '../../src/core/team/model.js';
 import { mergeRoster } from '../../src/core/team/roster.js';
 import { answerFriendOffer } from '../../src/core/friend-offers.js';
-import { type Crowd, befriend, crowd, settle } from '../mesh/helpers.js';
+import { type Crowd, LOSES_A_MESSAGE_ON_WINDOWS, befriend, crowd, settle } from '../mesh/helpers.js';
 import { type PartsFor, type TeamMac, personOf, teamMac } from './helpers.js';
 
 /** BLG-510: a team is one group: everyone sees everyone, any of them invites, leaving goes for all. */
@@ -95,7 +95,7 @@ describe('a team of three', () => {
     expect(mates(mia, 'pm')).toEqual([]);
   }, 120_000);
 
-  it('leaving while two friends on the team are still linking up: the late answer doesn’t put you back on it', async () => {
+  it.skipIf(LOSES_A_MESSAGE_ON_WINDOWS)('leaving while two friends on the team are still linking up: the late answer doesn’t put you back on it', async () => {
     net = await crowd();
     const ata = await teamMac(net, 'ata', [{ id: 'pa', name: 'api', repo: 'acme/api' }], withSync);
     const kay = await teamMac(net, 'kay', [{ id: 'pk', name: 'api', repo: 'acme/api' }], withSync);

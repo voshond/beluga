@@ -1,6 +1,7 @@
 import type { AgentRef } from '../protocol.js';
 import type { Effort } from '../shared/settings-schema.js';
 import type { Status } from './git.js';
+import type { ForkOf } from './github.js';
 import type { DefaultBranch, FetchProblem } from './sync.js';
 import type { ProjectScripts, ResolvedScripts } from './scripts.js';
 
@@ -43,6 +44,13 @@ export interface PullHead {
   readonly base?: string;
   /** Its branch is on a fork: fetched from GitHub's pull ref. */
   readonly fork?: boolean;
+}
+
+/** What renaming a workspace did: its name, and a worktree's branch (`branchKept`: why it kept its name). */
+export interface RenameResult {
+  readonly name: string;
+  readonly branch?: string;
+  readonly branchKept?: 'pushed';
 }
 
 /** What we remember about a workspace between runs. */
@@ -149,6 +157,8 @@ export interface Project {
   readonly scripts?: ResolvedScripts;
   /** The default branch (main or master) against its remote, and fetching it (see sync.ts). */
   readonly sync?: ProjectSync;
+  /** Origin is a GitHub fork: the original repository, and how far behind it the fork is (learned with gh after a fetch). */
+  readonly fork?: ForkOf;
 }
 
 /** How a project's default branch stands, plus Beluga's fetching of it. */

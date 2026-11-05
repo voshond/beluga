@@ -237,6 +237,24 @@ export function syncWorktreePrompt(ctx: { branch: string; upstream: string; situ
   ].join('\n');
 }
 
+/**
+ * The task Claude gets when Sync fork stopped on conflicts (BLG-726): in a worktree from the fork's
+ * default branch, merge the original's in, resolve, and open a pull request into the fork, so the
+ * fork's branch only moves when that PR merges.
+ */
+export function syncForkPrompt(ctx: { original: string; originalUrl: string; originalBranch: string; forkBranch: string; situation?: string }): string {
+  return [
+    `Bring ${ctx.original}'s ${ctx.originalBranch} into my fork's ${ctx.forkBranch}. GitHub's Sync fork stopped because they conflict, so you're in a worktree of your own for this (branched from origin/${ctx.forkBranch}).`,
+    ...(ctx.situation?.trim() ? [`What GitHub said: ${ctx.situation.trim()}`] : []),
+    '',
+    `1. Fetch the original without adding a remote: git fetch ${ctx.originalUrl}.git ${ctx.originalBranch} (it lands in FETCH_HEAD).`,
+    "2. git merge FETCH_HEAD (a merge, never a rebase). For each conflicted file, read both sides and the commits behind them and keep both intents: my fork's own changes and the original's. Remove every conflict marker.",
+    '3. Run the typecheck and the tests that cover what conflicted, fix what the merge broke, and commit the merge.',
+    `4. Push this branch to origin and open a pull request into ${ctx.forkBranch} on my fork (gh pr create --base ${ctx.forkBranch}, titled "Sync with ${ctx.original}"). Never push to ${ctx.forkBranch} itself, and never to ${ctx.original}.`,
+    '5. Say in a few lines which files conflicted and how you resolved each, and give the pull request URL.',
+  ].join('\n');
+}
+
 /** Told to Claude at the start of a sync run (instead of the questions-only note). */
 export function buildSyncMainAppend(project: string, branch: string, upstream: string): string {
   const remote = upstream.split('/')[0] || 'origin';

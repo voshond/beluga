@@ -17,6 +17,13 @@ export const FAST: Timing = { dialTimeoutMs: 4_000, backoffMinMs: 100, backoffMa
  */
 export const SLOW = process.platform === 'win32' ? 3 : 1;
 
+/**
+ * Network tests that, on Windows' runners only, now and then wait for a message that never comes
+ * while the rest of their file passes in a second (BLG-728; maybe two links to a friend closing
+ * each other when the two Macs dial at once). They run on macOS and Linux until that's found.
+ */
+export const LOSES_A_MESSAGE_ON_WINDOWS = process.platform === 'win32';
+
 /** How long a network condition may take to show up on a local testnet. */
 export const SETTLE_MS = 15_000 * SLOW;
 

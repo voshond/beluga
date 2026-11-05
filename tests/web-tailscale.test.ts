@@ -16,6 +16,9 @@ const OWN = 'kay@example.com';
 
 type Mode = 'running' | 'needs-login' | 'tagged' | 'denied' | 'no-https';
 
+/** The fake is a `#!node` script: Windows can't start one (its real tailscale is an .exe), so the tests that run it are for macOS and Linux. */
+const WINDOWS = process.platform === 'win32';
+
 /** A fake `tailscale`: `status --json` as the real one says it, `serve` that works or says why not, every call logged. */
 function fakeTailscale(dir: string, mode: Mode = 'running'): { bin: string; calls: () => string[][] } {
   const log = path.join(dir, 'calls.log');
@@ -82,7 +85,7 @@ async function tailnetAccess(mode: Mode = 'running', remember = false): Promise<
 }
 
 describe('beluga web --tailscale (BLG-656)', () => {
-  it('serves the web port on the tailnet (Serve, never Funnel) and says its https address, with a QR', async () => {
+  it.skipIf(WINDOWS)('serves the web port on the tailnet (Serve, never Funnel) and says its https address, with a QR', async () => {
     const { web, port, ts } = await tailnetAccess();
     const t = await web.goTailscale();
     expect(t.url).toBe(`https://${NAME}`);
@@ -101,7 +104,7 @@ describe('beluga web --tailscale (BLG-656)', () => {
     expect(words).toContain('never Funnel');
   });
 
-  it('lets your own login in without a link; another tailnet user needs one', async () => {
+  it.skipIf(WINDOWS)('lets your own login in without a link; another tailnet user needs one', async () => {
     const { web, port, adopted } = await tailnetAccess();
     const t = await web.goTailscale();
 
@@ -126,7 +129,7 @@ describe('beluga web --tailscale (BLG-656)', () => {
     expect((await via(port, 'GET', '/', { ...asLogin('mia@example.com'), cookie })).status).toBe(200);
   });
 
-  it('believes the login header only from tailscaled, under the ts.net name, while Serve is on', async () => {
+  it.skipIf(WINDOWS)('believes the login header only from tailscaled, under the ts.net name, while Serve is on', async () => {
     const { web, port } = await tailnetAccess();
     // Before Serve: the name isn't even answered to.
     expect((await via(port, 'GET', '/', asLogin(OWN))).status).toBe(421);
@@ -142,7 +145,7 @@ describe('beluga web --tailscale (BLG-656)', () => {
     expect(web.on).toBe(true);
   });
 
-  it('trusts nobody’s login on a tagged machine', async () => {
+  it.skipIf(WINDOWS)('trusts nobody’s login on a tagged machine', async () => {
     const { web, port } = await tailnetAccess('tagged');
     const t = await web.goTailscale();
     expect(t.login).toBeUndefined();
@@ -150,7 +153,7 @@ describe('beluga web --tailscale (BLG-656)', () => {
     expect(tailscaleWords(t)).toContain('every browser needs a join link');
   });
 
-  it('says how to install Tailscale, log in, or let Serve run, in one line each', async () => {
+  it.skipIf(WINDOWS)('says how to install Tailscale, log in, or let Serve run, in one line each', async () => {
     const missing = new TailscaleReach({ bin: path.join(dir, 'nowhere', 'tailscale') });
     await expect(missing.start(7777)).rejects.toThrow(/Tailscale isn’t installed here\. (Install it with `curl -fsSL https:\/\/tailscale\.com\/install\.sh \| sh`|Install Tailscale from)/);
     await expect(new TailscaleReach({ bin: fakeTailscale(mkdtempSync(path.join(dir, 'a-')), 'needs-login').bin }).start(7777)).rejects.toThrow('Log in with `sudo tailscale up`');
@@ -158,7 +161,7 @@ describe('beluga web --tailscale (BLG-656)', () => {
     await expect(new TailscaleReach({ bin: fakeTailscale(mkdtempSync(path.join(dir, 'c-')), 'no-https').bin }).start(7777)).rejects.toThrow('HTTPS Certificates');
   });
 
-  it('--off turns Serve off, and the choice is remembered until then', async () => {
+  it.skipIf(WINDOWS)('--off turns Serve off, and the choice is remembered until then', async () => {
     const { web, ts } = await tailnetAccess('running', true);
     await web.goTailscale();
     expect(readWebConfig()?.tailscale).toBe(true);
@@ -167,7 +170,7 @@ describe('beluga web --tailscale (BLG-656)', () => {
     expect(readWebConfig()).toBeUndefined();
   });
 
-  it('shows in `beluga status`, and is typed --tailscale', async () => {
+  it.skipIf(WINDOWS)('shows in `beluga status`, and is typed --tailscale', async () => {
     const { web } = await tailnetAccess();
     await web.goTailscale();
     const s = web.status();

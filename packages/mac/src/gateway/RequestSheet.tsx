@@ -9,6 +9,7 @@ import { Choice, Sheet } from '../dialogs/native/parts.js';
 import { useApi, useApp, useBeluga } from '../lib/beluga.js';
 import { backLine, whereLine } from './popup-model.js';
 import { closeRequest, useRequestSheet } from './request-native.js';
+import { TaskStep } from './TaskStep.js';
 import { openFriendCard } from '../network/use-net.js';
 import s from './access.module.css';
 import { yourComputer } from '../lib/os-words.js';
@@ -219,10 +220,7 @@ function Body({ task }: { task: TaskView }) {
           {task.steps.length ? (
             <div className={s.steps}>
               {task.steps.slice(-6).map((step, i) => (
-                <div key={i} className={s.step}>
-                  <Icon name="chevronRight" size={10} />
-                  <span>{step}</span>
-                </div>
+                <TaskStep key={i} line={step} className={s.step} />
               ))}
             </div>
           ) : null}

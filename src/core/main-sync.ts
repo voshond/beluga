@@ -1,6 +1,6 @@
-import { syncMainPrompt, syncWorktreePrompt } from '../agent/sync-main.js';
-import { conflictedFiles, projectRemote } from '../workspaces/git.js';
-import { type GhRunner, type GitHubInfo, type GitHubRepo, fetchGitHubInfo, ghHosts, parseGitHubRemote, runGh } from '../workspaces/github.js';
+import { syncForkPrompt, syncMainPrompt, syncWorktreePrompt } from '../agent/sync-main.js';
+import { conflictedFiles } from '../workspaces/git.js';
+import { type ForkOf, type GhRunner, type GitHubInfo, type GitHubRepo, fetchFork, fetchGitHubInfo, ghHosts, mergeUpstream, parseGitHubRemote, runGh } from '../workspaces/github.js';
 import type { WorkspaceManager } from '../workspaces/manager.js';
 import * as sync from '../workspaces/sync.js';
 import type { Project, Workspace } from '../workspaces/types.js';
@@ -57,6 +57,16 @@ export type GitHubState =
   /** On GitHub; `info` when gh could tell (unset: gh missing, signed out, or no access). */
   | { readonly kind: 'github'; readonly repo: GitHubRepo; readonly info?: GitHubInfo; readonly gh: boolean };
 
+/**
+ * How Sync fork went: GitHub brought the original's commits into the fork (`how`: nothing new, a
+ * fast-forward, or a merge commit for a fork with commits of its own) and Update main ran here; or
+ * GitHub stopped on conflicts (nothing changed); or it couldn't.
+ */
+export type ForkSyncOutcome =
+  | { readonly kind: 'synced'; readonly how: 'none' | 'fast-forward' | 'merge'; readonly update: sync.UpdateOutcome }
+  | { readonly kind: 'conflict'; readonly message: string }
+  | { readonly kind: 'failed'; readonly message: string };
+
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export class MainSync {
@@ -67,6 +77,8 @@ export class MainSync {
   private readonly tried = new Map<string, number>();
   private readonly authFailed = new Map<string, number>();
   private readonly github = new Map<string, GitHubState & { at: number; url: string }>();
+  /** What each project's origin was forked from as gh last said (null: not a fork), for which remote, and when. */
+  private readonly forks = new Map<string, { url: string; at: number; fork: ForkOf | null }>();
   private passing = false;
   /** Projects with an update, stash, move or switch running (one at a time per project). */
   private readonly exclusive = new Set<string>();
@@ -121,16 +133,18 @@ export class MainSync {
 
   private async doFetch(projectId: string, opts: { quiet?: boolean }): Promise<FetchOutcome> {
     const project = this.project(projectId);
-    const remote = await projectRemote(project.root) ?? 'origin';
+    const remote = project.sync?.remote ?? 'origin';
     this.tried.set(projectId, this.now);
     this.deps.manager.setFetchState(projectId, { fetching: true });
     this.deps.publish();
     const result = await sync.fetchRemote(project.root, remote);
     if (result.ok) {
       this.authFailed.delete(projectId);
-      if (result.remoteDefault) this.deps.manager.learnRemoteDefault(projectId, remote, result.remoteDefault);
+      if (result.remoteDefault) this.deps.manager.learnRemoteDefault(projectId, result.remoteDefault);
       this.deps.manager.setFetchState(projectId, {});
       await this.deps.refresh();
+      // A fork: how far behind the original it is now (for Sync fork). Never in the way of the fetch.
+      void this.learnFork(projectId).catch(() => undefined);
       return { ok: true };
     }
     if (result.reason === 'auth') this.authFailed.set(projectId, this.now);
@@ -170,7 +184,7 @@ export class MainSync {
     return this.alone(projectId, () => this.doUpdate(projectId));
   }
 
-  private async doUpdate(projectId: string): Promise<sync.UpdateOutcome> {
+  private async doUpdate(projectId: string, extra = ''): Promise<sync.UpdateOutcome> {
     const project = this.project(projectId);
     this.deps.manager.setFetchState(projectId, { fetching: true });
     this.deps.publish();
@@ -178,7 +192,7 @@ export class MainSync {
     this.tried.set(projectId, this.now);
     this.deps.manager.setFetchState(projectId, outcome.kind === 'fetch_failed' ? { fetchError: { reason: outcome.reason, message: outcome.message, at: this.now } } : {});
     await this.deps.refresh();
-    this.report(outcome);
+    this.report(outcome, extra);
     return outcome;
   }
 
@@ -266,6 +280,78 @@ export class MainSync {
     this.deps.manager.markPurpose(ws.id, 'sync_main');
     this.deps.armSync(ws.id, { branch: line.branch, upstream: line.upstream });
     this.deps.askClaude(syncMainPrompt({ branch: line.branch, upstream: line.upstream, situation: said, dirty: files }), `ws:${ws.id}`);
+    await this.deps.refresh();
+    return ws.id;
+  }
+
+  /** The project's origin on GitHub, when gh may be asked about its host (github.com, or one gh is signed in to). */
+  private async ghOrigin(projectId: string): Promise<{ url: string; repo?: GitHubRepo }> {
+    const url = (await this.deps.manager.remoteOf(projectId)) ?? '';
+    const hosts = this.deps.ghHosts?.() ?? ghHosts();
+    const repo = url ? parseGitHubRemote(url, hosts) : undefined;
+    return { url, ...(repo && (repo.host === 'github.com' || hosts.includes(repo.host)) ? { repo } : {}) };
+  }
+
+  /**
+   * Whether the project's origin is a GitHub fork, of what, and how far behind the original it is
+   * (asked after each fetch; "not a fork" is believed for an hour). What gh couldn't tell keeps
+   * what was known.
+   */
+  async learnFork(projectId: string): Promise<ForkOf | undefined> {
+    const { url, repo } = await this.ghOrigin(projectId);
+    const had = this.forks.get(projectId);
+    if (!repo) {
+      if (had) {
+        this.forks.delete(projectId);
+        this.deps.manager.setFork(projectId, undefined);
+        this.deps.publish();
+      }
+      return undefined;
+    }
+    if (had?.url === url && had.fork === null && this.now - had.at < GITHUB_TTL_MS) return undefined;
+    const fork = await fetchFork(repo, this.deps.gh ?? runGh).catch(() => undefined);
+    if (fork === undefined) return had?.url === url ? (had.fork ?? undefined) : undefined;
+    this.forks.set(projectId, { url, at: this.now, fork });
+    this.deps.manager.setFork(projectId, fork ?? undefined);
+    this.deps.publish();
+    return fork ?? undefined;
+  }
+
+  /**
+   * "Sync fork": the original's new commits come into the fork's default branch on GitHub (as
+   * GitHub's own Sync fork button does: a fast-forward, or a merge commit when the fork has commits
+   * of its own), then Update main brings them here. A conflict changes nothing and comes back
+   * (syncForkWithClaude resolves it in a worktree).
+   */
+  async syncFork(projectId: string): Promise<ForkSyncOutcome> {
+    const { url, repo } = await this.ghOrigin(projectId);
+    const fork = this.project(projectId).fork ?? (await this.learnFork(projectId));
+    if (!repo || !fork) return { kind: 'failed', message: 'This project’s origin isn’t a fork on GitHub' };
+    const original = `${fork.owner}/${fork.repo}`;
+    const merged = await mergeUpstream(repo, fork.forkBranch, this.deps.gh ?? runGh);
+    if (merged.kind === 'conflict') return { kind: 'conflict', message: `Your fork’s ${fork.forkBranch} and ${original}’s ${fork.branch} change the same lines, so GitHub couldn’t sync them.` };
+    if (merged.kind === 'failed') {
+      this.deps.toast(`Couldn’t sync with ${original}: ${merged.message}`, 'error');
+      return { kind: 'failed', message: merged.message };
+    }
+    this.forks.set(projectId, { url, at: this.now, fork: { ...fork, behind: 0 } });
+    this.deps.manager.setFork(projectId, { ...fork, behind: 0 });
+    const said = merged.kind === 'none' ? ` · your fork already had everything from ${original}` : merged.kind === 'merge' ? ` · synced with ${original} (a merge commit on your fork)` : ` · synced with ${original}`;
+    const update = await this.alone(projectId, () => this.doUpdate(projectId, said));
+    if (update.kind !== 'updated' && update.kind !== 'up_to_date' && merged.kind !== 'none') this.deps.toast(`Your fork on GitHub has ${original}’s new commits`, 'success');
+    return { kind: 'synced', how: merged.kind, update };
+  }
+
+  /** Sync fork stopped on conflicts: Claude merges the original in, in a worktree from the fork's branch, and opens a PR into it. → the worktree's id. */
+  async syncForkWithClaude(projectId: string, situation?: string): Promise<string | undefined> {
+    const fork = this.project(projectId).fork ?? (await this.learnFork(projectId));
+    if (!fork) {
+      this.deps.toast('This project’s origin isn’t a fork on GitHub', 'warn');
+      return undefined;
+    }
+    const ws = await this.deps.newWorktree(projectId, `sync-${fork.owner}`, {});
+    if (!ws) return undefined;
+    this.deps.askClaude(syncForkPrompt({ original: `${fork.owner}/${fork.repo}`, originalUrl: fork.url, originalBranch: fork.branch, forkBranch: fork.forkBranch, ...(situation ? { situation } : {}) }), `ws:${ws.id}`);
     await this.deps.refresh();
     return ws.id;
   }

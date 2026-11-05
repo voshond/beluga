@@ -20,6 +20,12 @@ export interface ChatReactAction {
 
 type ChatItem = Extract<LogItem, { type: 'chat' }>;
 
+/**
+ * Where the Mac and the phone offer reactions: the room's group chat, between people. A workspace
+ * chat is a conversation with Claude, where an emoji says nothing to anyone (BLG-742).
+ */
+export const reactableChannel = (channel: string): boolean => channel === 'room';
+
 /** The chips a chat item shows (none: an empty list). */
 export const chatReactions = (item: { readonly reacts?: readonly ReactionEvent[] }): Reaction[] => reactionsOf(item.reacts ?? []);
 

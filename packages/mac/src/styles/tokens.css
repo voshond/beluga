@@ -72,6 +72,9 @@
   --plan: #b84d8a;
   /* Epics (tasks with sub-tasks) on the board. */
   --epic: #5a62cf;
+  /* Calls (BLG-706): a soft mint for a call going on, and a deeper one for its words and icons. */
+  --call: #45b194;
+  --call-ink: #1f7a62;
   --code-bg: #f4f4f6;
   --term-bg: #fbfbfc;
   /* Under the dot matrix's dots (components/dot-matrix.module.css); dark needs none. */
@@ -106,6 +109,8 @@
   --worktree: #66c6bb;
   --plan: #e892c3;
   --epic: #a4aaf6;
+  --call: #74cdb3;
+  --call-ink: #9be0cb;
   --code-bg: #242427;
   --term-bg: #17171a;
 }

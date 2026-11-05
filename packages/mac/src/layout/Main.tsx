@@ -13,6 +13,7 @@ import { WorkFrame } from '../work/WorkNav.js';
 import s from './Shell.module.css';
 import side from './Sidebar.module.css';
 import { SharedPlanPage } from '../team/SharedPlans.js';
+import { CallRoom } from '../call/CallRoom.js';
 
 const OverviewView = lazy(() => import('../views/OverviewView.js').then((m) => ({ default: m.OverviewView })));
 const SearchView = lazy(() => import('../views/SearchView.js').then((m) => ({ default: m.SearchView })));
@@ -75,6 +76,12 @@ function Route() {
   if (making) return <MakingWorktree />;
   switch (view.kind) {
     case 'room':
+      // The room's chat with its call around it (BLG-716).
+      return (
+        <CallRoom id="room">
+          <ChatView />
+        </CallRoom>
+      );
     case 'assistant':
     case 'draft':
     case 'draft_worktree':

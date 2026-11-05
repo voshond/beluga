@@ -1,0 +1,152 @@
+/* The chat where it can't be seen (BLG-717): messages that pop up on the right and dissolve. */
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  /* As wide as its rail (the place that draws it sets the width; never the whole window). */
+  align-self: stretch;
+  pointer-events: none;
+}
+.reply {
+  pointer-events: auto;
+}
+
+.pops {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+}
+.pop {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+  padding: 7px 12px 8px 7px;
+  border-radius: 14px;
+  font-size: 12.5px;
+  line-height: 1.42;
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-raised) 96%, transparent);
+  box-shadow:
+    var(--shadow-pop),
+    inset 0 0 0 1px var(--hairline);
+  overflow-wrap: anywhere;
+  animation-name: popLife;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+.popBody {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.popBody strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--claude);
+}
+@keyframes popLife {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  3% {
+    opacity: 1;
+    transform: none;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pop {
+    animation-name: popFade;
+  }
+  @keyframes popFade {
+    0%,
+    85% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}
+
+.reply {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  height: 34px;
+  padding: 0 12px 0 11px;
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--bg-raised) 92%, transparent);
+  box-shadow:
+    var(--shadow-pop),
+    inset 0 0 0 1px var(--hairline);
+  color: var(--text-3);
+  opacity: 0.72;
+  transition:
+    opacity 260ms var(--ease-out),
+    transform 260ms var(--ease-out);
+}
+/* Nothing to answer and you're just looking: it steps aside (any pointer move brings it back). */
+.reply.replyAway {
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+}
+.reply:hover,
+.reply:focus-within {
+  opacity: 1;
+}
+.reply:focus-within {
+  box-shadow:
+    var(--shadow-pop),
+    inset 0 0 0 1.5px var(--accent);
+}
+.reply input {
+  all: unset;
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.reply input::placeholder {
+  color: var(--text-3);
+}
+.replyMark {
+  flex: none;
+}
+
+/* Over cameras (face to face): dark cards. */
+.dark .pop,
+.dark.pop,
+.dark.reply {
+  color: #f2f2f4;
+  background: rgba(30, 32, 37, 0.9);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+}
+.dark.reply input {
+  color: #f2f2f4;
+}
+.dark.reply input::placeholder,
+.dark.reply {
+  color: rgba(242, 242, 244, 0.6);
+}

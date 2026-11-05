@@ -64,11 +64,14 @@ describe('Beluga’s config for an OpenCode run', () => {
   });
 });
 
+/** A path under `/w` as this system resolves it (`D:\w\a.ts` on Windows). */
+const inW = (p: string): string => path.resolve('/w', p);
+
 describe('OpenCode’s tools as Beluga’s', () => {
   it('names each the way Claude Code’s are, with their input in Claude Code’s fields', () => {
-    expect(belugaCalls('read', { filePath: 'src/a.ts' }, '/w')).toEqual([{ name: 'Read', input: { file_path: '/w/src/a.ts' } }]);
+    expect(belugaCalls('read', { filePath: 'src/a.ts' }, '/w')).toEqual([{ name: 'Read', input: { file_path: inW('src/a.ts') } }]);
     expect(belugaCalls('bash', { command: 'npm test', description: 'tests' }, '/w')).toEqual([{ name: 'Bash', input: { command: 'npm test', description: 'tests' } }]);
-    expect(belugaCalls('edit', { filePath: '/w/a.ts', oldString: 'a', newString: 'b' }, '/w')[0]).toEqual({ name: 'Edit', input: { file_path: '/w/a.ts', old_string: 'a', new_string: 'b' } });
+    expect(belugaCalls('edit', { filePath: '/w/a.ts', oldString: 'a', newString: 'b' }, '/w')[0]).toEqual({ name: 'Edit', input: { file_path: inW('a.ts'), old_string: 'a', new_string: 'b' } });
     expect(belugaCalls('grep', { pattern: 'TODO', include: '*.ts' }, '/w')[0]).toEqual({ name: 'Grep', input: { pattern: 'TODO', path: '/w', glob: '*.ts' } });
     expect(belugaCalls('list', {}, '/w')[0]).toEqual({ name: 'LS', input: { path: '/w' } });
     expect(belugaCalls('webfetch', { url: 'https://x.dev' }, '/w')[0]!.name).toBe('WebFetch');
@@ -77,9 +80,9 @@ describe('OpenCode’s tools as Beluga’s', () => {
   it('judges a patch on each file it touches', () => {
     const patch = '*** Begin Patch\n*** Add File: new.ts\n+x\n*** Update File: src/old.ts\n@@\n-a\n+b\n*** Delete File: gone.ts\n*** End Patch';
     expect(patchFiles(patch, '/w')).toEqual([
-      { file: '/w/new.ts', kind: 'add' },
-      { file: '/w/src/old.ts', kind: 'update' },
-      { file: '/w/gone.ts', kind: 'delete' },
+      { file: inW('new.ts'), kind: 'add' },
+      { file: inW('src/old.ts'), kind: 'update' },
+      { file: inW('gone.ts'), kind: 'delete' },
     ]);
     expect(belugaCalls('apply_patch', { patchText: patch }, '/w').map((c) => c.name)).toEqual(['Write', 'Edit', 'Edit']);
   });

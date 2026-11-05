@@ -10,6 +10,7 @@ import type { Actions } from './actions.js';
 import type { UiStore } from './beluga.js';
 import { convoModeOf, terminalCapable, toggledMode, withConvoMode } from './convo-mode.js';
 import { getPrefs, setPrefs } from './prefs.js';
+import { SETTINGS_FIND_EVENT } from './settings-search.js';
 
 /**
  * The window's commands that the menu bar, the keyboard and the buttons share: what each does,
@@ -199,6 +200,11 @@ export function runCommand(ctx: CommandCtx, id: CommandId): void {
   if (now - (lastRun.get(id) ?? 0) < ONCE_MS) return;
   lastRun.set(id, now);
   const { client, ui, actions } = ctx;
+  // Find… in Settings searches its settings (BLG-740), not the conversation behind it.
+  if (id === 'conv-find' && ui.get().settings) {
+    document.dispatchEvent(new CustomEvent(SETTINGS_FIND_EVENT));
+    return;
+  }
   const state = client.store.getState();
   const st = commandState(state, id);
   if (!st.enabled) {

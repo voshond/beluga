@@ -18,6 +18,9 @@ function capture(): Io & { readonly text: () => string; readonly errors: () => s
   return { out: (t) => void (out += t), err: (t) => void (err += t), text: () => out, errors: () => err };
 }
 
+/** The fake is a `#!node` script: Windows can't start one (its real ssh is an .exe), so the tests that run it are for macOS and Linux. */
+const WINDOWS = process.platform === 'win32';
+
 /**
  * A fake `ssh`: every call is logged; `… beluga web link` prints a join link (or says Beluga isn't
  * running until `… beluga up`); `-N -L near:host:port` forwards TCP like ssh does, and the first such
@@ -77,7 +80,7 @@ afterEach(async () => {
 const fetchText = async (url: string): Promise<string> => (await fetch(url)).text();
 
 describe('beluga connect (BLG-657)', () => {
-  it('opens the UI in one command through an ~/.ssh/config alias, comes back when the tunnel drops, and Ctrl+C closes it', async () => {
+  it.skipIf(WINDOWS)('opens the UI in one command through an ~/.ssh/config alias, comes back when the tunnel drops, and Ctrl+C closes it', async () => {
     const ssh = fakeSsh(dir, { webPort, running: false, dropFirst: true });
     const io = capture();
     const ctrlC = new AbortController();
@@ -117,7 +120,7 @@ describe('beluga connect (BLG-657)', () => {
     expect(tunnels[0]).toContain('ExitOnForwardFailure=yes');
   }, 40_000);
 
-  it('keeps the port asked for, and only says the link with --no-open', async () => {
+  it.skipIf(WINDOWS)('keeps the port asked for, and only says the link with --no-open', async () => {
     const ssh = fakeSsh(dir, { webPort });
     const io = capture();
     const ctrlC = new AbortController();
@@ -135,7 +138,7 @@ describe('beluga connect (BLG-657)', () => {
     expect(await done).toBe(130);
   }, 30_000);
 
-  it('says how to install Beluga when the server has none', async () => {
+  it.skipIf(WINDOWS)('says how to install Beluga when the server has none', async () => {
     const ssh = fakeSsh(dir, { webPort, install: false });
     const io = capture();
     expect(await connect({ host: 'box', open: true }, io, { ssh: ssh.bin, openUrl: () => undefined, signal: new AbortController().signal })).toBe(1);
@@ -143,7 +146,7 @@ describe('beluga connect (BLG-657)', () => {
     expect(io.errors()).toContain('install.sh | sh');
   });
 
-  it('gives up, saying why, when the tunnel never opens', async () => {
+  it.skipIf(WINDOWS)('gives up, saying why, when the tunnel never opens', async () => {
     const ssh = fakeSsh(dir, { webPort, refuseTunnel: true });
     const io = capture();
     expect(await connect({ host: 'box', open: true }, io, { ssh: ssh.bin, openUrl: () => undefined, signal: new AbortController().signal })).toBe(1);
