@@ -42,6 +42,14 @@ export interface SubAgent {
   readonly kind?: 'agent' | 'background';
   /** When it started (missing on items saved before it was kept): where it sits among the steps. */
   readonly startedAt?: number;
+  /** When it finished (missing while it runs, and on items saved before it was kept): which side of a split turn it's drawn on. */
+  readonly endedAt?: number;
+}
+
+/** Where a stretch of a card's words ends in its text (a character offset), and when Claude wrote it. */
+export interface TextMark {
+  readonly at: number;
+  readonly end: number;
 }
 
 /**
@@ -57,7 +65,8 @@ export const isRunning = (status: AgentItemStatus): boolean =>
 /** A card that says it's running but has no live run behind it any more: interrupted, its sub-agents done. */
 export function settleRun(item: LogItem): LogItem {
   if (item.type !== 'agent' || !isRunning(item.status)) return item;
-  return { ...item, status: 'interrupted', endTs: item.endTs ?? item.lastAt ?? item.ts, subagents: item.subagents.map((s) => (s.status === 'running' ? { ...s, status: 'done' as const } : s)) };
+  const endTs = item.endTs ?? item.lastAt ?? item.ts;
+  return { ...item, status: 'interrupted', endTs, subagents: item.subagents.map((s) => (s.status === 'running' ? { ...s, status: 'done' as const, endedAt: endTs } : s)) };
 }
 
 export type LogItem =
@@ -101,8 +110,12 @@ export type LogItem =
       readonly slotWait?: SlotWait;
       /** When it left the queue (it waited its turn): where the chat draws it and the message it answers (see shared/claude-notices.ts asSent). */
       readonly queuedUntil?: number;
+      /** When the agent read the steered message this card is a note about: where the chat draws it (see shared/claude-notices.ts asRead, BLG-47). */
+      readonly readAt?: number;
       readonly status: AgentItemStatus;
       readonly text: string;
+      /** When each stretch of `text` was written, in order (missing on items saved before it was kept, or when the answer replaced the words): how a split turn shares its words. */
+      readonly textMarks?: readonly TextMark[];
       readonly steps: readonly string[];
       readonly ts: number;
       /** When the run finished (done/error/denied). */
@@ -881,23 +894,29 @@ function reduceAgent(state: DomainState, raw: Extract<Action, { type: 'agent_eve
   const between = a.event === 'started' || (a.event === 'progress' && !a.text && !subOpen) ? 'thinking' : a.event === 'text' ? 'writing' : a.event === 'tool' || a.event === 'progress' ? undefined : wasBetween;
   const betweenAt = between === undefined ? undefined : between === wasBetween && wasAt !== undefined ? wasAt : a.ts;
   const noted = base.text === READS_AFTER_STEP || base.text === STOPPING_FOR;
+  const { textMarks: _marks, ...unmarked } = rest as typeof rest & { textMarks?: readonly TextMark[] };
+  // A steered message's note ("reads this after its current step") isn't Claude's words: its own turn starting (or going back in line) ends it, a newer note replaces it.
+  const renoted = noted && (a.event === 'started' || a.event === 'text' || a.event === 'queued');
+  // Its note giving way to its own turn, its words or being taken in: the agent read it (not going back in line, nor a newer note).
+  const read = noted && a.event !== 'queued' && a.event !== 'error' && a.event !== 'progress' && !(a.event === 'text' && (a.text === READS_AFTER_STEP || a.text === STOPPING_FOR));
+  const text = renoted
+    ? a.event === 'text' ? a.text : ''
+    : // Each thing Claude says between steps is its own paragraph (one newline would run them into one blob).
+      a.event === 'text'
+      ? (base.text ? `${base.text}\n\n` : '') + a.text
+      : a.event === 'done' || a.event === 'error' || a.event === 'denied'
+        ? a.text || base.text
+        : base.text;
+  const textMarks = renoted ? (text ? [{ at: a.ts, end: text.length }] : undefined) : marksOf(base.text, base.textMarks, text, a.event === 'text' ? a.ts : undefined);
   const updated = {
-    ...rest,
+    ...unmarked,
     ...(progress ? { progress } : {}),
     ...(between ? { between, betweenAt } : {}),
     status: a.event === 'text' || a.event === 'tool' || a.event === 'sub' || a.event === 'progress' ? 'started' : a.event,
     // The run ended: ones still running end with it; one that failed or was stopped stays so.
-    subagents: a.event === 'sub' ? applySub(base.subagents, a.text, a.ts) : a.event === 'done' || a.event === 'error' ? base.subagents.map((s) => (s.status === 'running' ? { ...s, status: 'done' as const } : s)) : base.subagents,
-    text:
-      // A steered message's note ("reads this after its current step") isn't Claude's words: its own turn starting (or going back in line) ends it, a newer note replaces it.
-      noted && (a.event === 'started' || a.event === 'text' || a.event === 'queued')
-        ? a.event === 'text' ? a.text : ''
-        : // Each thing Claude says between steps is its own paragraph (one newline would run them into one blob).
-          a.event === 'text'
-        ? (base.text ? `${base.text}\n\n` : '') + a.text
-        : a.event === 'done' || a.event === 'error' || a.event === 'denied'
-          ? a.text || base.text
-          : base.text,
+    subagents: a.event === 'sub' ? applySub(base.subagents, a.text, a.ts) : a.event === 'done' || a.event === 'error' ? base.subagents.map((s) => (s.status === 'running' ? { ...s, status: 'done' as const, endedAt: a.ts } : s)) : base.subagents,
+    text,
+    ...(textMarks ? { textMarks } : {}),
     steps: a.event === 'tool' ? [...base.steps, a.text].slice(-MAX_STEPS) : base.steps,
     endTs: a.event === 'done' || a.event === 'error' || a.event === 'denied' ? a.ts : base.endTs,
     ...(a.event === 'started' || a.event === 'text' || a.event === 'tool' || a.event === 'sub' || a.event === 'progress' ? { lastAt: a.ts } : {}),
@@ -905,6 +924,7 @@ function reduceAgent(state: DomainState, raw: Extract<Action, { type: 'agent_eve
     ...(a.event === 'queued' && a.text ? { prompt: a.text } : {}),
     ...(a.event === 'queued' && a.slotWait ? { slotWait: a.slotWait } : {}),
     ...(existing?.status === 'queued' && a.event !== 'queued' ? { queuedUntil: a.ts } : {}),
+    ...(read ? { readAt: a.ts } : {}),
     // Any event may name the agent (the first one an older card saw may not have).
     ...(a.agent ? { agent: a.agent } : {}),
   } satisfies LogItem;
@@ -923,6 +943,19 @@ function reduceContext(state: DomainState, a: Extract<Action, { type: 'agent_eve
 
 export const formatTokens = (n: number): string => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 
+/**
+ * A card's text marks once its text changed from `was` to `now`: a stretch written at `at` adds
+ * one; an answer that's the end of what it said keeps the marks of that end; anything else
+ * (words from before marks were kept, an answer in other words) leaves the text unmarked.
+ */
+export function marksOf(was: string, marks: readonly TextMark[] | undefined, now: string, at: number | undefined): readonly TextMark[] | undefined {
+  if (now === was) return marks;
+  if (at !== undefined) return !was ? [{ at, end: now.length }] : marks ? [...marks, { at, end: now.length }] : undefined;
+  if (!marks || !now || !was.endsWith(now)) return undefined;
+  const cut = was.length - now.length;
+  return marks.filter((m) => m.end > cut).map((m) => ({ at: m.at, end: m.end - cut }));
+}
+
 /** Apply one sub-agent event (JSON from the runner) to the list. */
 function applySub(list: readonly SubAgent[], json: string, ts: number): readonly SubAgent[] {
   let e: { id?: string; phase?: string; title?: string; step?: string; kind?: 'agent' | 'background'; failed?: boolean };
@@ -937,7 +970,7 @@ function applySub(list: readonly SubAgent[], json: string, ts: number): readonly
   return list.map((s) => {
     if (s.id !== e.id) return s;
     if (e.phase === 'step' && e.step) return { ...s, steps: [...s.steps, e.step].slice(-MAX_STEPS) };
-    if (e.phase === 'done') return { ...s, status: e.failed ? 'failed' : 'done', steps: e.step ? [...s.steps, e.step].slice(-MAX_STEPS) : s.steps };
+    if (e.phase === 'done') return { ...s, status: e.failed ? 'failed' : 'done', endedAt: ts, steps: e.step ? [...s.steps, e.step].slice(-MAX_STEPS) : s.steps };
     return s;
   });
 }

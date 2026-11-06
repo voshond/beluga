@@ -49,6 +49,31 @@
 .own.continued {
   padding-top: 2px;
 }
+/* When you said it, under the last bubble of a run (BLG-46). */
+.ownTime {
+  margin-top: -2px;
+  color: var(--text-3);
+  font-size: 0.78rem;
+}
+/* Where the date changes in a conversation (BLG-46). */
+.day {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: var(--chat-max);
+  margin: 14px auto 6px;
+  padding: 0 24px;
+  color: var(--text-3);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.day::before,
+.day::after {
+  content: '';
+  flex: 1;
+  height: 0.5px;
+  background: var(--hairline);
+}
 .own .body {
   display: flex;
   flex-direction: column;

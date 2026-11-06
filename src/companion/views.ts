@@ -72,7 +72,7 @@ import { chatTopic, clip, convTopic, dashboardTopic, myId, nameOf, needsYou, pla
 export { chatTopic, convTopic, dashboardTopic, planTopic, sentinelTopic, taskTopic } from './needs-you.js';
 export { needsYou };
 import { ASSISTANT_CHANNEL, ASSISTANT_TITLE, activeAssistantChannel, assistantChatTitle, isAssistant } from '../shared/assistant.js';
-import { STEERED_IN, type SteeredMessage, asSent, steeredMessages, steerWaiting } from '../shared/claude-notices.js';
+import { STEERED_IN, type SteeredMessage, asRead, asSent, steeredMessages, steerWaiting } from '../shared/claude-notices.js';
 import { slotWaitDetail } from '../shared/run-slots.js';
 import type { DocKey } from './files.js';
 
@@ -418,12 +418,14 @@ function liveStep(item: AgentItem): string | undefined {
  * A conversation's items with your steered messages as the Mac draws them (BLG-54): one Claude
  * hasn't read yet says so on the message, and the note cards about them aren't turns. What waits
  * in the queue above the composer (queueOf) isn't a turn yet; once it runs, it's where it ran (BLG-317).
+ * A steered message is where Claude read it, and below everything until it does (BLG-47).
  */
 function withSteers(state: DomainState, all: readonly LogItem[]): Array<{ item: LogItem; steer?: SteeredMessage }> {
   const me = myId(state);
   const items = asSent(all, (l) => l.owner === me && (l.requester !== undefined ? l.requester === me : l.requesterName === l.ownerName));
   const { waiting, notes } = steeredMessages(items);
-  return items.flatMap((item) => (notes.has(item.id) ? [] : [{ item, ...(waiting.has(item.id) ? { steer: waiting.get(item.id)! } : {}) }]));
+  const read = asRead(items, waiting);
+  return [...read.rows, ...read.pinned].flatMap((item) => (notes.has(item.id) ? [] : [{ item, ...(waiting.has(item.id) ? { steer: waiting.get(item.id)! } : {}) }]));
 }
 
 /** Your message, editable from the phone (BLG-387): in a worktree or chat of yours, its words whole as shown (no code taken out). */
