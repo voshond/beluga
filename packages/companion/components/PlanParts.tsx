@@ -7,7 +7,7 @@ import type { ConvView, PlanView, Topic } from '../lib/link/protocol';
 import { color } from '../lib/theme';
 import { convHref, Prose, StepTicker } from './Conv';
 import { Breathe, TypingDots } from './Live';
-import { Card, IconBadge, Pill, Press, T, toneBg, toneInk, toneOf } from './ui';
+import { Card, IconBadge, Pill, Press, T, type Tone, toneBg, toneInk, toneOf } from './ui';
 
 type Milestone = PlanView['milestones'][number];
 
@@ -177,6 +177,36 @@ export function PlanDecisions({ decisions, open }: { readonly decisions: NonNull
                 {d.why}
               </T>
             ) : null}
+          </View>
+        ))}
+      </Card>
+    </View>
+  );
+}
+
+const SHIP_TONE: Readonly<Record<string, Tone>> = { MERGED: 'mint', CLOSED: 'rose', OPEN: 'sky' };
+
+export function PlanShip({ ship }: { readonly ship: NonNullable<PlanView['ship']> }) {
+  return (
+    <View style={{ marginTop: 26, paddingHorizontal: 16, gap: 10 }}>
+      <T v="eyebrow" style={{ paddingHorizontal: 4 }}>
+        Where the work goes
+      </T>
+      <Card style={{ padding: 16, gap: 14 }}>
+        <T v="caption" c={color.text2}>
+          {ship.next}
+        </T>
+        {ship.repos.map((r, n) => (
+          <View key={r.name} style={{ gap: 4 }} accessibilityLabel={`${r.name}: ${r.pr ? `${r.pr.ref}, ${r.pr.words}` : 'no pull request yet'}`}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <T v="body" style={{ flexShrink: 1 }}>
+                {`${n + 1}. ${r.name}`}
+              </T>
+              <Pill label={r.merged ? 'Merged' : r.pr ? r.pr.ref : 'No PR yet'} tone={r.merged ? 'mint' : r.pr ? (SHIP_TONE[r.pr.state] ?? 'plain') : 'plain'} Icon={r.merged ? Check : undefined} />
+            </View>
+            <T v="caption" c={color.text3}>
+              {r.pr ? `${r.branch} → main · ${r.pr.words}` : `${r.branch} → main`}
+            </T>
           </View>
         ))}
       </Card>

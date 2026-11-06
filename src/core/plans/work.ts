@@ -368,12 +368,12 @@ export class PlansWork {
     return this.pilot.openPr(id);
   }
 
-  mergePr(id: string, opts: { readonly auto?: boolean } = {}): Promise<Plan> {
-    return this.pilot.mergePr(id, opts);
+  mergePr(id: string, opts: { readonly auto?: boolean } = {}, repo?: string): Promise<Plan> {
+    return this.pilot.mergePr(id, opts, repo);
   }
 
-  mergeLocal(id: string): Promise<Plan> {
-    return this.pilot.mergeLocal(id);
+  mergeLocal(id: string, repo?: string): Promise<Plan> {
+    return this.pilot.mergeLocal(id, repo);
   }
 
   /** A conflict Claude couldn't fix: asked again now. */
@@ -387,8 +387,8 @@ export class PlansWork {
   }
 
   /** Its pull request conflicts with main: main merged into the plan's branch (a conflict goes to its Claude). */
-  bringInMain(id: string): Promise<Plan> {
-    return this.pilot.bringInMain(id);
+  bringInMain(id: string, repo?: string): Promise<Plan> {
+    return this.pilot.bringInMain(id, repo);
   }
 
   /** `agent` (Start with…, BLG-506): who works it this once; none: the task's own, the plan's, or your default. */

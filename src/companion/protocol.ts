@@ -9,7 +9,7 @@ import { z } from 'zod';
  * ignores what it doesn't know. A breaking change bumps the major, and the Mac keeps answering the
  * previous major for a release.
  */
-export const COMPANION_PROTO = { major: 1, minor: 42 } as const;
+export const COMPANION_PROTO = { major: 1, minor: 44 } as const;
 
 /**
  * What came in which minor, for a phone talking to an older Mac: it subscribes to a topic (and
@@ -112,6 +112,8 @@ export const COMPANION_PROTO = { major: 1, minor: 42 } as const;
  * 1.42 (BLG-8): what was settled while planning (`PlanView.decisions`: the question, the answer, and
  * whether you answered it or it's the agent's default) and what's still open (`PlanView.openQuestions`;
  * approving waits on them, `plans.approve` with `anyway`). An older Mac leaves them out.
+ * 1.44 (BLG-17): a plan across repos at its last step shows each repo's plan branch and pull request,
+ * in the order Merge All merges them (`PlanView.ship`). An older Mac leaves it out.
  */
 export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36, reactions: 41 } as const;
 
@@ -668,6 +670,22 @@ export const PlanView = z.object({
   /** 1.42 (BLG-8): what was settled while planning, and what's still open (the draft's, while there is one). */
   decisions: z.array(z.object({ question: z.string().max(400), answer: z.string().max(400), by: z.enum(['user', 'default']), why: z.string().max(400).optional() })).max(40).optional(),
   openQuestions: z.array(z.string().max(400)).max(40).optional(),
+  /** 1.44 (BLG-17): a plan across repos at its last step: each repo's branch and pull request, in merge order, and what's next in words. */
+  ship: z
+    .object({
+      repos: z
+        .array(
+          z.object({
+            name: z.string().max(200),
+            branch: z.string().max(250),
+            pr: z.object({ number: z.number().int().min(0), ref: z.string().max(300), state: z.string().max(20), url: z.string().max(500), words: z.string().max(200) }).optional(),
+            merged: z.boolean().optional(),
+          }),
+        )
+        .max(20),
+      next: z.string().max(300),
+    })
+    .optional(),
 });
 export type PlanView = z.infer<typeof PlanView>;
 export const PlansView = z.object({ plans: z.array(PlanView.pick({ id: true, title: true, state: true, topic: true }).extend({ done: z.number().int(), total: z.number().int() })).max(100) });

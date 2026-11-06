@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AUTONOMIES, AUTONOMY_INFO, type Autonomy, MAX_PARALLEL, type Plan, TESTS_AT, TESTS_AT_INFO, shownBody } from '@beluga/core/plans/model.js';
+import { AUTONOMIES, AUTONOMY_INFO, type Autonomy, MAX_PARALLEL, type Plan, TESTS_AT, TESTS_AT_INFO, prRef, shownBody } from '@beluga/core/plans/model.js';
 import { type PlanView, tidyOffer } from '@beluga/core/plans/progress.js';
 import { CONTINUE_PROMPT, decodeFailure, resetWords } from '@beluga/shared/run-failure.js';
 import { formatDuration } from '@beluga/shared/text.js';
@@ -29,7 +29,7 @@ import { BRANCH, FEED, PlanDetails } from './PlanDetails.js';
 import { DECISIONS, planNotes } from './PlanDecisions.js';
 import { PlanOutline } from './PlanOutline.js';
 import { CHAT_DEFAULT, DEFAULT_PLAN_LAYOUT, type Display, PLAN_LAYOUT_KEY, type PlanLayout, chatOpen, clampChatWidth, readPlanLayout, setChatOpen } from './plan-layout.js';
-import { barColumns, changeWords, headline, nextWords, shipAction, titleOf } from './plans-model.js';
+import { barColumns, changeWords, headline, nextWords, shipAction, shipAllAction, titleOf } from './plans-model.js';
 import { useCheckerChat, useConversationLoaded, usePlanActions, usePlanStep, usePlanView, usePlans } from './use-plans.js';
 import p from './plans.module.css';
 import { TeamReviews, usePlanTeamItems } from '../team/SharedPlans.js';
@@ -171,7 +171,9 @@ function Page({ view, prefs, setPrefs, picked, setPicked }: { view: PlanView; pr
   const next = view.next;
   const words = nextWords(next);
   const checker = useCheckerChat(next.kind === 'checking' ? next.milestone : undefined);
-  const line = headline(view);
+  const names = useApp((s) => s.projects);
+  const nameOf = (projectId: string): string => names.find((x) => x.id === projectId)?.name ?? projectId;
+  const line = headline(view, nameOf);
   // Claude is writing the first plan: one placeholder and one line say so, nothing else.
   const drafting = !plan.body && !body?.milestones.length;
 
@@ -187,6 +189,10 @@ function Page({ view, prefs, setPrefs, picked, setPicked }: { view: PlanView; pr
   const mergeNow = (auto: boolean): void =>
     void step.run(auto ? `turn on Merge When Checks Pass for #${pr?.number}` : `merge #${pr?.number} on GitHub`, auto ? 'Turning On…' : 'Merging…', () => api.mergePr(plan.id, auto ? { auto: true } : {}), auto ? `#${pr?.number} merges once its checks pass` : `Merged #${pr?.number}: the plan’s tasks are Done`);
   const openPr = (): void => void step.run('open the plan’s pull request', 'Opening PR…', () => api.openPr(plan.id), 'Opened the plan’s pull request');
+  const openPrs = (): void => void step.run('open the plan’s pull requests', 'Opening PRs…', () => api.openPr(plan.id), 'Opened one pull request per repo, each linking the others');
+  const mergeAll = (auto: boolean): void =>
+    void step.run(auto ? 'merge every repo’s pull request as its checks pass' : 'merge every repo’s pull request', auto ? 'Turning On…' : 'Merging All…', () => api.mergePr(plan.id, auto ? { auto: true } : {}), auto ? 'Each pull request merges in order once its checks pass' : 'Every repo’s pull request is merged: the plan’s tasks are Done');
+  const bringMainInto = (projectId: string): void => void step.run(`bring main into ${nameOf(projectId)}’s plan branch`, 'Bringing Main In…', () => api.bringInMain(plan.id, projectId));
 
   // Start with ▸ (BLG-506): "Your agent" over a plan with its own agent is yours by name (none would mean the plan's again).
   const startTasks = (tasks: readonly { readonly task: { readonly id: string } }[], agent?: AgentRef): void => tasks.forEach((t) => void act(() => api.startTask(plan.id, t.task.id, agent)));
@@ -246,6 +252,27 @@ function Page({ view, prefs, setPrefs, picked, setPicked }: { view: PlanView; pr
       case 'failed':
         return { label: 'Not Yet…', run: () => openSheet({ kind: 'plan_send_back', planId: plan.id, milestone: next.milestone.milestone.id }) };
       case 'ship': {
+        if (next.repos) {
+          const all = shipAllAction(plan, next.repos);
+          switch (all.kind) {
+            case 'open':
+              return { label: all.again ? 'Open PRs Again' : 'Open PRs', icon: 'pr', run: openPrs };
+            case 'queued':
+              return { label: 'Merging in Order…', busy: true };
+            case 'merge_all':
+              return all.wait ? { label: 'Merge All When Checks Pass', icon: 'check', run: () => mergeAll(true) } : { label: 'Merge All', icon: 'check', run: () => mergeAll(false) };
+            case 'repo': {
+              const where = nameOf(all.projectId);
+              if (all.action.kind === 'resolve') return { label: `Resolve Conflicts in ${where}`, icon: 'merge', run: () => bringMainInto(all.projectId) };
+              if (all.action.kind === 'stuck') return { label: `Ask ${who} Again`, icon: agentMark(mine), run: askAgain };
+              if (all.action.kind === 'fixing') return { label: `${who} Is Fixing ${where}`, busy: true };
+              if (all.action.kind === 'draft' && all.pr) return { label: `Mark ${where} Ready on GitHub`, icon: 'external', run: () => void openExternal(all.pr!.url) };
+              return { label: 'Bringing Main In…', busy: true };
+            }
+            default:
+              return undefined;
+          }
+        }
         // One pull request for the whole plan (plan/<slug> → main): opened, brought up to date with main when it conflicts, merged.
         const a = shipAction(plan, next.pr);
         switch (a.kind) {
@@ -297,8 +324,16 @@ function Page({ view, prefs, setPrefs, picked, setPicked }: { view: PlanView; pr
           { label: 'Pass Anyway', onSelect: () => void act(() => api.pass(plan.id, next.milestone.milestone.id)) },
         ]
       : []),
-    ...(pr ? [{ label: `View PR #${pr.number} on GitHub`, onSelect: () => void openExternal(pr.url) }] : []),
-    ...(next.kind === 'ship'
+    ...(next.kind === 'ship' && next.repos
+      ? [
+          ...next.repos.flatMap((r) => (r.pr ? [{ label: `View ${nameOf(r.projectId)}’s PR ${prRef(r.pr)}`, onSelect: () => void openExternal(r.pr!.url) }] : [])),
+          ...(shipAllAction(plan, next.repos).kind === 'merge_all' ? [{ label: 'Merge All Now', hint: 'Merge every pull request now, upstream repos first', onSelect: () => mergeAll(false) }] : []),
+          ...next.repos.filter((r) => !r.shipped && r.pr?.state === 'OPEN' && !r.pr.conflicts && !plan.mainMerge).map((r) => ({ label: `Bring Main into ${nameOf(r.projectId)}`, hint: `Merge main into ${r.branch} there now`, onSelect: () => bringMainInto(r.projectId) })),
+          { label: 'Merge into Main Locally', onSelect: () => openSheet({ kind: 'confirm', title: `Merge each repo’s ${next.branch} into its main here?`, message: 'Each repo’s main folder must be on main with no uncommitted changes. They merge upstream first; the first that can’t stops it.', confirm: 'Merge All', run: () => void step.run('merge each repo’s plan branch into main here', 'Merging…', () => api.mergeLocal(plan.id), 'Merged into main in every repo: the plan’s tasks are Done') }) },
+        ]
+      : []),
+    ...(pr && !(next.kind === 'ship' && next.repos) ? [{ label: `View PR #${pr.number} on GitHub`, onSelect: () => void openExternal(pr.url) }] : []),
+    ...(next.kind === 'ship' && !next.repos
       ? [
           ...(shipAction(plan, next.pr).kind === 'wait' ? [{ label: 'Merge Now', onSelect: () => mergeNow(false) }] : []),
           ...(next.pr?.state === 'OPEN' && !next.pr.conflicts && !plan.mainMerge ? [{ label: 'Bring Main In', hint: `Merge main into ${next.branch} now`, onSelect: () => void step.run(`bring main into ${next.branch}`, 'Bringing Main In…', () => api.bringInMain(plan.id), `Main is in ${next.branch}`) }] : []),
