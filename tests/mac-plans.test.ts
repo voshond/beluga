@@ -3,7 +3,7 @@ import { normalizeBody } from '../src/core/plans/edit.js';
 import type { Plan } from '../src/core/plans/model.js';
 import { planView } from '../src/core/plans/progress.js';
 import { NO_BOARD } from '../src/core/board/model.js';
-import { barColumns, branchFlow, changeMarks, changeWords, feedOf, gateId, graphShape, groupId, headline, milestoneRows, modeChange, nextWords, planStatus, plansOf, prWords, shipAction, taskHeadline, taskNodeId } from '../packages/mac/src/plans/plans-model.js';
+import { barColumns, branchFlow, changeMarks, changeWords, feedOf, firstRepos, gateId, graphShape, groupId, headline, milestoneRows, modeChange, newPlanTitle, nextWords, planStatus, plansOf, prWords, shipAction, taskHeadline, taskNodeId, withPrimary, withRepo } from '../packages/mac/src/plans/plans-model.js';
 import type { PlanPr } from '../src/core/plans/model.js';
 import type { PlanEvent } from '../src/core/plans/model.js';
 import type { PlanView } from '../src/core/plans/progress.js';
@@ -261,5 +261,32 @@ describe('shipping the plan: its pull request, conflicts with main, and where th
     const ev = (kind: PlanEvent['kind'], text: string, at: number): PlanEvent => ({ id: `e${at}`, at, by: { kind: 'beluga' }, kind, text });
     const items = feedOf([ev('note', 'made the plan’s branch plan/p from main', 1), ev('note', 'opened pull request #7: plan/p → main', 2), ev('note', 'paused by you', 3)]);
     expect(items.map((i) => i.kind)).toEqual(['pr', 'branch']);
+  });
+});
+
+describe('New Plan across several projects (BLG-19)', () => {
+  it('titles: one project, two, and more than two', () => {
+    expect(newPlanTitle([])).toBe('New Plan');
+    expect(newPlanTitle(['whisper-api'])).toBe('Plan in whisper-api');
+    expect(newPlanTitle(['whisper-api', 'calendar-api'])).toBe('Plan across whisper-api, calendar-api');
+    expect(newPlanTitle(['whisper-api', 'calendar-api', 'calendar-desktop'])).toBe('Plan across whisper-api, calendar-api…');
+  });
+  it('starts with the projects asked for that exist, else your usual one, else the first', () => {
+    expect(firstRepos(['a', 'b', 'c'], ['c', 'gone', 'a', 'c'], 'b')).toEqual(['c', 'a']);
+    expect(firstRepos(['a', 'b'], [], 'b')).toEqual(['b']);
+    expect(firstRepos(['a', 'b'], ['gone'], 'nope')).toEqual(['a']);
+    expect(firstRepos([], [], 'b')).toEqual([]);
+  });
+  it('ticks and unticks, keeping the primary and at most eight', () => {
+    expect(withRepo(['a'], 'b', true)).toEqual(['a', 'b']);
+    expect(withRepo(['a', 'b'], 'b', true)).toEqual(['a', 'b']);
+    expect(withRepo(['a', 'b'], 'b', false)).toEqual(['a']);
+    expect(withRepo(['a', 'b'], 'a', false)).toEqual(['a', 'b']);
+    const eight = ['1', '2', '3', '4', '5', '6', '7', '8'];
+    expect(withRepo(eight, '9', true)).toEqual(eight);
+  });
+  it('a new primary goes first and the others stay ticked', () => {
+    expect(withPrimary(['a', 'b', 'c'], 'c')).toEqual(['c', 'a', 'b']);
+    expect(withPrimary(['a'], 'b')).toEqual(['b', 'a']);
   });
 });

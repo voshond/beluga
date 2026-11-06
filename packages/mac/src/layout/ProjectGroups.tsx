@@ -6,6 +6,7 @@ import { ActionsContext, type ActionItem } from '../components/SpecMenu.js';
 import { cx } from '../components/ui.js';
 import { editGroups, newGroupFor, useGroupEdit } from '../lib/group-edit.js';
 import { useApi, useApp } from '../lib/beluga.js';
+import { openSheet } from '../lib/sheets.js';
 import { type Entry, type Place, type Target, outOfGroup, stepOf } from './project-layout.js';
 import { NO_TALLY, type Tally, tallyTip } from './attention-model.js';
 import { DotMark, TallyMark } from './signal-marks.js';
@@ -47,6 +48,13 @@ export function groupItems(p: Project, entries: readonly Entry[], arrange: (item
       onSelect: () => undefined,
     },
   ];
+}
+
+/** "Plan Across Group…" on a group's menu: New Plan with its projects ticked (this Mac's, at least two). */
+export function planAcrossItems(projects: readonly Project[]): readonly ActionItem[] {
+  const local = projects.filter((p) => p.root && !p.error);
+  if (local.length < 2) return [];
+  return [{ label: 'Plan Across Group…', icon: 'flag', separate: true, onSelect: () => openSheet({ kind: 'new_plan', projectIds: local.map((p) => p.id) }) }];
 }
 
 /** A group's name, typed in place: Return keeps it, Esc (or an empty name) gives up. */

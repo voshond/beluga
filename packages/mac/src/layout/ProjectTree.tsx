@@ -22,7 +22,7 @@ import { getPrefs, setPrefs, usePrefs } from '../lib/prefs.js';
 import { pickImage, reloadProjectIcon } from '../lib/projects.js';
 import { showUndo } from '../lib/undo-toast.js';
 import { useArrangeDrag } from './arrange-drag.js';
-import { GroupHeader, NewGroupRow, groupItems, isGroupOption, moveItems, moveKey } from './ProjectGroups.js';
+import { GroupHeader, NewGroupRow, groupItems, isGroupOption, moveItems, moveKey, planAcrossItems } from './ProjectGroups.js';
 import { type Entry, type Place, type Target, keyOfEntry, stepOf, useArrange, useLayout } from './project-layout.js';
 import { OutsideWorktrees } from './OtherWorktrees.js';
 import { ProjectAgents, WorkspaceWithAgents, useAgentOrigins, useCcSessions } from './SubAgents.js';
@@ -429,7 +429,7 @@ export function Projects() {
                       busy={groups[e.name]?.busy ?? false}
                       tally={groups[e.name]?.tally ?? { unread: 0, needs: 0, working: false }}
                       dropOn={intoGroup === e.name}
-                      menu={moveItems(entries, { group: e.name }, arrange)}
+                      menu={[...planAcrossItems(e.projects), ...moveItems(entries, { group: e.name }, arrange)]}
                       onToggle={() => actions.run({ type: 'toggle_group', name: e.name })}
                       onMove={(dir) => {
                         const place = stepOf(entries, { group: e.name }, dir);
