@@ -580,10 +580,10 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `plans.setTestsAt` | ✓ a plan's ⋯ › When to Run Tests ▸ (each milestone, or once at the end) |
 | `plans.pass` | ✓ Pass Milestone on a plan's page |
 | `plans.recheck` | ✓ Check Again on a milestone the agent is checking or that failed its check |
-| `plans.openPr` | ✓ Open PR on a plan whose every milestone passed (plan/<slug> → main) |
-| `plans.mergePr` | ✓ Merge on GitHub (or Merge When Checks Pass, ⋯ › Merge Now) once the plan's pull request is open |
-| `plans.mergeLocal` | ✓ ⋯ › Merge into Main Locally on a plan ready to ship |
-| `plans.bringInMain` | ✓ Resolve Conflicts on a plan whose pull request conflicts with main |
+| `plans.openPr` | ✓ Open PR on a plan whose every milestone passed (plan/<slug> → main); across repos **Open PRs** (one per repo, each body linking the others; Open PRs Again when one was closed) |
+| `plans.mergePr` | ✓ Merge on GitHub (or Merge When Checks Pass, ⋯ › Merge Now) once the plan's pull request is open; across repos **Merge All** / **Merge All When Checks Pass** (⋯ › Merge All Now), upstream repos first, stopping at the first that fails; ⋯ › View <repo>'s PR per repo |
+| `plans.mergeLocal` | ✓ ⋯ › Merge into Main Locally on a plan ready to ship (across repos: each repo's, in merge order) |
+| `plans.bringInMain` | ✓ Resolve Conflicts on a plan whose pull request conflicts with main; across repos **Resolve Conflicts in <repo>** and ⋯ › Bring Main into <repo> |
 | `plans.retryConflicts` | ✓ Ask Claude Again on a plan's conflict that waits for you |
 | `plans.showConflict` | ✓ Show in Finder on a plan's conflict that waits for you |
 | `plans.sendBack` | ✓ Not Yet… on a milestone waiting for you |
