@@ -1,5 +1,5 @@
 import { type BoardState, type Issue, issueById } from '../board/model.js';
-import { type Autonomy, type Combining, type MilestoneAgent, type MilestoneRun, type Plan, type PlanBody, type PlanMerge, type PlanMilestone, type PlanTask, type TaskWatch, autonomyOf, milestoneDeps, milestoneRepos, openMilestones, planBranchFor, shownBody } from './model.js';
+import { type Autonomy, type Combining, type MilestoneAgent, type MilestoneRun, type Plan, type PlanBody, type PlanMerge, type PlanMilestone, type PlanPr, type PlanShipped, type PlanTask, type TaskWatch, autonomyOf, isMultiRepo, milestoneDeps, milestoneRepos, openMilestones, planBranchFor, planPrFor, shipOrder, shippedIn, shownBody } from './model.js';
 import { type RunInfo, type TaskPulse, type WaitingMessage, messageState, pulseOf, pulseWords } from './watchdog.js';
 
 /**
@@ -92,6 +92,16 @@ export interface MilestoneView {
 }
 
 /** The one thing a plan waits for (the page's main button). */
+export type ShipRepo = { readonly projectId: string; readonly branch: string; readonly pr?: PlanPr; readonly shipped?: PlanShipped };
+
+export const shipRepos = (plan: Plan): readonly ShipRepo[] =>
+  shipOrder(plan).flatMap((projectId) => {
+    const branch = planBranchFor(plan, projectId);
+    const pr = planPrFor(plan, projectId);
+    const shipped = shippedIn(plan, projectId);
+    return branch ? [{ projectId, branch, ...(pr ? { pr } : {}), ...(shipped ? { shipped } : {}) }] : [];
+  });
+
 export type NextStep =
   | { readonly kind: 'approve' }
   | { readonly kind: 'review_changes' }
@@ -103,7 +113,7 @@ export type NextStep =
   /** A passed milestone merging into the plan's branch; `text`: “Fixing a merge conflict in KLD-9”. */
   | { readonly kind: 'merging'; readonly milestone: MilestoneView; readonly text: string }
   /** Every milestone passed: the plan's branch waits to reach main (Open PR, or merge it here). */
-  | { readonly kind: 'ship'; readonly branch: string; readonly pr?: Plan['pr'] }
+  | { readonly kind: 'ship'; readonly branch: string; readonly pr?: Plan['pr']; readonly repos?: readonly ShipRepo[] }
   | { readonly kind: 'answer'; readonly tasks: readonly TaskView[] }
   /** Tasks that stopped again after a wake: Resume them, or open their chat. */
   | { readonly kind: 'stalled'; readonly tasks: readonly TaskView[] }
@@ -374,7 +384,7 @@ function nextStep(plan: Plan, v: Omit<PlanView, 'next'>): NextStep {
   if (plan.status === 'done') {
     if (plan.draft) return { kind: 'review_changes' };
     // Its work is on the plan's branch, not in main yet.
-    if (plan.branch && !plan.shipped && v.milestones.some((m) => m.tasks.some((t) => t.state === 'planned'))) return { kind: 'ship', branch: plan.branch, ...(plan.pr ? { pr: plan.pr } : {}) };
+    if (plan.branch && !plan.shipped && v.milestones.some((m) => m.tasks.some((t) => t.state === 'planned'))) return { kind: 'ship', branch: plan.branch, ...(plan.pr ? { pr: plan.pr } : {}), ...(isMultiRepo(plan) ? { repos: shipRepos(plan) } : {}) };
     return { kind: 'done' };
   }
   if (plan.draft) return { kind: 'review_changes' };

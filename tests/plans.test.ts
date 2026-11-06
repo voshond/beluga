@@ -959,9 +959,10 @@ describe('the plan’s branch: tasks start from it, milestones merge into it, on
     /** Branches there already: "plan/x" in every repo, "cal:plan/x" in one. */
     const existing = new Set<string>();
     const inMain = new Set<string>();
-    let pr: PlanPr | undefined;
+    const prs = new Map<string, PlanPr>();
+    const edited: Array<{ repo: string; number: number; body: string }> = [];
     let conflict: ((branches: readonly string[], repo: string) => CombineResult | undefined) | undefined;
-    let mergeError: string | undefined;
+    let mergeError: { why: string; repo?: string } | undefined;
     const git: PlanGit = {
       ensureBranch: async (p, b) => {
         log.ensured.push(b);
@@ -980,17 +981,32 @@ describe('the plan’s branch: tasks start from it, milestones merge into it, on
         log.retired.push({ ws: ws ?? '', ...(branch ? { branch } : {}) });
         log.inRepo.push(`retire ${p} ${branch ?? '-'} into ${into}`);
       },
-      findPr: async () => pr,
-      openPr: async (_p, _branch, title) => (pr = { number: 7, url: 'https://github.com/bob/api/pull/7', state: 'OPEN', title, draft: false, checks: 'pending' }),
+      findPr: async (p) => prs.get(p),
+      openPr: async (p, _branch, title, body) => {
+        const number = 7 + prs.size;
+        const pr: PlanPr = { number, url: `https://github.com/bob/${p}/pull/${number}`, state: 'OPEN', title, draft: false, checks: 'pending' };
+        prs.set(p, pr);
+        log.inRepo.push(`open ${p} #${number}`);
+        edited.push({ repo: p, number, body });
+        return pr;
+      },
+      editPrBody: async (p, number, body) => void edited.push({ repo: p, number, body }),
       push: async (_p, b) => void log.pushed.push(b),
       mainRef: async () => 'origin/main',
-      mergePr: async (_p, _n, opts) => {
-        if (mergeError) throw new Error(mergeError);
-        pr = opts?.auto ? { ...pr!, autoMerge: true } : { ...pr!, state: 'MERGED' };
+      mergePr: async (p, n, opts) => {
+        log.inRepo.push(`mergepr ${p} #${n}${opts?.auto ? ' auto' : ''}`);
+        if (mergeError && (!mergeError.repo || mergeError.repo === p)) throw new Error(mergeError.why);
+        const pr = prs.get(p)!;
+        prs.set(p, opts?.auto ? { ...pr, autoMerge: true } : { ...pr, state: 'MERGED' });
       },
-      mergeLocal: async () => ({ ok: true }),
+      mergeLocal: async (p) => {
+        log.inRepo.push(`mergelocal ${p}`);
+        return { ok: true };
+      },
     };
-    return { git, log, existing, inMain, setPr: (p: PlanPr | undefined) => (pr = p), setConflict: (c: typeof conflict) => (conflict = c), failMerge: (why: string | undefined) => (mergeError = why) };
+    const setPr = (pr: PlanPr | undefined, repo = 'api') => (pr ? prs.set(repo, pr) : prs.delete(repo));
+    const bodyOf = (repo: string): string | undefined => edited.filter((e) => e.repo === repo).at(-1)?.body;
+    return { git, log, existing, inMain, prs, bodyOf, setPr, setConflict: (c: typeof conflict) => (conflict = c), failMerge: (why: string | undefined, repo?: string) => (mergeError = why ? { why, ...(repo ? { repo } : {}) } : undefined) };
   }
 
   async function running(autonomy: 'gated' | 'autopilot' = 'gated', body: BodyInput = BODY) {
@@ -1409,6 +1425,139 @@ describe('the plan’s branch: tasks start from it, milestones merge into it, on
       expect(t.plans.need(t.plan.id).activity.some((e) => e.text.startsWith('merging “Invite API” into plan/invites in calendar-api:'))).toBe(true);
     });
 
+    describe('shipping: one PR per repo, linked, merged upstream first (BLG-16)', () => {
+      const CHAIN: BodyInput = {
+        title: 'Invites',
+        goal: 'One feature across three repos',
+        milestones: [
+          { id: 'contract', title: 'Invite API', repos: ['cal'], tasks: [{ id: 'schema', title: 'Invite schema' }] },
+          { id: 'desktop', title: 'Desktop invites', repos: ['desk'], dependsOn: ['contract'], tasks: [{ id: 'ui', title: 'Invite UI' }] },
+          { id: 'hooks', title: 'Transcripts', dependsOn: ['desktop'], tasks: [{ id: 'hook', title: 'Transcript hook' }] },
+        ],
+      };
+
+      async function shipping() {
+        const g = fakeGit();
+        const t = setup({ git: g.git });
+        t.store.dispatch({ type: 'projects', projects: [...t.store.getState().projects, project('cal', 'calendar-api'), project('desk', 'calendar-desktop')] });
+        const plan = t.plans.create({ projectId: 'api', repos: ['api', 'cal', 'desk'], home: 'ws:main', autonomy: 'gated' }, t.claude);
+        t.work.forRun('ws:main', 'p-me')!.tools!.write(CHAIN);
+        t.work.approve(plan.id);
+        for (let n = 0; n < 100 && Object.keys(t.plans.need(plan.id).branches ?? {}).length < 3; n++) await tick(5);
+        const issue = (title: string) => t.store.getState().board.issues.find((i) => i.title === title)!;
+        const settle = async () => {
+          await tick(10);
+          for (let n = 0; n < 100 && Object.values(t.plans.need(plan.id).merging ?? {}).some((m) => !m.conflict); n++) await tick(5);
+          await tick(10);
+        };
+        for (const [id, title] of [['contract', 'Invite schema'], ['desktop', 'Invite UI'], ['hooks', 'Transcript hook']] as const) {
+          await tick(10);
+          t.board.update(issue(title).id, { status: 'in_review' }, t.claude);
+          await tick(10);
+          t.work.pass(plan.id, id);
+          await settle();
+        }
+        const view = () => planView(t.plans.need(plan.id), t.store.getState().board);
+        const said = () => t.plans.need(plan.id).activity.map((e) => e.text);
+        return { ...t, ...g, plan, issue, view, said };
+      }
+
+      it('Open PRs opens one per repo, upstream first, each body linking the other two by owner/repo#N', async () => {
+        const t = await shipping();
+        expect(t.plans.need(t.plan.id).status).toBe('done');
+        expect(t.view().next).toMatchObject({ kind: 'ship' });
+        await t.work.openPr(t.plan.id);
+        expect(t.log.inRepo.filter((l) => l.startsWith('open'))).toEqual(['open cal #7', 'open desk #8', 'open api #9']);
+        const plan = t.plans.need(t.plan.id);
+        expect(Object.fromEntries(Object.entries(plan.prs ?? {}).map(([r, pr]) => [r, pr.number]))).toEqual({ cal: 7, desk: 8, api: 9 });
+        expect(plan.pr?.number).toBe(9);
+        const refs: Record<string, string> = { cal: 'bob/cal#7', desk: 'bob/desk#8', api: 'bob/api#9' };
+        for (const repo of ['cal', 'desk', 'api']) {
+          const body = t.bodyOf(repo)!;
+          expect(body).toContain('## Linked pull requests');
+          for (const other of Object.keys(refs).filter((r) => r !== repo)) expect(body).toContain(refs[other]);
+          expect(body).not.toContain(refs[repo]);
+        }
+        expect(t.bodyOf('cal')).toContain('## Invite API');
+        expect(t.bodyOf('cal')).not.toContain('## Desktop invites');
+        expect(t.bodyOf('api')).toMatch(/1\. bob\/cal#7 \(calendar-api\)\n2\. bob\/desk#8 \(calendar-desktop\)\n3\. this one \(bob-api\)/);
+        expect(t.said()).toContain('opened pull request bob/desk#8: plan/invites → main in calendar-desktop');
+        t.log.inRepo.length = 0;
+        await t.work.openPr(t.plan.id);
+        expect(t.log.inRepo.filter((l) => l.startsWith('open'))).toEqual([]);
+      });
+
+      it('Merge All goes upstream first, stops at the first failure naming the repo; Done only once every PR is merged', async () => {
+        const t = await shipping();
+        await expect(t.work.mergePr(t.plan.id)).rejects.toThrow(/Open the PRs first: calendar-api, calendar-desktop, bob-api have no pull request yet/);
+        await t.work.openPr(t.plan.id);
+        t.failMerge('GraphQL: At least 1 approving review is required by reviewers with write access. (mergePullRequest)', 'desk');
+        await expect(t.work.mergePr(t.plan.id)).rejects.toThrow(/^Merge All stopped at calendar-desktop \(calendar-api merged before it\): .*approving review/);
+        expect(t.log.inRepo.filter((l) => l.startsWith('mergepr'))).toEqual(['mergepr cal #7', 'mergepr desk #8']);
+        const half = t.plans.need(t.plan.id);
+        expect(half.shipped).toBeUndefined();
+        expect(Object.keys(half.shippedIn ?? {})).toEqual(['cal']);
+        expect(t.issue('Invite schema').status).toBe('done');
+        expect(t.issue('Invite schema').activity.map((a) => a.text)).toContain('merged into main via bob/cal#7');
+        expect(t.issue('Invite UI').status).toBe('in_plan');
+        expect(t.view().next).toMatchObject({ kind: 'ship', repos: [{ projectId: 'cal', pr: { state: 'MERGED' }, shipped: { how: 'pr' } }, { projectId: 'desk', pr: { number: 8, state: 'OPEN' } }, { projectId: 'api', branch: 'plan/invites' }] });
+        expect(t.said().some((s) => s.startsWith('Merge All stopped at calendar-desktop'))).toBe(true);
+        t.failMerge(undefined);
+        await t.work.mergePr(t.plan.id);
+        expect(t.log.inRepo.filter((l) => l.startsWith('mergepr'))).toEqual(['mergepr cal #7', 'mergepr desk #8', 'mergepr desk #8', 'mergepr api #9']);
+        expect(t.plans.need(t.plan.id).shipped).toMatchObject({ how: 'pr', number: 9 });
+        for (const title of ['Invite schema', 'Invite UI', 'Transcript hook']) expect(t.issue(title).status).toBe('done');
+        expect(t.view().next.kind).toBe('done');
+        expect(t.said()).toContain('every repo’s work is in main (3 repos)');
+      });
+
+      it('Merge When Checks Pass turns auto-merge on one repo at a time, the next once the one before it merges', async () => {
+        const t = await shipping();
+        await t.work.openPr(t.plan.id);
+        await t.work.mergePr(t.plan.id, { auto: true });
+        expect(t.log.inRepo.filter((l) => l.startsWith('mergepr'))).toEqual(['mergepr cal #7 auto']);
+        expect(t.plans.need(t.plan.id).mergeAll).toMatchObject({ auto: true });
+        t.setPr({ ...t.prs.get('cal')!, state: 'MERGED' }, 'cal');
+        await t.work.pilot.pollPrs();
+        await tick(10);
+        expect(t.log.inRepo.filter((l) => l.startsWith('mergepr'))).toEqual(['mergepr cal #7 auto', 'mergepr desk #8 auto']);
+        expect(t.plans.need(t.plan.id).prs?.desk?.autoMerge).toBe(true);
+        expect(t.plans.need(t.plan.id).shipped).toBeUndefined();
+      });
+
+      it('a PR closed in one repo is shown on that repo, and Merge All stops there', async () => {
+        const t = await shipping();
+        await t.work.openPr(t.plan.id);
+        t.setPr({ ...t.prs.get('desk')!, state: 'CLOSED' }, 'desk');
+        await t.work.pilot.pollPrs();
+        const plan = t.plans.need(t.plan.id);
+        expect(plan.prs?.desk?.state).toBe('CLOSED');
+        expect(plan.prs?.cal?.state).toBe('OPEN');
+        expect(t.said()).toContain('calendar-desktop’s pull request bob/desk#8 was closed without merging: its tasks stay merged into the plan');
+        await expect(t.work.mergePr(t.plan.id)).rejects.toThrow(/Merge All stopped at calendar-desktop \(calendar-api merged before it\): Pull request bob\/desk#8 was closed on GitHub/);
+        expect(t.log.inRepo.some((l) => l.startsWith('mergepr api'))).toBe(false);
+      });
+
+      it('Resolve Conflicts brings main into the conflicting repo’s plan branch only', async () => {
+        const t = await shipping();
+        await t.work.openPr(t.plan.id);
+        t.setPr({ ...t.prs.get('desk')!, conflicts: true }, 'desk');
+        await t.work.pilot.pollPrs();
+        t.log.inRepo.length = 0;
+        await t.work.bringInMain(t.plan.id);
+        expect(t.log.inRepo.filter((l) => l.startsWith('merge '))).toEqual(['merge desk plan/invites ← origin/main']);
+        expect(t.said()).toContain('merged origin/main into plan/invites in calendar-desktop');
+      });
+
+      it('merging here does each repo in order, and the plan is Done after the last', async () => {
+        const t = await shipping();
+        await t.work.mergeLocal(t.plan.id);
+        expect(t.log.inRepo.filter((l) => l.startsWith('mergelocal'))).toEqual(['mergelocal cal', 'mergelocal desk', 'mergelocal api']);
+        expect(t.plans.need(t.plan.id).shipped).toMatchObject({ how: 'local' });
+        expect(t.issue('Invite UI').status).toBe('done');
+      });
+    });
+
     it('a plan of one repo keeps only `branch` (no branches), every step in its repo', async () => {
       const t = await running();
       await t.passSafe();
@@ -1454,6 +1603,7 @@ describe('soak: a long plan on Autopilot reaches the end by itself, with Claudes
       mainRef: async () => 'origin/main',
       mergePr: async () => undefined,
       mergeLocal: async () => ({ ok: true }),
+      editPrBody: async () => undefined,
     };
     return { git, steps };
   };

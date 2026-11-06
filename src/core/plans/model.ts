@@ -206,6 +206,7 @@ export interface PlanMainMerge {
   readonly at: number;
   /** What was merged in ("origin/main"). */
   readonly main: string;
+  readonly projectId?: string;
   readonly conflict?: {
     readonly at: number;
     readonly dir: string;
@@ -341,7 +342,10 @@ export interface Plan {
   readonly mainMerge?: PlanMainMerge;
   /** The branch's pull request into main, as last seen. */
   readonly pr?: PlanPr;
+  readonly prs?: Readonly<Record<string, PlanPr>>;
   readonly shipped?: PlanShipped;
+  readonly shippedIn?: Readonly<Record<string, PlanShipped>>;
+  readonly mergeAll?: { readonly at: number; readonly auto: boolean };
   /** Plans that ran before they had a branch were caught up once (passed milestones merged into one). */
   readonly caughtUp?: boolean;
   /**
@@ -519,6 +523,37 @@ export function milestoneRepos(plan: Pick<Plan, 'projectId' | 'repos'>, mileston
   const all = planRepos(plan);
   const named = (milestone?.repos ?? []).filter((r) => all.includes(r));
   return named.length ? [...new Set(named)] : [plan.projectId];
+}
+
+export const planPrFor = (plan: Pick<Plan, 'projectId' | 'pr' | 'prs'>, projectId: string): PlanPr | undefined =>
+  plan.prs?.[projectId] ?? (projectId === plan.projectId ? plan.pr : undefined);
+
+export const shippedIn = (plan: Pick<Plan, 'projectId' | 'repos' | 'shipped' | 'shippedIn'>, projectId: string): PlanShipped | undefined =>
+  plan.shipped ?? plan.shippedIn?.[projectId];
+
+export const prRef = (pr: Pick<PlanPr, 'number' | 'url'>): string => {
+  const m = /github\.com\/([^/]+)\/([^/]+)\/pull\//.exec(pr.url);
+  return m ? `${m[1]}/${m[2]}#${pr.number}` : `#${pr.number}`;
+};
+
+export function shipOrder(plan: Pick<Plan, 'projectId' | 'repos' | 'body'>): readonly string[] {
+  const repos = planRepos(plan);
+  const upstream = new Map(repos.map((r) => [r, new Set<string>()]));
+  const milestones = plan.body?.milestones ?? [];
+  const byId = new Map(milestones.map((m) => [m.id, m]));
+  for (const m of milestones) {
+    const here = milestoneRepos(plan, m);
+    for (const dep of milestoneDeps(plan.body, m)) {
+      for (const from of milestoneRepos(plan, byId.get(dep))) for (const to of here) if (from !== to) upstream.get(to)?.add(from);
+    }
+  }
+  const order: string[] = [];
+  while (order.length < repos.length) {
+    const left = repos.filter((r) => !order.includes(r));
+    order.push(left.find((r) => [...upstream.get(r)!].every((u) => order.includes(u))) ?? left[0]!);
+  }
+  const touched = new Set(milestones.flatMap((m) => milestoneRepos(plan, m)));
+  return touched.size ? order.filter((r) => touched.has(r)) : [plan.projectId];
 }
 
 /** A milestone's own autonomy, else its plan's. */
