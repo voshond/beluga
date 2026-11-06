@@ -1,5 +1,5 @@
 import { type BoardState, type Issue, issueById } from '../board/model.js';
-import { type Autonomy, type Combining, type MilestoneAgent, type MilestoneRun, type Plan, type PlanBody, type PlanMerge, type PlanMilestone, type PlanTask, type TaskWatch, autonomyOf, milestoneDeps, openMilestones, shownBody } from './model.js';
+import { type Autonomy, type Combining, type MilestoneAgent, type MilestoneRun, type Plan, type PlanBody, type PlanMerge, type PlanMilestone, type PlanPr, type PlanShipped, type PlanTask, type TaskWatch, autonomyOf, isMultiRepo, milestoneDeps, milestoneRepos, openMilestones, planBranchFor, planPrFor, shipOrder, shippedIn, shownBody } from './model.js';
 import { type RunInfo, type TaskPulse, type WaitingMessage, messageState, pulseOf, pulseWords } from './watchdog.js';
 
 /**
@@ -92,6 +92,16 @@ export interface MilestoneView {
 }
 
 /** The one thing a plan waits for (the page's main button). */
+export type ShipRepo = { readonly projectId: string; readonly branch: string; readonly pr?: PlanPr; readonly shipped?: PlanShipped };
+
+export const shipRepos = (plan: Plan): readonly ShipRepo[] =>
+  shipOrder(plan).flatMap((projectId) => {
+    const branch = planBranchFor(plan, projectId);
+    const pr = planPrFor(plan, projectId);
+    const shipped = shippedIn(plan, projectId);
+    return branch ? [{ projectId, branch, ...(pr ? { pr } : {}), ...(shipped ? { shipped } : {}) }] : [];
+  });
+
 export type NextStep =
   | { readonly kind: 'approve' }
   | { readonly kind: 'review_changes' }
@@ -103,7 +113,7 @@ export type NextStep =
   /** A passed milestone merging into the plan's branch; `text`: “Fixing a merge conflict in KLD-9”. */
   | { readonly kind: 'merging'; readonly milestone: MilestoneView; readonly text: string }
   /** Every milestone passed: the plan's branch waits to reach main (Open PR, or merge it here). */
-  | { readonly kind: 'ship'; readonly branch: string; readonly pr?: Plan['pr'] }
+  | { readonly kind: 'ship'; readonly branch: string; readonly pr?: Plan['pr']; readonly repos?: readonly ShipRepo[] }
   | { readonly kind: 'answer'; readonly tasks: readonly TaskView[] }
   /** Tasks that stopped again after a wake: Resume them, or open their chat. */
   | { readonly kind: 'stalled'; readonly tasks: readonly TaskView[] }
@@ -281,7 +291,9 @@ export function planView(plan: Plan, board: BoardState, live: Live = NOBODY_LIVE
       if (state === 'ready') {
         // Board blockers from outside the plan count too.
         const outside = (own.issue?.blockedBy ?? []).map((id) => issueById(board, id)).filter((i): i is Issue => Boolean(i && i.status !== 'done' && i.status !== 'canceled' && i.status !== 'in_review' && !body.milestones.some((x) => x.tasks.some((y) => y.issueId === i.id))));
-        const unmerged = t.blockedBy.filter((b) => finished(b) && !merged(b));
+        // Only branches in its own repo can be built on; one in another repo reaches it through that repo's plan branch.
+        const repo = own.issue?.projectId ?? milestoneRepos(plan, m)[0]!;
+        const unmerged = t.blockedBy.filter((b) => finished(b) && !merged(b) && (base.get(b)?.issue?.projectId ?? repo) === repo);
         if (!openIds.has(m.id) && !plan.runs[m.id]?.passedAt) {
           state = 'later';
           const waits = milestoneDeps(body, m).filter((d) => !plan.runs[d]?.passedAt);
@@ -297,7 +309,8 @@ export function planView(plan: Plan, board: BoardState, live: Live = NOBODY_LIVE
           from = base.get(unmerged[0]!)?.issue?.branch;
         }
         // Nothing unmerged to build on: the plan's branch as it is now (earlier milestones merged in).
-        if (state === 'ready' && !from && !froms && plan.branch) from = plan.branch;
+        const repoBranch = planBranchFor(plan, repo);
+        if (state === 'ready' && !from && !froms && repoBranch) from = repoBranch;
         // Being combined right now: shown as under way, never as waiting in silence.
         combining = state === 'ready' ? plan.combining?.[t.id] : undefined;
         if (combining) {
@@ -371,7 +384,7 @@ function nextStep(plan: Plan, v: Omit<PlanView, 'next'>): NextStep {
   if (plan.status === 'done') {
     if (plan.draft) return { kind: 'review_changes' };
     // Its work is on the plan's branch, not in main yet.
-    if (plan.branch && !plan.shipped && v.milestones.some((m) => m.tasks.some((t) => t.state === 'planned'))) return { kind: 'ship', branch: plan.branch, ...(plan.pr ? { pr: plan.pr } : {}) };
+    if (plan.branch && !plan.shipped && v.milestones.some((m) => m.tasks.some((t) => t.state === 'planned'))) return { kind: 'ship', branch: plan.branch, ...(plan.pr ? { pr: plan.pr } : {}), ...(isMultiRepo(plan) ? { repos: shipRepos(plan) } : {}) };
     return { kind: 'done' };
   }
   if (plan.draft) return { kind: 'review_changes' };

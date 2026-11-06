@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CcAgent, CcSession } from '../src/core/claude-code/model.js';
 import type { Project, Workspace } from '../src/workspaces/types.js';
-import { hasRowsInside } from '../packages/mac/src/layout/project-rows.js';
+import { hasRowsInside, planPlace } from '../packages/mac/src/layout/project-rows.js';
 
 /** A project's fold arrow shows only when unfolding it would show something. */
 describe('what a project has inside', () => {
@@ -25,5 +25,27 @@ describe('what a project has inside', () => {
   it('sub-agents started in the main folder; an old sub-agent worktree on its own is nothing to show', () => {
     expect(hasRowsInside(project(), [session([agent('a1')], 'main')])).toBe(true);
     expect(hasRowsInside(project(ws('agent-x', { external: true, path: '/r/.claude/worktrees/agent-x' })), [])).toBe(false);
+  });
+});
+
+describe('where a plan’s row goes (BLG-20)', () => {
+  const groups = [
+    { name: 'Calendar', projects: [{ id: 'api' }, { id: 'cal' }, { id: 'desk' }] },
+    { name: 'Other', projects: [{ id: 'web' }] },
+  ];
+
+  it('a one-repo plan: under its project, even in a group', () => {
+    expect(planPlace({ projectId: 'api' }, groups)).toEqual({ project: 'api' });
+    expect(planPlace({ projectId: 'api', repos: ['api'] }, groups)).toEqual({ project: 'api' });
+  });
+
+  it('a plan across repos all in one group: under the group', () => {
+    expect(planPlace({ projectId: 'cal', repos: ['cal', 'api', 'desk'] }, groups)).toEqual({ group: 'Calendar' });
+  });
+
+  it('its repos in different groups, or one not in any: under its primary', () => {
+    expect(planPlace({ projectId: 'api', repos: ['api', 'web'] }, groups)).toEqual({ project: 'api' });
+    expect(planPlace({ projectId: 'api', repos: ['api', 'loose'] }, groups)).toEqual({ project: 'api' });
+    expect(planPlace({ projectId: 'api', repos: ['api', 'cal'] }, [])).toEqual({ project: 'api' });
   });
 });

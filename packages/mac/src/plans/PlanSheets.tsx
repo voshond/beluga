@@ -1,13 +1,13 @@
 import { type KeyboardEvent, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AUTONOMIES, AUTONOMY_INFO, type Autonomy, DEFAULT_AUTONOMY, TESTS_AT, TESTS_AT_INFO, type TestsAt } from '@beluga/core/plans/model.js';
 import { agentForChoice } from '@beluga/ui/agent-choice.js';
-import { Field, FormSheet, Popup, TextArea } from '../components/FormSheet.js';
+import { Checkbox, Field, FormSheet, Popup, TextArea } from '../components/FormSheet.js';
 import { YOUR_AGENT, useAgentEntries } from '../components/agent-options.js';
 import { Icon, type IconName } from '../components/Icon.js';
 import { cx } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
 import { useTasksPrefs } from '../tasks/use-tasks.js';
-import { modeChange } from './plans-model.js';
+import { firstRepos, modeChange, newPlanTitle, withPrimary, withRepo } from './plans-model.js';
 import { usePlanActions, usePlanView, usePlans } from './use-plans.js';
 import p from './plans.module.css';
 import { chordLabel } from '../lib/shortcuts-model.js';
@@ -18,17 +18,22 @@ const AUTONOMY_ICON: Record<Autonomy, IconName> = { step: 'hand', gated: 'flag',
 /**
  * A new plan: what it's for (Claude plans from it, reading the code) and how far it runs on its
  * own. Opened from a project it's that project's (no picker). More options: who works its
- * milestones and tasks (BLG-497; your default agent unless you pick another).
+ * milestones and tasks (BLG-497; your default agent unless you pick another). Plan Across More
+ * Projects… ticks other projects of this Mac's (primary first); a group's Plan Across Group…
+ * opens it with the group's projects ticked (BLG-19).
  */
-export function NewPlanSheet({ projectId, close }: { projectId?: string; close: () => void }) {
+export function NewPlanSheet({ projectId, projectIds, close }: { projectId?: string; projectIds?: readonly string[]; close: () => void }) {
   const prefs = useTasksPrefs();
   const all = useApp((s) => s.projects);
   const projects = useMemo(() => all.filter((p) => p.root && !p.error), [all]);
   const { api, act } = usePlanActions();
   const actions = useActions();
   const [goal, setGoal] = useState('');
-  const known = projectId !== undefined && projects.some((p) => p.id === projectId);
-  const [project, setProject] = useState((known ? projectId : projects.some((p) => p.id === prefs.project) ? prefs.project : projects[0]?.id) ?? '');
+  const ids = projects.map((p) => p.id);
+  const known = [...(projectIds ?? []), ...(projectId ? [projectId] : [])].some((id) => ids.includes(id));
+  const [repos, setRepos] = useState(() => firstRepos(ids, projectIds ?? (projectId ? [projectId] : []), prefs.project));
+  const [across, setAcross] = useState(repos.length > 1);
+  const project = repos[0] ?? '';
   const [autonomy, setAutonomy] = useState<Autonomy>(DEFAULT_AUTONOMY);
   const [testsAt, setTestsAt] = useState<TestsAt>('milestone');
   const agents = useAgentEntries();
@@ -43,10 +48,10 @@ export function NewPlanSheet({ projectId, close }: { projectId?: string; close: 
     };
     return <FormSheet title="New Plan" intro="Plans belong to a project: a folder with your code. Add one first." submitLabel="Add a Project…" onSubmit={addProject} onCancel={close} />;
   }
-  const name = projects.find((p) => p.id === project)?.name;
+  const names = repos.flatMap((id) => projects.find((p) => p.id === id)?.name ?? []);
   return (
     <FormSheet
-      title={name ? `Plan in ${name}` : 'New Plan'}
+      title={newPlanTitle(names)}
       icon="flag"
       intro="Say what you want built. Your agent reads the code and cuts it into milestones and tasks; you talk it through, and nothing reaches the board until you approve."
       submitLabel="Plan with Your Agent"
@@ -55,7 +60,7 @@ export function NewPlanSheet({ projectId, close }: { projectId?: string; close: 
       onCancel={close}
       onSubmit={async () => {
         close();
-        await act(() => api.create({ projectId: project, goal: goal.trim(), autonomy, testsAt, ...(agent !== YOUR_AGENT ? { agent: agentForChoice(agent, runtimes) } : {}) }));
+        await act(() => api.create({ projectId: project, ...(repos.length > 1 ? { projectIds: [...repos] } : {}), goal: goal.trim(), autonomy, testsAt, ...(agent !== YOUR_AGENT ? { agent: agentForChoice(agent, runtimes) } : {}) }));
       }}
     >
       <div className={p.newPlan}>
@@ -64,12 +69,34 @@ export function NewPlanSheet({ projectId, close }: { projectId?: string; close: 
         </label>
         <GoalBox value={goal} onChange={setGoal} />
         <div className={p.newPlanHint}>What it’s for and what done looks like. {chordLabel('Cmd+Enter')} starts planning.</div>
-        {known ? null : (
+        {known && !across ? null : (
           <div className={p.newPlanRow}>
-            <span className={p.newPlanLabel}>Project</span>
-            <Popup label="Project" value={project} options={projects.map((p) => ({ value: p.id, label: p.name }))} onChange={setProject} />
+            <span className={p.newPlanLabel}>{across ? 'Primary project' : 'Project'}</span>
+            <Popup label="Project" value={project} options={projects.map((p) => ({ value: p.id, label: p.name }))} onChange={(id) => setRepos(withPrimary(repos, id))} />
           </div>
         )}
+        {projects.length > 1 ? (
+          <>
+            <button type="button" className={p.newPlanMore} aria-expanded={across} onClick={() => setAcross(!across)}>
+              <Icon name={across ? 'chevronDown' : 'chevronRight'} size={10} />
+              Plan Across More Projects…
+            </button>
+            {across ? (
+              <div className={p.newPlanRepos} role="group" aria-label="Projects in this plan">
+                {projects.map((x) => (
+                  <Checkbox
+                    key={x.id}
+                    checked={repos.includes(x.id)}
+                    onChange={(on) => setRepos(withRepo(repos, x.id, on))}
+                    label={x.name}
+                    {...(x.id === project ? { detail: 'Primary: the plan is talked through here' } : {})}
+                  />
+                ))}
+                <div className={p.newPlanHint}>Each milestone runs in one of them, and each gets its own plan branch and pull request.</div>
+              </div>
+            ) : null}
+          </>
+        ) : null}
         <div className={p.newPlanLabel} id="plan-runs">
           How it runs
         </div>

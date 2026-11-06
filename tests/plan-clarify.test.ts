@@ -220,3 +220,67 @@ describe('the demo’s Claude plans this way too (BLG-8)', () => {
     expect(t.issue('Release').brief.decisions).toContain('Who signs off on the release before it goes out? → Mia signs off');
   });
 });
+
+describe('a plan across repos: the planner sees and plans them all (BLG-11)', () => {
+  function multi(repos?: readonly string[]) {
+    const store = new Store(initialState('room'));
+    store.dispatch({ type: 'projects', projects: [project('api', 'whisper-api', [ws('main', 'api', 'whisper-api', 'chat', { askOnly: true } as Partial<Workspace>)]), project('cal', 'calendar-api'), project('desk', 'calendar-desktop')] });
+    let reads: (id: string) => readonly string[] = () => [];
+    const controller = {
+      onWorktree: () => () => undefined,
+      setReadAlso: (fn: (id: string) => readonly string[]) => {
+        reads = fn;
+        return () => undefined;
+      },
+    } as unknown as WorkspaceController;
+    const board = new Board({ store, dir: null, projectName: (id) => store.getState().projects.find((p) => p.id === id)?.name });
+    const boardWork = new BoardWork({ store, board, controller, selfId: () => 'p-me', selfName: () => 'Kay', askClaude: () => undefined });
+    board.setContext('cal', 'Calendar API: events and invites over REST.', 'Kay');
+    const plans = new Plans({ store, dir: null });
+    const work = new PlansWork({ store, plans, board: boardWork, controller, git: null, askClaude: () => 'ask', intend: () => undefined, delayMs: 0 });
+    const plan = plans.create({ projectId: 'api', ...(repos ? { repos } : {}), home: 'ws:main', goal: 'Invites with transcripts' }, boardWork.me());
+    const run = () => work.forRun('ws:main', 'p-me')!;
+    return { store, plans, plan, run, reads: (id: string) => reads(id) };
+  }
+
+  it('plan_write takes milestone repos by name or id and keeps ids', () => {
+    const t = multi(['cal', 'desk']);
+    t.run().tools!.write({ title: 'Invites', goal: 'g', milestones: [{ title: 'Contract', repos: ['Calendar-API'], tasks: [{ title: 'Schema' }] }, { title: 'Desktop', repos: ['desk', 'calendar-api'], tasks: [{ title: 'UI' }] }, { title: 'Transcripts', tasks: [{ title: 'Hook' }] }] });
+    const ms = t.plans.need(t.plan.id).draft!.milestones;
+    expect(ms.map((m) => m.repos)).toEqual([['cal'], ['desk', 'cal'], undefined]);
+    t.run().tools!.update([{ op: 'update_milestone', id: ms[2]!.id, repos: ['whisper-api'] }]);
+    expect(t.plans.need(t.plan.id).draft!.milestones[2]!.repos).toEqual(['api']);
+    expect(() => t.run().tools!.write({ title: 'Invites', goal: 'g', milestones: [{ title: 'Elsewhere', repos: ['mobile-app'] }] })).toThrow(/"mobile-app", which isn't one of this plan's repos/);
+  });
+
+  it('the tool schema takes repos on milestones and on update_milestone', () => {
+    const ops = toOps([{ op: 'update_milestone', id: 'm', repos: ['cal'] }]);
+    expect(ops[0]).toMatchObject({ op: 'update_milestone', id: 'm', repos: ['cal'] });
+  });
+
+  it('the planning prompt lists every repo with its folder and what was written about it', () => {
+    const brief = multi(['cal', 'desk']).run().brief!;
+    expect(brief).toContain('This plan covers several repos');
+    expect(brief).toContain('- whisper-api (id api), the primary: /tmp/whisper-api');
+    expect(brief).toContain('- calendar-api (id cal): /tmp/calendar-api');
+    expect(brief).toContain('- calendar-desktop (id desk): /tmp/calendar-desktop');
+    expect(brief).toContain('Calendar API: events and invites over REST.');
+    expect(brief).toMatch(/Contract first/);
+  });
+
+  it('a single-repo plan’s prompt is unchanged', () => {
+    const t = multi();
+    const plan = t.plans.need(t.plan.id);
+    const board = t.store.getState().board;
+    const brief = t.run().brief!;
+    expect(brief).toBe(planningBrief(plan, board, ''));
+    expect(planningBrief(plan, board, '', [{ id: 'api', name: 'whisper-api', root: '/tmp/whisper-api' }])).toBe(planningBrief(plan, board, ''));
+    expect(brief).not.toContain('several repos');
+  });
+
+  it('the home reads the other repos’ main folders; a single-repo plan’s reads none', () => {
+    expect(multi(['cal', 'desk']).reads('main')).toEqual(['/tmp/calendar-api', '/tmp/calendar-desktop']);
+    expect(multi().reads('main')).toEqual([]);
+    expect(multi(['cal']).reads('other')).toEqual([]);
+  });
+});

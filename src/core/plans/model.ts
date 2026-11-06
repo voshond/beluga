@@ -102,6 +102,8 @@ export interface PlanMilestone {
    * from its tasks' blockers in other milestones; empty, it runs alongside from the start.
    */
   readonly dependsOn?: readonly string[];
+  /** The repos it works in (project ids, from the plan's): absent or empty, the plan's primary. */
+  readonly repos?: readonly string[];
 }
 
 /**
@@ -172,6 +174,15 @@ export interface MilestoneAgent {
   readonly at: number;
   /** Plan task ids handed to it so far (more come when a check adds fix tasks). */
   readonly tasks: readonly string[];
+  /** A milestone across repos: its worktrees in the other repos (it edits them too), each merged into its repo's plan branch. */
+  readonly along?: readonly MilestoneAlong[];
+}
+
+/** A milestone agent's worktree in one of its other repos. */
+export interface MilestoneAlong {
+  readonly projectId: string;
+  readonly worktree: string;
+  readonly branch?: string;
 }
 
 /** A task that builds on several unmerged tasks: their branches are being combined into its start. */
@@ -195,6 +206,7 @@ export interface PlanMainMerge {
   readonly at: number;
   /** What was merged in ("origin/main"). */
   readonly main: string;
+  readonly projectId?: string;
   readonly conflict?: {
     readonly at: number;
     readonly dir: string;
@@ -230,6 +242,8 @@ export interface PlanMerge {
     /** The branch that conflicted, and its task's key. */
     readonly merging: string;
     readonly key?: string;
+    /** The repo it conflicts in (project id); absent, the plan's primary. */
+    readonly projectId?: string;
     readonly files: readonly string[];
     /** Claude was asked and it's still there: it waits for you. */
     readonly stuck?: boolean;
@@ -284,7 +298,12 @@ export type PlanStatus = 'draft' | 'active' | 'done';
 
 export interface Plan {
   readonly id: string;
+  /** Its primary repo. */
   readonly projectId: string;
+  /** Every repo it covers (project ids, primary first); absent, only projectId. */
+  readonly repos?: readonly string[];
+  /** A plan across repos: the board its tasks go on (one covering its repos, BLG-12); absent, each repo's own. */
+  readonly board?: string;
   /** The conversation it's planned and run from (`ws:<id>`): its head Claude. */
   readonly home: string;
   readonly status: PlanStatus;
@@ -315,13 +334,18 @@ export interface Plan {
   readonly watch?: Readonly<Record<string, TaskWatch>>;
   /** Its branch (plan/<slug>, from main): every task starts from it, passed milestones merge into it, and it ends as one PR. */
   readonly branch?: string;
+  /** A plan across repos: each repo's plan/<slug> (by project id; the primary's is `branch` too). Absent: only `branch`, in the primary. */
+  readonly branches?: Readonly<Record<string, string>>;
   /** Passed milestones being merged into the branch (by milestone id). */
   readonly merging?: Readonly<Record<string, PlanMerge>>;
   /** Main being merged into the plan's branch (its PR conflicted with main), or stopped at a conflict for Claude to fix. */
   readonly mainMerge?: PlanMainMerge;
   /** The branch's pull request into main, as last seen. */
   readonly pr?: PlanPr;
+  readonly prs?: Readonly<Record<string, PlanPr>>;
   readonly shipped?: PlanShipped;
+  readonly shippedIn?: Readonly<Record<string, PlanShipped>>;
+  readonly mergeAll?: { readonly at: number; readonly auto: boolean };
   /** Plans that ran before they had a branch were caught up once (passed milestones merged into one). */
   readonly caughtUp?: boolean;
   /**
@@ -388,6 +412,7 @@ export const MAX_MILESTONES = 12;
 export const MAX_PLAN_TASKS = 80;
 export const DEFAULT_PARALLEL = 3;
 export const MAX_PARALLEL = 8;
+export const MAX_PLAN_REPOS = 8;
 
 export const NO_PLANS: PlansState = { enabled: false, plans: [], style: '' };
 export const initialPlans: PlansSlice = { plans: NO_PLANS };
@@ -486,6 +511,51 @@ export function planTaskOfIssue(state: PlansState, issueId: string): { readonly 
   return undefined;
 }
 
+export const planRepos = (plan: Pick<Plan, 'projectId' | 'repos'>): readonly string[] => [...new Set([plan.projectId, ...(plan.repos ?? [])])];
+
+export const isMultiRepo = (plan: Pick<Plan, 'projectId' | 'repos'>): boolean => planRepos(plan).length > 1;
+
+/** A repo's plan branch: its own, else (plans from before branches per repo) `branch` for the primary. */
+export const planBranchFor = (plan: Pick<Plan, 'projectId' | 'branch' | 'branches'>, projectId: string): string | undefined =>
+  plan.branches?.[projectId] ?? (projectId === plan.projectId ? plan.branch : undefined);
+
+export function milestoneRepos(plan: Pick<Plan, 'projectId' | 'repos'>, milestone: Pick<PlanMilestone, 'repos'> | undefined): readonly string[] {
+  const all = planRepos(plan);
+  const named = (milestone?.repos ?? []).filter((r) => all.includes(r));
+  return named.length ? [...new Set(named)] : [plan.projectId];
+}
+
+export const planPrFor = (plan: Pick<Plan, 'projectId' | 'pr' | 'prs'>, projectId: string): PlanPr | undefined =>
+  plan.prs?.[projectId] ?? (projectId === plan.projectId ? plan.pr : undefined);
+
+export const shippedIn = (plan: Pick<Plan, 'projectId' | 'repos' | 'shipped' | 'shippedIn'>, projectId: string): PlanShipped | undefined =>
+  plan.shipped ?? plan.shippedIn?.[projectId];
+
+export const prRef = (pr: Pick<PlanPr, 'number' | 'url'>): string => {
+  const m = /github\.com\/([^/]+)\/([^/]+)\/pull\//.exec(pr.url);
+  return m ? `${m[1]}/${m[2]}#${pr.number}` : `#${pr.number}`;
+};
+
+export function shipOrder(plan: Pick<Plan, 'projectId' | 'repos' | 'body'>): readonly string[] {
+  const repos = planRepos(plan);
+  const upstream = new Map(repos.map((r) => [r, new Set<string>()]));
+  const milestones = plan.body?.milestones ?? [];
+  const byId = new Map(milestones.map((m) => [m.id, m]));
+  for (const m of milestones) {
+    const here = milestoneRepos(plan, m);
+    for (const dep of milestoneDeps(plan.body, m)) {
+      for (const from of milestoneRepos(plan, byId.get(dep))) for (const to of here) if (from !== to) upstream.get(to)?.add(from);
+    }
+  }
+  const order: string[] = [];
+  while (order.length < repos.length) {
+    const left = repos.filter((r) => !order.includes(r));
+    order.push(left.find((r) => [...upstream.get(r)!].every((u) => order.includes(u))) ?? left[0]!);
+  }
+  const touched = new Set(milestones.flatMap((m) => milestoneRepos(plan, m)));
+  return touched.size ? order.filter((r) => touched.has(r)) : [plan.projectId];
+}
+
 /** A milestone's own autonomy, else its plan's. */
 export const autonomyOf = (plan: Plan, milestone: PlanMilestone | undefined): Autonomy => milestone?.autonomy ?? plan.autonomy;
 
@@ -553,7 +623,7 @@ export function diffBodies(before: PlanBody | undefined, after: PlanBody | undef
     const b = now.get(id)!;
     return a && (a.milestone.id !== b.milestone.id || taskSignature(a.task) !== taskSignature(b.task));
   });
-  const ms = (b: PlanBody | undefined): string => (b?.milestones ?? []).map((m) => `${m.id}\0${m.title}\0${m.goal ?? ''}\0${m.criteria.join('\0')}\0${m.dependsOn?.join(',') ?? '-'}`).join('\n');
+  const ms = (b: PlanBody | undefined): string => (b?.milestones ?? []).map((m) => `${m.id}\0${m.title}\0${m.goal ?? ''}\0${m.criteria.join('\0')}\0${m.dependsOn?.join(',') ?? '-'}\0${m.repos?.join(',') ?? '-'}`).join('\n');
   const milestones = ms(before) === ms(after) ? 0 : Math.max(1, Math.abs((after?.milestones.length ?? 0) - (before?.milestones.length ?? 0)));
   const notes = (b: PlanBody | undefined): Set<string> => new Set([...(b?.decisions ?? []).map((d) => JSON.stringify(d)), ...(b?.openQuestions ?? []).map((q) => `?${q}`)]);
   const was = notes(before);

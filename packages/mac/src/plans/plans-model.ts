@@ -1,7 +1,7 @@
 import type { BoardState } from '../../../../src/core/board/model.js';
 import type { Actor } from '../../../../src/core/board/model.js';
-import { AUTONOMY_INFO, type Autonomy, type Plan, type PlanBody, type PlanEvent, type PlanPr, type PlansState, diffBodies, milestoneDeps, planTitle, shownBody } from '../../../../src/core/plans/model.js';
-import { type MilestoneState, type MilestoneView, type NextStep, type PlanView, type TaskState, type TaskView, agentNowWords } from '../../../../src/core/plans/progress.js';
+import { AUTONOMY_INFO, type Autonomy, MAX_PLAN_REPOS, type Plan, type PlanBody, type PlanEvent, type PlanMilestone, type PlanPr, type PlansState, diffBodies, isMultiRepo, milestoneDeps, milestoneRepos, planBranchFor, planTitle, prRef, shownBody } from '../../../../src/core/plans/model.js';
+import { type MilestoneState, type MilestoneView, type NextStep, type PlanView, type ShipRepo, type TaskState, type TaskView, agentNowWords } from '../../../../src/core/plans/progress.js';
 import { pulseWords } from '../../../../src/core/plans/watchdog.js';
 
 /**
@@ -59,6 +59,11 @@ export function milestoneLabel(view: Pick<PlanView, 'milestones' | 'open'>, m: M
 export function planStatus(view: Pick<PlanView, 'plan' | 'next'>): { readonly label: string; readonly tone: Tone } {
   const { plan, next } = view;
   if (!plan.body) return { label: 'Draft', tone: 'muted' };
+  if (plan.status === 'done' && !plan.draft && next.kind === 'ship' && next.repos) {
+    const closed = next.repos.some((r) => !r.shipped && r.pr?.state === 'CLOSED');
+    const merged = next.repos.filter((r) => r.shipped).length;
+    return closed ? { label: 'PR closed', tone: 'warn' } : merged ? { label: `${merged}/${next.repos.length} merged`, tone: 'accent' } : next.repos.some((r) => r.pr) ? { label: 'PRs open', tone: 'accent' } : { label: 'Ready to ship', tone: 'accent' };
+  }
   if (plan.status === 'done' && !plan.draft) return next.kind === 'ship' ? { label: plan.pr?.state === 'CLOSED' ? 'PR closed' : plan.pr ? 'PR open' : 'Ready to ship', tone: plan.pr?.state === 'CLOSED' ? 'warn' : 'accent' } : { label: 'Done', tone: 'ok' };
   if (plan.draft) return { label: 'Changes proposed', tone: 'accent' };
   if (plan.paused) return { label: 'Paused', tone: 'muted' };
@@ -134,6 +139,7 @@ export function nextWords(next: NextStep): { readonly title: string; readonly de
     case 'merging':
       return { title: next.text, detail: `“${next.milestone.milestone.title}” passes once its work is merged into the plan’s branch` };
     case 'ship':
+      if (next.repos) return shipAllWords(next.repos);
       if (next.pr?.state === 'OPEN') return { title: `Pull request #${next.pr.number} is open`, detail: `${next.branch} → main: ${prWords(next.pr)}` };
       if (next.pr?.state === 'CLOSED') return { title: `Pull request #${next.pr.number} was closed`, detail: 'Closed without merging: the plan’s tasks stay merged into the plan' };
       return { title: 'Open PR', detail: `Every milestone passed: ${next.branch} has all the plan’s work` };
@@ -149,6 +155,39 @@ export function plansOf(state: PlansState, projectId: string | undefined): Plan[
 }
 
 export const titleOf = planTitle;
+
+/** Which repos a milestone runs in, by name, for its chip: only on a plan across repos (BLG-20). */
+export function milestoneRepoNames(plan: Pick<Plan, 'projectId' | 'repos'>, milestone: Pick<PlanMilestone, 'repos'>, projects: ReadonlyArray<{ readonly id: string; readonly name: string }>): readonly string[] {
+  if (!isMultiRepo(plan)) return [];
+  return milestoneRepos(plan, milestone).map((id) => projects.find((p) => p.id === id)?.name ?? id);
+}
+
+/** New Plan's title: "Plan in api", or across several ("Plan across whisper-api, calendar-api…"). */
+export function newPlanTitle(names: readonly string[]): string {
+  if (!names.length) return 'New Plan';
+  if (names.length === 1) return `Plan in ${names[0]}`;
+  return `Plan across ${names.slice(0, 2).join(', ')}${names.length > 2 ? '…' : ''}`;
+}
+
+/** New Plan's projects to start with (primary first): the ones asked for that exist, else your usual project, else the first. */
+export function firstRepos(known: readonly string[], asked: readonly string[], usual: string | undefined): readonly string[] {
+  const picked = [...new Set(asked.filter((id) => known.includes(id)))].slice(0, MAX_PLAN_REPOS);
+  if (picked.length) return picked;
+  const one = usual && known.includes(usual) ? usual : known[0];
+  return one ? [one] : [];
+}
+
+/** Ticks or unticks a project: the primary stays, and a plan covers at most MAX_PLAN_REPOS. */
+export function withRepo(repos: readonly string[], id: string, on: boolean): readonly string[] {
+  if (!on) return id === repos[0] ? repos : repos.filter((r) => r !== id);
+  if (repos.includes(id) || repos.length >= MAX_PLAN_REPOS) return repos;
+  return [...repos, id];
+}
+
+/** Makes a project the primary (the plan's home), keeping the others ticked. */
+export function withPrimary(repos: readonly string[], id: string): readonly string[] {
+  return [id, ...repos.filter((r) => r !== id)].slice(0, MAX_PLAN_REPOS);
+}
 
 /** How far along each milestone is, for a plan's progress bar (finished share per milestone). */
 export function bars(view: PlanView): ReadonlyArray<{ readonly id: string; readonly title: string; readonly state: MilestoneState; readonly share: number }> {
@@ -218,12 +257,21 @@ function mergingLine(view: PlanView): Headline | undefined {
   return { who: 'beluga', text: `Merging ${m ? quoted(m) : 'a milestone'} into ${branchBits(view.plan).branch ?? 'the plan’s branch'}` };
 }
 
+function shipAllWords(repos: readonly ShipRepo[]): { readonly title: string; readonly detail: string } {
+  const merged = repos.filter((r) => r.shipped).length;
+  const open = repos.filter((r) => r.pr?.state === 'OPEN').length;
+  const closed = repos.filter((r) => !r.shipped && r.pr?.state === 'CLOSED').length;
+  if (closed) return { title: `${closed} of ${repos.length} pull requests closed`, detail: 'Closed without merging: open them again, or merge locally' };
+  if (open || merged) return { title: `${merged} of ${repos.length} pull requests merged`, detail: `Merge All merges them in order: ${repos.map((r) => (r.pr ? prRef(r.pr) : r.branch)).join(' → ')}` };
+  return { title: 'Open PRs', detail: `Every milestone passed: one pull request per repo (${repos.length}), each linking the others` };
+}
+
 /**
  * The plan in one sentence, with who it's about: what waits for you (“You: pass “API” — Claude
  * checked all 4 criteria”), else what Claude or Beluga is doing (“Claude is checking “API””, “3
  * tasks running in 2 milestones”).
  */
-export function headline(view: PlanView): Headline {
+export function headline(view: PlanView, nameOf?: (projectId: string) => string): Headline {
   const { plan, next } = view;
   const running = view.active.filter((t) => t.state === 'running' || t.state === 'idle');
   const inMilestones = new Set(running.map((t) => t.milestoneId)).size;
@@ -271,7 +319,7 @@ export function headline(view: PlanView): Headline {
     case 'stalled':
       return { who: 'you', text: `Resume ${next.tasks.map((t) => t.issue?.key ?? `“${t.task.title}”`).join(', ')}: its agent stopped again without finishing` };
     case 'ship':
-      return shipHeadline(plan, next.branch, next.pr);
+      return next.repos ? shipAllHeadline(plan, next.repos, nameOf) : shipHeadline(plan, next.branch, next.pr);
     case 'done':
       return { who: 'beluga', text: 'Done: every milestone passed' };
   }
@@ -615,6 +663,47 @@ export function shipAction(plan: Plan, pr: PlanPr | undefined): ShipAction {
   return { kind: 'merge' };
 }
 
+export type ShipAllAction =
+  | { readonly kind: 'open'; readonly repos: readonly string[]; readonly again: boolean }
+  | { readonly kind: 'repo'; readonly projectId: string; readonly pr?: PlanPr; readonly action: ShipAction }
+  | { readonly kind: 'queued' }
+  | { readonly kind: 'merge_all'; readonly wait: boolean }
+  | { readonly kind: 'merged' };
+
+export function shipAllAction(plan: Plan, repos: readonly ShipRepo[]): ShipAllAction {
+  const left = repos.filter((r) => !r.shipped);
+  if (!left.length) return { kind: 'merged' };
+  const toOpen = left.filter((r) => !r.pr || r.pr.state === 'CLOSED');
+  if (toOpen.length) return { kind: 'open', repos: toOpen.map((r) => r.projectId), again: toOpen.some((r) => r.pr?.state === 'CLOSED') };
+  const mainIn = plan.mainMerge ? (plan.mainMerge.projectId ?? plan.projectId) : undefined;
+  const busy = left.find((r) => r.projectId === mainIn);
+  if (busy) return { kind: 'repo', projectId: busy.projectId, ...(busy.pr ? { pr: busy.pr } : {}), action: shipAction(plan, busy.pr) };
+  const blocked = left.find((r) => ['resolve', 'draft'].includes(shipAction(plan, r.pr).kind));
+  if (blocked) return { kind: 'repo', projectId: blocked.projectId, ...(blocked.pr ? { pr: blocked.pr } : {}), action: shipAction(plan, blocked.pr) };
+  if (plan.mergeAll) return { kind: 'queued' };
+  return { kind: 'merge_all', wait: left.some((r) => shipAction(plan, r.pr).kind === 'wait') };
+}
+
+export function shipAllHeadline(plan: Plan, repos: readonly ShipRepo[], nameOf: (projectId: string) => string = (id) => id): Headline {
+  const a = shipAllAction(plan, repos);
+  const done = repos.filter((r) => r.shipped).length;
+  const sofar = done ? ` (${done} of ${repos.length} merged)` : '';
+  switch (a.kind) {
+    case 'open':
+      return { who: 'you', text: a.again ? `${a.repos.map(nameOf).join(', ')}: closed without merging; open again, or merge locally` : `Open the plan’s ${repos.length} pull requests, one per repo, each linking the others` };
+    case 'repo': {
+      const at = shipHeadline(plan, planBranchFor(plan, a.projectId) ?? plan.branch ?? 'the plan’s branch', a.pr);
+      return { who: at.who, text: `${nameOf(a.projectId)}: ${at.text}` };
+    }
+    case 'queued':
+      return { who: 'beluga', text: `Merging in order as checks pass${sofar}` };
+    case 'merge_all':
+      return { who: 'you', text: `Merge All: ${repos.map((r) => nameOf(r.projectId)).join(' → ')}${sofar}` };
+    case 'merged':
+      return { who: 'beluga', text: 'Every repo’s pull request is merged' };
+  }
+}
+
 const fileList = (files: readonly string[]): string => files.slice(0, 2).join(', ') + (files.length > 2 ? ` and ${files.length - 2} more` : '');
 
 function shipHeadline(plan: Plan, branch: string, pr: PlanPr | undefined): Headline {
@@ -657,14 +746,17 @@ export interface FlowStep {
  * Where the plan's work goes, from main back: main, the pull request into it, the plan's branch,
  * and each milestone merged into that branch (or merging, stopped at a conflict, couldn't, not yet).
  */
-export function branchFlow(view: PlanView): readonly FlowStep[] {
+export function branchFlow(view: PlanView, nameOf: (projectId: string) => string = (id) => id): readonly FlowStep[] {
   const { plan } = view;
   const branch = plan.branch;
   const pr = plan.pr;
   const steps: FlowStep[] = [];
   const shipped = plan.shipped;
-  steps.push({ id: 'main', kind: 'main', label: 'main', detail: shipped ? (shipped.how === 'pr' ? `the plan’s work is in, via #${shipped.number}` : 'the plan’s work is in, merged here') : 'the plan’s work goes here at the end', state: shipped ? 'done' : 'waiting' });
-  if (branch) {
+  const repos = view.next.kind === 'ship' ? view.next.repos : undefined;
+  steps.push({ id: 'main', kind: 'main', label: 'main', detail: shipped ? (shipped.how === 'pr' && !repos ? `the plan’s work is in, via #${shipped.number}` : 'the plan’s work is in, merged here') : 'the plan’s work goes here at the end', state: shipped ? 'done' : 'waiting' });
+  if (branch && repos) {
+    steps.push(...repoFlow(plan, repos, nameOf));
+  } else if (branch) {
     const ship = shipAction(plan, pr);
     const prState: FlowStep['state'] = shipped || pr?.state === 'MERGED' ? 'done' : ship.kind === 'stuck' || ship.kind === 'resolve' || pr?.state === 'CLOSED' || pr?.checks === 'failing' ? 'problem' : pr ? 'active' : 'waiting';
     const prDetail = plan.mainMerge?.conflict ? `conflicts with main in ${fileList(plan.mainMerge.conflict.files)}${plan.mainMerge.conflict.stuck ? ': needs you' : ': your agent is fixing it'}` : pr ? prWords(pr) : shipped?.how === 'local' ? 'merged here instead' : 'opened once every milestone passed';
@@ -678,19 +770,34 @@ export function branchFlow(view: PlanView): readonly FlowStep[] {
     const c = m.merging?.conflict;
     const failed = m.run.mergeFailed;
     const state: FlowStep['state'] = m.state === 'merging' ? (c?.stuck ? 'problem' : 'active') : failed ? 'problem' : m.state === 'passed' ? 'done' : m.state === 'later' || m.state === 'draft' ? 'later' : 'waiting';
+    const inRepos = milestoneRepos(plan, m.milestone);
+    const own = planBranchFor(plan, inRepos[0]!) ?? branch;
+    const into = own && isMultiRepo(plan) ? `${own} in ${inRepos.map(nameOf).join(' and ')}` : own;
     const detail =
       m.state === 'merging'
         ? c
-          ? `merging into ${branch ?? 'the branch'}: ${c.key ?? c.merging} conflicts in ${fileList(c.files)}${c.stuck ? ' — needs you' : ' — your agent is fixing it'}`
-          : `merging into ${branch ?? 'the branch'} now`
+          ? `merging into ${into ?? 'the branch'}: ${c.key ?? c.merging} conflicts in ${fileList(c.files)}${c.stuck ? ' — needs you' : ' — your agent is fixing it'}`
+          : `merging into ${into ?? 'the branch'} now`
         : failed
           ? `couldn’t merge: ${failed.reason}`
           : m.state === 'passed'
-            ? branch
-              ? `merged into ${branch}`
+            ? into
+              ? `merged into ${into}`
               : 'passed'
-            : `merges into ${branch ?? 'the plan’s branch'} when it passes · ${m.finished}/${m.total} tasks finished`;
+            : `merges into ${into ?? 'the plan’s branch'} when it passes · ${m.finished}/${m.total} tasks finished`;
     steps.push({ id: m.milestone.id, kind: 'milestone', label: m.milestone.title, detail, state });
   }
   return steps;
+}
+
+function repoFlow(plan: Plan, repos: readonly ShipRepo[], nameOf: (projectId: string) => string): FlowStep[] {
+  const prs = repos.map((r, n): FlowStep => {
+    const a = shipAction(plan, r.pr);
+    const conflict = plan.mainMerge?.conflict && (plan.mainMerge.projectId ?? plan.projectId) === r.projectId ? plan.mainMerge.conflict : undefined;
+    const state: FlowStep['state'] = r.shipped ? 'done' : conflict?.stuck || a.kind === 'resolve' || r.pr?.state === 'CLOSED' || r.pr?.checks === 'failing' ? 'problem' : r.pr ? 'active' : 'waiting';
+    const words = conflict ? `conflicts with main in ${fileList(conflict.files)}${conflict.stuck ? ': needs you' : ': your agent is fixing it'}` : r.pr ? prWords(r.pr) : r.shipped?.how === 'local' ? 'merged here instead' : 'opened once every milestone passed';
+    return { id: `pr:${r.projectId}`, kind: 'pr', label: `${n + 1}. ${nameOf(r.projectId)}${r.pr ? ` · ${prRef(r.pr)}` : ''}`, detail: `${r.branch} → main · ${r.shipped?.how === 'local' ? 'merged here' : words}`, state };
+  });
+  const branches = repos.map((r): FlowStep => ({ id: `branch:${r.projectId}`, kind: 'branch', label: r.branch, detail: `in ${nameOf(r.projectId)}: its milestones merge into it`, state: r.shipped ? 'done' : 'active' }));
+  return [...prs, ...branches];
 }

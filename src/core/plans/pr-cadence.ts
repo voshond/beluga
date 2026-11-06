@@ -1,4 +1,4 @@
-import type { Plan } from './model.js';
+import { type Plan, planBranchFor, planPrFor, shippedIn } from './model.js';
 
 /**
  * How often a plan's pull request is looked at on GitHub: often while something on it is about to
@@ -24,3 +24,13 @@ export function planPrCadence(plan: Pick<Plan, 'branch' | 'shipped' | 'pr' | 'ma
   if (plan.mainMerge || (pr?.state === 'OPEN' && (pr.conflicts || pr.checks === 'pending' || pr.autoMerge))) return PLAN_PR_FAST_MS;
   return PLAN_PR_SLOW_MS;
 }
+
+export type RepoPrState = Pick<Plan, 'branch' | 'shipped' | 'pr' | 'mainMerge'>;
+
+export const repoPrState = (plan: Pick<Plan, 'projectId' | 'repos' | 'branch' | 'branches' | 'pr' | 'prs' | 'shipped' | 'shippedIn' | 'mainMerge'>, projectId: string): RepoPrState => {
+  const branch = planBranchFor(plan, projectId);
+  const shipped = shippedIn(plan, projectId);
+  const pr = planPrFor(plan, projectId);
+  const mainMerge = plan.mainMerge && (plan.mainMerge.projectId ?? plan.projectId) === projectId ? plan.mainMerge : undefined;
+  return { ...(branch ? { branch } : {}), ...(shipped ? { shipped } : {}), ...(pr ? { pr } : {}), ...(mainMerge ? { mainMerge } : {}) };
+};

@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Check, ChevronRight, MessagesSquare } from 'lucide-react-native';
+import { Check, ChevronRight, FolderGit2, MessagesSquare } from 'lucide-react-native';
 import { ScrollView, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { elapsed, useSince, useView } from '../lib/hooks';
@@ -7,7 +7,7 @@ import type { ConvView, PlanView, Topic } from '../lib/link/protocol';
 import { color } from '../lib/theme';
 import { convHref, Prose, StepTicker } from './Conv';
 import { Breathe, TypingDots } from './Live';
-import { Card, IconBadge, Pill, Press, T, toneBg, toneInk, toneOf } from './ui';
+import { Card, IconBadge, Pill, Press, T, type Tone, toneBg, toneInk, toneOf } from './ui';
 
 type Milestone = PlanView['milestones'][number];
 
@@ -129,6 +129,11 @@ function MapNode({ m, i, onPress }: { readonly m: Milestone; readonly i: number;
           <T v="callout" c={color.text} numberOfLines={2} style={{ fontSize: 13.5, fontWeight: '600', lineHeight: 18 }}>
             {m.title}
           </T>
+          {m.repos?.length ? (
+            <T v="caption" c={color.text2} numberOfLines={1} style={{ fontSize: 11 }}>
+              {m.repos.join(' + ')}
+            </T>
+          ) : null}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <View style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: color.sunken, overflow: 'hidden' }}>
               <View style={{ width: `${all ? (done / all) * 100 : 0}%`, height: 4, borderRadius: 2, backgroundColor: color.ok, opacity: 0.5 }} />
@@ -140,6 +145,18 @@ function MapNode({ m, i, onPress }: { readonly m: Milestone; readonly i: number;
         </View>
       </Press>
     </Animated.View>
+  );
+}
+
+/** The repos a plan across repos covers (BLG-20), primary first; nothing on a one-repo plan. */
+export function PlanRepos({ repos }: { readonly repos: readonly string[] }) {
+  if (repos.length < 2) return null;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }} accessibilityLabel={`Across ${repos.join(', ')}`}>
+      {repos.map((r) => (
+        <Pill key={r} label={r} Icon={FolderGit2} />
+      ))}
+    </View>
   );
 }
 
@@ -177,6 +194,36 @@ export function PlanDecisions({ decisions, open }: { readonly decisions: NonNull
                 {d.why}
               </T>
             ) : null}
+          </View>
+        ))}
+      </Card>
+    </View>
+  );
+}
+
+const SHIP_TONE: Readonly<Record<string, Tone>> = { MERGED: 'mint', CLOSED: 'rose', OPEN: 'sky' };
+
+export function PlanShip({ ship }: { readonly ship: NonNullable<PlanView['ship']> }) {
+  return (
+    <View style={{ marginTop: 26, paddingHorizontal: 16, gap: 10 }}>
+      <T v="eyebrow" style={{ paddingHorizontal: 4 }}>
+        Where the work goes
+      </T>
+      <Card style={{ padding: 16, gap: 14 }}>
+        <T v="caption" c={color.text2}>
+          {ship.next}
+        </T>
+        {ship.repos.map((r, n) => (
+          <View key={r.name} style={{ gap: 4 }} accessibilityLabel={`${r.name}: ${r.pr ? `${r.pr.ref}, ${r.pr.words}` : 'no pull request yet'}`}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <T v="body" style={{ flexShrink: 1 }}>
+                {`${n + 1}. ${r.name}`}
+              </T>
+              <Pill label={r.merged ? 'Merged' : r.pr ? r.pr.ref : 'No PR yet'} tone={r.merged ? 'mint' : r.pr ? (SHIP_TONE[r.pr.state] ?? 'plain') : 'plain'} Icon={r.merged ? Check : undefined} />
+            </View>
+            <T v="caption" c={color.text3}>
+              {r.pr ? `${r.branch} → main · ${r.pr.words}` : `${r.branch} → main`}
+            </T>
           </View>
         ))}
       </Card>

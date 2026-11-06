@@ -1,7 +1,11 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Board } from '../src/core/board/board.js';
 import { BoardWork } from '../src/core/board/work.js';
 import type { BodyInput } from '../src/core/plans/edit.js';
+import type { PlanGit } from '../src/core/plans/plan-git.js';
 import { Plans } from '../src/core/plans/plans.js';
 import { planView, liveFrom } from '../src/core/plans/progress.js';
 import { COMMAND_LIMIT_MS, REPEAT_MS, STALL_MS, STEER_UNREAD_MS, assess, pulseOf, pulseWords, stepWords, waitingWords } from '../src/core/plans/watchdog.js';
@@ -436,5 +440,157 @@ describe('a plan never stalls quietly: Beluga moves it along, a step further eac
     // A long command: busy, never rescued.
     for (let i = 0; i < 5; i++) await t.later(quiet);
     expect(t.plans.need(t.plan.id).activity.some((a) => a.text.includes(' went quiet: '))).toBe(false);
+  });
+});
+
+describe('fixers and checkers per repo, and the final integrated check (BLG-15)', () => {
+  const ACROSS: BodyInput = {
+    title: 'Invites',
+    goal: 'One feature across three repos',
+    milestones: [
+      { id: 'contract', title: 'Invite API', repos: ['cal'], criteria: ['The schema is served'], dependsOn: [], tasks: [{ id: 'schema', title: 'Invite schema' }] },
+      { id: 'sync', title: 'Sync invites', repos: ['desk', 'api'], criteria: ['Invites sync'], dependsOn: ['contract'], tasks: [{ id: 'ui', title: 'Invite UI' }] },
+    ],
+  };
+
+  async function across() {
+    const base = mkdtempSync(path.join(tmpdir(), 'plans-across-'));
+    const root = (name: string): string => {
+      const dir = path.join(base, name);
+      mkdirSync(dir, { recursive: true });
+      return dir;
+    };
+    // calendar-api says how it's tested; the others don't.
+    const calRoot = root('calendar-api');
+    writeFileSync(path.join(calRoot, 'package.json'), JSON.stringify({ scripts: { test: 'vitest run', typecheck: 'tsc --noEmit', build: 'tsc' } }));
+    const repo = (id: string, name: string, dir: string, workspaces: Workspace[] = []): Project => ({ id, name, root: dir, base: 'main', workspaces });
+    const store = new Store(initialState('room'));
+    store.dispatch({ type: 'projects', projects: [repo('api', 'bob-api', root('bob-api'), [ws('main', 'api', 'bob-api', 'chat', { askOnly: true } as Partial<Workspace>)]), repo('cal', 'calendar-api', calRoot), repo('desk', 'calendar-desktop', root('calendar-desktop'))] });
+    let n = 0;
+    const add = (w: Workspace): void => store.dispatch({ type: 'projects', projects: store.getState().projects.map((p) => (p.id === w.projectId ? { ...p, workspaces: [...p.workspaces, w] } : p)) });
+    const listeners: Array<(e: WorktreeEvent) => void> = [];
+    const chats: Array<{ id: string; projectId: string; title: string }> = [];
+    const fixups: Array<{ channel: string; dir?: string }> = [];
+    let readAlso: (id: string) => readonly string[] = () => [];
+    const controller = {
+      onWorktree: (l: (e: WorktreeEvent) => void) => (listeners.push(l), () => undefined),
+      newWorktree: async (projectId: string, name: string) => {
+        const w = ws(`w${++n}`, projectId, name, 'worktree', { path: `/tmp/${projectId}/${name}` });
+        add(w);
+        listeners.forEach((l) => l({ kind: 'created', ws: w }));
+        return w;
+      },
+      newChat: async (projectId: string, title: string) => {
+        const w = ws(`c${++n}`, projectId, title, 'chat', { askOnly: true } as Partial<Workspace>);
+        chats.push({ id: w.id, projectId, title });
+        add(w);
+        return w;
+      },
+      archive: async () => true,
+      allowFixup: (channel: string, dir: string | undefined) => void fixups.push({ channel, ...(dir ? { dir } : {}) }),
+      setReadAlso: (fn: typeof readAlso) => ((readAlso = fn), () => undefined),
+      manager: { setAgent: () => undefined },
+    } as unknown as WorkspaceController;
+    let conflictIn: string | undefined;
+    const steps: string[] = [];
+    const git: PlanGit = {
+      ensureBranch: async () => ({ made: true }),
+      mergeInto: async (p, into, branches) => {
+        steps.push(`merge ${p} ${into}`);
+        return p === conflictIn ? { ok: false, branch: into, dir: `/tmp/.bases/${p}/plan-invites`, merging: branches[0]!, files: ['src/invite.ts'] } : { ok: true, branch: into };
+      },
+      inMain: async () => false,
+      retire: async () => undefined,
+      findPr: async () => undefined,
+      openPr: async () => {
+        throw new Error('no');
+      },
+      push: async () => undefined,
+      mainRef: async () => 'origin/main',
+      mergePr: async () => undefined,
+      mergeLocal: async () => ({ ok: true }),
+      editPrBody: async () => undefined,
+    };
+    const asked: Array<{ prompt: string; channel: string }> = [];
+    const board = new Board({ store, dir: null, projectName: (id) => store.getState().projects.find((p) => p.id === id)?.name });
+    const boardWork = new BoardWork({ store, board, controller, selfId: () => 'p-me', selfName: () => 'Kay', askClaude: (prompt, channel) => void asked.push({ prompt, channel }) });
+    const plans = new Plans({ store, dir: null });
+    const work = new PlansWork({ store, plans, board: boardWork, controller, git, askClaude: (prompt, channel) => `q${asked.push({ prompt, channel })}`, intend: () => undefined, delayMs: 0 });
+    const claude = boardWork.myClaude();
+    const plan = plans.create({ projectId: 'api', repos: ['api', 'cal', 'desk'], home: 'ws:main', autonomy: 'gated' }, claude);
+    work.forRun('ws:main', 'p-me')!.tools!.write(ACROSS);
+    work.approve(plan.id);
+    const until = async (ok: () => boolean): Promise<void> => {
+      for (let i = 0; i < 100 && !ok(); i++) {
+        work.pilot.tick();
+        await tick(5);
+      }
+    };
+    const issue = (title: string) => store.getState().board.issues.find((i) => i.title === title)!;
+    const agent = (m: string) => plans.need(plan.id).runs[m]?.agent;
+    const finish = async (title: string): Promise<void> => {
+      board.update(issue(title).id, { status: 'in_review' }, claude);
+      await tick(10);
+    };
+    await until(() => Boolean(agent('contract')));
+    return { store, plans, work, plan, chats, fixups, asked, steps, issue, agent, finish, until, calRoot, readAlso: (id: string) => readAlso(id), conflict: (repo: string | undefined) => (conflictIn = repo) };
+  }
+
+  it('a conflict in a non-primary repo opens its fixer there, which may edit only that hidden worktree and reads the other repos', async () => {
+    const t = await across();
+    t.conflict('cal');
+    await t.finish('Invite schema');
+    t.work.pass(t.plan.id, 'contract');
+    await t.until(() => Boolean(t.plans.need(t.plan.id).fixer));
+    const fixer = t.plans.need(t.plan.id).fixer!;
+    expect(t.chats.find((c) => c.id === fixer)).toMatchObject({ projectId: 'cal', title: 'Fix: Invites' });
+    expect(t.steps).toEqual(['merge cal plan/invites']);
+    expect(t.plans.need(t.plan.id).merging?.contract?.conflict).toMatchObject({ projectId: 'cal', dir: '/tmp/.bases/cal/plan-invites' });
+    // Its one place to edit: the hidden worktree the conflict is in.
+    expect(t.fixups).toContainEqual({ channel: `ws:${fixer}`, dir: '/tmp/.bases/cal/plan-invites' });
+    expect(t.asked.some((a) => a.channel === `ws:${fixer}` && a.prompt.includes('src/invite.ts'))).toBe(true);
+    // The other repos' main folders beside it, read-only; never its own.
+    const roots = t.store.getState().projects.map((p) => p.root);
+    expect([...t.readAlso(fixer)].sort()).toEqual([roots[0], roots[2]].sort());
+  });
+
+  it('a spanning milestone’s checker opens in its repo and reads every worktree of it; the last check runs every repo’s suites against all plan branches', async () => {
+    const t = await across();
+    await t.finish('Invite schema');
+    t.work.pass(t.plan.id, 'contract');
+    await t.until(() => Boolean(t.agent('sync')));
+    const sync = t.agent('sync')!;
+    const paths = t.store.getState().projects.flatMap((p) => p.workspaces);
+    const own = paths.find((w) => w.id === sync.worktree)!;
+    const beside = paths.find((w) => w.id === sync.along![0]!.worktree)!;
+    await t.finish('Invite UI');
+    await t.until(() => Boolean(t.plans.need(t.plan.id).runs.sync?.checker));
+    const checker = t.plans.need(t.plan.id).runs.sync!.checker!;
+    expect(t.chats.find((c) => c.id === checker)?.projectId).toBe('desk');
+    // It reads both of the milestone's worktrees (desk and bob-api), and the other repos' main folders.
+    const reads = t.readAlso(checker);
+    expect(reads).toEqual(expect.arrayContaining([own.path, beside.path, t.calRoot]));
+    expect(reads).not.toContain(t.store.getState().projects.find((p) => p.id === 'desk')!.root);
+    const prompt = t.asked.find((a) => a.channel === `ws:${checker}`)!.prompt;
+    expect(prompt).toContain(`- calendar-desktop: ${own.path}`);
+    expect(prompt).toContain(`- bob-api: ${beside.path}`);
+    // The plan's last milestone: every repo's plan branch and its suites, run together.
+    expect(prompt).toContain("This is the plan's last milestone: check the integrated work of every repo");
+    expect(prompt).toContain(`- calendar-api (${t.calRoot}): plan/invites; tests: npm run typecheck, npm test`);
+    expect(prompt).toMatch(/- bob-api \(.*\): plan\/invites, with this milestone's work from its worktree; tests: see its About This Project/);
+    expect(prompt).toMatch(/- calendar-desktop \(.*\): plan\/invites, with this milestone's work/);
+    // Its every-run brief lists the repos too.
+    expect(t.work.forRun(`ws:${checker}`, 'p-me')!.brief).toContain(`this milestone's worktrees: ${own.path}`);
+  });
+
+  it('a milestone that isn’t the last is checked in its repo, reading its worktree, without the integrated run', async () => {
+    const t = await across();
+    await t.finish('Invite schema');
+    await t.until(() => Boolean(t.plans.need(t.plan.id).runs.contract?.checker));
+    const checker = t.plans.need(t.plan.id).runs.contract!.checker!;
+    expect(t.chats.find((c) => c.id === checker)?.projectId).toBe('cal');
+    const prompt = t.asked.find((a) => a.channel === `ws:${checker}`)!.prompt;
+    expect(prompt).toContain('Its work, in its worktrees');
+    expect(prompt).not.toContain("plan's last milestone");
   });
 });

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { AgentRef } from '../protocol.js';
-import { AUTONOMIES, MAX_PARALLEL, TESTS_AT } from '../core/plans/model.js';
+import { AUTONOMIES, MAX_PARALLEL, MAX_PLAN_REPOS, TESTS_AT } from '../core/plans/model.js';
 import { PRIORITIES } from '../core/board/model.js';
 
 /**
@@ -30,8 +30,8 @@ const autonomy = z.enum(AUTONOMIES);
 /** Your changes to a plan (the same ops Claude has). */
 export const PlanOpSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('retitle'), title: z.string().max(200).optional(), goal: z.string().max(4000).optional() }),
-  z.object({ op: z.literal('add_milestone'), milestone: z.object({ id: ref.optional(), title: z.string().min(1).max(200), goal: z.string().max(4000).optional(), criteria: lines.optional(), tasks: z.array(task).max(40).optional(), dependsOn: z.array(ref).max(12).optional() }), after: ref.optional() }),
-  z.object({ op: z.literal('update_milestone'), id: ref, title: z.string().max(200).optional(), goal: z.string().max(4000).optional(), criteria: lines.optional(), autonomy: autonomy.nullable().optional(), dependsOn: z.array(ref).max(12).nullable().optional() }),
+  z.object({ op: z.literal('add_milestone'), milestone: z.object({ id: ref.optional(), title: z.string().min(1).max(200), goal: z.string().max(4000).optional(), criteria: lines.optional(), tasks: z.array(task).max(40).optional(), dependsOn: z.array(ref).max(12).optional(), repos: z.array(z.string().min(1).max(200)).max(MAX_PLAN_REPOS).optional() }), after: ref.optional() }),
+  z.object({ op: z.literal('update_milestone'), id: ref, title: z.string().max(200).optional(), goal: z.string().max(4000).optional(), criteria: lines.optional(), autonomy: autonomy.nullable().optional(), dependsOn: z.array(ref).max(12).nullable().optional(), repos: z.array(z.string().min(1).max(200)).max(MAX_PLAN_REPOS).nullable().optional() }),
   z.object({ op: z.literal('remove_milestone'), id: ref }),
   z.object({ op: z.literal('add_task'), milestone: ref, task, after: ref.optional() }),
   z.object({ op: z.literal('update_task'), id: ref, patch: task.partial() }),
@@ -43,7 +43,7 @@ export const PlanOpSchema = z.discriminatedUnion('op', [
 export const PLANS_API = {
   // A new plan with Claude: its own conversation (in the project's main folder) and its page → the plan.
   // `agent`: who works its milestones and tasks (BLG-497); none: your default.
-  'plans.create': { args: z.tuple([z.object({ projectId: z.string().min(1).max(200), goal: z.string().min(1), autonomy: autonomy.optional(), testsAt: z.enum(TESTS_AT).optional(), agent: AgentRef.optional() })]) },
+  'plans.create': { args: z.tuple([z.object({ projectId: z.string().min(1).max(200), projectIds: z.array(z.string().min(1).max(200)).max(MAX_PLAN_REPOS).optional(), goal: z.string().min(1), autonomy: autonomy.optional(), testsAt: z.enum(TESTS_AT).optional(), agent: AgentRef.optional() })]) },
   // Plan in this conversation (the composer's Plan with Tasks) → the plan.
   'plans.here': { args: z.tuple([z.string().min(1).max(200), autonomy.optional()]) },
   // The draft goes on the board (a new plan, or changes to one). Refused while it has open questions (BLG-8), unless `anyway`.
@@ -69,10 +69,11 @@ export const PLANS_API = {
   // The plan's one pull request (plan/<slug> → main), merging it on GitHub, or merging the branch into main here → the plan.
   'plans.openPr': { args: z.tuple([id]) },
   // auto: GitHub merges it once its checks and reviews pass.
-  'plans.mergePr': { args: z.tuple([id, z.object({ auto: z.boolean().optional() }).strict().optional()]) },
-  'plans.mergeLocal': { args: z.tuple([id]) },
+  // Across repos: one repo's (project id), or none for Merge All, upstream repos first.
+  'plans.mergePr': { args: z.tuple([id, z.object({ auto: z.boolean().optional() }).strict().optional(), id.optional()]) },
+  'plans.mergeLocal': { args: z.tuple([id, id.optional()]) },
   // Its pull request conflicts with main: main merged into the plan's branch, a conflict fixed by the plan's Claude.
-  'plans.bringInMain': { args: z.tuple([id]) },
+  'plans.bringInMain': { args: z.tuple([id, id.optional()]) },
   // A conflict Claude couldn't fix: ask it again; or show the folder it waits in (Finder).
   'plans.retryConflicts': { args: z.tuple([id]) },
   'plans.showConflict': { args: z.tuple([id]) },

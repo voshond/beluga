@@ -5,13 +5,13 @@ import type { BoardWork } from '../board/work.js';
 import type { Action, Store } from '../store.js';
 import { openMilestone } from './apply.js';
 import { openMilestoneEpic } from './epics.js';
-import { type Plan, type PlanMerge, type PlanMilestone, allTasks, openMilestones, planBranchName } from './model.js';
+import { type MilestoneAlong, type Plan, type PlanMerge, type PlanMilestone, type PlanPr, allTasks, isMultiRepo, milestoneRepos, openMilestones, planBranchFor, planBranchName, planPrFor, planRepos, prRef, shipOrder, shippedIn } from './model.js';
 import type { PlanGit } from './plan-git.js';
 import type { Plans } from './plans.js';
 import { FINISHED, type MilestoneView, type PlanView, type TaskState, type TaskView, agentTasks, agentsAtWork, liveFrom, planView, startable, tidyOffer, waitingOnYou } from './progress.js';
-import { checkFailedPrompt, checkNudgePrompt, checkPrompt, criteriaNeedCheck, fixupPrompt, mainFixupPrompt, mergeFixupPrompt, milestoneNextPrompt, milestonePrompt, recapPrompt, stuckPrompt } from './prompt.js';
+import { checkFailedPrompt, checkNudgePrompt, checkPrompt, criteriaNeedCheck, fixupPrompt, mainFixupPrompt, mergeFixupPrompt, milestoneNextPrompt, milestonePrompt, milestoneWhere, recapPrompt, type RepoCheck, repoChecks, stuckPrompt } from './prompt.js';
 import { TaskWatchdog } from './watchdog.js';
-import { PLAN_PR_FAST_MS, PLAN_PR_FOCUS_FRESH_MS, planPrCadence } from './pr-cadence.js';
+import { PLAN_PR_FAST_MS, PLAN_PR_FOCUS_FRESH_MS, type RepoPrState, planPrCadence, repoPrState } from './pr-cadence.js';
 import { pace } from '../power-saver.js';
 
 /**
@@ -79,7 +79,9 @@ export interface PilotDeps {
    * A conversation of its own to fix the plan's merge conflicts in (its workspace id, BLG-4): the head
    * Claude routes and never fills up with code work. Without it, the head Claude fixes them (as before).
    */
-  readonly fixerChat?: (plan: Plan) => Promise<string | undefined>;
+  readonly fixerChat?: (plan: Plan, projectId: string) => Promise<string | undefined>;
+  /** A repo's test commands (its main folder → "npm test"…), for a check across repos to run. */
+  readonly testsOf?: (root: string) => readonly string[];
   /** A checker's (or fixer's) conversation is no longer needed: archived, what was said kept. */
   readonly retireChat?: (workspaceId: string) => void;
   /**
@@ -127,6 +129,7 @@ const EVENT_MS = 1000;
 const RUNNING = new Set(['queued', 'awaiting_approval', 'started', 'answered']);
 const milestoneName = (plan: Plan, id: string): string => plan.body?.milestones.find((m) => m.id === id)?.title ?? id;
 const WS_PREFIX = 'ws:';
+const firstLine = (err: unknown): string => (err instanceof Error ? err.message : String(err)).split('\n')[0] ?? '';
 
 /**
  * How far a plan has got: tasks finished out of how many, milestones passed, checks recorded. A
@@ -529,7 +532,7 @@ export class PlanPilot {
 
   private step(plan: Plan): void {
     // Tasks start from the plan's branch: none starts before it's there.
-    if (this.deps.git && !plan.branch && !this.noBranch.has(plan.id)) return;
+    if (this.deps.git && this.branchesToMake(plan).length) return;
     const view = this.view(plan);
     this.noteFinished(plan, view);
     if (!view.open.length) return;
@@ -709,7 +712,7 @@ export class PlanPilot {
           this.stepMerges(plan);
           return `merged “${title}” again`;
         }
-        void this.askFixup(plan.id, mergeFixupPrompt(title, plan.branch ?? planBranchName(plan), c.key ?? c.merging, c), c.dir).catch(() => undefined);
+        void this.askFixup(plan.id, mergeFixupPrompt(title, planBranchFor(plan, c.projectId ?? plan.projectId) ?? planBranchName(plan), c.key ?? c.merging, c), c.dir, undefined, 0, c.projectId).catch(() => undefined);
         return `asked ${this.deps.plans.need(plan.id).fixer ? 'the fixer' : 'the plan’s Claude'} to fix the merge conflict in ${c.files.slice(0, 3).join(', ')}`;
       }
       default:
@@ -864,20 +867,25 @@ export class PlanPilot {
       // The first ready task first (it goes In Progress); the rest in their order.
       const ordered = [first, ...tasks.filter((t) => t !== first)];
       ids = ordered.map((t) => t.issue!.id);
-      const base = first.bases?.length ? plan.branch : first.base;
+      const base = first.bases?.length ? planBranchFor(plan, first.issue.projectId) : first.base;
       // The agent you started it with (BLG-506), else the plan's (BLG-497); none: your default.
       const agent = pick ?? plan.agent;
-      const ws = await this.deps.work.startShared(ids, `${first.issue.key} ${m.milestone.title}`, { quiet: true, ...(base ? { base } : {}), ...(agent ? { agent } : {}) });
-      const fresh = this.deps.plans.setAgent(plan.id, milestoneId, { worktree: ws.id, ...(ws.branch ? { branch: ws.branch } : {}), at: Date.now(), tasks: ordered.map((t) => t.task.id) });
+      const name = `${first.issue.key} ${m.milestone.title}`;
+      const ws = await this.deps.work.startShared(ids, name, { quiet: true, ...(base ? { base } : {}), ...(agent ? { agent } : {}) });
+      // A milestone across repos: a worktree in each of its other repos too, its agent working in all of them.
+      const along = await this.alongside(plan, m.milestone, first.issue.projectId, name, agent);
+      const fresh = this.deps.plans.setAgent(plan.id, milestoneId, { worktree: ws.id, ...(ws.branch ? { branch: ws.branch } : {}), at: Date.now(), tasks: ordered.map((t) => t.task.id), ...(along.length ? { along } : {}) });
       const keys = ordered.map((t) => t.issue!.key);
-      const said = `started one agent for “${m.milestone.title}” (${keys.join(', ')}) in a new worktree${base ? ` from ${base}` : ''}`;
+      const repos = isMultiRepo(plan) ? ` in ${[first.issue.projectId, ...along.map((a) => a.projectId)].map((r) => this.repoName(r)).join(' and ')}` : '';
+      const said = `started one agent for “${m.milestone.title}” (${keys.join(', ')})${repos} in a new worktree${base ? ` from ${base}` : ''}`;
       this.deps.plans.note(plan.id, 'started', said, by);
       const now = this.view(fresh);
       const mv = now.milestones.find((x) => x.milestone.id === milestoneId)!;
       const channel = `ws:${ws.id}`;
       const after = this.after(channel);
       const all = new Map(mv.tasks.map((t) => [t.task.id, t]));
-      this.deps.askClaude(milestonePrompt(now, mv, ordered.map((t) => all.get(t.task.id) ?? t), { only: Boolean(only) || mv.autonomy === 'step', ...(base ? { base } : {}) }), channel, false);
+      const where = milestoneWhere(fresh, mv.milestone, fresh.runs[milestoneId]?.agent, this.deps.store.getState().projects);
+      this.deps.askClaude(milestonePrompt(now, mv, ordered.map((t) => all.get(t.task.id) ?? t), { only: Boolean(only) || mv.autonomy === 'step', ...(base ? { base } : {}), ...(where ? { where } : {}) }), channel, false);
       this.sentOn.set(key, { sig: first.issue.id, ...after, count: 0 });
       this.handed.delete(key);
       return said.charAt(0).toUpperCase() + said.slice(1);
@@ -890,6 +898,32 @@ export class PlanPilot {
       this.launching.delete(key);
       this.schedule();
     }
+  }
+
+  /**
+   * A milestone's worktrees in its other repos (`here` is its tasks'), each from that repo's plan
+   * branch. Ones from before that are still there are kept (a restarted agent goes on with them);
+   * one that can't be made is said, and its agent works without it.
+   */
+  private async alongside(plan: Plan, milestone: PlanMilestone, here: string, name: string, agent: AgentRef | undefined): Promise<MilestoneAlong[]> {
+    const was = plan.runs[milestone.id]?.agent?.along ?? [];
+    const live = (id: string): boolean => this.deps.store.getState().projects.some((p) => p.workspaces.some((w) => w.id === id && !w.archived));
+    const out: MilestoneAlong[] = [];
+    for (const repo of milestoneRepos(plan, milestone).filter((r) => r !== here)) {
+      const kept = was.find((a) => a.projectId === repo && live(a.worktree));
+      if (kept) {
+        out.push(kept);
+        continue;
+      }
+      const base = planBranchFor(plan, repo);
+      try {
+        const ws = await this.deps.work.startAlongside(repo, name, { ...(base ? { base } : {}), ...(agent ? { agent } : {}) });
+        out.push({ projectId: repo, worktree: ws.id, ...(ws.branch ? { branch: ws.branch } : {}) });
+      } catch (err) {
+        this.deps.plans.note(plan.id, 'problem', `couldn’t make “${milestone.title}”’s worktree in ${this.repoName(repo)}: ${err instanceof Error ? err.message : String(err)}; its agent works without it`, { kind: 'beluga' });
+      }
+    }
+    return out;
   }
 
   /** One open milestone: a new round when work came back, its check when it's finished, its pass on autopilot. */
@@ -906,7 +940,8 @@ export class PlanPilot {
     if (m.run.checkAsked === undefined) {
       if (!this.deps.checkerChat) {
         // Asked first: if asking fails, the check isn't marked as asked (it's tried again).
-        const id = this.deps.askClaude(checkPrompt(view, m), plan.home, false);
+        const repos = this.repoChecks(plan, m.milestone);
+        const id = this.deps.askClaude(checkPrompt(view, m, repos ? { repos } : {}), plan.home, false);
         if (id) this.checkRuns.set(`${plan.id}:${m.milestone.id}`, id);
         this.deps.plans.checkAsked(plan.id, m.milestone.id);
         this.deps.system(plan.home, `Every task of “${m.milestone.title}” is finished: the agent is checking its pass criteria.`);
@@ -944,10 +979,16 @@ export class PlanPilot {
     const m = view.milestones.find((x) => x.milestone.id === milestone.id);
     if (!m) return;
     const own = channel !== plan.home;
-    const id = this.deps.askClaude(checkPrompt(view, m, { checker: own }), channel, false);
+    const repos = this.repoChecks(plan, milestone);
+    const id = this.deps.askClaude(checkPrompt(view, m, { checker: own, ...(repos ? { repos } : {}) }), channel, false);
     if (id) this.checkRuns.set(`${plan.id}:${milestone.id}`, id);
     this.deps.plans.checkAsked(plan.id, milestone.id);
     this.deps.system(plan.home, own ? `Every task of “${milestone.title}” is finished: a Claude of its own is checking its pass criteria. You can keep talking here.` : `Every task of “${milestone.title}” is finished: Claude is checking its pass criteria.`);
+  }
+
+  /** A plan across repos: every repo as a milestone's check sees it (undefined: one repo). */
+  repoChecks(plan: Plan, milestone: PlanMilestone): readonly RepoCheck[] | undefined {
+    return repoChecks(plan, milestone, plan.runs[milestone.id]?.agent, this.deps.store.getState().projects, this.deps.testsOf ?? (() => []));
   }
 
   /** The conversation that checks a milestone: the one it had (still there), or a new one. */
@@ -1107,7 +1148,7 @@ export class PlanPilot {
     let res: CombineResult;
     try {
       if (!combine) throw new Error('combining branches needs the project’s folder');
-      res = await combine(plan.projectId, issue.key, bases, plan.branch);
+      res = await combine(issue.projectId, issue.key, bases, planBranchFor(plan, issue.projectId));
     } catch (err) {
       this.deps.plans.setCombining(plan.id, t.task.id, undefined);
       this.endFixup(plan.id);
@@ -1125,7 +1166,7 @@ export class PlanPilot {
     this.deps.plans.setCombining(plan.id, t.task.id, { at: was?.at ?? Date.now(), from, conflict });
     if (!stuck) {
       if (!asks) this.deps.plans.note(plan.id, 'problem', `combining ${from.join(' and ')} for ${issue.key}: ${res.merging} conflicts in ${res.files.join(', ')}; the agent is fixing it`, { kind: 'beluga' });
-      await this.askFixup(plan.id, fixupPrompt(issue.key, t.task.title, from, res), res.dir, issue.id, asks);
+      await this.askFixup(plan.id, fixupPrompt(issue.key, t.task.title, from, res), res.dir, issue.id, asks, issue.projectId);
     } else if (!was?.conflict?.stuck) {
       this.deps.plans.note(plan.id, 'problem', `combining ${from.join(' and ')} for ${issue.key}: the conflict in ${res.files.join(', ')} is still there; fix it in ${res.dir} and ${issue.key} starts`, { kind: 'beluga' });
     }
@@ -1142,14 +1183,15 @@ export class PlanPilot {
   /**
    * A conflict to fix in a hidden worktree (`dir`): its fixer (made the first time, BLG-4) may edit
    * there, and is asked. The head Claude hears one line; no fixer can be made: it fixes it, as before.
-   * `key`/`asks`: counted, so a conflict asked about twice waits for you.
+   * `key`/`asks`: counted, so a conflict asked about twice waits for you. `repo`: the one it's in (a
+   * new fixer is made there; default the plan's primary).
    */
-  private async askFixup(planId: string, prompt: string, dir: string, key?: string, asks = 0): Promise<void> {
+  private async askFixup(planId: string, prompt: string, dir: string, key?: string, asks = 0, repo?: string): Promise<void> {
     const had = this.fixupHome(planId);
     let channel = had;
     const plan = this.deps.plans.need(planId);
     if (channel === plan.home && this.deps.fixerChat) {
-      const made = await this.deps.fixerChat(plan).catch(() => undefined);
+      const made = await this.deps.fixerChat(plan, repo ?? plan.projectId).catch(() => undefined);
       if (made) {
         this.deps.plans.setFixer(planId, made);
         channel = `${WS_PREFIX}${made}`;
@@ -1224,10 +1266,8 @@ export class PlanPilot {
   /** What goes on whether or not anything may start: its branch, catching up once, merges into it. */
   private tend(plan: Plan): void {
     if (!this.deps.git || this.noBranch.has(plan.id)) return;
-    if (!plan.branch) {
-      void this.makeBranch(plan);
-      return;
-    }
+    if (this.branchesToMake(plan).length) void this.makeBranch(plan);
+    if (!plan.branch) return;
     // Catching up (merging and clearing away what passed before the branch) waits for your Yes: see tidyUp.
     this.stepMerges(this.deps.plans.need(plan.id));
     this.stepMainMerge(this.deps.plans.need(plan.id));
@@ -1247,7 +1287,7 @@ export class PlanPilot {
       const fixing = this.fixupHome(plan.id);
       if (asked && (liveFrom(this.deps.store.getState()).busy(fixing) || this.lastRun(fixing) === asked.after)) return;
     }
-    void this.bringInMain(plan.id).catch(() => undefined);
+    void this.bringInMain(plan.id, plan.mainMerge?.projectId).catch(() => undefined);
   }
 
   /**
@@ -1255,32 +1295,38 @@ export class PlanPilot {
    * worktree), as a milestone is. A conflict goes to the plan's Claude to fix there, and is tried again
    * after; once it's in, the branch is pushed and the pull request can merge.
    */
-  async bringInMain(planId: string): Promise<Plan> {
-    const { git, plan, branch } = this.shippable(planId);
+  async bringInMain(planId: string, repo?: string): Promise<Plan> {
+    const was = this.deps.plans.need(planId);
+    const busy = was.mainMerge ? (was.mainMerge.projectId ?? was.projectId) : undefined;
+    const at = repo ?? busy ?? shipOrder(was).find((r) => planPrFor(was, r)?.conflicts) ?? was.projectId;
+    if (busy && busy !== at) throw new Error(`Main is being merged into ${this.branchIn(was, busy)} first`);
+    const { git, plan, branch } = this.shippable(planId, at);
+    const label = this.branchIn(plan, at);
+    const where = isMultiRepo(plan) ? { projectId: at } : {};
     const key = `main:${planId}`;
     if (this.mergingNow.has(key)) return plan;
     this.mergingNow.add(key);
     const beluga: Actor = { kind: 'beluga' };
     try {
-      const main = plan.mainMerge?.main ?? (await git.mainRef(plan.projectId));
-      if (!plan.mainMerge) this.deps.plans.setMainMerge(planId, { at: Date.now(), main });
+      const main = plan.mainMerge?.main ?? (await git.mainRef(at));
+      if (!plan.mainMerge) this.deps.plans.setMainMerge(planId, { at: Date.now(), main, ...where });
       let res: CombineResult;
       try {
-        res = await git.mergeInto(plan.projectId, branch, [main]);
+        res = await git.mergeInto(at, branch, [main]);
       } catch (err) {
         this.deps.plans.setMainMerge(planId, undefined);
-        throw new Error(`Couldn’t merge ${main} into ${branch}: ${(err instanceof Error ? err.message : String(err)).split('\n')[0]}`);
+        throw new Error(`Couldn’t merge ${main} into ${label}: ${firstLine(err)}`);
       }
       if (!res.ok) {
         const asks = this.fixAsked.get(key)?.asks ?? 0;
         const stuck = asks >= FIXUP_ASKS;
         const was = this.deps.plans.need(planId).mainMerge?.conflict;
-        this.deps.plans.setMainMerge(planId, { at: plan.mainMerge?.at ?? Date.now(), main, conflict: { at: was?.stuck && stuck ? was.at : Date.now(), dir: res.dir, files: res.files, ...(stuck ? { stuck } : {}) } });
+        this.deps.plans.setMainMerge(planId, { at: plan.mainMerge?.at ?? Date.now(), main, ...where, conflict: { at: was?.stuck && stuck ? was.at : Date.now(), dir: res.dir, files: res.files, ...(stuck ? { stuck } : {}) } });
         if (!stuck) {
-          if (!asks) this.deps.plans.note(planId, 'problem', `merging ${main} into ${branch}: it conflicts in ${res.files.join(', ')}; Claude is fixing it`, beluga);
-          await this.askFixup(planId, mainFixupPrompt(branch, main, plan.pr?.number, res), res.dir, key, asks);
+          if (!asks) this.deps.plans.note(planId, 'problem', `merging ${main} into ${label}: it conflicts in ${res.files.join(', ')}; Claude is fixing it`, beluga);
+          await this.askFixup(planId, mainFixupPrompt(branch, main, planPrFor(plan, at)?.number, res), res.dir, key, asks);
         } else if (!was?.stuck) {
-          this.deps.plans.note(planId, 'problem', `merging ${main} into ${branch}: the conflict in ${res.files.join(', ')} is still there; fix it and it goes on`, beluga);
+          this.deps.plans.note(planId, 'problem', `merging ${main} into ${label}: the conflict in ${res.files.join(', ')} is still there; fix it and it goes on`, beluga);
         }
         return this.deps.plans.need(planId);
       }
@@ -1288,35 +1334,53 @@ export class PlanPilot {
       this.fixAsked.delete(key);
       this.stuckTried.delete(key);
       this.deps.plans.setMainMerge(planId, undefined);
-      this.deps.plans.note(planId, 'passed', `merged ${main} into ${branch}`, beluga);
-      await git.push(plan.projectId, branch).catch((err: unknown) => {
-        throw new Error(`Merged ${main} into ${branch}, but couldn’t push it: ${(err instanceof Error ? err.message : String(err)).split('\n')[0]}`);
+      this.deps.plans.note(planId, 'passed', `merged ${main} into ${label}`, beluga);
+      await git.push(at, branch).catch((err: unknown) => {
+        throw new Error(`Merged ${main} into ${label}, but couldn’t push it: ${firstLine(err)}`);
       });
-      this.pushedPlan(planId);
-      const pr = await git.findPr(plan.projectId, branch).catch(() => undefined);
-      if (pr) this.prSeen(planId, pr);
+      this.pushedPlan(planId, at);
+      const pr = await git.findPr(at, branch).catch(() => undefined);
+      if (pr) this.prSeen(planId, pr, at);
       return this.deps.plans.need(planId);
     } finally {
       this.mergingNow.delete(key);
     }
   }
 
-  /** plan/<slug> from main (one that's there already is the plan's, never made twice). */
+  /** The repos whose plan branch isn't there yet (nor given up on): the primary last, as tasks wait for it. */
+  private branchesToMake(plan: Plan): readonly string[] {
+    const multi = isMultiRepo(plan);
+    return planRepos(plan)
+      .filter((r) => !this.noBranch.has(r === plan.projectId ? plan.id : `${plan.id}:${r}`) && !(multi ? plan.branches?.[r] : plan.branch))
+      .sort((a, b) => Number(a === plan.projectId) - Number(b === plan.projectId));
+  }
+
+  /** plan/<slug> from main in each of its repos (one that's there already is the plan's, never made twice). */
   private async makeBranch(plan: Plan): Promise<void> {
     if (this.branching.has(plan.id)) return;
     this.branching.add(plan.id);
     const branch = planBranchName(plan);
     try {
-      const { made } = await this.deps.git!.ensureBranch(plan.projectId, branch);
-      this.deps.plans.setBranch(plan.id, branch, made);
-    } catch (err) {
-      // Without one the plan runs as before: tasks from main.
-      this.noBranch.add(plan.id);
-      this.deps.plans.note(plan.id, 'problem', `couldn’t make the plan’s branch ${branch}: ${err instanceof Error ? err.message : String(err)}; tasks start from main`, { kind: 'beluga' });
+      for (const repo of this.branchesToMake(plan)) {
+        const primary = repo === plan.projectId;
+        try {
+          const { made } = await this.deps.git!.ensureBranch(repo, branch);
+          this.deps.plans.setBranch(plan.id, branch, made, repo);
+        } catch (err) {
+          // Without one the plan (or that repo's tasks) runs as before: from main.
+          this.noBranch.add(primary ? plan.id : `${plan.id}:${repo}`);
+          const where = isMultiRepo(plan) ? ` in ${this.repoName(repo)}` : '';
+          this.deps.plans.note(plan.id, 'problem', `couldn’t make the plan’s branch ${branch}${where}: ${err instanceof Error ? err.message : String(err)}; ${where ? 'its tasks' : 'tasks'} start from main`, { kind: 'beluga' });
+        }
+      }
     } finally {
       this.branching.delete(plan.id);
       this.schedule();
     }
+  }
+
+  private repoName(projectId: string): string {
+    return this.deps.store.getState().projects.find((p) => p.id === projectId)?.name ?? projectId;
   }
 
   /**
@@ -1391,44 +1455,49 @@ export class PlanPilot {
       return;
     }
     // Only tasks In Review (finished) are merged and retired.
-    let tasks = m.tasks.filter((t) => t.issue?.branch && t.issue.worktrees.length && t.state === 'review');
+    // Each task merges into its own repo's plan branch; one in a repo without one stays as it is.
+    let tasks = m.tasks.filter((t) => t.issue?.branch && t.issue.worktrees.length && t.state === 'review' && planBranchFor(plan, t.issue.projectId));
     if (merge.catchUp) {
       const left: TaskView[] = [];
       for (const t of tasks) {
-        if (await git.inMain(plan.projectId, t.issue!.branch!).catch(() => false)) this.deps.work.board.planMoved(t.issue!.id, 'done', 'its branch was already in main');
+        if (await git.inMain(t.issue!.projectId, t.issue!.branch!).catch(() => false)) this.deps.work.board.planMoved(t.issue!.id, 'done', 'its branch was already in main');
         else left.push(t);
       }
       tasks = left;
     }
-    let res: CombineResult | undefined;
-    if (tasks.length) {
+    // A milestone across repos: its agent's worktrees in the other repos merge into theirs too.
+    const along = tasks.length ? (plan.runs[milestoneId]?.agent?.along ?? []).filter((a) => a.branch && planBranchFor(plan, a.projectId)) : [];
+    const repos = [...new Set([...tasks.map((t) => t.issue!.projectId), ...along.map((a) => a.projectId)])];
+    for (const repo of repos) {
+      const into = planBranchFor(plan, repo)!;
+      const mine = tasks.filter((t) => t.issue!.projectId === repo);
+      let res: CombineResult;
       try {
-        // A milestone's one Claude: its tasks share one branch, merged once.
-        res = await git.mergeInto(plan.projectId, branch, [...new Set(tasks.map((t) => t.issue!.branch!))]);
+        // A milestone's one Claude: its tasks share one branch per repo, merged once (one already in is skipped).
+        res = await git.mergeInto(repo, into, [...new Set([...mine.map((t) => t.issue!.branch!), ...along.filter((a) => a.projectId === repo).map((a) => a.branch!)])]);
       } catch (err) {
         // Not a conflict (a dirty checkout, no git identity): kept on the milestone (its gate says why), and you pass it again.
         const why = err instanceof Error ? err.message : String(err);
         this.deps.plans.setMerging(planId, milestoneId, undefined);
         this.deps.plans.setMergeFailed(planId, milestoneId, why.split('\n').find((l) => l.trim())?.trim().slice(0, 300) ?? 'git said no');
         this.endFixup(planId, { merging: milestoneId });
-        this.deps.plans.note(planId, 'problem', `couldn’t merge “${m.milestone.title}” into ${branch}: ${why}`, beluga);
+        this.deps.plans.note(planId, 'problem', `couldn’t merge “${m.milestone.title}” into ${this.branchIn(plan, repo)}: ${why}`, beluga);
         return;
       }
-    }
-    if (res && !res.ok) {
+      if (res.ok) continue;
       // One task's branch: its key; a milestone's one Claude (a branch for several): the branch.
-      const on = tasks.filter((t) => t.issue!.branch === res.merging);
+      const on = mine.filter((t) => t.issue!.branch === res.merging);
       const conflictKey = on.length === 1 ? on[0]!.issue!.key : res.merging;
       const asks = this.fixAsked.get(key)?.asks ?? 0;
       const stuck = asks >= FIXUP_ASKS;
       const was = merge.conflict;
-      const conflict = { at: was?.stuck && stuck ? was.at : Date.now(), dir: res.dir, merging: res.merging, key: conflictKey, files: res.files, ...(stuck ? { stuck } : {}) };
+      const conflict = { at: was?.stuck && stuck ? was.at : Date.now(), dir: res.dir, merging: res.merging, key: conflictKey, files: res.files, ...(repo !== plan.projectId ? { projectId: repo } : {}), ...(stuck ? { stuck } : {}) };
       this.deps.plans.setMerging(planId, milestoneId, { ...merge, conflict });
       if (!stuck) {
-        if (!asks) this.deps.plans.note(planId, 'problem', `merging “${m.milestone.title}” into ${branch}: ${conflictKey} conflicts in ${res.files.join(', ')}; the agent is fixing it`, beluga);
-        await this.askFixup(planId, mergeFixupPrompt(m.milestone.title, branch, conflictKey, res), res.dir, key, asks);
+        if (!asks) this.deps.plans.note(planId, 'problem', `merging “${m.milestone.title}” into ${this.branchIn(plan, repo)}: ${conflictKey} conflicts in ${res.files.join(', ')}; the agent is fixing it`, beluga);
+        await this.askFixup(planId, mergeFixupPrompt(m.milestone.title, into, conflictKey, res), res.dir, key, asks, repo);
       } else if (!was?.stuck) {
-        this.deps.plans.note(planId, 'problem', `merging “${m.milestone.title}” into ${branch}: the conflict in ${res.files.join(', ')} is still there; fix it in ${res.dir} and the milestone passes`, beluga);
+        this.deps.plans.note(planId, 'problem', `merging “${m.milestone.title}” into ${this.branchIn(plan, repo)}: the conflict in ${res.files.join(', ')} is still there; fix it in ${res.dir} and the milestone passes`, beluga);
       }
       return;
     }
@@ -1438,22 +1507,37 @@ export class PlanPilot {
     this.stuckTried.delete(key);
     for (const t of tasks) this.deps.work.board.planMoved(t.issue!.id, 'in_plan', `merged into ${branch}: “${m.milestone.title}” passed`);
     this.deps.plans.setMerging(planId, milestoneId, undefined);
-    if (tasks.length) this.deps.plans.note(planId, 'passed', `merged ${tasks.map((t) => t.issue!.key).join(', ')} into ${branch}`, beluga);
+    for (const repo of repos) {
+      const what = [...tasks.filter((t) => t.issue!.projectId === repo).map((t) => t.issue!.key), ...along.filter((a) => a.projectId === repo).map((a) => a.branch!)];
+      this.deps.plans.note(planId, 'passed', `merged ${what.join(', ')} into ${this.branchIn(plan, repo)}`, beluga);
+    }
     if (!merge.catchUp) this.passed(planId, milestoneId, merge.by);
     // Cleared away in the background: the next merge (another milestone passed) doesn't wait for archiving.
-    void this.retireAll(plan, tasks, branch);
+    void this.retireAll(plan, tasks, along);
   }
 
-  /** Merged tasks' worktrees archived and branches deleted (a shared one once). */
-  private async retireAll(plan: Plan, tasks: readonly TaskView[], into: string): Promise<void> {
+  /** A repo's plan branch, said with the repo's name when the plan has several. */
+  private branchIn(plan: Plan, repo: string): string {
+    const branch = planBranchFor(plan, repo) ?? planBranchName(plan);
+    return isMultiRepo(plan) ? `${branch} in ${this.repoName(repo)}` : branch;
+  }
+
+  /** Merged tasks' worktrees archived and branches deleted against their repo's plan branch (a shared one once). */
+  private async retireAll(plan: Plan, tasks: readonly TaskView[], along: readonly MilestoneAlong[] = []): Promise<void> {
+    for (const a of along) {
+      await this.deps.git!.retire(a.projectId, a.worktree, a.branch, planBranchFor(plan, a.projectId)!).catch((err: unknown) => {
+        this.deps.plans.note(plan.id, 'problem', `couldn’t clear away the worktree in ${this.repoName(a.projectId)}: ${err instanceof Error ? err.message : String(err)}`, { kind: 'beluga' });
+      });
+    }
     const done = new Set<string>();
     for (const t of tasks) {
+      const repo = t.issue!.projectId;
       const ws = t.issue!.worktreeGone ? undefined : t.issue!.worktrees.at(-1);
-      const id = `${ws ?? ''}:${t.issue!.branch ?? ''}`;
+      const id = `${repo}:${ws ?? ''}:${t.issue!.branch ?? ''}`;
       if (done.has(id)) continue;
       done.add(id);
       try {
-        await this.deps.git!.retire(plan.projectId, ws, t.issue!.branch, into);
+        await this.deps.git!.retire(repo, ws, t.issue!.branch, planBranchFor(plan, repo)!);
       } catch (err) {
         this.deps.plans.note(plan.id, 'problem', `couldn’t clear away ${t.issue!.key}’s worktree: ${err instanceof Error ? err.message : String(err)}`, { kind: 'beluga' });
       }
@@ -1463,28 +1547,34 @@ export class PlanPilot {
   // ------------------------------------------------------------------ the plan's pull request
 
   /**
-   * Look at the plans' pull requests: merged → its tasks are Done. `now` (the default): every one;
-   * `tick` (every few seconds): those due (see pr-cadence.ts, slower in Low Power mode); `focus`:
-   * you came back to the window, so any not looked at in the last few seconds.
+   * Look at the plans' pull requests (one per repo across repos): merged → its tasks are Done. `now`
+   * (the default): every one; `tick` (every few seconds): those due (see pr-cadence.ts, slower in Low
+   * Power mode); `focus`: you came back to the window, so any not looked at in the last few seconds.
    */
   async pollPrs(reason: 'now' | 'tick' | 'focus' = 'now'): Promise<void> {
     const git = this.deps.git;
     if (!git || this.stopped || (reason !== 'now' && this.prPolling)) return;
     this.prPolling = true;
     try {
-      for (const plan of this.deps.plans.list()) {
-        if (!plan.branch || plan.shipped) continue;
+      for (const listed of this.deps.plans.list()) {
+        if (!listed.branch || listed.shipped) continue;
         // Only once there's something to ship (or a PR to follow).
-        const waiting = this.deps.store.getState().board.issues.some((i) => i.plan?.id === plan.id && i.status === 'in_plan');
-        if (!waiting && !plan.pr) continue;
-        const now = this.deps.now?.() ?? Date.now();
-        if (reason !== 'now' && !this.prDue(plan, reason, now)) continue;
-        this.prChecked.set(plan.id, now);
-        try {
-          const pr = await git.findPr(plan.projectId, plan.branch);
-          if (pr) this.prSeen(plan.id, pr);
-        } catch {
-          // GitHub couldn't tell (offline): next time.
+        const waiting = this.deps.store.getState().board.issues.some((i) => i.plan?.id === listed.id && i.status === 'in_plan');
+        if (!waiting && !listed.pr && !Object.keys(listed.prs ?? {}).length) continue;
+        for (const repo of shipOrder(listed)) {
+          const plan = this.deps.plans.need(listed.id);
+          const state = repoPrState(plan, repo);
+          if (!state.branch || state.shipped) continue;
+          const key = this.prKey(plan, repo);
+          const now = this.deps.now?.() ?? Date.now();
+          if (reason !== 'now' && !this.prDue(key, state, reason, now)) continue;
+          this.prChecked.set(key, now);
+          try {
+            const pr = await git.findPr(repo, state.branch);
+            if (pr) this.prSeen(plan.id, pr, repo);
+          } catch {
+            // GitHub couldn't tell (offline): next time.
+          }
         }
       }
     } finally {
@@ -1492,82 +1582,218 @@ export class PlanPilot {
     }
   }
 
-  private prDue(plan: Plan, reason: 'tick' | 'focus', now: number): boolean {
-    const since = now - (this.prChecked.get(plan.id) ?? -Infinity);
+  private prKey(plan: Pick<Plan, 'id' | 'projectId'>, repo: string): string {
+    return repo === plan.projectId ? plan.id : `${plan.id}:${repo}`;
+  }
+
+  private prDue(key: string, state: RepoPrState, reason: 'tick' | 'focus', now: number): boolean {
+    const since = now - (this.prChecked.get(key) ?? -Infinity);
     if (reason === 'focus') return since >= PLAN_PR_FOCUS_FRESH_MS;
-    const every = planPrCadence(plan, this.prPushed.get(plan.id), now);
+    const every = planPrCadence(state, this.prPushed.get(key), now);
     return every !== undefined && since >= pace(every, this.deps.store.getState().powerSaving);
   }
 
-  /** Beluga pushed the plan's branch: its PR is looked at often for a while (GitHub catches up a little after). */
-  private pushedPlan(planId: string): void {
-    this.prPushed.set(planId, this.deps.now?.() ?? Date.now());
+  /** Beluga pushed a plan branch: its PR is looked at often for a while (GitHub catches up a little after). */
+  private pushedPlan(planId: string, repo: string): void {
+    this.prPushed.set(this.prKey(this.deps.plans.need(planId), repo), this.deps.now?.() ?? Date.now());
   }
 
-  private prSeen(planId: string, pr: NonNullable<Plan['pr']>): void {
-    const plan = this.deps.plans.setPr(planId, pr);
-    if (pr.state === 'MERGED') this.ship(plan, 'pr', pr.number);
+  private prSeen(planId: string, pr: PlanPr, repo?: string): void {
+    const plan = this.deps.plans.setPr(planId, pr, repo);
+    if (pr.state === 'MERGED') this.ship(plan, 'pr', pr.number, repo);
   }
 
-  /** The plan's work reached main: every Merged into Plan task of it is Done at once. */
-  private ship(plan: Plan, how: 'pr' | 'local', number?: number): void {
-    const text = how === 'pr' ? `merged into main via #${number}` : 'merged into main here, with the plan';
-    for (const i of this.deps.store.getState().board.issues) if (i.plan?.id === plan.id && i.status === 'in_plan') this.deps.work.board.planMoved(i.id, 'done', text);
-    this.deps.plans.setShipped(plan.id, { at: Date.now(), how, ...(number !== undefined ? { number } : {}) });
-    this.deps.system(plan.home, how === 'pr' ? `The plan’s pull request #${number} was merged: its tasks are Done.` : `${plan.branch} was merged into main here: the plan’s tasks are Done.`);
+  /**
+   * The plan's work reached main: every Merged into Plan task of it is Done at once. Across repos,
+   * a milestone's tasks are Done once every repo it runs in is merged, and the plan once all are.
+   */
+  private ship(plan: Plan, how: 'pr' | 'local', number?: number, repo = plan.projectId): void {
+    if (!isMultiRepo(plan)) {
+      const text = how === 'pr' ? `merged into main via #${number}` : 'merged into main here, with the plan';
+      for (const i of this.deps.store.getState().board.issues) if (i.plan?.id === plan.id && i.status === 'in_plan') this.deps.work.board.planMoved(i.id, 'done', text);
+      this.deps.plans.setShipped(plan.id, { at: Date.now(), how, ...(number !== undefined ? { number } : {}) });
+      this.deps.system(plan.home, how === 'pr' ? `The plan’s pull request #${number} was merged: its tasks are Done.` : `${plan.branch} was merged into main here: the plan’s tasks are Done.`);
+      return;
+    }
+    if (shippedIn(plan, repo)) return;
+    const after = this.deps.plans.setShipped(plan.id, { at: Date.now(), how, ...(number !== undefined ? { number } : {}) }, repo);
+    const via = (r: string): string => {
+      const pr = planPrFor(after, r);
+      return after.shippedIn?.[r]?.how === 'pr' && pr ? prRef(pr) : `${this.repoName(r)} (merged here)`;
+    };
+    for (const m of this.view(after).milestones) {
+      const repos = milestoneRepos(after, m.milestone);
+      if (!repos.every((r) => shippedIn(after, r))) continue;
+      const text = `merged into main via ${repos.map(via).join(', ')}`;
+      for (const t of m.tasks) if (t.issue?.status === 'in_plan') this.deps.work.board.planMoved(t.issue.id, 'done', text);
+    }
+    if (after.shipped) {
+      for (const i of this.deps.store.getState().board.issues) if (i.plan?.id === plan.id && i.status === 'in_plan') this.deps.work.board.planMoved(i.id, 'done', 'merged into main with the plan');
+      this.deps.system(plan.home, `Every repo’s pull request is merged (${shipOrder(after).map(via).join(', ')}): the plan’s tasks are Done.`);
+      return;
+    }
+    const left = shipOrder(after).filter((r) => !shippedIn(after, r)).map((r) => this.repoName(r));
+    this.deps.system(plan.home, `${this.repoName(repo)}’s work reached main via ${via(repo)}: its tasks are Done; still to merge: ${left.join(', ')}.`);
+    if (after.mergeAll?.auto) void this.mergeNext(plan.id).catch(() => undefined);
   }
 
-  /** Open the plan's pull request (its branch → main). */
+  /** Open the plan's pull request (its branch → main); across repos, one per repo, each linking the others. */
   async openPr(planId: string): Promise<Plan> {
+    if (isMultiRepo(this.deps.plans.need(planId))) return this.openPrs(planId);
     const { git, plan, branch } = this.shippable(planId);
     const view = this.view(plan);
-    const body = [
-      view.body?.goal ?? '',
-      '',
-      ...view.milestones.flatMap((m) => [`## ${m.milestone.title}`, ...m.tasks.filter((t) => t.issue && t.state !== 'canceled').map((t) => `- ${t.issue!.key} ${t.task.title}`), '']),
-      `One pull request for the plan: each milestone was merged into \`${branch}\` when it passed.`,
-    ].join('\n');
-    const pr = await git.openPr(plan.projectId, branch, view.body?.title ?? branch, body.trim());
-    this.pushedPlan(planId);
+    const pr = await git.openPr(plan.projectId, branch, view.body?.title ?? branch, this.prBody(plan, view, plan.projectId));
+    this.pushedPlan(planId, plan.projectId);
     this.prSeen(planId, pr);
     return this.deps.plans.need(planId);
+  }
+
+  private async openPrs(planId: string): Promise<Plan> {
+    const { git } = this.shippable(planId);
+    for (const repo of shipOrder(this.deps.plans.need(planId))) {
+      const plan = this.deps.plans.need(planId);
+      const branch = planBranchFor(plan, repo);
+      const had = planPrFor(plan, repo);
+      if (!branch || shippedIn(plan, repo) || (had && had.state !== 'CLOSED')) continue;
+      const view = this.view(plan);
+      const found = await git.findPr(repo, branch).catch(() => undefined);
+      const pr =
+        found && found.state !== 'CLOSED'
+          ? found
+          : await git.openPr(repo, branch, view.body?.title ?? branch, this.prBody(plan, view, repo)).catch((err: unknown) => {
+              throw new Error(`Couldn’t open ${this.repoName(repo)}’s pull request: ${firstLine(err)}`);
+            });
+      this.pushedPlan(planId, repo);
+      this.prSeen(planId, pr, repo);
+    }
+    await this.linkPrs(planId);
+    return this.deps.plans.need(planId);
+  }
+
+  private async linkPrs(planId: string): Promise<void> {
+    const plan = this.deps.plans.need(planId);
+    const linked = shipOrder(plan).flatMap((repo) => {
+      const pr = planPrFor(plan, repo);
+      return pr && pr.state !== 'CLOSED' ? [{ repo, pr }] : [];
+    });
+    if (linked.length < 2) return;
+    const view = this.view(plan);
+    for (const { repo, pr } of linked) {
+      if (pr.state !== 'OPEN') continue;
+      await this.deps.git!.editPrBody(repo, pr.number, this.prBody(plan, view, repo, linked)).catch((err: unknown) => {
+        this.deps.plans.note(planId, 'problem', `couldn’t link ${this.repoName(repo)}’s pull request ${prRef(pr)} to the others: ${firstLine(err)}`, { kind: 'beluga' });
+      });
+    }
+  }
+
+  private prBody(plan: Plan, view: PlanView, repo: string, linked: readonly { readonly repo: string; readonly pr: PlanPr }[] = []): string {
+    const branch = planBranchFor(plan, repo) ?? planBranchName(plan);
+    const multi = isMultiRepo(plan);
+    const milestones = view.milestones.filter((m) => !multi || milestoneRepos(plan, m.milestone).includes(repo));
+    const order = shipOrder(plan);
+    const ref = (r: string): string => {
+      const pr = linked.find((l) => l.repo === r)?.pr;
+      return r === repo ? `this one (${this.repoName(r)})` : pr ? `${prRef(pr)} (${this.repoName(r)})` : this.repoName(r);
+    };
+    return [
+      view.body?.goal ?? '',
+      '',
+      ...milestones.flatMap((m) => [`## ${m.milestone.title}`, ...m.tasks.filter((t) => t.issue && t.state !== 'canceled').map((t) => `- ${t.issue!.key} ${t.task.title}`), '']),
+      ...(linked.some((l) => l.repo !== repo) ? ['## Linked pull requests', `The plan spans ${order.length} repos, one pull request each. Merge All merges them in this order:`, ...order.map((r, n) => `${n + 1}. ${ref(r)}`), ''] : []),
+      multi ? `This repo’s pull request for the plan: each of its milestones was merged into \`${branch}\` when it passed.` : `One pull request for the plan: each milestone was merged into \`${branch}\` when it passed.`,
+    ]
+      .join('\n')
+      .trim();
   }
 
   /**
    * Merge the plan's pull request on GitHub, as a worktree's is: GitHub asked first (what's saved can
    * be minutes old), the branch pushed (nothing merged here is left out), then merged now or (auto)
-   * once its checks and reviews pass. GitHub's no comes back in plain words.
+   * once its checks and reviews pass. GitHub's no comes back in plain words. Across repos: one repo's,
+   * or (no repo) Merge All, upstream repos first, stopping at the first that fails.
    */
-  async mergePr(planId: string, opts: { readonly auto?: boolean } = {}): Promise<Plan> {
-    const { git, plan, branch } = this.shippable(planId);
-    if (this.prMerging.has(planId)) throw new Error('The plan’s pull request is already being merged');
-    this.prMerging.add(planId);
+  async mergePr(planId: string, opts: { readonly auto?: boolean } = {}, repo?: string): Promise<Plan> {
+    const plan = this.deps.plans.need(planId);
+    if (!isMultiRepo(plan)) return this.mergeOne(planId, plan.projectId, opts);
+    return repo ? this.mergeOne(planId, repo, opts) : this.mergeAll(planId, opts);
+  }
+
+  private async mergeOne(planId: string, repo: string, opts: { readonly auto?: boolean }): Promise<Plan> {
+    const { git, plan, branch } = this.shippable(planId, repo);
+    const multi = isMultiRepo(plan);
+    const key = this.prKey(plan, repo);
+    if (this.prMerging.has(key)) throw new Error(multi ? `${this.repoName(repo)}’s pull request is already being merged` : 'The plan’s pull request is already being merged');
+    this.prMerging.add(key);
     try {
-      const pr = (await git.findPr(plan.projectId, branch).catch(() => undefined)) ?? plan.pr;
-      if (!pr) throw new Error('The plan has no pull request yet: open one first');
-      if (pr !== plan.pr) this.prSeen(planId, pr);
+      const saved = planPrFor(plan, repo);
+      const pr = (await git.findPr(repo, branch).catch(() => undefined)) ?? saved;
+      if (!pr) throw new Error(multi ? `${this.repoName(repo)} has no pull request yet: open the PRs first` : 'The plan has no pull request yet: open one first');
+      if (pr !== saved) this.prSeen(planId, pr, repo);
       if (pr.state === 'MERGED') return this.deps.plans.need(planId);
-      if (pr.state === 'CLOSED') throw new Error(`Pull request #${pr.number} was closed on GitHub: open it again first`);
+      if (pr.state === 'CLOSED') throw new Error(`Pull request ${multi ? prRef(pr) : `#${pr.number}`} was closed on GitHub: open it again first`);
       try {
-        await git.push(plan.projectId, branch);
-        this.pushedPlan(planId);
+        await git.push(repo, branch);
+        this.pushedPlan(planId, repo);
       } catch (err) {
-        throw new Error(`Couldn’t push ${branch} to GitHub, so #${pr.number} isn’t merged (it would leave work out): ${(err instanceof Error ? err.message : String(err)).split('\n')[0]}`);
+        throw new Error(`Couldn’t push ${branch} to GitHub, so #${pr.number} isn’t merged (it would leave work out): ${firstLine(err)}`);
       }
       try {
-        await git.mergePr(plan.projectId, pr.number, opts.auto ? { auto: true } : {});
+        await git.mergePr(repo, pr.number, opts.auto ? { auto: true } : {});
       } catch (err) {
         // GitHub may know more now (a conflict, a review): shown on the page.
-        const now = await git.findPr(plan.projectId, branch).catch(() => undefined);
-        if (now) this.prSeen(planId, now);
+        const now = await git.findPr(repo, branch).catch(() => undefined);
+        if (now) this.prSeen(planId, now, repo);
         throw err;
       }
-      const after = await git.findPr(plan.projectId, branch).catch(() => undefined);
-      this.prSeen(planId, after ?? (opts.auto ? { ...pr, autoMerge: true } : { ...pr, state: 'MERGED' }));
+      const after = await git.findPr(repo, branch).catch(() => undefined);
+      this.prSeen(planId, after ?? (opts.auto ? { ...pr, autoMerge: true } : { ...pr, state: 'MERGED' }), repo);
       return this.deps.plans.need(planId);
     } finally {
-      this.prMerging.delete(planId);
+      this.prMerging.delete(key);
     }
+  }
+
+  private async mergeAll(planId: string, opts: { readonly auto?: boolean }): Promise<Plan> {
+    const { plan } = this.shippable(planId);
+    const left = shipOrder(plan).filter((r) => !shippedIn(plan, r));
+    const missing = left.filter((r) => !planPrFor(plan, r));
+    if (missing.length) throw new Error(`Open the PRs first: ${missing.map((r) => this.repoName(r)).join(', ')} ${missing.length > 1 ? 'have' : 'has'} no pull request yet`);
+    if (opts.auto) {
+      this.deps.plans.setMergeAll(planId, { at: Date.now(), auto: true });
+      await this.mergeNext(planId);
+      return this.deps.plans.need(planId);
+    }
+    for (const repo of left) {
+      try {
+        await this.mergeOne(planId, repo, {});
+      } catch (err) {
+        throw this.stoppedAt(planId, repo, firstLine(err));
+      }
+      const now = this.deps.plans.need(planId);
+      if (!shippedIn(now, repo)) throw this.stoppedAt(planId, repo, `GitHub hasn’t merged ${prRef(planPrFor(now, repo)!)} yet`);
+    }
+    return this.deps.plans.need(planId);
+  }
+
+  private async mergeNext(planId: string): Promise<void> {
+    const plan = this.deps.plans.need(planId);
+    if (!plan.mergeAll || plan.shipped) return;
+    const repo = shipOrder(plan).find((r) => !shippedIn(plan, r));
+    if (!repo || planPrFor(plan, repo)?.autoMerge || this.prMerging.has(this.prKey(plan, repo))) return;
+    try {
+      await this.mergeOne(planId, repo, { auto: true });
+    } catch (err) {
+      this.deps.plans.setMergeAll(planId, undefined);
+      throw this.stoppedAt(planId, repo, firstLine(err));
+    }
+  }
+
+  private stoppedAt(planId: string, repo: string, why: string): Error {
+    const plan = this.deps.plans.need(planId);
+    const merged = shipOrder(plan).filter((r) => shippedIn(plan, r)).map((r) => this.repoName(r));
+    const text = `Merge All stopped at ${this.repoName(repo)}${merged.length ? ` (${merged.join(', ')} merged before it)` : ''}: ${why}`;
+    this.deps.plans.note(planId, 'problem', text, { kind: 'beluga' });
+    return new Error(text);
   }
 
   /** A conflict Claude couldn't fix (it waits for you): Claude is asked again now, from a clean count. */
@@ -1598,24 +1824,41 @@ export class PlanPilot {
     return plan.mainMerge?.conflict?.dir ?? Object.values(plan.merging ?? {}).find((m) => m.conflict)?.conflict?.dir ?? Object.values(plan.combining ?? {}).find((c) => c.conflict)?.conflict?.dir;
   }
 
-  /** Merge the plan's branch into main here. */
-  async mergeLocal(planId: string): Promise<Plan> {
-    const { git, plan, branch } = this.shippable(planId);
-    const res = await git.mergeLocal(plan.projectId, branch);
+  /** Merge the plan's branch into main here; across repos, one repo's, or (no repo) each in order. */
+  async mergeLocal(planId: string, repo?: string): Promise<Plan> {
+    const plan = this.deps.plans.need(planId);
+    if (!isMultiRepo(plan) || repo) return this.mergeLocalOne(planId, repo ?? plan.projectId);
+    const { plan: shippable } = this.shippable(planId);
+    for (const r of shipOrder(shippable).filter((x) => !shippedIn(shippable, x))) {
+      try {
+        await this.mergeLocalOne(planId, r);
+      } catch (err) {
+        throw this.stoppedAt(planId, r, firstLine(err));
+      }
+    }
+    return this.deps.plans.need(planId);
+  }
+
+  private async mergeLocalOne(planId: string, repo: string): Promise<Plan> {
+    const { git, plan, branch } = this.shippable(planId, repo);
+    const res = await git.mergeLocal(repo, branch);
     if (!res.ok) {
       if (res.reason === 'wrong_branch') throw new Error(`The main folder is on ${res.current}, not ${res.expected}: switch it to ${res.expected} first`);
       if (res.reason === 'dirty') throw new Error(`The main folder has uncommitted changes (${res.files.slice(0, 3).join(', ')}): commit or stash them first`);
       throw new Error(`Merging ${branch} into main conflicts in ${res.files.slice(0, 3).join(', ')}: nothing was changed`);
     }
-    this.ship(plan, 'local');
+    this.ship(plan, 'local', undefined, repo);
     return this.deps.plans.need(planId);
   }
 
-  private shippable(planId: string): { readonly git: PlanGit; readonly plan: Plan; readonly branch: string } {
+  private shippable(planId: string, repo?: string): { readonly git: PlanGit; readonly plan: Plan; readonly branch: string } {
     const plan = this.deps.plans.need(planId);
-    if (!this.deps.git || !plan.branch) throw new Error('This plan has no branch of its own');
+    const inRepo = repo ?? plan.projectId;
+    const branch = planBranchFor(plan, inRepo);
+    if (!this.deps.git || !plan.branch || !branch) throw new Error(inRepo === plan.projectId ? 'This plan has no branch of its own' : `${this.repoName(inRepo)} has no plan branch`);
     if (plan.shipped) throw new Error('The plan is in main already');
-    return { git: this.deps.git, plan, branch: plan.branch };
+    if (shippedIn(plan, inRepo)) throw new Error(`${this.repoName(inRepo)}’s work is in main already`);
+    return { git: this.deps.git, plan, branch };
   }
 
   /** Look at a plan's started tasks: wake what stopped without finishing, or ask you. */

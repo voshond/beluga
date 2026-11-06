@@ -47,8 +47,8 @@ export type NativeSheet =
   | { readonly kind: 'project_context'; readonly projectId: string }
   /** Environment…: a project's variables beside its main folder's .env (BLG-369). */
   | { readonly kind: 'project_env'; readonly projectId: string }
-  /** A new plan with Claude: what it's for, the project (unset: pick one), how far it runs on its own. */
-  | { readonly kind: 'new_plan'; readonly projectId?: string }
+  /** A new plan with Claude: what it's for, the project (unset: pick one), how far it runs on its own; `projectIds` ticks several (a group's Plan Across Group…). */
+  | { readonly kind: 'new_plan'; readonly projectId?: string; readonly projectIds?: readonly string[] }
   /** A new sentinel (docs/sentinel.md §3): from a recipe, or built yourself; `projectId` 'mac' is Your Mac. */
   | { readonly kind: 'new_sentinel'; readonly projectId?: string; readonly way?: 'describe' | 'recipe' | 'build' }
   /** Add a Tile to a dashboard (docs/sentinel.md §10). */

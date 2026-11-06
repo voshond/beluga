@@ -1,4 +1,6 @@
 import type { PlanAskInput, PlanTools } from '../../agent/types.js';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { AgentRef } from '../../protocol.js';
 import { agentName } from '../../shared/agent-label.js';
 import type { Actor, Issue } from '../board/model.js';
@@ -7,15 +9,15 @@ import type { CombineResult } from '../../workspaces/git.js';
 import type { Intent } from '../intents.js';
 import type { LogItem, Store } from '../store.js';
 import type { WorkspaceController } from '../workspace-controller.js';
-import { ApplyError, applyDraft } from './apply.js';
+import { ApplyError, applyDraft, planBoard } from './apply.js';
 import { dropEpics, syncEpics } from './epics.js';
 import type { BodyInput, PlanOp, TaskInput } from './edit.js';
-import { type Autonomy, type Plan, type TestsAt, allTasks, checkerOf, planForHome, planTaskOfIssue, planTitle } from './model.js';
+import { type Autonomy, MAX_PLAN_REPOS, type Plan, type TestsAt, allTasks, checkerOf, isMultiRepo, milestoneRepos, planForHome, planRepos, planTaskOfIssue, planTitle } from './model.js';
 import { type PilotDeps, PlanPilot } from './pilot.js';
 import type { TaskView } from './progress.js';
 import { type PlanGit, planGitOf } from './plan-git.js';
 import { type Plans, UNTITLED } from './plans.js';
-import { checkFailedPrompt, checkerBrief, describePlan, handbackPrompt, headBrief, milestoneNote, planningBrief, sizeWords, workerNote } from './prompt.js';
+import { type MilestoneWhere, type PlanRepoInfo, checkFailedPrompt, checkerBrief, describePlan, handbackPrompt, headBrief, milestoneNote, milestoneWhere, planningBrief, sizeWords, workerNote } from './prompt.js';
 
 /**
  * Plans at work: making a plan (its own conversation, in the project's main folder where Claude
@@ -58,6 +60,18 @@ export interface PlansWorkDeps {
 
 const WS = 'ws:';
 
+type PackageScripts = { readonly scripts?: Readonly<Record<string, string>> };
+
+/** A repo's test commands, from its package.json scripts (none there, or no package.json: none). */
+const testsOf = (root: string): readonly string[] => {
+  try {
+    const { scripts } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as PackageScripts;
+    return ['typecheck', 'lint', 'test'].filter((s) => scripts?.[s]).map((s) => (s === 'test' ? 'npm test' : `npm run ${s}`));
+  } catch {
+    return [];
+  }
+};
+
 export class PlansWork {
   readonly plans: Plans;
   readonly pilot: PlanPilot;
@@ -80,14 +94,16 @@ export class PlansWork {
       ...(deps.controller
         ? {
             // On the plan's agent (BLG-503), like its workers; none picked: the project's.
+            // In the milestone's repo (BLG-15): its branches are there to diff; the plan's other repos are read beside it.
             checkerChat: async (plan, milestone) => {
-              const ws = await deps.controller!.newChat(plan.projectId, `Check: ${milestone.title}`.slice(0, 40), undefined, { quiet: true });
+              const ws = await deps.controller!.newChat(milestoneRepos(plan, milestone)[0]!, `Check: ${milestone.title}`.slice(0, 40), undefined, { quiet: true });
               if (ws && plan.agent) deps.controller!.manager.setAgent(ws.id, plan.agent);
               return ws?.id;
             },
             // Its merge conflicts (BLG-4): a conversation of its own, so the head Claude only routes.
-            fixerChat: async (plan) => {
-              const ws = await deps.controller!.newChat(plan.projectId, `Fix: ${planTitle(plan)}`.slice(0, 40), undefined, { quiet: true });
+            // In the repo that conflicts (BLG-15); it may edit only the hidden worktree it's given (allowFixup).
+            fixerChat: async (plan, projectId) => {
+              const ws = await deps.controller!.newChat(projectId, `Fix: ${planTitle(plan)}`.slice(0, 40), undefined, { quiet: true });
               if (ws && plan.agent) deps.controller!.manager.setAgent(ws.id, plan.agent);
               return ws?.id;
             },
@@ -104,14 +120,23 @@ export class PlansWork {
       ...(deps.forYou ? { forYou: deps.forYou } : {}),
       ...(deps.rescueMs !== undefined ? { rescueMs: deps.rescueMs } : {}),
       structure: (plan) => this.structure(plan.id),
+      testsOf,
     });
     // A task of a plan: its worktree's Claude knows the plan and what runs beside it.
     deps.board.setBriefExtra((issue) => this.workerBrief(issue));
     // A milestone's worktree: its one Claude gets the milestone (its tasks in order, where each stands).
     deps.board.setRunBrief((channel) => this.milestoneBrief(channel));
+    // A milestone across repos: its agent edits its worktrees in the other repos too (BLG-14).
+    deps.board.setAlsoExtra((id) => this.alongPaths(id));
+    // A plan across repos: its home reads the other repos' main folders too (read-only: it's a main-folder chat),
+    // and a milestone reads the repos of earlier milestones it builds on.
+    this.offReads = deps.controller?.setReadAlso?.((id) => [...new Set([...this.homeReads(id), ...this.upstreamReads(id), ...this.helperReads(id)])]);
   }
 
+  private readonly offReads: (() => void) | undefined;
+
   stop(): void {
+    this.offReads?.();
     this.pilot.stop();
     this.plans.flush();
   }
@@ -126,15 +151,16 @@ export class PlansWork {
    * the code there and changes nothing), and the plan's page. Claude starts planning from `goal`.
    */
   /** `quiet`: started from elsewhere (Your Mac), so the Mac's window stays where it is. */
-  async create(input: { readonly projectId: string; readonly goal: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentRef }, opts: { readonly quiet?: boolean } = {}): Promise<Plan> {
+  async create(input: { readonly projectId: string; readonly projectIds?: readonly string[]; readonly goal: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentRef }, opts: { readonly quiet?: boolean } = {}): Promise<Plan> {
     const controller = this.deps.controller;
     if (!controller) throw new Error('Plans need a project folder');
     const goal = input.goal.trim();
     if (!goal) throw new Error('Say what the plan is for');
+    const repos = this.localRepos(input.projectId, input.projectIds);
     const chat = await controller.newChat(input.projectId, UNTITLED, undefined, { quiet: true });
     if (!chat) throw new Error('Couldn’t start the plan’s conversation');
     const home = `${WS}${chat.id}`;
-    const plan = this.plans.create({ projectId: input.projectId, home, goal, ...(input.autonomy ? { autonomy: input.autonomy } : {}), ...(input.testsAt ? { testsAt: input.testsAt } : {}), ...(input.agent ? { agent: input.agent } : {}) }, this.me());
+    const plan = this.plans.create({ projectId: input.projectId, ...(repos.length > 1 ? { repos } : {}), home, goal, ...(input.autonomy ? { autonomy: input.autonomy } : {}), ...(input.testsAt ? { testsAt: input.testsAt } : {}), ...(input.agent ? { agent: input.agent } : {}) }, this.me());
     if (!opts.quiet) this.deps.intend({ type: 'navigate', view: { kind: 'plan', id: plan.id } });
     this.deps.askClaude(goal, home, true);
     // Named in a moment by a quick model (your message is never its name); Claude's plan_write names it after that.
@@ -146,6 +172,56 @@ export class PlansWork {
       })
       .catch(() => undefined);
     return plan;
+  }
+
+  /** What a new board for a plan across repos is called: the sidebar group holding all its repos, else the plan's title. */
+  private boardNameFor(plan: Plan): string {
+    const state = this.deps.store.getState();
+    const roots = this.repoInfos(plan).map((r) => r.root);
+    const group = (state.projectGroups ?? []).find((g) => roots.every((root) => root && g.projects.includes(root)));
+    return group?.name ?? planTitle(plan);
+  }
+
+  /** A plan's repos as the planner sees them: name and main folder (primary first). */
+  private repoInfos(plan: Plan): readonly PlanRepoInfo[] {
+    const projects = this.deps.store.getState().projects;
+    return planRepos(plan).map((id) => {
+      const p = projects.find((x) => x.id === id);
+      return { id, name: p?.name ?? id, root: p?.root ?? '' };
+    });
+  }
+
+  /** The other repos' main folders a plan's home reads (none for a single-repo plan, or one that's done). */
+  homeReads(workspaceId: string): readonly string[] {
+    const plan = planForHome(this.plans.state(), `${WS}${workspaceId}`);
+    if (!plan || plan.status === 'done' || !isMultiRepo(plan)) return [];
+    return this.repoInfos(plan).slice(1).map((r) => r.root).filter(Boolean);
+  }
+
+  /** Milestone repos as Claude names them (a project's name or id) → the plan's ids; one it can't place is left for the check to refuse. */
+  private repoIds(planId: string, repos: readonly string[] | null | undefined): readonly string[] | null | undefined {
+    if (!repos) return repos;
+    const infos = this.repoInfos(this.plans.need(planId));
+    return repos.map((r) => {
+      const said = r.trim().toLowerCase();
+      return infos.find((x) => x.id.toLowerCase() === said)?.id ?? infos.find((x) => x.name.toLowerCase() === said)?.id ?? r.trim();
+    });
+  }
+
+  private withRepoIds<T extends { readonly repos?: readonly string[] | null }>(planId: string, m: T): T {
+    if (!m.repos) return m;
+    return { ...m, repos: this.repoIds(planId, m.repos) };
+  }
+
+  /** The repos a new plan covers (primary first): each one a project on this Mac, with its folder. */
+  private localRepos(primary: string, more: readonly string[] | undefined): readonly string[] {
+    const repos = planRepos({ projectId: primary, repos: more ?? [] });
+    if (repos.length === 1) return repos;
+    if (repos.length > MAX_PLAN_REPOS) throw new Error(`A plan covers at most ${MAX_PLAN_REPOS} projects`);
+    const projects = this.deps.store.getState().projects;
+    const missing = repos.filter((id) => !projects.some((p) => p.id === id && p.root));
+    if (missing.length) throw new Error(`A plan can only cover projects on this Mac: ${missing.map((id) => `"${id}"`).join(', ')} ${missing.length > 1 ? "aren't" : "isn't"} one of them`);
+    return repos;
   }
 
   /** A plan's own conversation goes by the plan's name (in the sidebar too), unless you renamed it. */
@@ -193,7 +269,8 @@ export class PlansWork {
     if (open.length && !opts.anyway) throw new Error(`${open.length === 1 ? 'A question is' : `${open.length} questions are`} still open: ${open.map((q) => `“${q}”`).join(', ')}. Answer ${open.length === 1 ? 'it' : 'them'} in the plan’s conversation, or approve anyway.`);
     let applied: ReturnType<typeof applyDraft>;
     try {
-      applied = applyDraft(plan, this.deps.board.board, { by, me: this.deps.board.me() });
+      const boardId = planBoard(plan, this.deps.board.board, this.boardNameFor(plan));
+      applied = applyDraft(boardId ? this.plans.setBoard(id, boardId) : plan, this.deps.board.board, { by, me: this.deps.board.me() });
     } catch (err) {
       // What was made stays linked to the draft, so approving again doesn't make it twice.
       if (err instanceof ApplyError) this.plans.linkDraft(id, err.linked);
@@ -291,12 +368,12 @@ export class PlansWork {
     return this.pilot.openPr(id);
   }
 
-  mergePr(id: string, opts: { readonly auto?: boolean } = {}): Promise<Plan> {
-    return this.pilot.mergePr(id, opts);
+  mergePr(id: string, opts: { readonly auto?: boolean } = {}, repo?: string): Promise<Plan> {
+    return this.pilot.mergePr(id, opts, repo);
   }
 
-  mergeLocal(id: string): Promise<Plan> {
-    return this.pilot.mergeLocal(id);
+  mergeLocal(id: string, repo?: string): Promise<Plan> {
+    return this.pilot.mergeLocal(id, repo);
   }
 
   /** A conflict Claude couldn't fix: asked again now. */
@@ -310,8 +387,8 @@ export class PlansWork {
   }
 
   /** Its pull request conflicts with main: main merged into the plan's branch (a conflict goes to its Claude). */
-  bringInMain(id: string): Promise<Plan> {
-    return this.pilot.bringInMain(id);
+  bringInMain(id: string, repo?: string): Promise<Plan> {
+    return this.pilot.bringInMain(id, repo);
   }
 
   /** `agent` (Start with…, BLG-506): who works it this once; none: the task's own, the plan's, or your default. */
@@ -362,14 +439,15 @@ export class PlansWork {
       if (checking.plan.status !== 'active' || !checking.plan.body) return undefined;
       const view = this.pilot.view(checking.plan);
       const m = view.milestones.find((x) => x.milestone.id === checking.milestone);
-      return m ? { tools: this.checkerTools(checking.plan.id, m.milestone.id), brief: checkerBrief(view, m) } : undefined;
+      return m ? { tools: this.checkerTools(checking.plan.id, m.milestone.id), brief: checkerBrief(view, m, this.pilot.repoChecks(checking.plan, m.milestone)) } : undefined;
     }
     const found = planForHome(this.plans.state(), channel);
     if (!found) return this.workerOf(channel);
     const plan = (said && this.plans.noteRequest(found.id, said)) || found;
     const board = this.deps.store.getState().board;
     const view = this.pilot.view(plan);
-    const brief = plan.body ? headBrief(view) + planningBrief(plan, board, this.plans.planningStyle) : planningBrief(plan, board, this.plans.planningStyle);
+    const planning = planningBrief(plan, board, this.plans.planningStyle, this.repoInfos(plan));
+    const brief = plan.body ? headBrief(view) + planning : planning;
     return { tools: this.toolsFor(plan.id), brief };
   }
 
@@ -473,18 +551,56 @@ export class PlansWork {
   private milestoneBrief(channel: string): { readonly brief: string; readonly current?: Issue } | undefined {
     if (!channel.startsWith(WS)) return undefined;
     const wsId = channel.slice(WS.length);
+    const found = this.milestoneIn(wsId);
+    if (!found) return undefined;
+    const view = this.pilot.view(found.plan);
+    const m = view.milestones.find((x) => x.milestone.id === found.id);
+    if (!m) return undefined;
+    const mine = m.tasks.filter((t) => t.issue?.worktrees.includes(wsId));
+    const current = mine.find((t) => t.state === 'running' || t.state === 'idle' || t.state === 'asking' || t.state === 'stalled') ?? mine.find((t) => t.state === 'ready');
+    return { brief: milestoneNote(view, m, current, this.whereOf(found.plan, found.id)), ...(current?.issue ? { current: current.issue } : {}) };
+  }
+
+  /** The active plan milestone whose agent works in this worktree (its own, not one beside it). */
+  private milestoneIn(workspaceId: string): { readonly plan: Plan; readonly id: string } | undefined {
     for (const plan of this.plans.list()) {
       if (plan.status !== 'active' || !plan.body) continue;
-      const id = Object.keys(plan.runs).find((k) => plan.runs[k]?.agent?.worktree === wsId);
-      if (!id) continue;
-      const view = this.pilot.view(plan);
-      const m = view.milestones.find((x) => x.milestone.id === id);
-      if (!m) return undefined;
-      const mine = m.tasks.filter((t) => t.issue?.worktrees.includes(wsId));
-      const current = mine.find((t) => t.state === 'running' || t.state === 'idle' || t.state === 'asking' || t.state === 'stalled') ?? mine.find((t) => t.state === 'ready');
-      return { brief: milestoneNote(view, m, current), ...(current?.issue ? { current: current.issue } : {}) };
+      const id = Object.keys(plan.runs).find((k) => plan.runs[k]?.agent?.worktree === workspaceId);
+      if (id) return { plan, id };
     }
     return undefined;
+  }
+
+  private whereOf(plan: Plan, milestoneId: string): MilestoneWhere | undefined {
+    const milestone = plan.body?.milestones.find((x) => x.id === milestoneId);
+    return milestone ? milestoneWhere(plan, milestone, plan.runs[milestoneId]?.agent, this.deps.store.getState().projects) : undefined;
+  }
+
+  /** A milestone across repos: its worktrees in the other repos, which its agent edits too. */
+  alongPaths(workspaceId: string): readonly string[] {
+    const found = this.milestoneIn(workspaceId);
+    return found ? (this.whereOf(found.plan, found.id)?.along.map((a) => a.path) ?? []) : [];
+  }
+
+  /**
+   * A plan across repos: what its fixer and its checkers read beside their own main folder, never
+   * edit: the plan's other repos, and a checker its milestone's worktrees (every repo it worked in).
+   */
+  helperReads(workspaceId: string): readonly string[] {
+    const channel = `${WS}${workspaceId}`;
+    const checking = checkerOf(this.plans.state(), channel);
+    const plan = checking?.plan ?? this.plans.list().find((p) => p.fixer === workspaceId);
+    if (!plan || plan.status === 'done' || !isMultiRepo(plan)) return [];
+    const milestone = checking ? plan.body?.milestones.find((m) => m.id === checking.milestone) : undefined;
+    const worktrees = milestone ? (this.pilot.repoChecks(plan, milestone) ?? []).flatMap((r) => r.worktrees) : [];
+    const own = this.deps.store.getState().projects.find((p) => p.workspaces.some((w) => w.id === workspaceId))?.root;
+    return [...worktrees, ...this.repoInfos(plan).map((r) => r.root).filter((root) => root && root !== own)];
+  }
+
+  /** A milestone building on earlier ones in other repos: their main folders, read-only. */
+  upstreamReads(workspaceId: string): readonly string[] {
+    const found = this.milestoneIn(workspaceId);
+    return found ? [...new Set(this.whereOf(found.plan, found.id)?.upstream.map((u) => u.repo.root).filter(Boolean) ?? [])] : [];
   }
 
   /** A task Claude says is an existing board task (its key): that task, adopted into the plan. */
@@ -551,12 +667,12 @@ export class PlansWork {
     };
     return {
       get: () => describePlan(this.pilot.view(plans.need(planId))),
-      write: (body: BodyInput) => after(() => plans.writeDraft(planId, { ...body, milestones: body.milestones.map((m) => ({ ...m, tasks: (m.tasks ?? []).map((t) => this.adopt(t, planId)) })) }, this.claude())),
+      write: (body: BodyInput) => after(() => plans.writeDraft(planId, { ...body, milestones: body.milestones.map((m) => ({ ...this.withRepoIds(planId, m), tasks: (m.tasks ?? []).map((t) => this.adopt(t, planId)) })) }, this.claude())),
       update: (ops: readonly PlanOp[], reason?: string) =>
         after(() =>
           plans.editDraft(
             planId,
-            ops.map((o) => (o.op === 'add_task' ? { ...o, task: this.adopt(o.task, planId) } : o.op === 'update_task' ? { ...o, patch: this.adopt(o.patch, planId) } : o.op === 'add_milestone' ? { ...o, milestone: { ...o.milestone, tasks: (o.milestone.tasks ?? []).map((t) => this.adopt(t, planId)) } } : o)),
+            ops.map((o) => (o.op === 'add_task' ? { ...o, task: this.adopt(o.task, planId) } : o.op === 'update_task' ? { ...o, patch: this.adopt(o.patch, planId) } : o.op === 'add_milestone' ? { ...o, milestone: { ...this.withRepoIds(planId, o.milestone), tasks: (o.milestone.tasks ?? []).map((t) => this.adopt(t, planId)) } } : o.op === 'update_milestone' ? this.withRepoIds(planId, o) : o)),
             this.claude(),
             reason,
           ),

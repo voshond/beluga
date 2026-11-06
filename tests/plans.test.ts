@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { Board } from '../src/core/board/board.js';
 import { BoardWork } from '../src/core/board/work.js';
 import { type BodyInput, PlanError, applyOps, normalizeBody } from '../src/core/plans/edit.js';
-import { diffBodies, milestoneDeps, planForHome } from '../src/core/plans/model.js';
+import { diffBodies, milestoneDeps, planBranchFor, planForHome } from '../src/core/plans/model.js';
+import { boardOf, isVisiting, reposOf, showsOn } from '../src/core/board/model.js';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { Plans } from '../src/core/plans/plans.js';
 import { overlaps, planView, tidyOffer, waves } from '../src/core/plans/progress.js';
 import { PlansWork, type PlansWorkDeps } from '../src/core/plans/work.js';
@@ -23,7 +27,7 @@ const ws = (id: string, projectId: string, name: string, kind: Workspace['kind']
 const project = (id: string, name: string, workspaces: Workspace[] = []): Project => ({ id, name, root: `/tmp/${name}`, base: 'main', workspaces });
 const tick = (ms = 0): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-function setup(opts: { combine?: PlansWorkDeps['combine']; git?: PlanGit; titlePlan?: (goal: string) => Promise<string | undefined>; workers?: 'milestone' | 'task'; forYou?: PlansWorkDeps['forYou']; cancel?: PlansWorkDeps['cancel']; rescueMs?: number; now?: () => number } = {}) {
+function setup(opts: { dir?: string; combine?: PlansWorkDeps['combine']; git?: PlanGit; titlePlan?: (goal: string) => Promise<string | undefined>; workers?: 'milestone' | 'task'; forYou?: PlansWorkDeps['forYou']; cancel?: PlansWorkDeps['cancel']; rescueMs?: number; now?: () => number } = {}) {
   const store = new Store(initialState('room'));
   store.dispatch({ type: 'projects', projects: [project('api', 'bob-api', [ws('main', 'api', 'bob-api', 'chat', { askOnly: true } as Partial<Workspace>)])] });
   const listeners: Array<(e: WorktreeEvent) => void> = [];
@@ -62,7 +66,7 @@ function setup(opts: { combine?: PlansWorkDeps['combine']; git?: PlanGit; titleP
   } as unknown as WorkspaceController;
   const board = new Board({ store, dir: null, projectName: (id) => store.getState().projects.find((p) => p.id === id)?.name });
   const boardWork = new BoardWork({ store, board, controller, selfId: () => 'p-me', selfName: () => 'Kay', askClaude: (prompt, channel) => void asked.push({ prompt, channel, echo: true }) });
-  const plans = new Plans({ store, dir: null });
+  const plans = new Plans({ store, dir: opts.dir ?? null });
   const intents: unknown[] = [];
   const work = new PlansWork({ store, plans, board: boardWork, controller, askClaude: (prompt, channel, echo) => `ask-${asked.push({ prompt, channel, echo })}`, intend: (i) => void intents.push(i), delayMs: 0, ...(opts.combine ? { combine: opts.combine } : {}), ...(opts.git ? { git: opts.git } : {}), ...(opts.titlePlan ? { titlePlan: opts.titlePlan } : {}), ...(opts.workers ? { workers: opts.workers } : {}), ...(opts.forYou ? { forYou: opts.forYou } : {}), ...(opts.cancel ? { cancel: opts.cancel } : {}), ...(opts.rescueMs !== undefined ? { rescueMs: opts.rescueMs } : {}), ...(opts.now ? { now: opts.now } : {}) });
   const claude = boardWork.myClaude();
@@ -950,36 +954,59 @@ describe('a task that builds on several unfinished tasks starts from their combi
 describe('the plan’s branch: tasks start from it, milestones merge into it, one PR at the end', () => {
   /** A fake of git and GitHub: what was asked, and what it answers. */
   function fakeGit() {
-    const log = { pushed: [] as string[], ensured: [] as string[], merged: [] as Array<{ into: string; branches: readonly string[] }>, retired: [] as Array<{ ws: string; branch?: string }> };
+    /** `inRepo`: each git step with the repo it ran in ("merge cal plan/x ← klaud/y"). */
+    const log = { pushed: [] as string[], ensured: [] as string[], merged: [] as Array<{ into: string; branches: readonly string[] }>, retired: [] as Array<{ ws: string; branch?: string }>, inRepo: [] as string[] };
+    /** Branches there already: "plan/x" in every repo, "cal:plan/x" in one. */
     const existing = new Set<string>();
     const inMain = new Set<string>();
-    let pr: PlanPr | undefined;
-    let conflict: ((branches: readonly string[]) => CombineResult | undefined) | undefined;
-    let mergeError: string | undefined;
+    const prs = new Map<string, PlanPr>();
+    const edited: Array<{ repo: string; number: number; body: string }> = [];
+    let conflict: ((branches: readonly string[], repo: string) => CombineResult | undefined) | undefined;
+    let mergeError: { why: string; repo?: string } | undefined;
     const git: PlanGit = {
-      ensureBranch: async (_p, b) => {
+      ensureBranch: async (p, b) => {
         log.ensured.push(b);
-        const made = !existing.has(b);
-        existing.add(b);
+        log.inRepo.push(`ensure ${p} ${b}`);
+        const made = !existing.has(b) && !existing.has(`${p}:${b}`);
+        existing.add(`${p}:${b}`);
         return { made };
       },
-      mergeInto: async (_p, into, branches) => {
+      mergeInto: async (p, into, branches) => {
         log.merged.push({ into, branches });
-        return conflict?.(branches) ?? { ok: true, branch: into };
+        log.inRepo.push(`merge ${p} ${into} ← ${branches.join(' ')}`);
+        return conflict?.(branches, p) ?? { ok: true, branch: into };
       },
       inMain: async (_p, b) => inMain.has(b),
-      retire: async (_p, ws, branch) => void log.retired.push({ ws: ws ?? '', ...(branch ? { branch } : {}) }),
-      findPr: async () => pr,
-      openPr: async (_p, _branch, title) => (pr = { number: 7, url: 'https://github.com/bob/api/pull/7', state: 'OPEN', title, draft: false, checks: 'pending' }),
+      retire: async (p, ws, branch, into) => {
+        log.retired.push({ ws: ws ?? '', ...(branch ? { branch } : {}) });
+        log.inRepo.push(`retire ${p} ${branch ?? '-'} into ${into}`);
+      },
+      findPr: async (p) => prs.get(p),
+      openPr: async (p, _branch, title, body) => {
+        const number = 7 + prs.size;
+        const pr: PlanPr = { number, url: `https://github.com/bob/${p}/pull/${number}`, state: 'OPEN', title, draft: false, checks: 'pending' };
+        prs.set(p, pr);
+        log.inRepo.push(`open ${p} #${number}`);
+        edited.push({ repo: p, number, body });
+        return pr;
+      },
+      editPrBody: async (p, number, body) => void edited.push({ repo: p, number, body }),
       push: async (_p, b) => void log.pushed.push(b),
       mainRef: async () => 'origin/main',
-      mergePr: async (_p, _n, opts) => {
-        if (mergeError) throw new Error(mergeError);
-        pr = opts?.auto ? { ...pr!, autoMerge: true } : { ...pr!, state: 'MERGED' };
+      mergePr: async (p, n, opts) => {
+        log.inRepo.push(`mergepr ${p} #${n}${opts?.auto ? ' auto' : ''}`);
+        if (mergeError && (!mergeError.repo || mergeError.repo === p)) throw new Error(mergeError.why);
+        const pr = prs.get(p)!;
+        prs.set(p, opts?.auto ? { ...pr, autoMerge: true } : { ...pr, state: 'MERGED' });
       },
-      mergeLocal: async () => ({ ok: true }),
+      mergeLocal: async (p) => {
+        log.inRepo.push(`mergelocal ${p}`);
+        return { ok: true };
+      },
     };
-    return { git, log, existing, inMain, setPr: (p: PlanPr | undefined) => (pr = p), setConflict: (c: typeof conflict) => (conflict = c), failMerge: (why: string | undefined) => (mergeError = why) };
+    const setPr = (pr: PlanPr | undefined, repo = 'api') => (pr ? prs.set(repo, pr) : prs.delete(repo));
+    const bodyOf = (repo: string): string | undefined => edited.filter((e) => e.repo === repo).at(-1)?.body;
+    return { git, log, existing, inMain, prs, bodyOf, setPr, setConflict: (c: typeof conflict) => (conflict = c), failMerge: (why: string | undefined, repo?: string) => (mergeError = why ? { why, ...(repo ? { repo } : {}) } : undefined) };
   }
 
   async function running(autonomy: 'gated' | 'autopilot' = 'gated', body: BodyInput = BODY) {
@@ -1319,6 +1346,228 @@ describe('the plan’s branch: tasks start from it, milestones merge into it, on
     expect(ISSUE_STATUSES.slice(3, 6)).toEqual(['in_review', 'in_plan', 'done']);
     expect(STATUS_INFO.in_plan.label).toBe('Merged into Plan');
   });
+
+  describe('across repos: a plan branch in each (BLG-13)', () => {
+    const ACROSS: BodyInput = {
+      title: 'Invites',
+      goal: 'One feature across three repos',
+      milestones: [
+        { id: 'hooks', title: 'Transcripts', tasks: [{ id: 'hook', title: 'Transcript hook' }] },
+        { id: 'contract', title: 'Invite API', repos: ['cal'], tasks: [{ id: 'schema', title: 'Invite schema' }] },
+        { id: 'desktop', title: 'Desktop invites', repos: ['desk'], dependsOn: ['contract'], tasks: [{ id: 'ui', title: 'Invite UI', blockedBy: ['schema'] }] },
+      ],
+    };
+
+    async function across() {
+      const g = fakeGit();
+      // calendar-api kept one by hand: adopted there, made in the others.
+      g.existing.add('cal:plan/invites');
+      const t = setup({ git: g.git });
+      t.store.dispatch({ type: 'projects', projects: [...t.store.getState().projects, project('cal', 'calendar-api'), project('desk', 'calendar-desktop')] });
+      const plan = t.plans.create({ projectId: 'api', repos: ['api', 'cal', 'desk'], home: 'ws:main', autonomy: 'gated' }, t.claude);
+      t.work.forRun('ws:main', 'p-me')!.tools!.write(ACROSS);
+      t.work.approve(plan.id);
+      for (let n = 0; n < 100 && t.made.length < 2; n++) await tick(5);
+      await tick(10);
+      const issue = (title: string) => t.store.getState().board.issues.find((i) => i.title === title)!;
+      const settle = async () => {
+        await tick(10);
+        for (let n = 0; n < 100 && Object.values(t.plans.need(plan.id).merging ?? {}).some((m) => !m.conflict); n++) await tick(5);
+        await tick(10);
+      };
+      return { ...t, ...g, plan, issue, settle };
+    }
+
+    it('approving makes plan/<slug> in every repo (adopting one that’s there), the primary last; each milestone starts from its repo’s', async () => {
+      const t = await across();
+      expect(t.log.inRepo.filter((l) => l.startsWith('ensure'))).toEqual(['ensure cal plan/invites', 'ensure desk plan/invites', 'ensure api plan/invites']);
+      const plan = t.plans.need(t.plan.id);
+      expect(plan.branch).toBe('plan/invites');
+      expect(plan.branches).toEqual({ api: 'plan/invites', cal: 'plan/invites', desk: 'plan/invites' });
+      const said = plan.activity.map((e) => e.text);
+      expect(said).toContain('collects the plan’s work on plan/invites in calendar-api');
+      expect(said).toContain('made the plan’s branch plan/invites from main in calendar-desktop');
+      const worktrees = t.store.getState().projects.flatMap((p) => p.workspaces).filter((w) => w.kind === 'worktree');
+      expect(worktrees.map((w) => w.projectId).sort()).toEqual(['api', 'cal']);
+      expect(t.made.map((m) => m.base)).toEqual(['plan/invites', 'plan/invites']);
+      // Never made twice: another look changes nothing.
+      t.work.pilot.schedule();
+      await tick(20);
+      expect(t.log.ensured).toHaveLength(3);
+    });
+
+    it('passing a milestone merges only into its repo’s plan branch and retires against it', async () => {
+      const t = await across();
+      const schema = t.issue('Invite schema');
+      t.board.update(schema.id, { status: 'in_review' }, t.claude);
+      await tick(10);
+      t.work.pass(t.plan.id, 'contract');
+      await t.settle();
+      const branch = t.issue('Invite schema').branch!;
+      expect(t.log.inRepo.filter((l) => l.startsWith('merge'))).toEqual([`merge cal plan/invites ← ${branch}`]);
+      for (let n = 0; n < 50 && !t.log.inRepo.some((l) => l.startsWith('retire')); n++) await tick(5);
+      expect(t.log.inRepo.filter((l) => l.startsWith('retire'))).toEqual([`retire cal ${branch} into plan/invites`]);
+      expect(t.issue('Invite schema').status).toBe('in_plan');
+      expect(t.plans.need(t.plan.id).activity.map((e) => e.text)).toContain(`merged ${schema.key} into plan/invites in calendar-api`);
+      expect(t.plans.need(t.plan.id).runs.contract?.passedAt).toBeDefined();
+    });
+
+    it('a conflict says which repo it’s in; the others aren’t touched', async () => {
+      const t = await across();
+      t.setConflict((branches, repo) => (repo === 'cal' ? { ok: false, branch: 'plan/invites', dir: '/tmp/.bases/cal/plan-invites', merging: branches[0]!, files: ['src/invite.ts'] } : undefined));
+      t.board.update(t.issue('Invite schema').id, { status: 'in_review' }, t.claude);
+      await tick(10);
+      t.work.pass(t.plan.id, 'contract');
+      await t.settle();
+      const conflict = t.plans.need(t.plan.id).merging?.contract?.conflict;
+      expect(conflict).toMatchObject({ projectId: 'cal', dir: '/tmp/.bases/cal/plan-invites', key: t.issue('Invite schema').key });
+      expect(t.log.inRepo.some((l) => l.startsWith('merge api') || l.startsWith('merge desk'))).toBe(false);
+      expect(t.plans.need(t.plan.id).activity.some((e) => e.text.startsWith('merging “Invite API” into plan/invites in calendar-api:'))).toBe(true);
+    });
+
+    describe('shipping: one PR per repo, linked, merged upstream first (BLG-16)', () => {
+      const CHAIN: BodyInput = {
+        title: 'Invites',
+        goal: 'One feature across three repos',
+        milestones: [
+          { id: 'contract', title: 'Invite API', repos: ['cal'], tasks: [{ id: 'schema', title: 'Invite schema' }] },
+          { id: 'desktop', title: 'Desktop invites', repos: ['desk'], dependsOn: ['contract'], tasks: [{ id: 'ui', title: 'Invite UI' }] },
+          { id: 'hooks', title: 'Transcripts', dependsOn: ['desktop'], tasks: [{ id: 'hook', title: 'Transcript hook' }] },
+        ],
+      };
+
+      async function shipping() {
+        const g = fakeGit();
+        const t = setup({ git: g.git });
+        t.store.dispatch({ type: 'projects', projects: [...t.store.getState().projects, project('cal', 'calendar-api'), project('desk', 'calendar-desktop')] });
+        const plan = t.plans.create({ projectId: 'api', repos: ['api', 'cal', 'desk'], home: 'ws:main', autonomy: 'gated' }, t.claude);
+        t.work.forRun('ws:main', 'p-me')!.tools!.write(CHAIN);
+        t.work.approve(plan.id);
+        for (let n = 0; n < 100 && Object.keys(t.plans.need(plan.id).branches ?? {}).length < 3; n++) await tick(5);
+        const issue = (title: string) => t.store.getState().board.issues.find((i) => i.title === title)!;
+        const settle = async () => {
+          await tick(10);
+          for (let n = 0; n < 100 && Object.values(t.plans.need(plan.id).merging ?? {}).some((m) => !m.conflict); n++) await tick(5);
+          await tick(10);
+        };
+        for (const [id, title] of [['contract', 'Invite schema'], ['desktop', 'Invite UI'], ['hooks', 'Transcript hook']] as const) {
+          await tick(10);
+          t.board.update(issue(title).id, { status: 'in_review' }, t.claude);
+          await tick(10);
+          t.work.pass(plan.id, id);
+          await settle();
+        }
+        const view = () => planView(t.plans.need(plan.id), t.store.getState().board);
+        const said = () => t.plans.need(plan.id).activity.map((e) => e.text);
+        return { ...t, ...g, plan, issue, view, said };
+      }
+
+      it('Open PRs opens one per repo, upstream first, each body linking the other two by owner/repo#N', async () => {
+        const t = await shipping();
+        expect(t.plans.need(t.plan.id).status).toBe('done');
+        expect(t.view().next).toMatchObject({ kind: 'ship' });
+        await t.work.openPr(t.plan.id);
+        expect(t.log.inRepo.filter((l) => l.startsWith('open'))).toEqual(['open cal #7', 'open desk #8', 'open api #9']);
+        const plan = t.plans.need(t.plan.id);
+        expect(Object.fromEntries(Object.entries(plan.prs ?? {}).map(([r, pr]) => [r, pr.number]))).toEqual({ cal: 7, desk: 8, api: 9 });
+        expect(plan.pr?.number).toBe(9);
+        const refs: Record<string, string> = { cal: 'bob/cal#7', desk: 'bob/desk#8', api: 'bob/api#9' };
+        for (const repo of ['cal', 'desk', 'api']) {
+          const body = t.bodyOf(repo)!;
+          expect(body).toContain('## Linked pull requests');
+          for (const other of Object.keys(refs).filter((r) => r !== repo)) expect(body).toContain(refs[other]);
+          expect(body).not.toContain(refs[repo]);
+        }
+        expect(t.bodyOf('cal')).toContain('## Invite API');
+        expect(t.bodyOf('cal')).not.toContain('## Desktop invites');
+        expect(t.bodyOf('api')).toMatch(/1\. bob\/cal#7 \(calendar-api\)\n2\. bob\/desk#8 \(calendar-desktop\)\n3\. this one \(bob-api\)/);
+        expect(t.said()).toContain('opened pull request bob/desk#8: plan/invites → main in calendar-desktop');
+        t.log.inRepo.length = 0;
+        await t.work.openPr(t.plan.id);
+        expect(t.log.inRepo.filter((l) => l.startsWith('open'))).toEqual([]);
+      });
+
+      it('Merge All goes upstream first, stops at the first failure naming the repo; Done only once every PR is merged', async () => {
+        const t = await shipping();
+        await expect(t.work.mergePr(t.plan.id)).rejects.toThrow(/Open the PRs first: calendar-api, calendar-desktop, bob-api have no pull request yet/);
+        await t.work.openPr(t.plan.id);
+        t.failMerge('GraphQL: At least 1 approving review is required by reviewers with write access. (mergePullRequest)', 'desk');
+        await expect(t.work.mergePr(t.plan.id)).rejects.toThrow(/^Merge All stopped at calendar-desktop \(calendar-api merged before it\): .*approving review/);
+        expect(t.log.inRepo.filter((l) => l.startsWith('mergepr'))).toEqual(['mergepr cal #7', 'mergepr desk #8']);
+        const half = t.plans.need(t.plan.id);
+        expect(half.shipped).toBeUndefined();
+        expect(Object.keys(half.shippedIn ?? {})).toEqual(['cal']);
+        expect(t.issue('Invite schema').status).toBe('done');
+        expect(t.issue('Invite schema').activity.map((a) => a.text)).toContain('merged into main via bob/cal#7');
+        expect(t.issue('Invite UI').status).toBe('in_plan');
+        expect(t.view().next).toMatchObject({ kind: 'ship', repos: [{ projectId: 'cal', pr: { state: 'MERGED' }, shipped: { how: 'pr' } }, { projectId: 'desk', pr: { number: 8, state: 'OPEN' } }, { projectId: 'api', branch: 'plan/invites' }] });
+        expect(t.said().some((s) => s.startsWith('Merge All stopped at calendar-desktop'))).toBe(true);
+        t.failMerge(undefined);
+        await t.work.mergePr(t.plan.id);
+        expect(t.log.inRepo.filter((l) => l.startsWith('mergepr'))).toEqual(['mergepr cal #7', 'mergepr desk #8', 'mergepr desk #8', 'mergepr api #9']);
+        expect(t.plans.need(t.plan.id).shipped).toMatchObject({ how: 'pr', number: 9 });
+        for (const title of ['Invite schema', 'Invite UI', 'Transcript hook']) expect(t.issue(title).status).toBe('done');
+        expect(t.view().next.kind).toBe('done');
+        expect(t.said()).toContain('every repo’s work is in main (3 repos)');
+      });
+
+      it('Merge When Checks Pass turns auto-merge on one repo at a time, the next once the one before it merges', async () => {
+        const t = await shipping();
+        await t.work.openPr(t.plan.id);
+        await t.work.mergePr(t.plan.id, { auto: true });
+        expect(t.log.inRepo.filter((l) => l.startsWith('mergepr'))).toEqual(['mergepr cal #7 auto']);
+        expect(t.plans.need(t.plan.id).mergeAll).toMatchObject({ auto: true });
+        t.setPr({ ...t.prs.get('cal')!, state: 'MERGED' }, 'cal');
+        await t.work.pilot.pollPrs();
+        await tick(10);
+        expect(t.log.inRepo.filter((l) => l.startsWith('mergepr'))).toEqual(['mergepr cal #7 auto', 'mergepr desk #8 auto']);
+        expect(t.plans.need(t.plan.id).prs?.desk?.autoMerge).toBe(true);
+        expect(t.plans.need(t.plan.id).shipped).toBeUndefined();
+      });
+
+      it('a PR closed in one repo is shown on that repo, and Merge All stops there', async () => {
+        const t = await shipping();
+        await t.work.openPr(t.plan.id);
+        t.setPr({ ...t.prs.get('desk')!, state: 'CLOSED' }, 'desk');
+        await t.work.pilot.pollPrs();
+        const plan = t.plans.need(t.plan.id);
+        expect(plan.prs?.desk?.state).toBe('CLOSED');
+        expect(plan.prs?.cal?.state).toBe('OPEN');
+        expect(t.said()).toContain('calendar-desktop’s pull request bob/desk#8 was closed without merging: its tasks stay merged into the plan');
+        await expect(t.work.mergePr(t.plan.id)).rejects.toThrow(/Merge All stopped at calendar-desktop \(calendar-api merged before it\): Pull request bob\/desk#8 was closed on GitHub/);
+        expect(t.log.inRepo.some((l) => l.startsWith('mergepr api'))).toBe(false);
+      });
+
+      it('Resolve Conflicts brings main into the conflicting repo’s plan branch only', async () => {
+        const t = await shipping();
+        await t.work.openPr(t.plan.id);
+        t.setPr({ ...t.prs.get('desk')!, conflicts: true }, 'desk');
+        await t.work.pilot.pollPrs();
+        t.log.inRepo.length = 0;
+        await t.work.bringInMain(t.plan.id);
+        expect(t.log.inRepo.filter((l) => l.startsWith('merge '))).toEqual(['merge desk plan/invites ← origin/main']);
+        expect(t.said()).toContain('merged origin/main into plan/invites in calendar-desktop');
+      });
+
+      it('merging here does each repo in order, and the plan is Done after the last', async () => {
+        const t = await shipping();
+        await t.work.mergeLocal(t.plan.id);
+        expect(t.log.inRepo.filter((l) => l.startsWith('mergelocal'))).toEqual(['mergelocal cal', 'mergelocal desk', 'mergelocal api']);
+        expect(t.plans.need(t.plan.id).shipped).toMatchObject({ how: 'local' });
+        expect(t.issue('Invite UI').status).toBe('done');
+      });
+    });
+
+    it('a plan of one repo keeps only `branch` (no branches), every step in its repo', async () => {
+      const t = await running();
+      await t.passSafe();
+      expect(t.plans.need(t.plan.id).branches).toBeUndefined();
+      expect(t.log.inRepo.length).toBeGreaterThan(2);
+      expect(t.log.inRepo.every((l) => l.split(' ')[1] === 'api')).toBe(true);
+      expect(planBranchFor(t.plans.need(t.plan.id), 'api')).toBe('plan/payments');
+      expect(planBranchFor(t.plans.need(t.plan.id), 'cal')).toBeUndefined();
+    });
+  });
 });
 
 describe('soak: a long plan on Autopilot reaches the end by itself, with Claudes that misbehave (BLG-473)', () => {
@@ -1335,12 +1584,56 @@ describe('soak: a long plan on Autopilot reaches the end by itself, with Claudes
     ],
   } as BodyInput;
 
+  /** The same plan in two repos (BLG-14): B and D in calendar-api, D building on A's C, E spanning both. */
+  const ACROSS: BodyInput = { ...LONG, milestones: LONG.milestones.map((m) => ({ ...m, ...(m.id === 'b' || m.id === 'd' ? { repos: ['cal'] } : m.id === 'e' ? { repos: ['cal', 'api'] } : {}) })) } as BodyInput;
+
+  /** A git where every merge goes in: each step with its repo. */
+  const okGit = () => {
+    const steps: string[] = [];
+    const git: PlanGit = {
+      ensureBranch: async (p, b) => (steps.push(`ensure ${p} ${b}`), { made: true }),
+      mergeInto: async (p, into, branches) => (steps.push(`merge ${p} ${into} ← ${branches.join(' ')}`), { ok: true, branch: into }),
+      inMain: async () => false,
+      retire: async (p, _ws, branch) => void steps.push(`retire ${p} ${branch ?? '-'}`),
+      findPr: async () => undefined,
+      openPr: async () => {
+        throw new Error('no');
+      },
+      push: async () => undefined,
+      mainRef: async () => 'origin/main',
+      mergePr: async () => undefined,
+      mergeLocal: async () => ({ ok: true }),
+      editPrBody: async () => undefined,
+    };
+    return { git, steps };
+  };
+
   it('Claudes that stop after one task or never answer, checks without a verdict, and a restart: it still gets there, never left to you', async () => {
+    await soak(LONG);
+  });
+
+  it('across two repos with plan branches: milestones run in their repos, a spanning one in both, and it still gets there', async () => {
+    const g = okGit();
+    const t = await soak(ACROSS, { git: g.git, repos: ['api', 'cal'] });
+    const done = t.plans.need(t.planId);
+    expect(done.branches).toEqual({ api: 'plan/long-run', cal: 'plan/long-run' });
+    const repoOf = (id: string) => t.store.getState().projects.flatMap((p) => p.workspaces).find((w) => w.id === id)?.projectId;
+    expect(['a', 'b', 'c', 'd', 'e'].map((m) => repoOf(done.runs[m]!.agent!.worktree))).toEqual(['api', 'cal', 'api', 'cal', 'cal']);
+    expect(done.runs.e!.agent!.along?.map((a) => a.projectId)).toEqual(['api']);
+    // Each milestone merged into its own repo's branch only; E into both.
+    const merges = g.steps.filter((s) => s.startsWith('merge'));
+    expect(merges.some((s) => s.startsWith('merge cal') && s.includes(t.issue('B one').branch!))).toBe(true);
+    expect(merges.some((s) => s.startsWith('merge api') && s.includes(t.issue('B one').branch!))).toBe(false);
+    expect(merges.some((s) => s.startsWith('merge api') && s.includes(done.runs.e!.agent!.along![0]!.branch!))).toBe(true);
+  });
+
+  async function soak(body: BodyInput, opts: { git?: PlanGit; repos?: readonly string[] } = {}) {
     // A minute passes between looks; a milestone quiet for three is moved along.
     let clock = 1_000_000;
-    const t = setup({ rescueMs: 3 * 60_000, now: () => clock });
-    const plan = t.plans.create({ projectId: 'api', home: 'ws:main', autonomy: 'autopilot' }, t.claude);
-    t.work.forRun('ws:main', 'p-me')!.tools!.write(LONG);
+    const t = setup({ rescueMs: 3 * 60_000, now: () => clock, ...(opts.git ? { git: opts.git } : {}) });
+    if (opts.repos) t.store.dispatch({ type: 'projects', projects: [...t.store.getState().projects, project('cal', 'calendar-api')] });
+    const plan = t.plans.create({ projectId: 'api', ...(opts.repos ? { repos: opts.repos } : {}), home: 'ws:main', autonomy: 'autopilot' }, t.claude);
+    t.work.forRun('ws:main', 'p-me')!.tools!.write(body);
     let work = t.work;
     work.approve(plan.id);
     await tick(5);
@@ -1391,7 +1684,7 @@ describe('soak: a long plan on Autopilot reaches the end by itself, with Claudes
       // A restart partway: everything Beluga kept in memory is gone, the plan and the board stay.
       if (i === 40) {
         work.stop();
-        work = new PlansWork({ store: t.store, plans: t.plans, board: t.boardWork, controller: t.controller, askClaude: (prompt, channel, echo) => `ask-${t.asked.push({ prompt, channel, echo })}`, intend: () => undefined, delayMs: 0, rescueMs: 3 * 60_000, now: () => clock });
+        work = new PlansWork({ store: t.store, plans: t.plans, board: t.boardWork, controller: t.controller, askClaude: (prompt, channel, echo) => `ask-${t.asked.push({ prompt, channel, echo })}`, intend: () => undefined, delayMs: 0, rescueMs: 3 * 60_000, now: () => clock, ...(opts.git ? { git: opts.git } : {}) });
       }
       clock += 60_000;
       work.pilot.tick();
@@ -1407,8 +1700,159 @@ describe('soak: a long plan on Autopilot reaches the end by itself, with Claudes
     expect(Object.values(done.rescue ?? {}).some((r) => r.yours)).toBe(false);
     // Every rung was needed somewhere: sent on, woken, started over, asked again, a fresh checker, the head Claude.
     const said = done.activity.map((a) => a.text).join('\n');
-    for (const rung of ['sent the Claude doing', 'woke BOB-', 'started it again', 'asked for the check of', 'to a fresh checker', 'asked the plan’s Claude to decide']) expect(said).toContain(rung);
+    for (const rung of ['sent the Claude doing', 'woke ', 'started it again', 'asked for the check of', 'to a fresh checker', 'asked the plan’s Claude to decide']) expect(said).toContain(rung);
     // Its epics followed it: every milestone's is In Review (merged into the plan with no branch here, then done once shipped).
     for (const id of Object.values(done.epics!.milestones)) expect(['in_review', 'in_plan', 'done']).toContain(t.board.need(id).status);
+    const issue = (title: string) => t.store.getState().board.issues.find((i) => i.title === title)!;
+    return { ...t, planId: plan.id, issue };
+  }
+});
+
+describe('a plan across several repos (BLG-10)', () => {
+  const multiSetup = () => {
+    const t = setup();
+    t.store.dispatch({ type: 'projects', projects: [...t.store.getState().projects, project('cal', 'calendar-api'), project('desk', 'calendar-desktop')] });
+    return t;
+  };
+
+  it('plans.create with projectIds keeps them, primary first, once', async () => {
+    const t = multiSetup();
+    const plan = await t.work.create({ projectId: 'api', projectIds: ['api', 'cal', 'desk', 'cal'], goal: 'One feature everywhere' });
+    expect(plan.projectId).toBe('api');
+    expect(plan.repos).toEqual(['api', 'cal', 'desk']);
+    expect(t.plans.need(plan.id).repos).toEqual(['api', 'cal', 'desk']);
+  });
+
+  it('one project, or none extra, stays a plain single-repo plan', async () => {
+    const t = multiSetup();
+    expect('repos' in (await t.work.create({ projectId: 'api', goal: 'Solo' }))).toBe(false);
+    expect('repos' in (await t.work.create({ projectId: 'api', projectIds: ['api'], goal: 'Solo' }))).toBe(false);
+  });
+
+  it('refuses projects that aren’t on this Mac, before starting a conversation', async () => {
+    const t = multiSetup();
+    const chats = (): number => t.store.getState().projects.flatMap((p) => p.workspaces).length;
+    const before = chats();
+    await expect(t.work.create({ projectId: 'api', projectIds: ['cal', 'friend-repo'], goal: 'Nope' })).rejects.toThrow(/only cover projects on this Mac: "friend-repo" isn't one of them/);
+    expect(chats()).toBe(before);
+    expect(t.plans.list()).toHaveLength(0);
+  });
+
+  it('drafts of a multi-repo plan may name its repos, and only those', async () => {
+    const t = multiSetup();
+    const plan = await t.work.create({ projectId: 'api', projectIds: ['cal'], goal: 'Two repos' });
+    const drafted = t.plans.writeDraft(plan.id, { title: 'Two repos', goal: 'g', milestones: [{ title: 'Calendar', repos: ['cal'], tasks: [{ title: 'Do it' }] }] }, t.claude);
+    expect(drafted.draft!.milestones[0]!.repos).toEqual(['cal']);
+    expect(() => t.plans.writeDraft(plan.id, { title: 'Two repos', goal: 'g', milestones: [{ title: 'Desktop', repos: ['desk'] }] }, t.claude)).toThrow(/isn't one of this plan's repos/);
+  });
+});
+
+describe('approving a plan across repos onto one board (BLG-12)', () => {
+  const roots = ['/tmp/bob-api', '/tmp/calendar-api', '/tmp/calendar-desktop'];
+  const multiSetup = (groups?: ReadonlyArray<{ name: string; projects: readonly string[] }>) => {
+    const t = setup();
+    t.store.dispatch({ type: 'projects', projects: [...t.store.getState().projects, project('cal', 'calendar-api'), project('desk', 'calendar-desktop')], ...(groups ? { groups } : {}) });
+    return t;
+  };
+  const BODY: BodyInput = {
+    title: 'Invites with transcripts',
+    goal: 'One feature across three repos',
+    milestones: [
+      { id: 'contract', title: 'Invite API', repos: ['cal'], tasks: [{ id: 'schema', title: 'Invite schema' }] },
+      { id: 'transcribe', title: 'Transcripts', tasks: [{ id: 'hook', title: 'Transcript hook' }] },
+      { id: 'desktop', title: 'Desktop invites', repos: ['desk'], dependsOn: ['contract'], tasks: [{ id: 'ui', title: 'Invite UI', blockedBy: ['schema'] }] },
+    ],
+  };
+  const approve3 = async (t: ReturnType<typeof multiSetup>) => {
+    const plan = await t.work.create({ projectId: 'api', projectIds: ['cal', 'desk'], goal: 'Invites' });
+    t.plans.writeDraft(plan.id, BODY, t.claude);
+    return t.work.approve(plan.id);
+  };
+  const issueOf = (t: ReturnType<typeof multiSetup>, plan: ReturnType<typeof t.plans.need>, task: string) => t.board.need(plan.body!.milestones.flatMap((m) => m.tasks).find((x) => x.id === task)!.issueId!);
+
+  it('a plan of three repos goes on one new board covering them, each task in its milestone’s repo', async () => {
+    const t = multiSetup();
+    const plan = await approve3(t);
+    expect(plan.board).toMatch(/^board_/);
+    expect([...reposOf(t.board.state(), plan.board!)].sort()).toEqual(['api', 'cal', 'desk']);
+    expect(t.board.state().projects[plan.board!]!.name).toBe('Invites with transcripts');
+    expect(['schema', 'hook', 'ui'].map((id) => issueOf(t, plan, id).projectId)).toEqual(['cal', 'api', 'desk']);
+    for (const id of ['schema', 'hook', 'ui']) expect(boardOf(issueOf(t, plan, id))).toBe(plan.board);
+    expect(isVisiting(issueOf(t, plan, 'schema'), 'cal')).toBe(true);
+    expect(showsOn(issueOf(t, plan, 'ui'), 'desk')).toBe(true);
+    expect(showsOn(issueOf(t, plan, 'ui'), 'cal')).toBe(false);
+    expect(issueOf(t, plan, 'ui').blockedBy).toEqual([issueOf(t, plan, 'schema').id]);
+    const epics = plan.epics!;
+    expect(boardOf(t.board.need(epics.plan))).toBe(plan.board);
+    expect(t.board.need(epics.plan).projectId).toBe('api');
+    expect(['contract', 'transcribe', 'desktop'].map((m) => t.board.need(epics.milestones[m]!).projectId)).toEqual(['cal', 'api', 'desk']);
+    expect(issueOf(t, plan, 'schema').parent).toBe(epics.milestones.contract);
+  });
+
+  it('a board named after the sidebar group holding the repos; one covering exactly them is reused', async () => {
+    const t = multiSetup([{ name: 'Calendar', projects: roots }]);
+    const first = await approve3(t);
+    expect(t.board.state().projects[first.board!]!.name).toBe('Calendar');
+    const second = await approve3(t);
+    expect(second.board).toBe(first.board);
+    const u = multiSetup();
+    const made = u.board.createBoard({ name: 'Mine', repos: ['desk', 'api', 'cal'] });
+    expect((await approve3(u)).board).toBe(made);
+  });
+
+  it('changes keep the board; a task not started follows its milestone to another repo', async () => {
+    const t = multiSetup();
+    const plan = await approve3(t);
+    t.plans.editDraft(plan.id, [{ op: 'update_milestone', id: 'transcribe', repos: ['desk'] }], t.claude);
+    const again = t.work.approve(plan.id);
+    expect(again.board).toBe(plan.board);
+    expect(issueOf(t, again, 'hook').projectId).toBe('desk');
+    expect(t.board.need(again.epics!.milestones.transcribe!).projectId).toBe('desk');
+    expect(again.epics!.milestones.transcribe).toBe(plan.epics!.milestones.transcribe);
+  });
+
+  it('a single-repo plan approves as before: no board of its own, tasks on the repo’s board', async () => {
+    const t = multiSetup();
+    const plan = await t.work.create({ projectId: 'api', goal: 'Solo' });
+    t.plans.writeDraft(plan.id, { title: 'Solo', goal: 'g', milestones: [{ title: 'M', tasks: [{ id: 'a', title: 'A' }] }] }, t.claude);
+    const done = t.work.approve(plan.id);
+    expect(done.board).toBeUndefined();
+    const issue = t.board.need(done.body!.milestones[0]!.tasks[0]!.issueId!);
+    expect(issue.projectId).toBe('api');
+    expect(issue.board).toBeUndefined();
+    expect(Object.keys(t.board.state().projects).some((id) => id.startsWith('board_'))).toBe(false);
+  });
+
+  it('an existing plans.json without repos loads and approves unchanged', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'plans-old-'));
+    const old = {
+      id: 'pl_old',
+      projectId: 'api',
+      home: 'ws:main',
+      status: 'draft',
+      draft: { title: 'Old plan', goal: 'From before', milestones: [{ id: 'm', title: 'M', criteria: ['It works'], tasks: [{ id: 'a', title: 'A', acceptance: ['Done'], blockedBy: [] }, { id: 'b', title: 'B', acceptance: [], blockedBy: ['a'] }] }] },
+      draftRev: 3,
+      autonomy: 'step',
+      maxParallel: 3,
+      testsAt: 'milestone',
+      paused: false,
+      runs: {},
+      activity: [],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    writeFileSync(path.join(dir, 'plans.json'), JSON.stringify({ version: 1, plans: [old] }));
+    const t = setup({ dir });
+    const loaded = t.plans.need('pl_old');
+    expect(loaded.repos).toBeUndefined();
+    expect(loaded.draft!.milestones[0]!.repos).toBeUndefined();
+    const done = t.work.approve('pl_old');
+    expect(done.board).toBeUndefined();
+    const [a, b] = done.body!.milestones[0]!.tasks.map((x) => t.board.need(x.issueId!));
+    expect([a!.projectId, b!.projectId]).toEqual(['api', 'api']);
+    expect([a!.board, b!.board]).toEqual([undefined, undefined]);
+    expect(b!.blockedBy).toEqual([a!.id]);
+    expect(t.board.need(done.epics!.plan).projectId).toBe('api');
+    t.work.stop();
   });
 });

@@ -11,7 +11,7 @@ import type { CcAgent } from '../core/claude-code/model.js';
 import type { PendingQuestion } from '../core/collab-store.js';
 import { type TaskView as GwTask, isFinal, requestGist, stateLabel, stateTone, targetLabel } from '../core/gateway/model.js';
 import { parseDecisionQid } from '../core/plans/decisions.js';
-import { type Plan, planForHome, planTitle } from '../core/plans/model.js';
+import { type Plan, type PlanPr, isMultiRepo, milestoneRepos, planForHome, planRepos, planTitle, prRef } from '../core/plans/model.js';
 import { planOwnerOf } from '../core/plans/owner.js';
 import { branchState } from '../core/branch-state.js';
 import { type RunSummary, type Sentinel, type SentinelState, activeSentinelChat, firstLine, isLive, isSentinelChat, lastRunOf, pausedWords, runsOf, scheduleSentence, sentinelById, sentinelChatTitle } from '../core/sentinel/model.js';
@@ -857,6 +857,33 @@ function checkerOfMilestone(state: DomainState, checker: string | undefined): { 
   return topic ? { checker: topic } : {};
 }
 
+const prLine = (pr: PlanPr): string => {
+  if (pr.state === 'MERGED') return 'merged into main';
+  if (pr.state === 'CLOSED') return 'closed without merging';
+  const bits = [pr.draft ? 'a draft' : '', pr.conflicts ? 'conflicts with main' : '', pr.checks === 'failing' ? 'checks failing' : pr.checks === 'pending' ? 'checks running' : pr.checks === 'passing' ? 'checks pass' : '', pr.review === 'CHANGES_REQUESTED' ? 'changes requested' : pr.review === 'REVIEW_REQUIRED' ? 'needs a review' : '', pr.autoMerge ? 'merges when checks pass' : ''].filter(Boolean);
+  return bits.length ? bits.join(' · ') : 'ready to merge';
+};
+
+function shipOf(state: DomainState, plan: Plan, progress: PlanProgress): Pick<PlanView, 'ship'> {
+  const next = progress.next;
+  if (next.kind !== 'ship' || !next.repos) return {};
+  const nameOf = (id: string): string => state.projects.find((x) => x.id === id)?.name ?? id;
+  const merged = next.repos.filter((r) => r.shipped).length;
+  const missing = next.repos.filter((r) => !r.shipped && (!r.pr || r.pr.state === 'CLOSED'));
+  const words = missing.length ? `Open PRs on your Mac: ${missing.map((r) => nameOf(r.projectId)).join(', ')} ${missing.length > 1 ? 'have' : 'has'} none open` : plan.mergeAll ? `Merging in order as checks pass (${merged} of ${next.repos.length} merged)` : `Merge All on your Mac: ${merged} of ${next.repos.length} merged`;
+  return {
+    ship: {
+      repos: next.repos.slice(0, 20).map((r) => ({
+        name: clip(nameOf(r.projectId), 200),
+        branch: clip(r.branch, 250),
+        ...(r.pr ? { pr: { number: r.pr.number, ref: clip(prRef(r.pr), 300), state: r.pr.state, url: clip(r.pr.url, 500), words: clip(prLine(r.pr), 200) } } : {}),
+        ...(r.shipped ? { merged: true } : {}),
+      })),
+      next: clip(words, 300),
+    },
+  };
+}
+
 export function planPageView(state: DomainState, id: string): PlanView | undefined {
   const plan = state.plans.plans.find((p) => p.id === id);
   if (!plan) return undefined;
@@ -866,9 +893,13 @@ export function planPageView(state: DomainState, id: string): PlanView | undefin
   const goal = (plan.body ?? plan.draft)?.goal;
   const notes = plan.draft ?? plan.body;
   const topic = planTopic(plan.id);
+  // A plan across repos names them, and each milestone its own (BLG-20).
+  const repoName = (pid: string): string => clip(state.projects.find((p) => p.id === pid)?.name ?? pid, 200);
+  const across = isMultiRepo(plan);
   return {
     id: clip(plan.id, 200),
     title: clip(planTitle(plan), 300),
+    ...(across ? { repos: planRepos(plan).slice(0, 8).map(repoName) } : {}),
     ...(goal ? { goal: clip(plainLine(goal, 4000), 4000) } : {}),
     state: planState(plan, progress),
     ...(home ? { topic: home } : {}),
@@ -898,8 +929,10 @@ export function planPageView(state: DomainState, id: string): PlanView | undefin
       ...(m.autonomy !== plan.autonomy ? { autonomy: m.autonomy } : {}),
       ...checkerOfMilestone(state, m.run.checker),
       ...agentNowOf(m),
+      ...(across ? { repos: milestoneRepos(plan, m.milestone).slice(0, 8).map(repoName) } : {}),
     })),
     autonomy: plan.autonomy,
+    ...shipOf(state, plan, progress),
     ...(notes?.decisions?.length ? { decisions: notes.decisions.slice(0, 40).map((d) => ({ question: clip(d.question, 400), answer: clip(d.answer, 400), by: d.by, ...(d.why ? { why: clip(d.why, 400) } : {}) })) } : {}),
     ...(notes?.openQuestions?.length ? { openQuestions: notes.openQuestions.slice(0, 40).map((q) => clip(q, 400)) } : {}),
     ...(plan.paused ? { paused: true } : {}),

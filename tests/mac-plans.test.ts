@@ -3,10 +3,10 @@ import { normalizeBody } from '../src/core/plans/edit.js';
 import type { Plan } from '../src/core/plans/model.js';
 import { planView } from '../src/core/plans/progress.js';
 import { NO_BOARD } from '../src/core/board/model.js';
-import { barColumns, branchFlow, changeMarks, changeWords, feedOf, gateId, graphShape, groupId, headline, milestoneRows, modeChange, nextWords, planStatus, plansOf, prWords, shipAction, taskHeadline, taskNodeId } from '../packages/mac/src/plans/plans-model.js';
+import { barColumns, branchFlow, changeMarks, changeWords, feedOf, firstRepos, gateId, graphShape, groupId, headline, milestoneRepoNames, milestoneRows, modeChange, newPlanTitle, nextWords, planStatus, plansOf, prWords, shipAction, shipAllAction, taskHeadline, taskNodeId, withPrimary, withRepo } from '../packages/mac/src/plans/plans-model.js';
 import type { PlanPr } from '../src/core/plans/model.js';
 import type { PlanEvent } from '../src/core/plans/model.js';
-import type { PlanView } from '../src/core/plans/progress.js';
+import type { PlanView, ShipRepo } from '../src/core/plans/progress.js';
 import { columnAt, edgeSpeed, isDrag, landingIndex, leanFor, neighbours, withGap } from '../packages/mac/src/tasks/board-drag.js';
 import { nextMode } from '../packages/mac/src/chat/compose-mode.js';
 
@@ -261,5 +261,83 @@ describe('shipping the plan: its pull request, conflicts with main, and where th
     const ev = (kind: PlanEvent['kind'], text: string, at: number): PlanEvent => ({ id: `e${at}`, at, by: { kind: 'beluga' }, kind, text });
     const items = feedOf([ev('note', 'made the plan’s branch plan/p from main', 1), ev('note', 'opened pull request #7: plan/p → main', 2), ev('note', 'paused by you', 3)]);
     expect(items.map((i) => i.kind)).toEqual(['pr', 'branch']);
+  });
+});
+
+describe('shipping a plan across repos: one PR each, Merge All in order (BLG-17)', () => {
+  const pr = (repo: string, number: number, over: Partial<PlanPr> = {}): PlanPr => ({ number, url: `https://github.com/bob/${repo}/pull/${number}`, state: 'OPEN', title: 'P', draft: false, checks: 'passing', ...over });
+  const across = (over: Partial<Plan> = {}): Plan => plan({ status: 'done', body, draft: undefined, branch: 'plan/p', repos: ['api', 'cal'], branches: { api: 'plan/p', cal: 'plan/p' }, ...over });
+  const repos = (cal?: PlanPr, api?: PlanPr, merged: readonly string[] = []): ShipRepo[] => [
+    { projectId: 'cal', branch: 'plan/p', ...(cal ? { pr: cal } : {}), ...(merged.includes('cal') ? { shipped: { at: 1, how: 'pr' as const, number: cal?.number ?? 0 } } : {}) },
+    { projectId: 'api', branch: 'plan/p', ...(api ? { pr: api } : {}), ...(merged.includes('api') ? { shipped: { at: 1, how: 'pr' as const, number: api?.number ?? 0 } } : {}) },
+  ];
+  const names = (id: string): string => ({ api: 'bob-api', cal: 'calendar-api' })[id] ?? id;
+
+  it('Open PRs until every repo has one; then a repo’s conflict, Merge All (when checks pass), merging in order', () => {
+    expect(shipAllAction(across(), repos())).toEqual({ kind: 'open', repos: ['cal', 'api'], again: false });
+    expect(shipAllAction(across(), repos(pr('cal', 7), pr('api', 8, { state: 'CLOSED' })))).toEqual({ kind: 'open', repos: ['api'], again: true });
+    expect(shipAllAction(across(), repos(pr('cal', 7), pr('api', 8, { conflicts: true })))).toMatchObject({ kind: 'repo', projectId: 'api', action: { kind: 'resolve' } });
+    expect(shipAllAction(across({ mainMerge: { at: 1, main: 'origin/main', projectId: 'cal', conflict: { at: 1, dir: '/d', files: ['a.ts'], stuck: true } } }), repos(pr('cal', 7), pr('api', 8)))).toMatchObject({ kind: 'repo', projectId: 'cal', action: { kind: 'stuck' } });
+    expect(shipAllAction(across(), repos(pr('cal', 7, { checks: 'pending' }), pr('api', 8)))).toEqual({ kind: 'merge_all', wait: true });
+    expect(shipAllAction(across(), repos(pr('cal', 7), pr('api', 8)))).toEqual({ kind: 'merge_all', wait: false });
+    expect(shipAllAction(across({ mergeAll: { at: 1, auto: true } }), repos(pr('cal', 7), pr('api', 8)))).toEqual({ kind: 'queued' });
+    expect(shipAllAction(across(), repos(pr('cal', 7, { state: 'MERGED' }), pr('api', 8, { state: 'MERGED' }), ['cal', 'api']))).toEqual({ kind: 'merged' });
+    expect(headline({ ...planView(across(), NO_BOARD), next: { kind: 'ship', branch: 'plan/p', repos: repos(pr('cal', 7, { state: 'MERGED' }), pr('api', 8), ['cal']) } }, names)).toEqual({ who: 'you', text: 'Merge All: calendar-api → bob-api (1 of 2 merged)' });
+  });
+
+  it('Where the work goes lists each repo’s PR and plan branch, in merge order', () => {
+    const p = across({ mainMerge: { at: 1, main: 'origin/main', projectId: 'api', conflict: { at: 1, dir: '/d', files: ['x.ts'] } } });
+    const v: PlanView = { ...planView(p, NO_BOARD), next: { kind: 'ship', branch: 'plan/p', repos: repos(pr('cal', 7, { state: 'MERGED' }), pr('api', 8), ['cal']) } };
+    const flow = branchFlow(v, names).filter((s) => s.kind === 'pr' || s.kind === 'branch');
+    expect(flow.map((s) => [s.label, s.state])).toEqual([
+      ['1. calendar-api · bob/cal#7', 'done'],
+      ['2. bob-api · bob/api#8', 'active'],
+      ['plan/p', 'done'],
+      ['plan/p', 'active'],
+    ]);
+    expect(flow[1]!.detail).toBe('plan/p → main · conflicts with main in x.ts: your agent is fixing it');
+    expect(flow[3]!.detail).toBe('in bob-api: its milestones merge into it');
+    expect(nextWords(v.next)).toMatchObject({ title: '1 of 2 pull requests merged' });
+    expect(planStatus(v)).toEqual({ label: '1/2 merged', tone: 'accent' });
+  });
+});
+
+describe('New Plan across several projects (BLG-19)', () => {
+  it('titles: one project, two, and more than two', () => {
+    expect(newPlanTitle([])).toBe('New Plan');
+    expect(newPlanTitle(['whisper-api'])).toBe('Plan in whisper-api');
+    expect(newPlanTitle(['whisper-api', 'calendar-api'])).toBe('Plan across whisper-api, calendar-api');
+    expect(newPlanTitle(['whisper-api', 'calendar-api', 'calendar-desktop'])).toBe('Plan across whisper-api, calendar-api…');
+  });
+  it('starts with the projects asked for that exist, else your usual one, else the first', () => {
+    expect(firstRepos(['a', 'b', 'c'], ['c', 'gone', 'a', 'c'], 'b')).toEqual(['c', 'a']);
+    expect(firstRepos(['a', 'b'], [], 'b')).toEqual(['b']);
+    expect(firstRepos(['a', 'b'], ['gone'], 'nope')).toEqual(['a']);
+    expect(firstRepos([], [], 'b')).toEqual([]);
+  });
+  it('ticks and unticks, keeping the primary and at most eight', () => {
+    expect(withRepo(['a'], 'b', true)).toEqual(['a', 'b']);
+    expect(withRepo(['a', 'b'], 'b', true)).toEqual(['a', 'b']);
+    expect(withRepo(['a', 'b'], 'b', false)).toEqual(['a']);
+    expect(withRepo(['a', 'b'], 'a', false)).toEqual(['a', 'b']);
+    const eight = ['1', '2', '3', '4', '5', '6', '7', '8'];
+    expect(withRepo(eight, '9', true)).toEqual(eight);
+  });
+  it('a new primary goes first and the others stay ticked', () => {
+    expect(withPrimary(['a', 'b', 'c'], 'c')).toEqual(['c', 'a', 'b']);
+    expect(withPrimary(['a'], 'b')).toEqual(['b', 'a']);
+  });
+});
+
+describe('a milestone’s repo chip (BLG-20)', () => {
+  const projects = [{ id: 'api', name: 'whisper-api' }, { id: 'cal', name: 'calendar-api' }];
+  it('nothing on a one-repo plan', () => {
+    expect(milestoneRepoNames({ projectId: 'api' }, { repos: ['api'] }, projects)).toEqual([]);
+  });
+  it('its repos by name on a plan across repos; the primary when it names none', () => {
+    const across = { projectId: 'api', repos: ['api', 'cal'] };
+    expect(milestoneRepoNames(across, {}, projects)).toEqual(['whisper-api']);
+    expect(milestoneRepoNames(across, { repos: ['cal'] }, projects)).toEqual(['calendar-api']);
+    expect(milestoneRepoNames(across, { repos: ['api', 'cal'] }, projects)).toEqual(['whisper-api', 'calendar-api']);
   });
 });

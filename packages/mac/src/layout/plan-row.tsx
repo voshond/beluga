@@ -1,5 +1,6 @@
+import type { Project } from '@beluga/workspaces/types.js';
 import type { Plan } from '@beluga/core/plans/model.js';
-import { planOfPlace } from '@beluga/core/plans/owner.js';
+import { isLivePlan, planOfPlace } from '@beluga/core/plans/owner.js';
 import { Icon } from '../components/Icon.js';
 import { ActionsContext, type ActionItem } from '../components/SpecMenu.js';
 import { Badge } from '../components/ui.js';
@@ -13,6 +14,7 @@ import { usePrefs } from '../lib/prefs.js';
 import { taskChatsItem } from './plan-task-chats.js';
 import { DotMark, nameClass, signalClass } from './signal-marks.js';
 import { Row } from './sidebar-parts.js';
+import { planPlace } from './project-rows.js';
 import m from './signal.module.css';
 
 /**
@@ -20,9 +22,10 @@ import m from './signal.module.css';
  * (they stay off the sidebar). Its name, a small ring of how far it got (breathing while Claude
  * works its tasks), a dot when it waits for you, a count of what's new in its own conversation
  * (never its tasks' added up: news there is a quiet dot), as a chat row has.
- * It stays marked while you're in its conversation or in one of its tasks.
+ * It stays marked while you're in its conversation or in one of its tasks. A plan across repos
+ * under its primary project (its repos aren't all in one group) says how many more: "+2 repos".
  */
-export function PlanRow({ plan, indent }: { plan: Plan; indent: number }) {
+export function PlanRow({ plan, indent, more = 0 }: { plan: Plan; indent: number; more?: number }) {
   const view = usePlanView(plan)!;
   const { open, openList } = usePlanActions();
   const uiPrefs = usePrefs();
@@ -60,6 +63,11 @@ export function PlanRow({ plan, indent }: { plan: Plan; indent: number }) {
         onClick={() => open(plan.id)}
         trailing={
           <>
+            {more ? (
+              <span className={m.repos} title={`Also in ${more} more project${more === 1 ? '' : 's'}`}>
+                +{more} repo{more === 1 ? '' : 's'}
+              </span>
+            ) : null}
             {unread ? (
               <span className={m.count} data-signal="unread">
                 <Badge count={unread} urgent />
@@ -78,5 +86,26 @@ export function PlanRow({ plan, indent }: { plan: Plan; indent: number }) {
         }
       />
     </ActionsContext>
+  );
+}
+
+/**
+ * The plans across repos that sit under a group (every repo of theirs is in it), above its
+ * projects; folded, only the one you're in stays (BLG-20).
+ */
+export function GroupPlans({ name, groups, folded, indent }: { name: string; groups: ReadonlyArray<{ readonly name: string; readonly projects: readonly Project[] }>; folded: boolean; indent: number }) {
+  const all = useApp((st) => st.plans.plans);
+  const inPlan = useApp((st) => planOfPlace(st.plans, st.board, st.view));
+  const here = all.filter((x) => {
+    if (!isLivePlan(x) || (folded && x.id !== inPlan)) return false;
+    const place = planPlace(x, groups);
+    return 'group' in place && place.group === name;
+  });
+  return (
+    <>
+      {here.map((x) => (
+        <PlanRow key={x.id} plan={x} indent={indent} />
+      ))}
+    </>
   );
 }

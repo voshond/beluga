@@ -568,7 +568,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `team.answerKnock` | ✓ the knock's card in the worktree's chat (Let In as Editor, Let In as Viewer; ••• › Not Now) and the bell's row; the phone's card (Let In as Editor / Not Now / Let In as Viewer) |
 | `team.befriend` | ✓ the team badge on a project's row › its card › Add Friend beside someone on the team who isn't a friend (BLG-510); they Accept like any friend request |
 | `team.leave` | ✓ project ••• › Leave Team with Ata (Leave Team with several teammates: off it for everyone, BLG-510) |
-| `plans.create` | ✓ Plans › New Plan (a goal; the agent plans in a conversation of its own in the project's main folder; More options › Agent picks who works its milestones and tasks, BLG-497); the phone's Ask › a project › Plan (1.5); Your Mac's `start_plan` (quietly) |
+| `plans.create` | ✓ Plans › New Plan (a goal; the agent plans in a conversation of its own in the project's main folder; `projectIds` adds more of this Mac's projects for a plan across repos, primary first, BLG-10: New Plan › Plan Across More Projects… ticks them, and a sidebar group's ⋯ › Plan Across Group… opens New Plan with the group's projects ticked, BLG-19; More options › Agent picks who works its milestones and tasks, BLG-497); the phone's Ask › a project › Plan (1.5); Your Mac's `start_plan` (quietly) |
 | `plans.here` | ✓ the composer's mode menu › Plan with Tasks (the agent plans in the conversation you're in) |
 | `plans.approve` | ✓ Approve Plan / Apply Changes on a plan's page and its strip above the conversation; Approve Plan's ▾ › Approve, worked by ▸ (BLG-506: `plans.setWorkAgent`, then approve) |
 | `plans.discard` | ✓ Discard Draft / Discard Changes on a plan's page |
@@ -580,10 +580,10 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `plans.setTestsAt` | ✓ a plan's ⋯ › When to Run Tests ▸ (each milestone, or once at the end) |
 | `plans.pass` | ✓ Pass Milestone on a plan's page |
 | `plans.recheck` | ✓ Check Again on a milestone the agent is checking or that failed its check |
-| `plans.openPr` | ✓ Open PR on a plan whose every milestone passed (plan/<slug> → main) |
-| `plans.mergePr` | ✓ Merge on GitHub (or Merge When Checks Pass, ⋯ › Merge Now) once the plan's pull request is open |
-| `plans.mergeLocal` | ✓ ⋯ › Merge into Main Locally on a plan ready to ship |
-| `plans.bringInMain` | ✓ Resolve Conflicts on a plan whose pull request conflicts with main |
+| `plans.openPr` | ✓ Open PR on a plan whose every milestone passed (plan/<slug> → main); across repos **Open PRs** (one per repo, each body linking the others; Open PRs Again when one was closed) |
+| `plans.mergePr` | ✓ Merge on GitHub (or Merge When Checks Pass, ⋯ › Merge Now) once the plan's pull request is open; across repos **Merge All** / **Merge All When Checks Pass** (⋯ › Merge All Now), upstream repos first, stopping at the first that fails; ⋯ › View <repo>'s PR per repo |
+| `plans.mergeLocal` | ✓ ⋯ › Merge into Main Locally on a plan ready to ship (across repos: each repo's, in merge order) |
+| `plans.bringInMain` | ✓ Resolve Conflicts on a plan whose pull request conflicts with main; across repos **Resolve Conflicts in <repo>** and ⋯ › Bring Main into <repo> |
 | `plans.retryConflicts` | ✓ Ask Claude Again on a plan's conflict that waits for you |
 | `plans.showConflict` | ✓ Show in Finder on a plan's conflict that waits for you |
 | `plans.sendBack` | ✓ Not Yet… on a milestone waiting for you |

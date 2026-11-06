@@ -1,5 +1,5 @@
 import type { CombineResult, MergeResult } from '../../workspaces/git.js';
-import { createPr, explainMergeError, findPr, hasGh, mergePr, pushForPr } from '../../workspaces/pr.js';
+import { createPr, explainMergeError, findPr, hasGh, mergePr, pushForPr, runGh } from '../../workspaces/pr.js';
 import type { PlanPr } from './model.js';
 import type { WorkspaceController } from '../workspace-controller.js';
 
@@ -22,6 +22,7 @@ export interface PlanGit {
   /** The branch's pull request (undefined: none). Throws when GitHub couldn't tell. */
   findPr(projectId: string, branch: string): Promise<PlanPr | undefined>;
   openPr(projectId: string, branch: string, title: string, body: string): Promise<PlanPr>;
+  editPrBody(projectId: string, number: number, body: string): Promise<void>;
   /** Push the plan's branch to GitHub (what was merged into it here since the PR opened goes in too). */
   push(projectId: string, branch: string): Promise<void>;
   /** Merge it now, or (auto) once its checks and reviews pass. Throws gh's error. */
@@ -46,6 +47,7 @@ export function planGitOf(controller: WorkspaceController): PlanGit {
     },
     findPr: (projectId, branch) => findPr(root(projectId), branch),
     openPr: async (projectId, branch, title, body) => createPr(root(projectId), { base: await m.defaultBranchName(projectId), head: branch, title, body }),
+    editPrBody: async (projectId, number, body) => void (await runGh(['pr', 'edit', String(number), '--body', body], root(projectId), 60_000)),
     // A merge commit, keeping each milestone's merges.
     push: async (projectId, branch) => void (await pushForPr(root(projectId), branch)),
     mergePr: async (projectId, number, opts) => {

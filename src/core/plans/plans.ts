@@ -38,7 +38,13 @@ import {
   type TestsAt,
   diffBodies,
   isEmptyDiff,
+  isMultiRepo,
+  planBranchFor,
   planById,
+  planPrFor,
+  planRepos,
+  prRef,
+  shipOrder,
 } from './model.js';
 
 /**
@@ -140,13 +146,15 @@ export class Plans {
   // ------------------------------------------------------------------ drafting
 
   /** A new plan: an empty draft in its conversation (Claude writes it there). Your goal is never its title: a quick model names it (autoTitle), and Claude's plan_write after that. */
-  create(input: { readonly projectId: string; readonly home: string; readonly title?: string; readonly goal?: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentRef }, by: Actor): Plan {
+  create(input: { readonly projectId: string; readonly repos?: readonly string[]; readonly home: string; readonly title?: string; readonly goal?: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentRef }, by: Actor): Plan {
     const at = this.now();
+    const repos = planRepos(input);
     const title = (input.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 80) || UNTITLED;
     const request = input.goal?.trim().slice(0, MAX_REQUEST);
     const plan: Plan = {
       id: short('pl'),
       projectId: input.projectId,
+      ...(repos.length > 1 ? { repos } : {}),
       home: input.home,
       status: 'draft',
       ...(request ? { request } : {}),
@@ -183,7 +191,7 @@ export class Plans {
   /** Claude's whole plan (the draft). Tasks it named before keep their board tasks. */
   writeDraft(id: string, input: BodyInput, by: Actor): Plan {
     const plan = this.need(id);
-    const draft = normalizeBody(input, [plan.draft, plan.body]);
+    const draft = normalizeBody(input, [plan.draft, plan.body], planRepos(plan));
     return this.setDraft(plan, draft, by, plan.body ? 'proposed changes to the plan' : 'wrote the plan');
   }
 
@@ -192,7 +200,7 @@ export class Plans {
     const plan = this.need(id);
     const base = plan.draft ?? plan.body;
     if (!base) throw new PlanError('This plan has nothing in it yet: write it whole first (plan_write)');
-    const draft = applyOps(base, ops);
+    const draft = applyOps(base, ops, planRepos(plan));
     const why = reason?.replace(/\s+/g, ' ').trim().slice(0, 200);
     return this.setDraft(plan, draft, by, why ? `changed the plan — ${why}` : plan.body ? 'proposed changes to the plan' : 'changed the plan');
   }
@@ -362,6 +370,11 @@ export class Plans {
   }
 
   /** Its epics on the board (see epics.ts). */
+  setBoard(id: string, board: string): Plan {
+    const plan = this.need(id);
+    return plan.board === board ? plan : this.change(plan, { board }, []);
+  }
+
   setEpics(id: string, epics: PlanEpics): Plan {
     const plan = this.need(id);
     if (JSON.stringify(plan.epics) === JSON.stringify(epics)) return plan;
@@ -405,11 +418,20 @@ export class Plans {
     return this.change(plan, { watch: Object.keys(next).length ? next : undefined }, []);
   }
 
-  /** The plan's branch is there (made from main, or one that was there already). */
-  setBranch(id: string, branch: string, made: boolean): Plan {
+  /**
+   * The plan's branch is there in a repo (made from main, or one that was there already). A plan of
+   * one repo keeps only `branch`; across repos each is in `branches`, the primary's in `branch` too.
+   */
+  setBranch(id: string, branch: string, made: boolean, projectId?: string): Plan {
     const plan = this.need(id);
-    if (plan.branch === branch) return plan;
-    return this.change(plan, { branch }, [event({ kind: 'beluga' }, 'note', made ? `made the plan’s branch ${branch} from main` : `collects the plan’s work on ${branch}`, this.now())]);
+    const repo = projectId ?? plan.projectId;
+    const multi = planRepos(plan).length > 1;
+    const primary = repo === plan.projectId;
+    if ((primary ? plan.branch === branch : true) && (!multi || plan.branches?.[repo] === branch)) return plan;
+    const name = multi ? this.deps.store.getState().projects.find((p) => p.id === repo)?.name ?? repo : undefined;
+    const where = name ? ` in ${name}` : '';
+    const text = made ? `made the plan’s branch ${branch} from main${where}` : `collects the plan’s work on ${branch}${where}`;
+    return this.change(plan, { ...(primary ? { branch } : {}), ...(multi ? { branches: { ...plan.branches, [repo]: branch } } : {}) }, [event({ kind: 'beluga' }, 'note', text, this.now())]);
   }
 
   /** A passed milestone being merged into the plan's branch (undefined: no longer). */
@@ -428,24 +450,50 @@ export class Plans {
   }
 
   /** The branch's pull request as last seen (what changed goes in the activity). */
-  setPr(id: string, found: PlanPr): Plan {
+  setPr(id: string, found: PlanPr, repo?: string): Plan {
     const plan = this.need(id);
-    const before = plan.pr;
+    const multi = isMultiRepo(plan);
+    const inRepo = repo ?? plan.projectId;
+    const before = planPrFor(plan, inRepo);
     // Only what the plan shows (GitHub's answer carries more, like each check run).
     const { number, url, state, title, draft, checks, review, conflicts, autoMerge, mergeState } = found;
     const pr: PlanPr = { number, url, state, title, draft, checks, ...(review ? { review } : {}), ...(conflicts ? { conflicts } : {}), ...(autoMerge ? { autoMerge } : {}), ...(mergeState ? { mergeState } : {}) };
     if (before && before.number === pr.number && before.state === pr.state && before.checks === pr.checks && before.review === pr.review && before.title === pr.title && before.draft === pr.draft && before.conflicts === pr.conflicts && before.autoMerge === pr.autoMerge && before.mergeState === pr.mergeState) return plan;
     const notes: PlanEvent[] = [];
     const at = this.now();
-    if (!before || before.number !== pr.number) notes.push(event({ kind: 'beluga' }, 'note', `opened pull request #${pr.number}: ${plan.branch ?? 'the plan’s branch'} → main`, at));
-    if (pr.state === 'CLOSED' && before?.state !== 'CLOSED') notes.push(event({ kind: 'beluga' }, 'problem', `pull request #${pr.number} was closed without merging: its tasks stay merged into the plan`, at));
-    return this.change(plan, { pr }, notes);
+    const name = multi ? this.repoName(inRepo) : undefined;
+    const branch = planBranchFor(plan, inRepo) ?? 'the plan’s branch';
+    if (!before || before.number !== pr.number) notes.push(event({ kind: 'beluga' }, 'note', name ? `opened pull request ${prRef(pr)}: ${branch} → main in ${name}` : `opened pull request #${pr.number}: ${branch} → main`, at));
+    if (pr.state === 'CLOSED' && before?.state !== 'CLOSED') notes.push(event({ kind: 'beluga' }, 'problem', name ? `${name}’s pull request ${prRef(pr)} was closed without merging: its tasks stay merged into the plan` : `pull request #${pr.number} was closed without merging: its tasks stay merged into the plan`, at));
+    const primary = inRepo === plan.projectId;
+    return this.change(plan, { ...(primary ? { pr } : {}), ...(multi ? { prs: { ...plan.prs, [inRepo]: pr } } : {}) }, notes);
   }
 
-  setShipped(id: string, shipped: PlanShipped): Plan {
+  setShipped(id: string, shipped: PlanShipped, repo?: string): Plan {
     const plan = this.need(id);
     if (plan.shipped) return plan;
-    return this.change(plan, { shipped }, [event({ kind: 'beluga' }, 'done', shipped.how === 'pr' ? `merged into main via #${shipped.number}` : 'merged into main here', shipped.at)]);
+    if (!isMultiRepo(plan)) return this.change(plan, { shipped }, [event({ kind: 'beluga' }, 'done', shipped.how === 'pr' ? `merged into main via #${shipped.number}` : 'merged into main here', shipped.at)]);
+    const inRepo = repo ?? plan.projectId;
+    if (plan.shippedIn?.[inRepo]) return plan;
+    const shippedIn = { ...plan.shippedIn, [inRepo]: shipped };
+    const pr = planPrFor(plan, inRepo);
+    const notes = [event({ kind: 'beluga' }, 'done', shipped.how === 'pr' && pr ? `merged into main in ${this.repoName(inRepo)} via ${prRef(pr)}` : `merged into main here in ${this.repoName(inRepo)}`, shipped.at)];
+    const repos = shipOrder(plan);
+    if (!repos.every((r) => shippedIn[r])) return this.change(plan, { shippedIn }, notes);
+    const how = repos.every((r) => shippedIn[r]!.how === 'pr') ? 'pr' : 'local';
+    const number = shippedIn[plan.projectId]?.number;
+    const all: PlanShipped = { at: shipped.at, how, ...(number !== undefined ? { number } : {}) };
+    return this.change(plan, { shippedIn, shipped: all, mergeAll: undefined }, [...notes, event({ kind: 'beluga' }, 'done', `every repo’s work is in main (${repos.length} repos)`, shipped.at)]);
+  }
+
+  setMergeAll(id: string, mergeAll: Plan['mergeAll']): Plan {
+    const plan = this.need(id);
+    if (!mergeAll && !plan.mergeAll) return plan;
+    return this.change(plan, { mergeAll }, []);
+  }
+
+  private repoName(projectId: string): string {
+    return this.deps.store.getState().projects.find((p) => p.id === projectId)?.name ?? projectId;
   }
 
   setCaughtUp(id: string): Plan {

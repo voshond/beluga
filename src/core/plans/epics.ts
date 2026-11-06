@@ -1,6 +1,6 @@
 import type { Board } from '../board/board.js';
-import { type Actor, type Issue, type IssueStatus, isOpen } from '../board/model.js';
-import { type Plan, type PlanEpics, type PlanMilestone, allTasks, milestoneDeps, planTitle } from './model.js';
+import { type Actor, type Issue, type IssueStatus, boardOf, isOpen } from '../board/model.js';
+import { type Plan, type PlanEpics, type PlanMilestone, allTasks, milestoneDeps, milestoneRepos, planTitle } from './model.js';
 
 /**
  * A plan's shape on the board: one epic for the plan, one epic under it for each milestone, and the
@@ -24,10 +24,10 @@ const milestoneBrief = (m: PlanMilestone): { goal?: string; context?: string } =
   ...(m.criteria.length ? { context: ['A milestone of its plan: it passes when its checker finds these true.', '', 'Pass criteria:', ...m.criteria.map((c) => `- ${c}`)].join('\n') } : {}),
 });
 
-/** An epic still there to use (not deleted, not canceled, in the plan's project). */
-const usable = (board: Board, id: string | undefined, projectId: string): Issue | undefined => {
+/** An epic still there to use (not deleted, not canceled, in the plan's project, on the plan's board). */
+const usable = (board: Board, id: string | undefined, projectId: string | undefined, boardId?: string): Issue | undefined => {
   const issue = id ? board.get(id) : undefined;
-  return issue && issue.status !== 'canceled' && issue.projectId === projectId ? issue : undefined;
+  return issue && issue.status !== 'canceled' && (!projectId || issue.projectId === projectId) && (!boardId || boardOf(issue) === boardId) ? issue : undefined;
 };
 
 /**
@@ -40,9 +40,11 @@ export function syncEpics(plan: Plan, board: Board, by: Actor): PlanEpics | unde
   const title = planTitle(plan).slice(0, MAX_TITLE);
 
   // The plan's own epic.
-  let top = usable(board, plan.epics?.plan, plan.projectId);
+  // A plan across repos: its epics are on its board, each milestone's in its milestone's repo.
+  const onBoard = plan.board ? { board: plan.board } : {};
+  let top = usable(board, plan.epics?.plan, plan.projectId, plan.board);
   if (!top) {
-    top = board.create({ projectId: plan.projectId, title, status: 'todo', brief: body.goal ? { goal: body.goal } : {} }, by, 'plan');
+    top = board.create({ projectId: plan.projectId, ...onBoard, title, status: 'todo', brief: body.goal ? { goal: body.goal } : {} }, by, 'plan');
   } else if (top.title !== title) {
     top = board.update(top.id, { title }, by);
   }
@@ -51,9 +53,11 @@ export function syncEpics(plan: Plan, board: Board, by: Actor): PlanEpics | unde
   const milestones: Record<string, string> = {};
   for (const m of body.milestones) {
     const brief = milestoneBrief(m);
-    let epic = usable(board, plan.epics?.milestones[m.id], plan.projectId);
+    const repo = milestoneRepos(plan, m)[0]!;
+    let epic = usable(board, plan.epics?.milestones[m.id], plan.board ? undefined : repo, plan.board);
+    if (epic && epic.projectId !== repo) epic = board.update(epic.id, { projectId: repo }, by);
     if (!epic) {
-      epic = board.create({ projectId: plan.projectId, title: m.title.slice(0, MAX_TITLE), status: startsAt(plan, m), parent: top.id, brief }, by, 'plan');
+      epic = board.create({ projectId: repo, ...onBoard, title: m.title.slice(0, MAX_TITLE), status: startsAt(plan, m), parent: top.id, brief }, by, 'plan');
     } else {
       if (epic.title !== m.title || epic.parent !== top.id) epic = board.update(epic.id, { ...(epic.title !== m.title ? { title: m.title.slice(0, MAX_TITLE) } : {}), ...(epic.parent !== top.id ? { parent: top.id } : {}) }, by);
       for (const section of ['goal', 'context'] as const) {

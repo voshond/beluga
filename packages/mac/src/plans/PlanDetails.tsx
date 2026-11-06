@@ -7,6 +7,7 @@ import { Markdown } from '../chat/Markdown.js';
 import { Icon, type IconName } from '../components/Icon.js';
 import { Button, IconButton, cx } from '../components/ui.js';
 import { openSheet } from '../lib/sheets.js';
+import { useApp } from '../lib/beluga.js';
 import { ProofItems } from '../tasks/TaskSections.js';
 import { type FlowStep, MILESTONE_STATE, branchFlow, milestoneNowWords, taskWords } from './plans-model.js';
 import { LiveDot, TaskChatMark, TaskStateIcon, TonePill } from './marks.js';
@@ -84,7 +85,7 @@ function BranchHead({ view }: { view: PlanView }) {
         Plan
       </div>
       <h3 className={p.detailsTitle}>Where the work goes</h3>
-      <p className={p.muted}>{view.plan.branch ? `Each milestone merges into ${view.plan.branch} when it passes; at the end, one pull request takes it into main.` : 'Without a branch of its own, each task’s work goes to main on its own.'}</p>
+      <p className={p.muted}>{view.next.kind === 'ship' && view.next.repos ? `Each milestone merges into its repo’s ${view.plan.branch} when it passes; at the end, one pull request per repo, merged upstream first.` : view.plan.branch ? `Each milestone merges into ${view.plan.branch} when it passes; at the end, one pull request takes it into main.` : 'Without a branch of its own, each task’s work goes to main on its own.'}</p>
     </>
   );
 }
@@ -94,7 +95,8 @@ const FLOW_STATE: Record<FlowStep['state'], string> = { done: 'Done', active: 'N
 
 /** main ← the pull request ← the plan's branch ← each milestone, with where each stands. */
 function BranchFlow({ view }: { view: PlanView }) {
-  const steps = branchFlow(view);
+  const projects = useApp((s) => s.projects);
+  const steps = branchFlow(view, (id) => projects.find((x) => x.id === id)?.name ?? id);
   return (
     <ol className={p.flow} aria-label="Where the work goes">
       {steps.map((s) => (
