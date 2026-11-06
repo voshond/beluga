@@ -39,6 +39,7 @@ import {
   diffBodies,
   isEmptyDiff,
   planById,
+  planRepos,
 } from './model.js';
 
 /**
@@ -140,13 +141,15 @@ export class Plans {
   // ------------------------------------------------------------------ drafting
 
   /** A new plan: an empty draft in its conversation (Claude writes it there). Your goal is never its title: a quick model names it (autoTitle), and Claude's plan_write after that. */
-  create(input: { readonly projectId: string; readonly home: string; readonly title?: string; readonly goal?: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentRef }, by: Actor): Plan {
+  create(input: { readonly projectId: string; readonly repos?: readonly string[]; readonly home: string; readonly title?: string; readonly goal?: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentRef }, by: Actor): Plan {
     const at = this.now();
+    const repos = planRepos(input);
     const title = (input.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 80) || UNTITLED;
     const request = input.goal?.trim().slice(0, MAX_REQUEST);
     const plan: Plan = {
       id: short('pl'),
       projectId: input.projectId,
+      ...(repos.length > 1 ? { repos } : {}),
       home: input.home,
       status: 'draft',
       ...(request ? { request } : {}),
@@ -183,7 +186,7 @@ export class Plans {
   /** Claude's whole plan (the draft). Tasks it named before keep their board tasks. */
   writeDraft(id: string, input: BodyInput, by: Actor): Plan {
     const plan = this.need(id);
-    const draft = normalizeBody(input, [plan.draft, plan.body]);
+    const draft = normalizeBody(input, [plan.draft, plan.body], planRepos(plan));
     return this.setDraft(plan, draft, by, plan.body ? 'proposed changes to the plan' : 'wrote the plan');
   }
 
@@ -192,7 +195,7 @@ export class Plans {
     const plan = this.need(id);
     const base = plan.draft ?? plan.body;
     if (!base) throw new PlanError('This plan has nothing in it yet: write it whole first (plan_write)');
-    const draft = applyOps(base, ops);
+    const draft = applyOps(base, ops, planRepos(plan));
     const why = reason?.replace(/\s+/g, ' ').trim().slice(0, 200);
     return this.setDraft(plan, draft, by, why ? `changed the plan — ${why}` : plan.body ? 'proposed changes to the plan' : 'changed the plan');
   }
@@ -362,6 +365,11 @@ export class Plans {
   }
 
   /** Its epics on the board (see epics.ts). */
+  setBoard(id: string, board: string): Plan {
+    const plan = this.need(id);
+    return plan.board === board ? plan : this.change(plan, { board }, []);
+  }
+
   setEpics(id: string, epics: PlanEpics): Plan {
     const plan = this.need(id);
     if (JSON.stringify(plan.epics) === JSON.stringify(epics)) return plan;

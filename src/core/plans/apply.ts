@@ -1,9 +1,9 @@
 import type { Board } from '../board/board.js';
 import { criteria, criterionLine } from '../board/criteria.js';
 import { labelsFor } from '../board/labels.js';
-import { type Actor, type Assignee, type BriefSection, type Issue, boardOf, isOpen } from '../board/model.js';
+import { type Actor, type Assignee, type BriefSection, type Issue, boardOf, isOpen, reposOf } from '../board/model.js';
 import { PlanError } from './edit.js';
-import { type Plan, type PlanBody, type PlanTask, allTasks, decisionLines, diffBodies, milestoneDeps, taskById } from './model.js';
+import { type Plan, type PlanBody, type PlanTask, allTasks, decisionLines, diffBodies, isMultiRepo, milestoneDeps, milestoneRepos, planRepos, taskById } from './model.js';
 
 /**
  * Approving a plan: its draft goes on the board. New tasks are made (in the plan's milestone, its
@@ -37,6 +37,22 @@ const inPlanSet = (board: Board, issue: Issue, labels: readonly string[]): strin
   return labels.map((l) => l.toLowerCase()).filter((l) => set.has(l) || issue.labels.includes(l));
 };
 
+const sameRepos = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((r) => b.includes(r));
+
+/**
+ * The board a plan across repos puts its tasks on (BLG-12): the one it has while that still covers
+ * its repos, else one covering exactly them, else a new board of its own called `name` (the sidebar
+ * group they're in, or the plan's title). A single-repo plan: none (each task on its repo's board).
+ */
+export function planBoard(plan: Plan, board: Board, name: string): string | undefined {
+  if (!isMultiRepo(plan)) return undefined;
+  const repos = planRepos(plan);
+  const boards = board.state().projects;
+  if (plan.board && boards[plan.board] && repos.every((r) => reposOf(board.state(), plan.board!).includes(r))) return plan.board;
+  const same = Object.keys(boards).find((id) => sameRepos(reposOf(board.state(), id), repos));
+  return same ?? board.createBoard({ name, repos });
+}
+
 export function applyDraft(plan: Plan, board: Board, actors: ApplyActors): Applied {
   const linked = new Map<string, string>();
   try {
@@ -67,10 +83,12 @@ function applyInto(plan: Plan, board: Board, actors: ApplyActors, linked: Map<st
     // Yours is assigned to you; Claude's is no one's (a task is for a person, BLG-278): who's on it shows while it runs.
     const assignee = task.assignee === 'me' ? actors.me : undefined;
     const existing = issueOf.get(task.id);
+    const repo = milestoneRepos(plan, milestone)[0]!;
     if (!existing) {
       const made = board.create(
         {
-          projectId: plan.projectId,
+          projectId: repo,
+          ...(plan.board ? { board: plan.board } : {}),
           title: task.title,
           status: fresh,
           ...(assignee ? { assignee } : {}),
@@ -103,6 +121,8 @@ function applyInto(plan: Plan, board: Board, actors: ApplyActors, linked: Map<st
         // Claude wrote the plan: its labels come from the project's set (and any the task already had).
         ...(task.labels && old && differs('labels') ? { labels: inPlanSet(board, existing, task.labels) } : {}),
         ...((notStarted && moved && existing.status !== fresh) || revived ? { status: fresh } : {}),
+        // A plan across repos: a task not started yet follows its milestone to another repo.
+        ...(plan.board && notStarted && existing.projectId !== repo ? { projectId: repo } : {}),
       },
       actors.by,
     );

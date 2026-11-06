@@ -102,6 +102,8 @@ export interface PlanMilestone {
    * from its tasks' blockers in other milestones; empty, it runs alongside from the start.
    */
   readonly dependsOn?: readonly string[];
+  /** The repos it works in (project ids, from the plan's): absent or empty, the plan's primary. */
+  readonly repos?: readonly string[];
 }
 
 /**
@@ -284,7 +286,12 @@ export type PlanStatus = 'draft' | 'active' | 'done';
 
 export interface Plan {
   readonly id: string;
+  /** Its primary repo. */
   readonly projectId: string;
+  /** Every repo it covers (project ids, primary first); absent, only projectId. */
+  readonly repos?: readonly string[];
+  /** A plan across repos: the board its tasks go on (one covering its repos, BLG-12); absent, each repo's own. */
+  readonly board?: string;
   /** The conversation it's planned and run from (`ws:<id>`): its head Claude. */
   readonly home: string;
   readonly status: PlanStatus;
@@ -388,6 +395,7 @@ export const MAX_MILESTONES = 12;
 export const MAX_PLAN_TASKS = 80;
 export const DEFAULT_PARALLEL = 3;
 export const MAX_PARALLEL = 8;
+export const MAX_PLAN_REPOS = 8;
 
 export const NO_PLANS: PlansState = { enabled: false, plans: [], style: '' };
 export const initialPlans: PlansSlice = { plans: NO_PLANS };
@@ -486,6 +494,16 @@ export function planTaskOfIssue(state: PlansState, issueId: string): { readonly 
   return undefined;
 }
 
+export const planRepos = (plan: Pick<Plan, 'projectId' | 'repos'>): readonly string[] => [...new Set([plan.projectId, ...(plan.repos ?? [])])];
+
+export const isMultiRepo = (plan: Pick<Plan, 'projectId' | 'repos'>): boolean => planRepos(plan).length > 1;
+
+export function milestoneRepos(plan: Pick<Plan, 'projectId' | 'repos'>, milestone: Pick<PlanMilestone, 'repos'> | undefined): readonly string[] {
+  const all = planRepos(plan);
+  const named = (milestone?.repos ?? []).filter((r) => all.includes(r));
+  return named.length ? [...new Set(named)] : [plan.projectId];
+}
+
 /** A milestone's own autonomy, else its plan's. */
 export const autonomyOf = (plan: Plan, milestone: PlanMilestone | undefined): Autonomy => milestone?.autonomy ?? plan.autonomy;
 
@@ -553,7 +571,7 @@ export function diffBodies(before: PlanBody | undefined, after: PlanBody | undef
     const b = now.get(id)!;
     return a && (a.milestone.id !== b.milestone.id || taskSignature(a.task) !== taskSignature(b.task));
   });
-  const ms = (b: PlanBody | undefined): string => (b?.milestones ?? []).map((m) => `${m.id}\0${m.title}\0${m.goal ?? ''}\0${m.criteria.join('\0')}\0${m.dependsOn?.join(',') ?? '-'}`).join('\n');
+  const ms = (b: PlanBody | undefined): string => (b?.milestones ?? []).map((m) => `${m.id}\0${m.title}\0${m.goal ?? ''}\0${m.criteria.join('\0')}\0${m.dependsOn?.join(',') ?? '-'}\0${m.repos?.join(',') ?? '-'}`).join('\n');
   const milestones = ms(before) === ms(after) ? 0 : Math.max(1, Math.abs((after?.milestones.length ?? 0) - (before?.milestones.length ?? 0)));
   const notes = (b: PlanBody | undefined): Set<string> => new Set([...(b?.decisions ?? []).map((d) => JSON.stringify(d)), ...(b?.openQuestions ?? []).map((q) => `?${q}`)]);
   const was = notes(before);

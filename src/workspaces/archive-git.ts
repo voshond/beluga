@@ -13,8 +13,11 @@ import path from 'node:path';
 /** git add and read-tree on a big folder can take a while; packing much longer. */
 export const LONG_MS = 10 * 60_000;
 export const TAR_TIMEOUT_MS = 30 * 60_000;
+/** Extra variables for git and tar, on top of the process's own. */
+export type ExtraEnv = Readonly<Record<string, string | undefined>>;
+
 /** Commits need a name; yours when git has one. */
-const IDENTITY = { GIT_AUTHOR_NAME: 'Beluga', GIT_AUTHOR_EMAIL: 'beluga@localhost', GIT_COMMITTER_NAME: 'Beluga', GIT_COMMITTER_EMAIL: 'beluga@localhost' };
+const IDENTITY: ExtraEnv = { GIT_AUTHOR_NAME: 'Beluga', GIT_AUTHOR_EMAIL: 'beluga@localhost', GIT_COMMITTER_NAME: 'Beluga', GIT_COMMITTER_EMAIL: 'beluga@localhost' };
 
 export class ArchiveError extends Error {}
 
@@ -22,10 +25,10 @@ export class ArchiveError extends Error {}
  * Files byte for byte: no .gitattributes (line endings, filters like LFS) and no autocrlf, both
  * when the snapshot is made and when it's written back (attributes from git's empty tree).
  */
-export const RAW_ENV: NodeJS.ProcessEnv = { GIT_ATTR_SOURCE: '4b825dc642cb6eb9a060e54bf8d69288fbee4904' };
+export const RAW_ENV: ExtraEnv = { GIT_ATTR_SOURCE: '4b825dc642cb6eb9a060e54bf8d69288fbee4904' };
 export const RAW_ARGS = ['-c', 'core.autocrlf=false', '-c', 'core.safecrlf=false'] as const;
 
-export function run(cmd: string, args: readonly string[], opts: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; input?: string }): Promise<string> {
+export function run(cmd: string, args: readonly string[], opts: { cwd: string; env?: ExtraEnv; timeoutMs?: number; input?: string }): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = execFile(cmd, [...args], { cwd: opts.cwd, timeout: opts.timeoutMs ?? 120_000, maxBuffer: 256 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...opts.env } }, (err, stdout, stderr) => {
       if (err) reject(new Error((stderr || err.message).trim()));
@@ -35,7 +38,7 @@ export function run(cmd: string, args: readonly string[], opts: { cwd: string; e
   });
 }
 
-export const git = (cwd: string, args: readonly string[], env?: NodeJS.ProcessEnv, timeoutMs?: number): Promise<string> => run('git', args, { cwd, ...(env ? { env } : {}), ...(timeoutMs ? { timeoutMs } : {}) });
+export const git = (cwd: string, args: readonly string[], env?: ExtraEnv, timeoutMs?: number): Promise<string> => run('git', args, { cwd, ...(env ? { env } : {}), ...(timeoutMs ? { timeoutMs } : {}) });
 /** Paths given to git as they are (a "[" or "*" in a name is just a character). */
 export const gitLiteral = (cwd: string, args: readonly string[]): Promise<string> => git(cwd, ['--literal-pathspecs', ...args]);
 export const tryGit = (cwd: string, args: readonly string[]): Promise<string | undefined> => git(cwd, args).then((s) => s.trim(), () => undefined);
@@ -93,7 +96,7 @@ export async function assertSettled(dir: string): Promise<void> {
 }
 
 /** Folders that are git repos of their own, in a git index (mode 160000 entries). */
-async function gitlinks(dir: string, env?: NodeJS.ProcessEnv): Promise<string[]> {
+async function gitlinks(dir: string, env?: ExtraEnv): Promise<string[]> {
   const out = await git(dir, ['ls-files', '--stage', '-z'], env, LONG_MS);
   return out
     .split('\0')
@@ -137,7 +140,7 @@ export function fingerprint(dir: string, rels: readonly string[]): string {
 }
 
 /** Your name for the snapshot commit when git has one, else Beluga's. */
-async function identity(dir: string): Promise<NodeJS.ProcessEnv> {
+async function identity(dir: string): Promise<ExtraEnv> {
   const name = await tryGit(dir, ['config', 'user.name']);
   const email = await tryGit(dir, ['config', 'user.email']);
   return name && email ? {} : IDENTITY;
