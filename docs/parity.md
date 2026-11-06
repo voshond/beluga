@@ -326,6 +326,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `workspaces.cleanUpOthers` | Clean Up Worktrees… › Remove (only what you ticked; branches kept) |
 | `workspaces.addProject` | ✓ |
 | `workspaces.removeProject` | a project's ⋯ / right-click menu › Delete Project… (out of Beluga; its folder goes to the Trash only if ticked) |
+| `workspaces.moveProject` | a project's ⋯ / right-click menu › Move Folder… (pick the folder it goes into; off while Claude works in it); `beluga project move <name> <folder>` |
 | `workspaces.addFolder` | ✓ |
 | `workspaces.selectFile` | ✓ |
 | `workspaces.review` | the right panel's Changes tab (loads and refreshes the changes while you stay in the chat) |
@@ -400,7 +401,8 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `projects.clone` | ✓ Add projects sheet › Clone from GitHub |
 | `projects.cloneProgress` | ✓ Clone progress in the Add projects sheet |
 | `projects.create` | ✓ Add projects sheet › Start new, New Project… in the Projects + menu and the palette |
-| `projects.newHome` | ✓ the location a new project goes in, in Add projects › Start new |
+| `projects.newHome` | ✓ the location a new project goes in, in Add projects › Start new (and Clone) |
+| `projects.setHome` | Settings › Workspaces › New projects go in (Choose…, Default); that folder is watched for projects too |
 | `projects.icon` | ✓ project icons in the sidebar |
 | `projects.iconAt` | ✓ icons of suggested folders |
 | `projects.setIcon` | ✓ right-click a project › Change Icon… |

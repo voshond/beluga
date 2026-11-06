@@ -4,19 +4,20 @@ import path from 'node:path';
 import { WorkspaceError } from './manager.js';
 import { git, tryGit } from './git.js';
 
-/** Where new projects go unless you pick somewhere: the first of these that exists, else ~/Projects. */
-const HOMES = ['Projects', 'projects', 'Developer', 'code', 'Code', 'dev', 'repos', 'GitHub'];
+/** Where new projects go unless you pick somewhere: the folder you chose in Settings, else the first of these that exists, else ~/Projects. */
+const HOMES = ['Projects', 'projects', 'Developer', 'code', 'Code', 'dev', 'repos', 'GitHub', 'Documents/GitHub'];
 
-export function defaultProjectsHome(home = os.homedir()): string {
-  for (const rel of HOMES) {
-    const dir = path.join(home, rel);
-    try {
-      if (statSync(dir).isDirectory()) return dir;
-    } catch {
-      // not this one
-    }
+const isDir = (dir: string): boolean => {
+  try {
+    return statSync(dir).isDirectory();
+  } catch {
+    return false;
   }
-  return path.join(home, 'Projects');
+};
+
+export function defaultProjectsHome(home = os.homedir(), chosen?: string): string {
+  if (chosen && isDir(chosen)) return chosen;
+  return HOMES.map((rel) => path.join(home, rel)).find(isDir) ?? path.join(home, 'Projects');
 }
 
 /** Why a project name won't do as a folder name, or undefined when it's fine. */
@@ -78,11 +79,11 @@ export async function initProject(dir: string): Promise<string> {
  * `main` with a README in a first commit, so worktrees can branch from it straight away.
  * An empty folder that's already there is used; one with files in it is refused.
  */
-export async function createProject(name: string, parent?: string): Promise<string> {
+export async function createProject(name: string, parent?: string, home?: string): Promise<string> {
   const bad = badProjectName(name);
   if (bad) throw new WorkspaceError(bad);
   const n = name.trim();
-  const dir = path.resolve(parent || defaultProjectsHome(), n);
+  const dir = path.resolve(parent || defaultProjectsHome(os.homedir(), home), n);
   const existed = existsSync(dir);
   if (existed && (!statSync(dir).isDirectory() || !isEmptyDir(dir))) throw new WorkspaceError(`${dir} is already there, with files in it. Add it as a project instead.`);
   mkdirSync(dir, { recursive: true });

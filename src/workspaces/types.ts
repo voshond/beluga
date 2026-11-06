@@ -211,4 +211,6 @@ export interface ProjectsConfig {
   readonly scripts?: Readonly<Record<string, ProjectScripts>>;
   /** Setup commands from a project's own beluga.json/conductor.json you allowed to run (by root → command hashes). */
   readonly approvedScripts?: Readonly<Record<string, readonly string[]>>;
+  /** Projects you moved (Move Project): their new real root → the id they had, so tasks, history and worktrees stay theirs. */
+  readonly ids?: Readonly<Record<string, string>>;
 }

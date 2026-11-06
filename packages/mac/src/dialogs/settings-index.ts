@@ -150,6 +150,7 @@ export const SETTINGS: readonly Entry[] = [
   ...rows('workspaces', undefined, [
     ['Run setup in new worktrees', 'The project’s setup command runs in each new worktree.', 'npm install setup command auto setup'],
     ['Branch prefix', 'What new worktrees’ branches start with.', 'git branch name prefix'],
+    ['New projects go in', 'The folder new projects and clones start in.', 'default projects folder path clone location home directory github'],
     ['Friends may start work here', 'They ask to start a worktree or hand work to you.', 'friend worktrees'],
   ]),
   group('workspaces', 'Hidden projects', 'Projects you hid from the sidebar.', 'hide show unhide project sidebar'),

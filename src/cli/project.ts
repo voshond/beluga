@@ -16,6 +16,8 @@ export interface ProjectLink {
   /** A git project, or a folder of them (projects.add). */
   add(dir: string): Promise<unknown>;
   remove(id: string): Promise<unknown>;
+  /** Its folder into another one (workspaces.moveProject). */
+  move(id: string, toParent: string): Promise<unknown>;
   /** Where new projects go (projects.newHome): the same folder the Mac app picks. */
   home(): Promise<string>;
   /** What the daemon said while doing it: its warnings and errors (toasts). */
@@ -31,6 +33,7 @@ export function projectLinkOf(client: SocketClient): ProjectLink {
     onChange: (l) => client.store.subscribe(l),
     add: (dir) => client.call('projects.add', dir),
     remove: (id) => client.call('workspaces.removeProject', id),
+    move: (id, toParent) => client.call('workspaces.moveProject', id, toParent),
     home: () => client.call('projects.newHome'),
     onProblem: (l) => client.onIntent((i: Intent) => void (i.type === 'toast' && i.level !== 'success' && i.level !== 'info' ? l(i.text) : undefined)),
   };
@@ -211,5 +214,33 @@ export async function removeProject(link: ProjectLink, which: string | undefined
     return 1;
   }
   io.out(`Removed ${p.name} from Beluga. Its folder stays at ${tilde(p.root)}, and its worktrees are archived.\n`);
+  return 0;
+}
+
+/** `beluga project move <name> --into <folder>`: its folder goes there (worktrees, tasks and history go along). */
+export async function moveProject(link: ProjectLink, which: string | undefined, into: string | undefined, io: Io, waitMs = 10_000): Promise<Exit> {
+  if (!which || !into) {
+    io.err('Move which project, where? `beluga project move <name> --into <folder>`.\n');
+    return 2;
+  }
+  const p = findProject(link.projects(), which);
+  if (typeof p === 'string') {
+    io.err(`${p}\n`);
+    return 1;
+  }
+  const to = path.join(path.resolve(expandHome(into)), path.basename(p.root));
+  const problems: string[] = [];
+  const stop = link.onProblem((text) => problems.push(text));
+  const ok = await link.move(p.id, path.resolve(expandHome(into))).catch((err: unknown) => {
+    problems.push(errorText(err));
+    return false;
+  });
+  stop();
+  const there = ok !== false && (await until(link, (ps) => (ps.some((x) => x.id === p.id && x.root === to) ? true : undefined), waitMs));
+  if (!there) {
+    io.err(`Beluga didn't move ${p.name}${problems.length ? `: ${problems.join(' ')}` : '. `beluga logs` may say why.'}\n`);
+    return 1;
+  }
+  io.out(`Moved ${p.name} to ${tilde(to)}. Its worktrees, tasks and history went along.\n`);
   return 0;
 }

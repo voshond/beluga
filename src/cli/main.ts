@@ -45,12 +45,13 @@ export async function run(cmd: ParsedCommand, io: Io): Promise<Exit> {
     }
     case 'project': {
       const [sub = 'list', ...rest] = cmd.positionals;
-      const { addProject, listProjects, projectLinkOf, removeProject } = await import('./project.js');
+      const { addProject, listProjects, moveProject, projectLinkOf, removeProject } = await import('./project.js');
       const into = typeof cmd.flags.into === 'string' ? cmd.flags.into : undefined;
       if (sub === 'list') return attached(io, async (client) => listProjects(client.store.getDomain().projects, io));
       if (sub === 'add') return attached(io, (client) => addProject(projectLinkOf(client), rest.join(' ') || undefined, io, into ? { into } : {}));
       if (sub === 'remove') return attached(io, (client) => removeProject(projectLinkOf(client), rest.join(' ') || undefined, io));
-      throw new UsageError(`\`beluga project\` can add, list or remove; there's no \`${sub}\`.`, 'project');
+      if (sub === 'move') return attached(io, (client) => moveProject(projectLinkOf(client), rest.join(' ') || undefined, into, io));
+      throw new UsageError(`\`beluga project\` can add, list, move or remove; there's no \`${sub}\`.`, 'project');
     }
     case 'web': {
       const { web } = await import('./web.js');

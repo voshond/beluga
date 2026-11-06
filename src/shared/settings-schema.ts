@@ -103,6 +103,8 @@ export const Settings = z.object({
   projectAgents: z.record(z.string().min(1).max(80), AgentRef).optional(),
   /** What new worktrees' branches start with (`beluga/<name>`); empty: no prefix. */
   branchPrefix: z.string().regex(BRANCH_PREFIX_RE).catch(BRANCH_PREFIX_DEFAULT),
+  /** Where new projects and clones go (Settings › Workspaces); unset: the first code folder found in your home (workspaces/new-project.ts). */
+  projectsHome: z.string().min(1).max(4096).optional(),
   /** Run the project's setup script (e.g. npm install) in every new worktree. */
   autoSetup: z.boolean().default(true),
   /** Show how full each conversation's context is. */

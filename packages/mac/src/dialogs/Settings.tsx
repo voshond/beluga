@@ -23,6 +23,7 @@ import { EnvironmentSettings } from './EnvironmentSettings.js';
 import { ReportProblemRow } from './ReportProblemRow.js';
 import { ContextSettings } from './ContextSettings.js';
 import { ParallelSettings } from './ParallelSettings.js';
+import { ProjectsHomeRow } from './ProjectsHomeRow.js';
 import { ChatLimitSettings } from './ChatLimitSettings.js';
 import { McpSettings } from './McpSettings.js';
 import { LaunchFlagsSettings } from './LaunchFlagsSettings.js';
@@ -475,6 +476,7 @@ function Workspaces() {
           <Switch label="Auto setup" on={p.autoSetup} onChange={(v) => void api.session.setPrefs({ autoSetup: v })} />
         </Row>
         <BranchPrefixRow />
+        <ProjectsHomeRow />
         <Row label="Friends may start work here" detail="They ask to start a worktree or hand work to you; you approve each one.">
           <Switch label="Friend worktrees" on={p.friendWorktrees === 'ask'} onChange={(v) => void api.session.setFriendWorktrees(v ? 'ask' : 'off')} />
         </Row>

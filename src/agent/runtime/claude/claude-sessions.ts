@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, realpathSync } from 'node:fs';
-import { open, readdir, rm, stat } from 'node:fs/promises';
+import { cp, open, readdir, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { getSessionMessages, listSessions } from '@anthropic-ai/claude-agent-sdk';
@@ -282,6 +282,23 @@ export async function dropFolderSessions(dir: string, root: string = claudeConfi
     if (!keep) await rm(folder, { recursive: true, force: true }).catch(() => undefined);
   }
   return freed;
+}
+
+/**
+ * A folder moved (Move Project): its Claude Code sessions are copied next to where it is now, so
+ * they resume from there. Copies, never moves: the old ones stay, and nothing there is overwritten.
+ * Returns how many transcripts went along.
+ */
+export async function carryFolderSessions(from: string, to: string, root: string = claudeConfigDir()): Promise<number> {
+  const target = path.join(root, 'projects', encodeProjectDir(path.resolve(to)));
+  let carried = 0;
+  for (const variant of new Set(pathVariants(from))) {
+    const folder = path.join(root, 'projects', encodeProjectDir(variant));
+    if (folder === target || !existsSync(folder)) continue;
+    carried += transcriptsIn(folder).length;
+    await cp(folder, target, { recursive: true, force: false, errorOnExist: false }).catch(() => undefined);
+  }
+  return carried;
 }
 
 async function messagesOf(sessionId: string, dir: string): Promise<TranscriptMessage[]> {
