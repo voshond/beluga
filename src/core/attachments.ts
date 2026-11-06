@@ -89,26 +89,25 @@ export function expandChips(text: string, selfId: string, publish: (a: Attachmen
   return { text: out, attachments: used };
 }
 
+const IMAGE_LINK = /klaud-attachment:[^/\s)]+\/([^/\s)]+)/g;
+
+const localImage = (name: string, dir: string): string | undefined => {
+  if (!IMAGE_EXT.test(name) || name.startsWith('.')) return undefined;
+  return [dir, path.join(dir, 'room')].map((where) => path.join(where, name)).find(isFile);
+};
+
 /** Images on this computer linked from a prompt (only files in the attachments folder count). */
 export function linkedImages(prompt: string, dir = attachmentsDir()): string[] {
   const out: string[] = [];
-  for (const m of prompt.matchAll(/klaud-attachment:[^/\s)]+\/([^/\s)]+)/g)) {
-    const name = m[1] ?? '';
-    if (!IMAGE_EXT.test(name) || name.startsWith('.')) continue;
-    for (const where of [dir, path.join(dir, 'room')]) {
-      const abs = path.join(where, name);
-      try {
-        if (statSync(abs).isFile() && !out.includes(abs)) {
-          out.push(abs);
-          break;
-        }
-      } catch {
-        // not here
-      }
-    }
+  for (const m of prompt.matchAll(IMAGE_LINK)) {
+    const abs = localImage(m[1] ?? '', dir);
+    if (abs && !out.includes(abs)) out.push(abs);
   }
   return out;
 }
+
+/** Links to images on this computer pointed at their files, for words that reach Claude as plain text (an answer to its question). */
+export const withImagePaths = (text: string, dir = attachmentsDir()): string => text.replace(IMAGE_LINK, (link, name: string) => localImage(name, dir) ?? link);
 
 export const mediaTypeOf = (file: string): 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp' => {
   const ext = path.extname(file).toLowerCase();

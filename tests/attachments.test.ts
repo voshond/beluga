@@ -14,6 +14,7 @@ import {
   mediaTypeOf,
   publishForRoom,
   registerAttachment,
+  withImagePaths,
 } from '../src/core/attachments.js';
 import { imageContent } from '../src/agent/runtime/claude/runner.js';
 
@@ -71,6 +72,13 @@ describe('images for Claude', () => {
     expect(linkedImages(prompt, dir)).toEqual([path.join(dir, 'a.png'), path.join(dir, 'room', 'b.jpg')]);
     expect(linkedImages('klaud-attachment:me/../secret.png', dir)).toEqual([]);
     expect(mediaTypeOf('a.JPG')).toBe('image/jpeg');
+  });
+
+  it('points linked images at their files for an answer Claude reads as text', () => {
+    const answer = 'like this [📎 image 1 (png, 1K)](klaud-attachment:me/a.png), not [x](klaud-attachment:me/missing.png)';
+    expect(withImagePaths(answer, dir)).toBe(`like this [📎 image 1 (png, 1K)](${path.join(dir, 'a.png')}), not [x](klaud-attachment:me/missing.png)`);
+    expect(withImagePaths('[y](klaud-attachment:me/b.jpg)', dir)).toBe(`[y](${path.join(dir, 'room', 'b.jpg')})`);
+    expect(withImagePaths('klaud-attachment:me/../secret.png', dir)).toBe('klaud-attachment:me/../secret.png');
   });
 
   it('sends images as content blocks next to the text', async () => {

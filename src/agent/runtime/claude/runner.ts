@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { query, type Options } from '@anthropic-ai/claude-agent-sdk';
-import { MAX_ATTACHMENT_BYTES, linkedImages, mediaTypeOf } from '../../../core/attachments.js';
+import { MAX_ATTACHMENT_BYTES, linkedImages, mediaTypeOf, withImagePaths } from '../../../core/attachments.js';
 import { buildPrompt, summarizeTool } from '../../prompt.js';
 import { runInstructions } from '../../run-instructions.js';
 import { SECRET_DECLINED, decideTool, denyReason } from '../../policy.js';
@@ -289,7 +289,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
       const answerQuestion = async (toolInput: Record<string, unknown>) => {
         const question = toQuestion(toolInput);
         const answer = question ? await ask(question) : ({ kind: 'skip' } as const);
-        if (answer.kind === 'answers') return { behavior: 'allow' as const, updatedInput: { ...toolInput, answers: answer.answers } };
+        if (answer.kind === 'answers') return { behavior: 'allow' as const, updatedInput: { ...toolInput, answers: Object.fromEntries(Object.entries(answer.answers).map(([q, a]) => [q, withImagePaths(a)])) } };
         return { behavior: 'deny' as const, message: 'The user skipped this question. Continue with your best judgment and say what you assumed.' };
       };
       let askedToDefine = false;
@@ -307,7 +307,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
           await q.setPermissionMode(claudeLaunch(input.launchArgs?.claude ?? [], { plan: false, autoEdit }).permissionMode).catch(() => undefined);
           return { behavior: 'allow' as const, updatedInput: toolInput };
         }
-        const feedback = answer.kind === 'plan' && answer.feedback ? `The user wants changes to the plan: ${answer.feedback}` : 'The user did not approve the plan yet. Ask what they would like to change.';
+        const feedback = answer.kind === 'plan' && answer.feedback ? `The user wants changes to the plan: ${withImagePaths(answer.feedback)}` : 'The user did not approve the plan yet. Ask what they would like to change.';
         return { behavior: 'deny' as const, message: feedback };
       };
 
