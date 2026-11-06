@@ -28,7 +28,7 @@ import { Markdown } from './Markdown.js';
 import { AgentSteps, StepsFold, StepsToggle } from './steps/AgentSteps.js';
 import { useDisclosure } from './steps/step-memory.js';
 import { useFlightLanding } from './flight.js';
-import { type TurnPart, workingPhase } from './live-tail.js';
+import { type TurnPart, subInHead, wordsOf, workingPhase } from './live-tail.js';
 import { Shimmer } from './steps/StepRow.js';
 import { useMentionWorld } from './Mention.js';
 import type { TaskView } from '@beluga/core/gateway/model.js';
@@ -336,16 +336,17 @@ function WorkingLine({ item, quiet }: { item: AgentItem; quiet: boolean }) {
 }
 
 /**
- * Where a turn split by what was said during it began (see live-tail.ts): who, and the steps it
- * had finished by then; the rest (what it does now, its answer) is further down.
+ * Where a turn split by what was said during it began (see live-tail.ts): who, and the steps,
+ * background work and words it had finished by then; the rest (what it does now, its answer) is further down.
  */
 function TurnHead({ item, part, mine }: { item: AgentItem; part: TurnPart; mine: boolean }) {
   const prefs = usePrefs();
   const steps = useDisclosure(`${item.channel}/${item.id}`);
   const running = isRunning(item.status) && item.status !== 'queued';
   const folded = item.status === 'done' && Boolean(item.text) && prefs.doneSteps === 'fold' && !steps.shown;
-  // No step yet: a head would be a bare name over "continues below". Its tail says it all.
-  if (!item.steps.some((x) => !HIDDEN_STEPS.test(x))) return null;
+  const words = wordsOf(item, part);
+  // Nothing done yet: a head would be a bare name over "continues below". Its tail says it all.
+  if (!words && !item.steps.some((x) => !HIDDEN_STEPS.test(x)) && !item.subagents.some((x) => subInHead(x, part.cut))) return null;
   return (
     <div className={cx(s.message, s.agent, s.turnHead)} data-turn={item.status} data-turn-part="head">
       <div className={s.gutter}>
@@ -361,6 +362,7 @@ function TurnHead({ item, part, mine }: { item: AgentItem; part: TurnPart; mine:
         <StepsFold folded={folded}>
           <AgentSteps item={item} running={false} part={part} />
         </StepsFold>
+        {words ? <Markdown text={words} paths localImages={mine} tasks={mine} /> : null}
         <div className={s.continues}>
           <Icon name="chevronDown" size={11} />
           {running ? 'Still working · continues below' : 'Continued below'}
@@ -448,6 +450,8 @@ function TurnCard({
   const prefs = usePrefs();
   const steps = useDisclosure(`${item.channel}/${item.id}`);
   const answered = item.status === 'done' && Boolean(item.text);
+  // A split turn's tail has the words it wrote after what was said during it (its head has the rest).
+  const words = wordsOf(item, part);
   // A queued message Claude read mid-turn: its answer is the card above's.
   const steeredIn = (item.status === 'done' && item.text === STEERED_IN) || waitingNote;
   // Claude Code stopped at a plan limit: the newest card here (`latest`) offers to go on, in one click.
@@ -524,9 +528,9 @@ function TurnCard({
             <div className={s.idle}>{item.text === STEERED_IN ? STEERED_BELOW : item.text}</div>
           ) : failure ? (
             <FailureNotice failure={failure} />
-          ) : item.text ? (
-            <Markdown text={item.text} paths localImages={mine} live={running} tasks={mine} />
-          ) : item.status === 'queued' && item.slotWait ? (
+          ) : words ? (
+            <Markdown text={words} paths localImages={mine} live={running} tasks={mine} />
+          ) : item.text ? null : item.status === 'queued' && item.slotWait ? (
             // Nothing runs here: your Claude works in as many other conversations as it may at once.
             <SlotWaitNotice wait={item.slotWait} requestId={mine && item.requester === selfId ? item.requestId : undefined} />
           ) : item.status === 'queued' ? (

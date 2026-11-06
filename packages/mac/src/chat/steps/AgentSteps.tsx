@@ -16,7 +16,7 @@ import { type Entry, foldOf, movedTogether, ownStepsOf, subRowView, timelineOf }
 import { usePresence } from '../../layout/panel/ResizeHandle.js';
 import { Shimmer, StepRow, usePersonId } from './StepRow.js';
 import { useAgentSteps } from './use-steps.js';
-import { type TurnPart, inHead } from '../live-tail.js';
+import { type TurnPart, inHead, subInHead } from '../live-tail.js';
 import { useActions } from '../../lib/actions.js';
 import { useClock } from '../../lib/window-active.js';
 import { countRender } from '../../lib/render-count.js';
@@ -119,10 +119,13 @@ export const AgentSteps = memo(function AgentSteps({ item, running, part, subs: 
   const current = working && lastRow?.status === 'running' ? lastRow : undefined;
   const finished = useMemo(() => (current ? rows.slice(0, -1) : rows), [current, rows]);
   // Sub-agents and background work sit where they started (KLD-51); hidden, they're one line at the end.
-  // A split turn's sub-agents and background work are its tail's (what's still going stays in sight at the bottom).
+  // A split turn's head has the ones that finished before the cut; the rest are its tail's (what's still going stays in sight at the bottom, BLG-45).
   // A taken-over turn's running work is drawn in its live part, at the very bottom (BLG-54); the rest stays where it started.
-  const kept = useMemo(() => (which ? subagents.filter((x) => (x.status === 'running') === (which === 'running')) : subagents), [subagents, which]);
-  const placedSubs = detail === 'hidden' || part?.side === 'head' ? NO_SUBS : kept;
+  const kept = useMemo(() => {
+    const ours = part?.side === 'head' || part?.side === 'tail' ? subagents.filter((x) => subInHead(x, part.cut) === (part.side === 'head')) : subagents;
+    return which ? ours.filter((x) => (x.status === 'running') === (which === 'running')) : ours;
+  }, [subagents, which, part?.side, part?.cut]);
+  const placedSubs = detail === 'hidden' ? NO_SUBS : kept;
   const timeline = useMemo(() => timelineOf(finished, placedSubs, (id) => rich?.find((x) => x.id === id)?.startedAt), [finished, placedSubs, rich]);
   const ownBefore = useRef<ReadonlyMap<string, readonly StepSummary[]>>(undefined);
   const own = useMemo(() => (ownBefore.current = ownStepsOf(ownBefore.current, rich, subagents)), [rich, subagents]);

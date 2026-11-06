@@ -1,5 +1,5 @@
 // Relative paths (not @beluga/…) so the unit tests at the repo root can load this model too.
-import type { LogItem } from '../../../../src/core/store.js';
+import type { LogItem, SubAgent } from '../../../../src/core/store.js';
 import type { StepSummary } from '../../../../src/shared/steps.js';
 import { READS_AFTER_STEP, STEERED_IN, STOPPING_FOR, backgroundWait } from '../../../../src/shared/claude-notices.js';
 import { HIDDEN_STEPS, isRunning } from '../../../../src/ui/format.js';
@@ -8,7 +8,8 @@ import { HIDDEN_STEPS, isRunning } from '../../../../src/ui/format.js';
  * Where a Claude turn is drawn when you said something while it worked (BLG-22). Messages sent
  * mid-turn (steered in, or waiting their turn) land below the turn's card, so the card would sit
  * above them looking stuck while Claude goes on. Instead the turn is drawn in two parts: its
- * head stays where the turn began, with the steps it had finished before your first message;
+ * head stays where the turn began, with the steps, background work and words it had finished
+ * before your first message (BLG-45);
  * its tail (what it does since: the step it's on, background work, the working line, its
  * answer) comes after what you said: at the very bottom while it runs, and stays there once it
  * has answered, so nothing jumps or vanishes when the turn ends.
@@ -167,6 +168,25 @@ const endOf = (step: StepSummary): number => step.endedAt ?? (step.durationMs !=
 export function inHead(step: StepSummary, cut: number): boolean {
   if (step.id.startsWith('line-') || step.status === 'running') return false;
   return endOf(step) <= cut;
+}
+
+/** Whether a sub-agent or background work of a split turn is drawn in its head: it had finished before the cut. */
+export function subInHead(sub: SubAgent, cut: number): boolean {
+  return sub.status !== 'running' && sub.endedAt !== undefined && sub.endedAt <= cut;
+}
+
+/**
+ * A card's words for the part of it drawn: a split turn's head has what it wrote before the cut,
+ * its tail the rest. Words it can't place in time (from before their times were kept, an answer
+ * in other words) are the tail's.
+ */
+export function wordsOf(card: Pick<AgentItem, 'text' | 'textMarks'>, part: TurnPart | undefined): string {
+  if (!part) return card.text;
+  if (part.side === 'live') return '';
+  const marks = card.textMarks;
+  const placed = marks !== undefined && marks.at(-1)?.end === card.text.length;
+  const end = placed ? (marks.filter((m) => m.at <= part.cut).at(-1)?.end ?? 0) : 0;
+  return part.side === 'head' ? card.text.slice(0, end).trimEnd() : card.text.slice(end).replace(/^\n+/, '');
 }
 
 /**
