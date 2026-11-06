@@ -24,7 +24,8 @@ describe('the commands a task of yours needs', () => {
 
   it('show where, a block to paste that starts in its folder, and how you tell it worked', () => {
     const text = runMarkdown({ ...DEPLOY, cwd: '/home/me/my repo' });
-    expect(text).toContain('Run on **i9arch** in `/home/me/my repo`:');
+    expect(text).toContain('Run on **i9arch**:');
+    expect(text).not.toContain('in `/home/me/my repo`');
     expect(text).toContain("```sh\ncd '/home/me/my repo'\ngit merge origin/pr-4 origin/pr-5\nsudo ./install.sh\n```");
     expect(text).toContain('It worked when: install.sh ends with "enabled and started"');
   });

@@ -58,11 +58,10 @@ const MAX_RUN_TEXT = 760;
 
 const shellWord = (text: string): string => (/^[\w@%+=:,./~-]+$/.test(text) ? text : `'${text.replace(/'/g, `'\\''`)}'`);
 
-/** What you run, as the card shows it: where, the commands in a block to copy (from its folder), and how you tell it worked. */
+/** What you run, as the card shows it: the machine, the commands in a block to copy (its folder is the cd that starts it), and how you tell it worked. */
 export function runMarkdown(run: PlanRun): string {
-  const where = [run.on ? `on **${run.on}**` : '', run.cwd ? `in \`${run.cwd}\`` : ''].filter(Boolean).join(' ');
   const commands = [...(run.cwd ? [`cd ${shellWord(run.cwd)}`] : []), ...run.commands];
-  return [`Run${where ? ` ${where}` : ''}:`, '```sh', ...commands, '```', run.expect ? `It worked when: ${run.expect}` : ''].filter(Boolean).join('\n');
+  return [`Run${run.on ? ` on **${run.on}**` : ''}:`, '```sh', ...commands, '```', run.expect ? `It worked when: ${run.expect}` : ''].filter(Boolean).join('\n');
 }
 
 /** The question with its commands under it: the words are cut to fit, the commands first of all. */
