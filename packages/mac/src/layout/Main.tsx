@@ -26,6 +26,7 @@ const ActivityView = lazy(() => import('../claude-code/ActivityView.js').then((m
 const ProjectHome = lazy(() => import('../views/ProjectHome.js').then((m) => ({ default: m.ProjectHome })));
 const HistoryView = lazy(() => import('../views/history/HistoryView.js').then((m) => ({ default: m.HistoryView })));
 const WorktreesView = lazy(() => import('../views/worktrees/WorktreesView.js').then((m) => ({ default: m.WorktreesView })));
+const NotificationsView = lazy(() => import('./NotificationsView.js').then((m) => ({ default: m.NotificationsView })));
 const RequestsView = lazy(() => import('../gateway/RequestsView.js').then((m) => ({ default: m.RequestsView })));
 const TasksView = lazy(() => import('../tasks/TasksView.js').then((m) => ({ default: m.TasksView })));
 const TaskPage = lazy(() => import('../tasks/TaskPage.js').then((m) => ({ default: m.TaskPage })));
@@ -110,6 +111,8 @@ function Route() {
       return <ActivityView />;
     case 'requests':
       return <RequestsView />;
+    case 'notifications':
+      return <NotificationsView />;
     case 'tasks':
       return <WorkFrame page="tasks"><TasksView /></WorkFrame>;
     case 'task':

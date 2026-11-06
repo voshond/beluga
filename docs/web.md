@@ -138,6 +138,7 @@ server (vite, the e2e demo) is a plain browser and keeps its development behavio
 | `lib/boot.ts` `endpoint()` | asks Tauri for the daemon's port and token | `/__beluga/endpoint` says `{ web: true }`; the socket is this origin's `/ws`, its session cookie lets it in |
 | `lib/boot.ts` `copyText` cap, `lib/copy.ts` | the app's clipboard | `navigator.clipboard` (needs https or localhost) |
 | `lib/boot.ts` `notify` cap | macOS banners with actions, the pop-up for requests | Web Notifications (asked once; needs https or localhost), clicking one goes to its chat or request; a friend's message is the in-window banner as in the app |
+| `layout/NotificationCenter.tsx` the bell's list | a popover under the toolbar bell | the same; in a window too narrow to show the bell (a phone's browser) it opens as the Notifications page instead (`layout/NotificationsView.tsx`) |
 | `lib/boot.ts` `openExternal`, `lib/system.ts` | the default browser | a new tab |
 | `lib/boot.ts` `raise` | brings the window forward | `window.focus()` |
 | `lib/projects.ts` `pickFolders` (Add Project › Choose Folders…, New Project › Change…, Share a Folder, `FormSheet` folders, Settings › People & access › Add Folder…) | the Open panel | Beluga's own folder picker over the server's folders (`dialogs/FolderBrowser.tsx`, `local.browse`) |

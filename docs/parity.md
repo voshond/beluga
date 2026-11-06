@@ -110,7 +110,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `welcome` | sheet |
 | `settings` | Settings window |
 | `model` | model picker / sheet |
-| `inbox` | notification centre under the toolbar bell: the same filters and groups, click to go there, hover for read/unread and ×, Mark all read, Clear all |
+| `inbox` | notification centre under the toolbar bell: the same filters and groups, click to go there, hover for read/unread and ×, Mark all read, Clear all; where the bell can't be seen (a narrow window, a phone's browser) the same centre opens as the Notifications page (`layout/NotificationsView.tsx`) |
 | `person` | the room card (`RoomPeerCard`), beside their row in Friends (a friend in your room, or Not friends yet) or the room popover's people: Message / Ask Your Agent / Run / Follow / Files buttons, their trust as a line with “Change in their card…” (a friend: their conversation's Info, the one place trust is set) or “Add as a friend”, Remove with an alert; you are your account card (name, who may use your agent), from the room popover. Right-click: Trust (read-only), Change in Their Card… / Add as Friend, and the same actions |
 | `confirm` | sheet |
 | `project` | sheet and right-click menu |
