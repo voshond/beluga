@@ -58,6 +58,15 @@ describe('call helpers', () => {
     expect(parseStage('not json')).toBeUndefined();
     expect(parseStage('{"k":"asked","by":"a","ask":"m1","box":[0,0,0.5,0.5]}')).toEqual({ k: 'asked', by: 'a', ask: 'm1', box: [0, 0, 0.5, 0.5] });
   });
+
+  it('a viewer says how they want the screen sent to them; the sharer says their overlay is in the picture (BLG-743)', () => {
+    expect(parseStage('{"k":"want","by":"v","mode":"smooth"}')).toEqual({ k: 'want', by: 'v', mode: 'smooth' });
+    // No mode: back to how the sharer sends it.
+    expect(parseStage('{"k":"want","by":"v"}')).toEqual({ k: 'want', by: 'v' });
+    expect(parseStage('{"k":"want","by":"v","mode":"blurry"}')).toEqual({ k: 'want', by: 'v' });
+    expect(parseStage('{"k":"overlay","by":"s","inPicture":true}')).toEqual({ k: 'overlay', by: 's', inPicture: true });
+    expect(parseStage('{"k":"overlay","by":"s","inPicture":"yes"}')).toEqual({ k: 'overlay', by: 's', inPicture: false });
+  });
 });
 
 describe('a call ringing for you reaches the phone (BLG-706)', () => {

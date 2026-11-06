@@ -5,6 +5,7 @@ import { inApp } from '../lib/boot.js';
 import { Levels } from './levels.js';
 import { type CameraSize, type LineState, Peer } from './peer.js';
 import { demoCamera, demoPointer, demoScreen, demoVoice } from './demo-media.js';
+import { NoiseFilter } from './noise-filter.js';
 import { repeat } from './repeat.js';
 import { wakeSound } from './ringtone.js';
 import { type NotePhrase, Scribe, type Words, demoPhrases, scribeModels } from './scribe.js';
@@ -41,17 +42,23 @@ export interface CallLive {
   readonly cameras: Readonly<Record<string, MediaStream>>;
   /** How the screen on the stage is sent (the sharer picks). */
   readonly mode: ShareMode;
+  /** How you want it sent to you, watching someone else's (BLG-743); undefined: as they send it. */
+  readonly want?: ShareMode;
+  /** The sharer whose overlay macOS puts in the picture: their screen shows everyone's pointers, so this window doesn't draw them again. */
+  readonly overlayBy?: string;
   /** The stage fills the whole display. */
   readonly theater: boolean;
   /** Face to face: cameras over the whole window (theirs big, yours in a corner; a group as a collage). */
   readonly faces: boolean;
+  /** Background noise out of your voice (BLG-744): on in every call until you turn it off for it; `none`: this window can't. */
+  readonly quiet: 'on' | 'off' | 'none';
   /** Your words go in the call's notes (`off`: you paused it; `none`: nobody in the call has a voice model). */
   readonly notes: 'on' | 'off' | 'none';
   /** Who writes the notes down with which model (peer ids, yours too), and the call's language once it settled (BLG-738). */
   readonly scribing: { readonly writers: Readonly<Record<string, VoiceModelId>>; readonly language?: string };
 }
 
-const EMPTY: CallLive = { speaking: new Set(), lines: {}, asks: [], cameras: {}, mode: 'sharp', theater: false, faces: false, notes: 'none', scribing: { writers: {} } };
+const EMPTY: CallLive = { speaking: new Set(), lines: {}, asks: [], cameras: {}, mode: 'sharp', theater: false, faces: false, quiet: 'on', notes: 'none', scribing: { writers: {} } };
 
 /** A picture from someone: its track, and whether frames are coming. */
 interface Incoming {
@@ -71,6 +78,10 @@ export class CallEngine {
   private readonly incoming = new Map<string, Map<string, Incoming>>();
   /** Which of each person's streams is their camera and which a screen (they say so on the stage). */
   private readonly kinds = new Map<string, { readonly cam?: string; readonly screen?: string }>();
+  /** How each viewer wants the screen sent to them (they say so); the rest get the sharer's mode. */
+  private readonly wants = new Map<string, ShareMode>();
+  /** Your overlay is in the picture you share now (you said so to the others). */
+  private overlayMine = false;
   /** Your camera, while it's on. */
   private cam: MediaStream | undefined;
   /** How each person shows your camera (they say so), and how you show theirs. */
@@ -94,7 +105,11 @@ export class CallEngine {
   private readonly demoVoices = new Set<string>();
   /** A demo friend pointing at the shared screen (as the network would bring it: a few times a second). */
   private stopDemoPointer: (() => void) | undefined;
+  /** What the call sends of your voice: the noise filter's output, or the microphone itself. */
   private mic: MediaStream | undefined;
+  /** The microphone itself, and the filter over it (call/noise-filter.ts). */
+  private raw: MediaStream | undefined;
+  private filter: NoiseFilter | undefined;
   /** The microphone and speaker you picked (BLG-737), remembered on this Mac; undefined: macOS's own. */
   private micId: string | undefined = readPref(MIC_PREF);
   private speakerId: string | undefined = readPref(SPEAKER_PREF);
@@ -148,6 +163,41 @@ export class CallEngine {
     };
   }
 
+  /** Background noise out of your voice for this call, or kept (the next call starts with it on again). */
+  setQuiet(on: boolean): void {
+    if (this.live.quiet === 'none') return;
+    if (this.filter) this.filter.enabled = on;
+    this.patch({ quiet: on ? 'on' : 'off' });
+  }
+
+  /** The noise filter over this microphone, set as the call wants it (undefined: it can't run here). */
+  private async startFilter(raw: MediaStream): Promise<NoiseFilter | undefined> {
+    const filter = await NoiseFilter.start(raw, () => this.filterBroke(filter));
+    if (filter) filter.enabled = this.live.quiet !== 'off';
+    else this.patch({ quiet: 'none' });
+    return filter;
+  }
+
+  /** The filter stopped working mid-call: your voice goes on, unfiltered, rather than going silent. */
+  private filterBroke(which: NoiseFilter | undefined): void {
+    if (!which || which !== this.filter || !this.raw) return;
+    this.filter = undefined;
+    which.stop();
+    this.useVoice(this.raw);
+    this.patch({ quiet: 'none' });
+  }
+
+  /** Your voice is this stream from now on: every line, the speaking ring and the notes follow. */
+  private useVoice(stream: MediaStream): void {
+    this.mic = stream;
+    this.micAsked = Promise.resolve(stream);
+    if (this.view) this.applyMute(this.view);
+    const track = stream.getAudioTracks()[0];
+    for (const p of this.peers.values()) void p.setMic(track);
+    if (this.view) this.levels.watch(this.me, stream);
+    this.scribe?.listen(stream);
+  }
+
   /** Use this microphone (undefined: macOS's own) from now on; in a call, the others hear it at once. */
   async pickMic(id: string | undefined): Promise<void> {
     this.micId = id;
@@ -155,20 +205,19 @@ export class CallEngine {
     if (!this.view || this.view.demo || !this.mic) return;
     const token = this.micToken;
     try {
-      const next = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(id) });
+      const raw = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(id) });
+      const filter = await this.startFilter(raw);
       if (token !== this.micToken || !this.view) {
-        next.getTracks().forEach((t) => t.stop());
+        filter?.stop();
+        raw.getTracks().forEach((t) => t.stop());
         return;
       }
-      const old = this.mic;
-      this.mic = next;
-      this.micAsked = Promise.resolve(next);
-      this.applyMute(this.view);
-      const track = next.getAudioTracks()[0];
-      for (const p of this.peers.values()) void p.setMic(track);
-      this.levels.watch(this.me, next);
-      this.scribe?.listen(next);
-      old?.getTracks().forEach((t) => t.stop());
+      const [oldRaw, oldFilter] = [this.raw, this.filter];
+      this.raw = raw;
+      this.filter = filter;
+      this.useVoice(filter?.stream ?? raw);
+      oldFilter?.stop();
+      oldRaw?.getTracks().forEach((t) => t.stop());
     } catch {
       this.patch({ problem: 'Couldn’t switch to that microphone. Check it’s plugged in, then pick it again.' });
     }
@@ -224,7 +273,7 @@ export class CallEngine {
       this.screen = next;
       const track = this.screen.getVideoTracks()[0];
       if (track) {
-        this.tune(track, this.live.mode);
+        this.tune(track);
         track.onended = () => void this.stopSharing();
       }
       await this.client.api.calls.set(c, { sharing: true });
@@ -244,18 +293,37 @@ export class CallEngine {
     this.reconcile();
   }
 
-  /** Sharp for text, Smooth for motion: your capture and everyone passing it on follow. */
+  /** Sharp for text, Smooth for motion: your capture and everyone passing it on follow (but viewers who chose their own). */
   setShareMode(mode: ShareMode): void {
-    const track = this.screen?.getVideoTracks()[0];
-    if (track) this.tune(track, mode);
     this.patch({ mode });
+    const track = this.screen?.getVideoTracks()[0];
+    if (track) this.tune(track);
     this.stageSend({ k: 'mode', by: this.me, mode });
     this.reconcile();
   }
 
-  private tune(track: MediaStreamTrack, mode: ShareMode): void {
+  /**
+   * Watching someone's screen: how you want it sent to you (undefined: as they send it). Whoever
+   * feeds you sends it so; passed on through someone else, it can't be sharper than what they get.
+   */
+  setWant(mode: ShareMode | undefined): void {
+    this.patch({ want: mode });
+    this.stageSend({ k: 'want', by: this.me, ...(mode ? { mode } : {}) });
+  }
+
+  /** The sharer's overlay is in the picture now (call/overlay.ts says so as it changes): the others hear it. */
+  setOverlayInPicture(on: boolean): void {
+    if (on === this.overlayMine) return;
+    this.overlayMine = on;
+    this.stageSend({ k: 'overlay', by: this.me, inPicture: on });
+  }
+
+  /** Your capture: tuned for the mode you send in, and every frame when someone watching wants Smooth. */
+  private tune(track: MediaStreamTrack): void {
+    const mode = this.live.mode;
+    const smooth = mode === 'smooth' || [...this.wants.values()].includes('smooth');
     track.contentHint = mode === 'sharp' ? 'text' : 'motion';
-    void track.applyConstraints({ frameRate: mode === 'sharp' ? { ideal: 24, max: 30 } : { ideal: 60, max: 60 } }).catch(() => undefined);
+    void track.applyConstraints({ frameRate: smooth ? { ideal: 60, max: 60 } : { ideal: 24, max: 30 } }).catch(() => undefined);
   }
 
   /** The stage over the whole display (the window goes full screen too), or back. */
@@ -448,12 +516,17 @@ export class CallEngine {
     const token = this.micToken;
     this.micAsked ??= navigator.mediaDevices
       .getUserMedia({ audio: micConstraints(this.micId) })
-      .then((s) => {
+      .then(async (raw) => {
+        const filter = await this.startFilter(raw);
         // The call ended while macOS asked: this microphone isn't wanted any more.
         if (token !== this.micToken) {
-          s.getTracks().forEach((t) => t.stop());
+          filter?.stop();
+          raw.getTracks().forEach((t) => t.stop());
           return undefined;
         }
+        this.raw = raw;
+        this.filter = filter;
+        const s = filter?.stream ?? raw;
         this.mic = s;
         if (this.view) this.applyMute(this.view);
         // Lines made while it opened carry it from now on.
@@ -485,7 +558,7 @@ export class CallEngine {
   }
 
   private async begin(call: CallView): Promise<void> {
-    this.patch({ ...EMPTY, conversation: call.conversation, call: call.id });
+    this.patch({ ...EMPTY, want: undefined, overlayBy: undefined, conversation: call.conversation, call: call.id });
     // This window makes your side of the call: say so now, and every few seconds while it does.
     const keep = (): void => {
       const c = this.live.conversation;
@@ -497,6 +570,8 @@ export class CallEngine {
     const mic = await this.openMic();
     if (this.view?.id !== call.id) return;
     if (mic) this.levels.watch(this.me, mic);
+    // The microphone opened before the call's state was fresh: say again whether the filter runs.
+    if (mic) this.patch({ quiet: this.filter ? (this.filter.enabled ? 'on' : 'off') : 'none' });
     this.reconcile();
   }
 
@@ -543,6 +618,8 @@ export class CallEngine {
     this.audio.clear();
     this.incoming.clear();
     this.kinds.clear();
+    this.wants.clear();
+    this.overlayMine = false;
     this.viewsOf.clear();
     this.scribes.clear();
     this.clipsIn.clear();
@@ -561,11 +638,15 @@ export class CallEngine {
     this.screen?.getTracks().forEach((t) => t.stop());
     this.screen = undefined;
     this.view = undefined;
-    this.patch(EMPTY);
+    this.patch({ ...EMPTY, want: undefined, overlayBy: undefined });
   }
 
   private closeMic(): void {
     this.micToken++;
+    this.filter?.stop();
+    this.filter = undefined;
+    this.raw?.getTracks().forEach((t) => t.stop());
+    this.raw = undefined;
     this.mic?.getTracks().forEach((t) => t.stop());
     this.mic = undefined;
     this.micAsked = undefined;
@@ -573,7 +654,8 @@ export class CallEngine {
 
   private applyMute(call: CallView): void {
     const muted = call.people.find((p) => p.me)?.muted ?? false;
-    for (const t of this.mic?.getAudioTracks() ?? []) t.enabled = !muted;
+    // Muted at the microphone itself too: nothing of you reaches the filter, the ring or the notes.
+    for (const t of [...(this.raw?.getAudioTracks() ?? []), ...(this.mic?.getAudioTracks() ?? [])]) t.enabled = !muted;
   }
 
   /** Make the lines match the call: one per person, the share going where the tree says. */
@@ -593,12 +675,15 @@ export class CallEngine {
       this.dropAudio(id);
       this.incoming.delete(id);
       this.kinds.delete(id);
+      this.wants.delete(id);
       this.levels.forget(id);
     }
     for (const p of others) if (!this.peers.has(p.peerId)) this.peers.set(p.peerId, this.line(call, p.peerId));
     this.reconcileCameras(call, others.length + 1);
     // The share: who has the stage, who feeds whom.
     const sharer = sharerOf(call);
+    // The overlay in the picture was that sharer's: another share has its own.
+    if (this.live.overlayBy && this.live.overlayBy !== sharer?.peerId) this.patch({ overlayBy: undefined });
     // Someone shared after you: they have the stage now, and your capture stops.
     if (this.screen && sharer && !sharer.me) void this.stopSharing();
     if (!sharer || (sharer.me && !this.screen)) {
@@ -612,7 +697,8 @@ export class CallEngine {
     this.sharingTo = new Set(shareChildren(tree, me));
     const outgoing = sharer.me ? this.screen?.getVideoTracks()[0] : this.picture(tree.get(me) ?? '', 'screen');
     const children = this.sharingTo;
-    for (const [id, peer] of this.peers) void peer.setVideo(children.has(id) ? outgoing : undefined, this.live.mode);
+    // Each viewer gets it the way they asked for, else the sharer's way.
+    for (const [id, peer] of this.peers) void peer.setVideo(children.has(id) ? outgoing : undefined, this.wants.get(id) ?? this.live.mode);
     const stream = sharer.me ? this.screen : outgoing ? new MediaStream([outgoing]) : undefined;
     const was = this.live.stage;
     if (!stream) {
@@ -718,6 +804,17 @@ export class CallEngine {
           }
           if (m.k === 'clip') return this.clipPart(peerId, m);
           if (m.k === 'clip-text') return this.clipsOut.get(`${peerId}:${m.id}`)?.({ text: m.text, ...(m.lang ? { lang: m.lang } : {}) });
+          if (m.k === 'want') {
+            if (m.mode) this.wants.set(peerId, m.mode);
+            else this.wants.delete(peerId);
+            const track = this.screen?.getVideoTracks()[0];
+            if (track) this.tune(track);
+            return this.reconcile();
+          }
+          if (m.k === 'overlay') {
+            if (this.view && sharerOf(this.view)?.peerId === peerId) this.patch({ overlayBy: m.inPicture ? peerId : undefined });
+            return;
+          }
           if (m.k === 'mode') {
             // Only the sharer's word counts; the relays follow it too.
             if (this.view && sharerOf(this.view)?.peerId === peerId) this.patch({ mode: m.mode });
@@ -731,6 +828,8 @@ export class CallEngine {
           // Someone who just joined hears how your screen is sent, and how you show their camera.
           if (state === 'connected' && this.screen) this.peers.get(peerId)?.sendStage(JSON.stringify({ k: 'mode', by: this.me, mode: this.live.mode }));
           if (state === 'connected') this.peers.get(peerId)?.sendStage(JSON.stringify({ k: 'view', by: this.me, big: this.myView.big, visible: this.myView.visible }));
+          if (state === 'connected' && this.live.want) this.peers.get(peerId)?.sendStage(JSON.stringify({ k: 'want', by: this.me, mode: this.live.want }));
+          if (state === 'connected' && this.overlayMine) this.peers.get(peerId)?.sendStage(JSON.stringify({ k: 'overlay', by: this.me, inPicture: true }));
         },
       },
       mic,
@@ -876,7 +975,11 @@ function writePref(key: string, value: string | undefined): void {
   }
 }
 
-/** Your voice, cleaned up, from the microphone you picked (if it's gone, macOS's own). */
+/**
+ * Your voice from the microphone you picked (if it's gone, macOS's own). WebKit takes only echo
+ * cancellation from these (macOS's voice processing): background noise is taken out after, by the
+ * call's own filter (call/noise-filter.ts, BLG-744). The rest is for other browsers.
+ */
 function micConstraints(id: string | undefined): MediaTrackConstraints {
   return { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, sampleRate: 48_000, ...(id ? { deviceId: { ideal: id } } : {}) };
 }

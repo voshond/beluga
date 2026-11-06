@@ -394,7 +394,10 @@ conversation, and it's the same chat.
   dissolves a few seconds later by itself. The Box tool (or Shift as you drag) marks a box instead;
   it goes as a stroke along its sides, so it fades and can be asked about like any sketch. Beside
   your sketch, Ask your agent sends the part it covers, ink and all, to the chat; the sketch stays up
-  while you type the question. The sharer picks Sharp (text) or Smooth (motion) behind •••; Full
+  while you type the question. The sharer picks Sharp (text) or Smooth (motion) behind •••; each
+  viewer can pick their own there too (BLG-743), or keep the sharer's. A viewer's choice goes out as
+  `want`, and whoever feeds them the picture sends it that way (the sharer captures every frame once
+  anyone wants Smooth); passed on through another viewer, it can't be sharper than what they get. Full
   Screen gives the picture the whole display. Nothing is written over the shared screen while the
   chat shows beside it.
 - **Everyone's pointer** (BLG-733). Off until you turn on Show My Pointer in the stage's bar (each
@@ -408,6 +411,15 @@ conversation, and it's the same chat.
 - **Microphone and speaker** (BLG-737). The chevron beside Mute picks which microphone and speaker
   the call uses; a new microphone goes on every line at once, and the choice is kept on this Mac.
   Picking a speaker needs WebKit's `setSinkId`; without it, macOS's own output is used.
+- **Background noise** (BLG-744). WebKit ignores a page's `noiseSuppression` and
+  `autoGainControl`: only echo cancellation applies (macOS's voice processing, Standard Mic Mode),
+  and macOS lets no app turn Voice Isolation on for itself (only the user, in Control Center). So
+  the call has its own filter (call/noise-filter.ts): RNNoise (via @sapphi-red/web-noise-suppressor)
+  in an audio worklet at 48 kHz, between the microphone and everything that hears you (the lines,
+  the speaking ring, the notes). It's on in every call; Noise Removal in the microphone menu turns it
+  off for that call, rewiring what feeds the call's one track, so no line is renegotiated. If the
+  audio engine won't start, or stops and won't resume, the plain microphone goes on instead and the
+  menu says it can't run.
 - **The chat where it can't be seen.** Full Screen and Face to Face cover the chat, so what the
   others write from then on pops up on the right, dissolves once there was time to read it, and a
   line under it answers in the same chat (call/ChatPops.tsx). Messages that were already there
@@ -423,9 +435,16 @@ conversation, and it's the same chat.
   bottom right. Both ask macOS to leave them out of captures (`NSWindowSharingNone`), so the
   others don't see them. Since macOS 15, ScreenCaptureKit doesn't always listen, so the overlay
   first shows a few pixels of two colours in turn in its top-left corner and the sharer's window
-  looks for them in its own capture (call/leak-probe.ts, BLG-736). Found: the overlay stays away
-  for the call (a toast says why), and nobody sees their own pointer or ink twice. Sharing one window, the frame and the ink stay off (its place on screen
-  isn't known); the chat still pops up. In Beluga, the strip, the stage and the sidebar's pill say
+  looks for them in its own capture (call/leak-probe.ts, BLG-736). Found: the overlay still shows
+  (a screen whose owner can't see the pointers is no use, BLG-743), and the sharer says so
+  (`overlay` with `inPicture`): the others stop drawing pointers over that picture, since they're in
+  it, so nobody sees one twice. Ink lands on the same spot in both, so it stays. Sharing one window,
+  WebKit doesn't say where it is, so the shell looks it up in macOS's window list
+  (src-tauri/src/shared_window.rs): the window whose size in pixels is the picture's; several that
+  size in one place (maximized) are one place, in different places the title settles it, else
+  nothing. Found, the overlay covers just that window and follows it (looked up again every 400
+  ms); not found, the frame and the ink stay off and the chat still pops up. A window's capture
+  never has the overlay in it, so there's nothing to probe. In Beluga, the strip, the stage and the sidebar's pill say
   you're sharing, and the pill can stop it. In full screen the stage's bar floats over the
   bottom and steps aside after a couple of seconds without the pointer moving.
 - **Calls of 5–10.** Each Mac measures what it can send (WebRTC's own estimate per line) and says so

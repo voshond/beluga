@@ -15,15 +15,13 @@ import { type FloatAction, type FloatState, floatState } from './float-model.js'
 let focused = typeof document === 'undefined' ? true : document.hasFocus();
 let latest: FloatState | null = null;
 let wired = false;
-let engineOf: CallEngine | undefined;
-/** You hid the card while sharing: only the frame around your screen shows until that share ends (its track). */
-let hiddenFor: string | undefined;
+/** You hid the card (BLG-743): it stays away until you're back in Beluga (a call ringing still shows). */
+let hidden = false;
 
-/** What the card shows now: nothing while Beluga is in front, or while you hid it for this share. */
+/** What the card shows now: nothing while Beluga is in front, or while you hid it. */
 function shown(): FloatState | null {
   if (focused) return null;
-  const track = engineOf?.sharedTrack()?.id;
-  if (latest?.kind === 'in' && latest.youShare && track && track === hiddenFor) return null;
+  if (latest?.kind === 'in' && hidden) return null;
   return latest;
 }
 
@@ -37,9 +35,9 @@ async function send(): Promise<void> {
 async function wire(client: SocketClient, engine: CallEngine): Promise<void> {
   if (wired || !inApp()) return;
   wired = true;
-  engineOf = engine;
   window.addEventListener('focus', () => {
     focused = true;
+    hidden = false;
     void send();
   });
   window.addEventListener('blur', () => {
@@ -53,7 +51,7 @@ async function wire(client: SocketClient, engine: CallEngine): Promise<void> {
     if (action === 'leave') void engine.leave();
     if (action === 'stop-sharing') void engine.stopSharing();
     if (action === 'hide') {
-      hiddenFor = engine.sharedTrack()?.id;
+      hidden = true;
       void send();
     }
     if (action === 'decline') void client.api.calls.decline(conversation).catch(() => undefined);

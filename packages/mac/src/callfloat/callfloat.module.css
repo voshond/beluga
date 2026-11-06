@@ -1,18 +1,101 @@
-/* The floating call card (BLG-706): a soft pill over other apps. No glow: a hairline and a quiet shadow. */
-.card {
-  box-sizing: border-box;
+/*
+ * The floating call card (BLG-706, BLG-743): a soft pill over other apps. No glow: a hairline and a
+ * quiet shadow. Its window is see-through room around it (call_float.rs: 90 tall, 16 either side),
+ * and the shadow stays inside that room: a shadow cut off at the window's edge shows as a faint
+ * rectangle. Open, it shows everything; compact, a small pill of faces. It grows and shrinks around
+ * its middle, the two faces of it crossfading; the window follows (CallFloat.tsx).
+ */
+:global(#root) {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 56px;
-  margin: 4px;
-  padding: 0 10px 0 6px;
-  border-radius: 28px;
+  justify-content: center;
+  align-items: flex-start;
+}
+.card {
+  --lift: 0 0 0 0.5px var(--hairline-strong), 0 4px 12px rgba(0, 0, 0, 0.22);
+  --resize: 420ms cubic-bezier(0.32, 0.72, 0, 1);
+  position: relative;
+  box-sizing: border-box;
+  flex: none;
+  height: 40px;
+  max-width: calc(520px - 32px);
+  margin: 12px 16px 0;
+  overflow: hidden;
+  border-radius: 999px;
   background: var(--bg-raised);
-  box-shadow: var(--shadow-pop);
+  box-shadow: var(--lift);
   color: var(--text);
   font: 13px/1.25 var(--font);
   animation: arrive 260ms var(--ease-out);
+  transition:
+    width var(--resize),
+    height var(--resize),
+    background var(--dur),
+    box-shadow var(--dur);
+}
+.open {
+  height: 56px;
+}
+/* Each face of the card is as wide as its words (measured for the card's width), whatever the card's width now. */
+.full,
+.compact {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  width: max-content;
+  transition: opacity 220ms var(--ease-out);
+}
+.full {
+  left: 0;
+  gap: 8px;
+  padding: 0 10px 0 6px;
+  opacity: 0;
+  pointer-events: none;
+}
+.compact {
+  left: 50%;
+  transform: translateX(-50%);
+  gap: 7px;
+  padding: 0 12px;
+  transition-delay: 120ms;
+}
+.open .full {
+  opacity: 1;
+  pointer-events: auto;
+  transition-delay: 90ms;
+}
+.open .compact {
+  opacity: 0;
+  pointer-events: none;
+  transition-delay: 0ms;
+}
+.more {
+  margin-left: 4px;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+.waiting {
+  display: inline-grid;
+  place-items: center;
+  color: var(--call-ink);
+}
+.mutedMark {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--error) 16%, transparent);
+  color: var(--error);
+}
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .full,
+  .compact {
+    transition: none;
+  }
 }
 .ringing {
   background: color-mix(in srgb, var(--call) 9%, var(--bg-raised));
@@ -21,8 +104,15 @@
 .sharing {
   background: color-mix(in srgb, var(--call) 14%, var(--bg-raised));
   box-shadow:
-    var(--shadow-pop),
+    var(--lift),
     inset 0 0 0 1.5px color-mix(in srgb, var(--call) 55%, transparent);
+}
+/* You're muted: the card turns rose, so it's plain at a glance (over the sharing green too). */
+.muted {
+  background: color-mix(in srgb, var(--error) 12%, var(--bg-raised));
+  box-shadow:
+    var(--lift),
+    inset 0 0 0 1.5px color-mix(in srgb, var(--error) 50%, transparent);
 }
 .text .onShow {
   display: inline-flex;
@@ -105,25 +195,42 @@
 .faces {
   display: flex;
   padding-left: 4px;
+  isolation: isolate;
 }
 .faces .face + .face {
   margin-left: -8px;
 }
 .face {
+  position: relative;
   display: inline-flex;
   border-radius: 50%;
   box-shadow: 0 0 0 2px var(--bg-raised);
   transition: box-shadow var(--dur) var(--ease-out);
 }
+/* Whoever is talking: at the front, on top, a ring in the call's green that breathes while they talk (no glow, a solid ring). */
 .speaking {
   box-shadow:
     0 0 0 2px var(--bg-raised),
-    0 0 0 4px color-mix(in srgb, var(--call) 70%, transparent);
+    0 0 0 4px color-mix(in srgb, var(--call) 75%, transparent);
+  animation: talk 1.4s ease-in-out infinite;
+}
+@keyframes talk {
+  50% {
+    box-shadow:
+      0 0 0 2px var(--bg-raised),
+      0 0 0 5.5px color-mix(in srgb, var(--call) 45%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .speaking {
+    animation: none;
+  }
 }
 .text {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  max-width: 200px;
 }
 .text strong {
   font-weight: 600;

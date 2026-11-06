@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { netChat, roomChat } from '../packages/mac/src/call/call-chat.js';
 import { type ChatPop, POPS_KEPT, POP_CHARS, PopClock, popMs, popText, popsNow } from '../packages/mac/src/call/chat-pops.js';
-import { floatState } from '../packages/mac/src/call/float-model.js';
+import { faceOrder, floatState } from '../packages/mac/src/call/float-model.js';
 import type { LogItem } from '../src/core/store.js';
 import type { MessageView } from '../src/net/mesh/views.js';
 import type { CallView } from '../src/shared/calls.js';
@@ -90,5 +90,28 @@ describe('the floating card while you share', () => {
     const off = floatState(call(false), [], new Set(), () => '#launch');
     expect(on?.kind === 'in' && on.youShare).toBe(true);
     expect(off?.kind === 'in' && off.youShare).toBeFalsy();
+  });
+});
+
+describe('the faces on the call card (BLG-743)', () => {
+  const people = (ids: string, talking = '') => [...ids].map((id) => ({ peerId: id, speaking: talking.includes(id) }));
+
+  it('starts in the call’s order', () => {
+    expect(faceOrder([], people('abc'))).toEqual(['a', 'b', 'c']);
+  });
+
+  it('whoever talks moves to the front, and stays there once they stop, until someone else talks', () => {
+    const one = faceOrder(['a', 'b', 'c'], people('abc', 'c'));
+    expect(one).toEqual(['c', 'a', 'b']);
+    expect(faceOrder(one, people('abc'))).toEqual(['c', 'a', 'b']);
+    expect(faceOrder(one, people('abc', 'b'))).toEqual(['b', 'c', 'a']);
+  });
+
+  it('two talking at once keep their order between them, in front', () => {
+    expect(faceOrder(['a', 'b', 'c'], people('abc', 'bc'))).toEqual(['b', 'c', 'a']);
+  });
+
+  it('someone who joins comes in at the end; someone who left goes', () => {
+    expect(faceOrder(['a', 'b'], people('bd'))).toEqual(['b', 'd']);
   });
 });

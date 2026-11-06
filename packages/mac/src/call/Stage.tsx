@@ -69,6 +69,8 @@ export function Stage({ call }: { call: CallView }) {
   const stroke = useRef<{ id: string; pts: number[]; sent: number } | undefined>(undefined);
   const lastSent = useRef(0);
   const sharer = call.people.find((p) => p.peerId === stage?.by);
+  // macOS put the sharer's overlay in the picture: the pointers are in it already (BLG-743), so none drawn over it here.
+  const pointersInPicture = Boolean(stage && live.overlayBy === stage.by);
   const color = personColor(me);
   const agent = useMyAgentName();
   const place = useCallPlace(call.conversation);
@@ -240,9 +242,9 @@ export function Stage({ call }: { call: CallView }) {
       <div ref={frame} className={cx(c.stageFrame, showMine && c.stageOwnPointer)} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onLeave}>
         <video ref={video} className={c.stageVideo} autoPlay playsInline muted />
         <canvas ref={canvas} className={c.stageInk} style={{ width: size.w, height: size.h }} aria-hidden="true" />
-        <Pointers people={call.people} me={me} box={box} />
+        {pointersInPicture ? null : <Pointers people={call.people} me={me} box={box} />}
         {/* Yours, as the others see it, right under your mouse (it stands in for the arrow there). */}
-        {showMine ? (
+        {showMine && !pointersInPicture ? (
           <div className={c.pointers} aria-hidden="true">
             <PointerMark by={me} name={call.people.find((p) => p.me)?.name ?? 'You'} style={{ opacity: 0 }} nodeRef={(el) => (mineMark.current = el)} />
           </div>
@@ -321,6 +323,11 @@ export function Stage({ call }: { call: CallView }) {
             <Icon name="expand" size={14} />
           </button>
         </Tip>
+        {sharer && !sharer.me ? (
+          <ActionsDropdown items={wantItems(sharer.name, live.mode, live.want, (m) => engine.setWant(m))}>
+            <IconButton icon="more" label="How You See Their Screen" />
+          </ActionsDropdown>
+        ) : null}
         {sharer?.me ? (
           <>
             <ActionsDropdown items={shareItems(live.mode, (m) => engine.setShareMode(m))}>
@@ -354,7 +361,19 @@ function AskPill({ at, frame, agent, ask, hold }: { at: CSSProperties; frame: { 
   );
 }
 
-/** The sharer's choice, behind •••: every pixel of text, or every frame of motion. Only the sharer sees it. */
+/**
+ * Watching, behind •••: how it comes to you (BLG-743). As the sharer sends it, or your own choice;
+ * yours goes to whoever feeds you the picture.
+ */
+function wantItems(name: string, mode: ShareMode, want: ShareMode | undefined, set: (m: ShareMode | undefined) => void): ActionItem[] {
+  return [
+    { label: `As ${name} Sends It`, hint: mode === 'sharp' ? 'Sharp now' : 'Smooth now', checked: want === undefined, onSelect: () => set(undefined) },
+    { label: 'Sharp', separate: true, hint: 'Text stays crisp: full resolution, fewer frames', checked: want === 'sharp', onSelect: () => set('sharp') },
+    { label: 'Smooth', hint: 'Motion stays fluid: every frame, softer when the network is tight', checked: want === 'smooth', onSelect: () => set('smooth') },
+  ];
+}
+
+/** The sharer's choice, behind •••: every pixel of text, or every frame of motion, for everyone who didn't pick their own. */
 function shareItems(mode: ShareMode, set: (m: ShareMode) => void): ActionItem[] {
   return [
     { label: 'Sharp', hint: 'Text stays crisp: full resolution, fewer frames', checked: mode === 'sharp', onSelect: () => set('sharp') },

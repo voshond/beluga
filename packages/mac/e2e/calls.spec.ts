@@ -80,6 +80,14 @@ test('sharing a screen puts it on the stage beside the chat; the chat in full sc
   const stage = page.getByRole('region', { name: 'Your shared screen' });
   await expect(stage).toBeVisible();
   await expect(page.getByRole('log', { name: 'Channel launch' })).toBeVisible();
+  // In a smaller window the chat beside the stage is narrow: Send stays inside the message box (BLG-743).
+  await page.setViewportSize({ width: 1000, height: 760 });
+  const field = page.getByRole('textbox', { name: 'Message launch' });
+  const send = page.getByRole('button', { name: 'Send', exact: true });
+  const [fieldAt, sendAt] = await Promise.all([field.boundingBox(), send.boundingBox()]);
+  expect(sendAt!.x + sendAt!.width).toBeLessThanOrEqual(fieldAt!.x + fieldAt!.width + 8);
+  await shot(page, '04-share-beside-chat');
+  await page.setViewportSize({ width: 1440, height: 900 });
   // Beside the chat, nothing pops up over the screen: the chat is right there.
   const popChat = stage.getByRole('complementary', { name: 'The chat' });
   await expect(popChat).toHaveCount(0);
@@ -139,7 +147,17 @@ test('sharing a screen puts it on the stage beside the chat; the chat in full sc
   // Which microphone and speaker, beside Mute (BLG-737).
   await strip(page).getByRole('button', { name: 'Microphone and Speaker' }).click();
   await expect(page.getByRole('menuitem', { name: 'Microphone' })).toBeVisible();
+  // Background noise is out of your voice in every call (BLG-744): the filter runs, so it's ticked.
+  const quiet = page.getByRole('menuitem', { name: /^Noise Removal/ });
+  await expect(quiet).toHaveAttribute('data-checked', 'true');
   await shot(page, '06c-devices');
+  // Off for this call, and back on.
+  await quiet.click();
+  await strip(page).getByRole('button', { name: 'Microphone and Speaker' }).click();
+  await expect(quiet).not.toHaveAttribute('data-checked', 'true');
+  await quiet.click();
+  await strip(page).getByRole('button', { name: 'Microphone and Speaker' }).click();
+  await expect(quiet).toHaveAttribute('data-checked', 'true');
   await page.keyboard.press('Escape');
   // Smooth for motion, and the whole display.
   // How the screen is sent is the sharer's, tucked behind •••.

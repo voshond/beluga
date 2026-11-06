@@ -42,3 +42,16 @@ export function floatState(mine: CallView | undefined, ringing: readonly CallVie
   if (!by) return null;
   return { kind: 'ringing', conversation: r.conversation, place: placeOf(r.conversation), by: { peerId: by.peerId, name: by.name, speaking: false, muted: by.muted }, group: r.conversation.startsWith('group:') };
 }
+
+/**
+ * The order of the faces on the card (peer ids), from the last order and who's in the call now
+ * (BLG-743): whoever talks moves to the front and stays there after they stop, until someone else
+ * talks; someone new comes in at the end. The card shows the first few, the front one on top.
+ */
+export function faceOrder(prev: readonly string[], people: ReadonlyArray<{ readonly peerId: string; readonly speaking: boolean }>): string[] {
+  const here = new Set(people.map((p) => p.peerId));
+  const kept = prev.filter((id) => here.has(id));
+  const order = [...kept, ...people.map((p) => p.peerId).filter((id) => !kept.includes(id))];
+  const talking = new Set(people.filter((p) => p.speaking).map((p) => p.peerId));
+  return [...order.filter((id) => talking.has(id)), ...order.filter((id) => !talking.has(id))];
+}

@@ -81,9 +81,10 @@ function AskButton({ ask, setAsk, people, me }: { ask: Ask | undefined; setAsk: 
   const whose = ask && ask.kind !== 'me' ? askLabel(ask, true) : 'your agent';
   const toggle = (
     <Tip label={ask ? `${askLabel(ask, true)} answers this message · click to just send it` : 'Your agent answers this message, from this conversation · or type @claude, which asks your agent whichever it is'}>
-      <button type="button" className={cx(c.chip, people.length > 0 && s.askMain, ask && c.chipOn)} aria-pressed={Boolean(ask)} disabled={!me} onClick={() => setAsk(ask ? undefined : { kind: 'me' })}>
+      <button type="button" className={cx(c.chip, people.length > 0 && s.askMain, ask && c.chipOn)} aria-label={`Ask: ${whose}`} aria-pressed={Boolean(ask)} disabled={!me} onClick={() => setAsk(ask ? undefined : { kind: 'me' })}>
         <Icon name={askMark(ask, myMark)} size={13} />
-        Ask: {whose}
+        {/* Beside a shared screen the box is narrow: the words step aside, Send stays in it. */}
+        <span className={c.chipLabel}>Ask: {whose}</span>
       </button>
     </Tip>
   );
@@ -257,13 +258,14 @@ export function NetComposer({ id, placeholder, people, me, send, addPeople, note
               <button
                 type="button"
                 className={c.chip}
+                aria-label="Friends"
                 onClick={() => {
                   write(text && !/\s$/.test(text) ? `${text} @` : `${text}@`);
                   ref.current?.focus();
                 }}
               >
                 <Icon name="people" size={13} />
-                Friends
+                <span className={c.chipLabel}>Friends</span>
               </button>
             </Tip>
           ) : null}

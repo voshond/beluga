@@ -161,6 +161,14 @@ export type StageMessage =
   | { readonly k: 'unmark'; readonly by: string; readonly id: string }
   /** How the sharer sends their screen: sharp for text, smooth for motion (relays pass it on the same way). */
   | { readonly k: 'mode'; readonly by: string; readonly mode: ShareMode }
+  /** How a viewer wants the screen sent to them (BLG-743): whoever feeds them sends it so; no mode, as the sharer sends it. */
+  | { readonly k: 'want'; readonly by: string; readonly mode?: ShareMode }
+  /**
+   * The sharer's overlay (their own screen showing the others' pointers and ink) is in the picture
+   * they share (BLG-743): macOS put it there. The others then leave pointers to the picture, not
+   * drawing their own over it, so nobody sees one twice.
+   */
+  | { readonly k: 'overlay'; readonly by: string; readonly inPicture: boolean }
   /** Whose cameras this window shows big (the rest small; `visible` false: none on screen), so senders size each one for it. */
   | { readonly k: 'view'; readonly by: string; readonly big: readonly string[]; readonly visible: boolean }
   /** How a Mac does as a scribe (BLG-718, shared/scribe-plan.ts): a model or not, how fast, how busy. */
@@ -226,6 +234,10 @@ export function parseStage(text: string): StageMessage | undefined {
       return typeof o['id'] === 'string' && o['id'].length <= 40 ? { k: 'unmark', by, id: o['id'] } : undefined;
     case 'mode':
       return o['mode'] === 'sharp' || o['mode'] === 'smooth' ? { k: 'mode', by, mode: o['mode'] } : undefined;
+    case 'want':
+      return { k: 'want', by, ...(o['mode'] === 'sharp' || o['mode'] === 'smooth' ? { mode: o['mode'] } : {}) };
+    case 'overlay':
+      return { k: 'overlay', by, inPicture: o['inPicture'] === true };
     case 'view': {
       const big = o['big'];
       if (!Array.isArray(big) || big.length > 32 || !big.every((b) => typeof b === 'string' && b.length <= 200)) return undefined;
