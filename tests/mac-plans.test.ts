@@ -3,7 +3,7 @@ import { normalizeBody } from '../src/core/plans/edit.js';
 import type { Plan } from '../src/core/plans/model.js';
 import { planView } from '../src/core/plans/progress.js';
 import { NO_BOARD } from '../src/core/board/model.js';
-import { barColumns, branchFlow, changeMarks, changeWords, feedOf, gateId, graphShape, groupId, headline, milestoneRows, modeChange, nextWords, planStatus, plansOf, prWords, shipAction, shipAllAction, taskHeadline, taskNodeId } from '../packages/mac/src/plans/plans-model.js';
+import { barColumns, branchFlow, changeMarks, changeWords, feedOf, firstRepos, gateId, graphShape, groupId, headline, milestoneRepoNames, milestoneRows, modeChange, newPlanTitle, nextWords, planStatus, plansOf, prWords, shipAction, shipAllAction, taskHeadline, taskNodeId, withPrimary, withRepo } from '../packages/mac/src/plans/plans-model.js';
 import type { PlanPr } from '../src/core/plans/model.js';
 import type { PlanEvent } from '../src/core/plans/model.js';
 import type { PlanView, ShipRepo } from '../src/core/plans/progress.js';
@@ -299,5 +299,45 @@ describe('shipping a plan across repos: one PR each, Merge All in order (BLG-17)
     expect(flow[3]!.detail).toBe('in bob-api: its milestones merge into it');
     expect(nextWords(v.next)).toMatchObject({ title: '1 of 2 pull requests merged' });
     expect(planStatus(v)).toEqual({ label: '1/2 merged', tone: 'accent' });
+  });
+});
+
+describe('New Plan across several projects (BLG-19)', () => {
+  it('titles: one project, two, and more than two', () => {
+    expect(newPlanTitle([])).toBe('New Plan');
+    expect(newPlanTitle(['whisper-api'])).toBe('Plan in whisper-api');
+    expect(newPlanTitle(['whisper-api', 'calendar-api'])).toBe('Plan across whisper-api, calendar-api');
+    expect(newPlanTitle(['whisper-api', 'calendar-api', 'calendar-desktop'])).toBe('Plan across whisper-api, calendar-api…');
+  });
+  it('starts with the projects asked for that exist, else your usual one, else the first', () => {
+    expect(firstRepos(['a', 'b', 'c'], ['c', 'gone', 'a', 'c'], 'b')).toEqual(['c', 'a']);
+    expect(firstRepos(['a', 'b'], [], 'b')).toEqual(['b']);
+    expect(firstRepos(['a', 'b'], ['gone'], 'nope')).toEqual(['a']);
+    expect(firstRepos([], [], 'b')).toEqual([]);
+  });
+  it('ticks and unticks, keeping the primary and at most eight', () => {
+    expect(withRepo(['a'], 'b', true)).toEqual(['a', 'b']);
+    expect(withRepo(['a', 'b'], 'b', true)).toEqual(['a', 'b']);
+    expect(withRepo(['a', 'b'], 'b', false)).toEqual(['a']);
+    expect(withRepo(['a', 'b'], 'a', false)).toEqual(['a', 'b']);
+    const eight = ['1', '2', '3', '4', '5', '6', '7', '8'];
+    expect(withRepo(eight, '9', true)).toEqual(eight);
+  });
+  it('a new primary goes first and the others stay ticked', () => {
+    expect(withPrimary(['a', 'b', 'c'], 'c')).toEqual(['c', 'a', 'b']);
+    expect(withPrimary(['a'], 'b')).toEqual(['b', 'a']);
+  });
+});
+
+describe('a milestone’s repo chip (BLG-20)', () => {
+  const projects = [{ id: 'api', name: 'whisper-api' }, { id: 'cal', name: 'calendar-api' }];
+  it('nothing on a one-repo plan', () => {
+    expect(milestoneRepoNames({ projectId: 'api' }, { repos: ['api'] }, projects)).toEqual([]);
+  });
+  it('its repos by name on a plan across repos; the primary when it names none', () => {
+    const across = { projectId: 'api', repos: ['api', 'cal'] };
+    expect(milestoneRepoNames(across, {}, projects)).toEqual(['whisper-api']);
+    expect(milestoneRepoNames(across, { repos: ['cal'] }, projects)).toEqual(['calendar-api']);
+    expect(milestoneRepoNames(across, { repos: ['api', 'cal'] }, projects)).toEqual(['whisper-api', 'calendar-api']);
   });
 });

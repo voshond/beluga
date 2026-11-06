@@ -14,7 +14,7 @@ import { MILESTONE_STATE, type MilestoneJoin, type PlanGraphShape, TASK_STATE, c
 import { COMPACT_STATES, FOLDS_KEY, type Folds, MILESTONE, type MilestoneFrame, PLAN_GAPS, arrowHead, isFolded, labelAt, milestoneAnchors, milestoneFrame, milestoneRoute, placeMilestones, readFolds, taskSize, withFold } from './plan-layout.js';
 import { useCheckerChat, useClock, usePlanActions } from './use-plans.js';
 import { useGlide } from './use-glide.js';
-import { LiveDot, LockMark, TaskChatMark, TaskStateIcon } from './marks.js';
+import { LiveDot, LockMark, RepoChip, TaskChatMark, TaskStateIcon } from './marks.js';
 import p from './plans.module.css';
 import c from './PlanCanvas.module.css';
 
@@ -46,6 +46,8 @@ interface TaskData extends Record<string, unknown> {
 }
 interface MilestoneData extends Record<string, unknown> {
   readonly view: MilestoneView;
+  /** The plan's repos (its chip names the milestone's, on a plan across repos). */
+  readonly plan: Pick<PlanView['plan'], 'projectId' | 'repos'>;
   readonly current: boolean;
   readonly folded: boolean;
   /** What it waits on that hasn't passed yet (titles): locked until they do. */
@@ -291,7 +293,7 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
         width: box.width,
         height: box.height,
         measured: { width: box.width, height: box.height },
-        data: { view: m, current, folded: away, waitsOn, gated: m.dependsOn.some((d) => byMs.has(d)), ...(view.plan.branch ? { branch: view.plan.branch } : {}), ...(starting.has(id) ? { starting: true } : {}), selected: selected === gateId(id), onFold },
+        data: { view: m, plan: view.plan, current, folded: away, waitsOn, gated: m.dependsOn.some((d) => byMs.has(d)), ...(view.plan.branch ? { branch: view.plan.branch } : {}), ...(starting.has(id) ? { starting: true } : {}), selected: selected === gateId(id), onFold },
         selectable: false,
         draggable: false,
         zIndex: -1,
@@ -605,6 +607,7 @@ const MilestoneNode = memo(function MilestoneNode({ data }: NodeProps<Node<Miles
               </span>
             ) : null}
             {m.milestone.autonomy ? <span className={p.msAuto}>{AUTONOMY_INFO[m.autonomy].label}</span> : null}
+            <RepoChip plan={data.plan} milestone={m.milestone} />
             {data.starting ? (
               <span className={c.starting} role="status">
                 <Working />

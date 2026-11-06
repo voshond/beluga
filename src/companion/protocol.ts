@@ -112,6 +112,8 @@ export const COMPANION_PROTO = { major: 1, minor: 44 } as const;
  * 1.42 (BLG-8): what was settled while planning (`PlanView.decisions`: the question, the answer, and
  * whether you answered it or it's the agent's default) and what's still open (`PlanView.openQuestions`;
  * approving waits on them, `plans.approve` with `anyway`). An older Mac leaves them out.
+ * 1.43 (BLG-20): a plan across repos names them (`PlanView.repos`, primary first) and each
+ * milestone's (`PlanView.milestones[].repos`). A one-repo plan, or an older Mac, leaves them out.
  * 1.44 (BLG-17): a plan across repos at its last step shows each repo's plan branch and pull request,
  * in the order Merge All merges them (`PlanView.ship`). An older Mac leaves it out.
  */
@@ -655,6 +657,8 @@ export const PlanView = z.object({
         checker: Topic.optional(),
         /** 1.40: its agent at work right now (“Working on BLG-12 · Edit README.md”), and its conversation. */
         agentNow: z.object({ text: z.string().max(300), asking: z.boolean().optional(), topic: Topic.optional() }).optional(),
+        /** 1.43 (BLG-20): the repos it runs in (project names), on a plan across repos. */
+        repos: z.array(z.string().max(200)).max(8).optional(),
       }),
     )
     .max(50),
@@ -670,6 +674,8 @@ export const PlanView = z.object({
   /** 1.42 (BLG-8): what was settled while planning, and what's still open (the draft's, while there is one). */
   decisions: z.array(z.object({ question: z.string().max(400), answer: z.string().max(400), by: z.enum(['user', 'default']), why: z.string().max(400).optional() })).max(40).optional(),
   openQuestions: z.array(z.string().max(400)).max(40).optional(),
+  /** 1.43 (BLG-20): the repos a plan across repos covers (project names, primary first). */
+  repos: z.array(z.string().max(200)).max(8).optional(),
   /** 1.44 (BLG-17): a plan across repos at its last step: each repo's branch and pull request, in merge order, and what's next in words. */
   ship: z
     .object({

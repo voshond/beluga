@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Check, ChevronRight, MessagesSquare } from 'lucide-react-native';
+import { Check, ChevronRight, FolderGit2, MessagesSquare } from 'lucide-react-native';
 import { ScrollView, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { elapsed, useSince, useView } from '../lib/hooks';
@@ -129,6 +129,11 @@ function MapNode({ m, i, onPress }: { readonly m: Milestone; readonly i: number;
           <T v="callout" c={color.text} numberOfLines={2} style={{ fontSize: 13.5, fontWeight: '600', lineHeight: 18 }}>
             {m.title}
           </T>
+          {m.repos?.length ? (
+            <T v="caption" c={color.text2} numberOfLines={1} style={{ fontSize: 11 }}>
+              {m.repos.join(' + ')}
+            </T>
+          ) : null}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <View style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: color.sunken, overflow: 'hidden' }}>
               <View style={{ width: `${all ? (done / all) * 100 : 0}%`, height: 4, borderRadius: 2, backgroundColor: color.ok, opacity: 0.5 }} />
@@ -140,6 +145,18 @@ function MapNode({ m, i, onPress }: { readonly m: Milestone; readonly i: number;
         </View>
       </Press>
     </Animated.View>
+  );
+}
+
+/** The repos a plan across repos covers (BLG-20), primary first; nothing on a one-repo plan. */
+export function PlanRepos({ repos }: { readonly repos: readonly string[] }) {
+  if (repos.length < 2) return null;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }} accessibilityLabel={`Across ${repos.join(', ')}`}>
+      {repos.map((r) => (
+        <Pill key={r} label={r} Icon={FolderGit2} />
+      ))}
+    </View>
   );
 }
 

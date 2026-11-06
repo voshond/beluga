@@ -589,6 +589,23 @@
   color: var(--text-2);
   box-shadow: inset 0 0 0 1px var(--hairline-strong);
 }
+/* The repo a milestone runs in, on a plan across repos (BLG-20). */
+.msRepo {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  max-width: 180px;
+  padding: 0 6px;
+  border-radius: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--bg-hover);
+}
 /* Progress sits in the head, beside its count: nothing is ruled across the lane. */
 .msProgress {
   flex: none;
@@ -1564,6 +1581,17 @@
 .newPlanMore:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent);
+}
+/* Plan Across More Projects…: this Mac's projects with checkboxes, two columns (BLG-19). */
+.newPlanRepos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 14px;
+  margin: 0 0 8px 15px;
+}
+.newPlanRepos .newPlanHint {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
 }
 /* Six lines to start; it grows with the text (set from its scrollHeight) to ~60% of the sheet (72vh at most),
    never so far that the buttons scroll away (the rest of the sheet is under 400px). */

@@ -1,3 +1,4 @@
+import { type Plan, planRepos } from '../../../../src/core/plans/model.js';
 import type { AgentOrigin, CcSession } from '../../../../src/core/claude-code/model.js';
 import { worktreeOrigin } from '../../../../src/workspaces/origin.js';
 import type { Project } from '../../../../src/workspaces/types.js';
@@ -15,4 +16,14 @@ export function hasRowsInside(p: Project, sessions: readonly CcSession[], origin
   if (outsideOf(p).some((w) => !isAgentWorktree(w))) return true;
   const main = live.find((w) => w.kind === 'main');
   return Boolean(main && subAgentsUnder(sessions, main.id, origins).length);
+}
+
+/**
+ * Where a plan's row goes: under the group holding every one of its repos (a plan across repos),
+ * else under its primary project (BLG-20).
+ */
+export function planPlace(plan: Pick<Plan, 'projectId' | 'repos'>, groups: ReadonlyArray<{ readonly name: string; readonly projects: readonly Pick<Project, 'id'>[] }>): { readonly group: string } | { readonly project: string } {
+  const repos = planRepos(plan);
+  const home = repos.length > 1 ? groups.find((g) => repos.every((r) => g.projects.some((p) => p.id === r))) : undefined;
+  return home ? { group: home.name } : { project: plan.projectId };
 }

@@ -6,7 +6,7 @@ import { ActionsContext, ActionsDropdown, type ActionItem } from '../components/
 import { IconButton, cx } from '../components/ui.js';
 import { openSheet } from '../lib/sheets.js';
 import { MILESTONE_STATE, TASK_STATE, changeMarks, milestoneLabel, milestoneRows, taskWords } from './plans-model.js';
-import { TaskChatMark, TaskStateIcon } from './marks.js';
+import { RepoChip, TaskChatMark, TaskStateIcon } from './marks.js';
 import { openDecision } from './plan-ask-model.js';
 import { useCheckerChat, useClock, usePlanActions } from './use-plans.js';
 import { useStartWith } from '../components/agent-options.js';
@@ -70,6 +70,7 @@ function Milestone({ view, plan, m, keys, marks, selected, onSelect, startable }
         <Rename value={m.milestone.title} className={p.oTitle} label="Milestone name" onDone={(title) => edit([{ op: 'update_milestone', id: m.milestone.id, title }])} />
         <span className={cx(p.msState, p[`tone_${info.tone}`])}>{milestoneLabel(view, m)}</span>
         {m.autonomy !== plan.autonomy ? <span className={p.msAuto}>{AUTONOMY_INFO[m.autonomy].label}</span> : null}
+        <RepoChip plan={plan} milestone={m.milestone} />
         <span className={p.grow} />
         <span className={p.msCount}>
           {m.state === 'draft' ? `${m.milestone.tasks.length} tasks` : `${m.finished}/${m.total}`}

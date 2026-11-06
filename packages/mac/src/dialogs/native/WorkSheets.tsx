@@ -205,7 +205,7 @@ export function NativeSheets() {
     case 'project_env':
       return <EnvironmentSheet key={sheet.projectId} projectId={sheet.projectId} close={close} />;
     case 'new_plan':
-      return <NewPlanSheet {...(sheet.projectId ? { projectId: sheet.projectId } : {})} close={close} />;
+      return <NewPlanSheet {...(sheet.projectId ? { projectId: sheet.projectId } : {})} {...(sheet.projectIds ? { projectIds: sheet.projectIds } : {})} close={close} />;
     case 'new_sentinel':
       return <NewSentinelSheet {...(sheet.projectId ? { projectId: sheet.projectId } : {})} {...(sheet.way ? { way: sheet.way } : {})} close={close} />;
     case 'add_tile':

@@ -1,6 +1,6 @@
 import type { BoardState } from '../../../../src/core/board/model.js';
 import type { Actor } from '../../../../src/core/board/model.js';
-import { AUTONOMY_INFO, type Autonomy, type Plan, type PlanBody, type PlanEvent, type PlanPr, type PlansState, diffBodies, isMultiRepo, milestoneDeps, milestoneRepos, planBranchFor, planTitle, prRef, shownBody } from '../../../../src/core/plans/model.js';
+import { AUTONOMY_INFO, type Autonomy, MAX_PLAN_REPOS, type Plan, type PlanBody, type PlanEvent, type PlanMilestone, type PlanPr, type PlansState, diffBodies, isMultiRepo, milestoneDeps, milestoneRepos, planBranchFor, planTitle, prRef, shownBody } from '../../../../src/core/plans/model.js';
 import { type MilestoneState, type MilestoneView, type NextStep, type PlanView, type ShipRepo, type TaskState, type TaskView, agentNowWords } from '../../../../src/core/plans/progress.js';
 import { pulseWords } from '../../../../src/core/plans/watchdog.js';
 
@@ -155,6 +155,39 @@ export function plansOf(state: PlansState, projectId: string | undefined): Plan[
 }
 
 export const titleOf = planTitle;
+
+/** Which repos a milestone runs in, by name, for its chip: only on a plan across repos (BLG-20). */
+export function milestoneRepoNames(plan: Pick<Plan, 'projectId' | 'repos'>, milestone: Pick<PlanMilestone, 'repos'>, projects: ReadonlyArray<{ readonly id: string; readonly name: string }>): readonly string[] {
+  if (!isMultiRepo(plan)) return [];
+  return milestoneRepos(plan, milestone).map((id) => projects.find((p) => p.id === id)?.name ?? id);
+}
+
+/** New Plan's title: "Plan in api", or across several ("Plan across whisper-api, calendar-api…"). */
+export function newPlanTitle(names: readonly string[]): string {
+  if (!names.length) return 'New Plan';
+  if (names.length === 1) return `Plan in ${names[0]}`;
+  return `Plan across ${names.slice(0, 2).join(', ')}${names.length > 2 ? '…' : ''}`;
+}
+
+/** New Plan's projects to start with (primary first): the ones asked for that exist, else your usual project, else the first. */
+export function firstRepos(known: readonly string[], asked: readonly string[], usual: string | undefined): readonly string[] {
+  const picked = [...new Set(asked.filter((id) => known.includes(id)))].slice(0, MAX_PLAN_REPOS);
+  if (picked.length) return picked;
+  const one = usual && known.includes(usual) ? usual : known[0];
+  return one ? [one] : [];
+}
+
+/** Ticks or unticks a project: the primary stays, and a plan covers at most MAX_PLAN_REPOS. */
+export function withRepo(repos: readonly string[], id: string, on: boolean): readonly string[] {
+  if (!on) return id === repos[0] ? repos : repos.filter((r) => r !== id);
+  if (repos.includes(id) || repos.length >= MAX_PLAN_REPOS) return repos;
+  return [...repos, id];
+}
+
+/** Makes a project the primary (the plan's home), keeping the others ticked. */
+export function withPrimary(repos: readonly string[], id: string): readonly string[] {
+  return [id, ...repos.filter((r) => r !== id)].slice(0, MAX_PLAN_REPOS);
+}
 
 /** How far along each milestone is, for a plan's progress bar (finished share per milestone). */
 export function bars(view: PlanView): ReadonlyArray<{ readonly id: string; readonly title: string; readonly state: MilestoneState; readonly share: number }> {
