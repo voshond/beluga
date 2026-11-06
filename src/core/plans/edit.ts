@@ -1,5 +1,5 @@
 import { ESTIMATES, PRIORITIES, type Priority } from '../board/model.js';
-import { AUTONOMIES, type Autonomy, MAX_MILESTONES, MAX_PLAN_REPOS, MAX_PLAN_TASKS, type PlanBody, type PlanDecision, type PlanDecisionEntry, type PlanMilestone, type PlanRepoChange, type PlanTask, allTasks, reposWith } from './model.js';
+import { AUTONOMIES, type Autonomy, MAX_MILESTONES, MAX_PLAN_REPOS, MAX_PLAN_TASKS, type PlanBody, type PlanDecision, type PlanDecisionEntry, type PlanMilestone, type PlanRepoChange, type PlanTask, allTasks, reposWith, runOf } from './model.js';
 
 /**
  * Writing a plan: a whole one (Claude's plan_write), or a change at a time (Claude's plan_update,
@@ -47,7 +47,8 @@ function decisionOf(input: PlanDecision | undefined): PlanDecision | undefined {
     .filter((o) => o.label && !seen.has(o.label) && seen.add(o.label))
     .slice(0, 6)
     .map((o) => ({ label: o.label, ...(o.description ? { description: o.description } : {}) }));
-  return { question, options, ...(input.multi ? { multi: true } : {}) };
+  const run = runOf(input.run);
+  return { question, options, ...(input.multi ? { multi: true } : {}), ...(run ? { run } : {}) };
 }
 
 export interface MilestoneInput {

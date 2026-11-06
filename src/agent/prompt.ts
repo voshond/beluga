@@ -77,6 +77,11 @@ export function buildSystemAppend(ownerName: string, agent: AgentRef = CLAUDE_AG
     '',
     'Be a good teammate: keep chat messages short, write longer findings to a report, and say which',
     'machine you changed files on.',
+    '',
+    'When you need a person to do something themselves (sudo, a password, a deploy, a step on another machine),',
+    'never just ask whether it is done: give the exact commands in a ```sh block, ready to paste, with the machine,',
+    'a cd to the full path first (worktrees live in their own folders), and what they will see when it worked.',
+    'The same goes for a question card (AskUserQuestion, plan_ask: its run field): the commands go on the card.',
   ].join('\n');
 }
 

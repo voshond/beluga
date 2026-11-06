@@ -21,6 +21,16 @@ const PRIORITY = z.enum(['urgent', 'high', 'medium', 'low', 'none']);
 const ESTIMATE = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(5), z.literal(8)]);
 const AUTONOMY = z.enum(['step', 'gated', 'autopilot']);
 
+/** Commands the user runs themselves (sudo, a deploy, a step on another machine): shown on the card to copy. */
+const RUN = z
+  .object({
+    on: z.string().max(80).optional().describe('The machine to run them on (its name, like "i9arch" or "the NAS"); left out, this one'),
+    cwd: z.string().max(300).optional().describe('The folder to run them in, as a full path (a worktree’s, when the work is there)'),
+    commands: z.array(z.string().min(1).max(400)).min(1).max(12).describe('Exactly what to type, one command per line, in order, ready to paste (sudo where it needs it)'),
+    expect: z.string().max(300).optional().describe('What they see when it worked (a line it prints, a status), so they can tell'),
+  })
+  .describe('When the user has to run something themselves: the exact commands, where, and what success looks like. Never ask "done?" without it');
+
 const TASK = z.object({
   id: id.optional(),
   title: z.string().min(1).max(200),
@@ -39,6 +49,7 @@ const TASK = z.object({
       question: z.string().min(1).max(1000).describe('What the user decides, as a question'),
       options: z.array(z.object({ label: z.string().min(1).max(200), description: z.string().max(600).optional() })).max(6).describe('The choices (the user can always write their own instead)'),
       multi: z.boolean().optional().describe('true: they may pick several'),
+      run: RUN.optional(),
     })
     .optional()
     .describe('For a task assigned to me: the decision it asks for. No worktree is made; the user answers in the plan chat, and the answer is recorded on the task'),
@@ -106,7 +117,7 @@ export function taskInput(t: Partial<Task>): Partial<TaskInput> & { readonly iss
     ...(t.labels ? { labels: t.labels } : {}),
     ...(t.touches ? { touches: t.touches } : {}),
     ...(t.assignee ? { assignee: t.assignee } : {}),
-    ...(t.decision ? { decision: { question: t.decision.question, options: t.decision.options, ...(t.decision.multi ? { multi: true } : {}) } } : {}),
+    ...(t.decision ? { decision: { question: t.decision.question, options: t.decision.options, ...(t.decision.multi ? { multi: true } : {}), ...(t.decision.run ? { run: t.decision.run } : {}) } } : {}),
     ...(t.issue ? { issue: t.issue } : {}),
   };
 }
@@ -208,7 +219,7 @@ export function createPlanToolDefs(plan: PlanTools) {
     ),
     tool(
       'plan_ask',
-      'Ask the user a decision only they can make (a product or design choice, an account, a secret, which of two behaviours): one concrete question, 2 to 4 options and the one you recommend. It goes to the plan’s conversation and their phone; carry on with whatever doesn’t depend on it, and end your turn when nothing else is left: the answer comes to you here and is recorded on the task. Not for routine choices you can make yourself: decide those, and say what you assumed.',
+      'Ask the user a decision only they can make (a product or design choice, an account, a secret, which of two behaviours): one concrete question, 2 to 4 options and the one you recommend. It goes to the plan’s conversation and their phone; carry on with whatever doesn’t depend on it, and end your turn when nothing else is left: the answer comes to you here and is recorded on the task. Not for routine choices you can make yourself: decide those, and say what you assumed. When it needs them to run something (sudo, a deploy, a login, a step on another machine), give it in run: the exact commands, the machine and the full path, and what success looks like.',
       {
         task: z.string().max(40).optional().describe('The task it’s about (its key, or its id in the plan); left out, the one you’re on'),
         question: z.string().min(1).max(1000).describe('One question, about one thing'),
@@ -216,6 +227,7 @@ export function createPlanToolDefs(plan: PlanTools) {
         options: z.array(z.object({ label: z.string().min(1).max(120), description: z.string().max(400).optional() })).min(2).max(4).describe('The choices (they can always write their own instead)'),
         recommended: z.string().max(120).optional().describe('The label of the option you recommend'),
         multi: z.boolean().optional().describe('true: they may pick several'),
+        run: RUN.optional(),
       },
       (a) => guarded(() => (plan.ask ? plan.ask(a) : 'Asking the user isn’t available here: decide, and say what you assumed in the task’s Decisions')),
     ),

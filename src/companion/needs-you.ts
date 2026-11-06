@@ -61,6 +61,13 @@ function approvalItem(state: DomainState, a: Approval): NeedsYou {
   };
 }
 
+/** The commands a question asks you to run (its code blocks), line for line: the card's title can't hold them. */
+const commandsIn = (markdown: string): string =>
+  [...markdown.matchAll(/^(`{3,}|~{3,})[^\n]*\n([\s\S]*?)(?:^\1[ \t]*$|(?![\s\S]))/gm)]
+    .map((m) => m[2]!.trimEnd())
+    .filter(Boolean)
+    .join('\n\n');
+
 /** Claude's question (or plan to approve), or a plan task waiting on your decision. */
 function questionItem(state: DomainState, q: PendingQuestion): NeedsYou {
   const topic = convTopic(q.channel);
@@ -90,6 +97,7 @@ function questionItem(state: DomainState, q: PendingQuestion): NeedsYou {
   const picked = Object.fromEntries(Object.entries(q.picked).filter(([k]) => !k.endsWith('#multi')));
   const last = !rest.length;
   const single = last && !head.multiSelect && head.options.length > 0 && head.options.length <= 3;
+  const detail = [commandsIn(head.question), ...rest.map((r) => plainLine(r.question, 1000))].filter(Boolean).join('\n');
   // Several picks (joined with ", " as the Mac does) or your own words go where `slot` says: the
   // last question sends every answer (questions.answer); an earlier one is kept with questions.pick.
   const answer: NonNullable<NeedsYou['answer']> = last
@@ -101,7 +109,7 @@ function questionItem(state: DomainState, q: PendingQuestion): NeedsYou {
     ...(decision ? { from: plan ? `the plan “${clip(planTitle(plan), 80)}”` : 'a plan' } : {}),
     ...(decision && planT ? { topic: planT } : {}),
     title: clip(plainLine(head.question, 500), 500),
-    ...(rest.length ? { detail: clip(rest.map((r) => plainLine(r.question, 1000)).join('\n'), 64_000) } : {}),
+    ...(detail ? { detail: clip(detail, 64_000) } : {}),
     choices: head.options.slice(0, 12).map((o) => ({ label: clip(o.label, 200), ...(o.description ? { description: clip(o.description, 1000) } : {}) })),
     multi: head.multiSelect,
     freeText: true,

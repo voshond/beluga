@@ -12,7 +12,7 @@ import type { WorkspaceController } from '../workspace-controller.js';
 import { ApplyError, applyDraft, planBoard } from './apply.js';
 import { dropEpics, syncEpics } from './epics.js';
 import type { BodyInput, PlanOp, RepoChangeInput, TaskInput } from './edit.js';
-import { type Autonomy, MAX_PLAN_REPOS, type Plan, type TestsAt, allTasks, checkerOf, isMultiRepo, milestoneRepos, planForHome, planRepos, planTaskOfIssue, planTitle, proposedRepos } from './model.js';
+import { type Autonomy, MAX_PLAN_REPOS, type Plan, type TestsAt, allTasks, checkerOf, isMultiRepo, milestoneRepos, planForHome, planRepos, planTaskOfIssue, planTitle, proposedRepos, runOf } from './model.js';
 import { type PilotDeps, PlanPilot } from './pilot.js';
 import type { TaskView } from './progress.js';
 import { type PlanGit, planGitOf } from './plan-git.js';
@@ -605,9 +605,10 @@ export class PlansWork {
     if (options.length < 2) throw new Error('Give at least two different options (they can always write their own)');
     const recommended = options.find((o) => o.label.toLowerCase() === input.recommended?.trim().toLowerCase())?.label;
     const why = input.why?.replace(/\s+/g, ' ').trim();
+    const run = runOf(input.run);
     const key = t.issue?.key ?? t.task.id;
     const replaced = Boolean(hit.plan.asks?.[t.task.id]);
-    this.plans.setAsk(planId, t.task.id, { task: t.task.id, question, ...(why ? { why } : {}), options, ...(recommended ? { recommended } : {}), ...(input.multi ? { multi: true } : {}), worktree: wsId, at: Date.now() });
+    this.plans.setAsk(planId, t.task.id, { task: t.task.id, question, ...(why ? { why } : {}), options, ...(recommended ? { recommended } : {}), ...(input.multi ? { multi: true } : {}), ...(run ? { run } : {}), worktree: wsId, at: Date.now() });
     this.plans.note(planId, 'note', `${key} asks the user: ${question.slice(0, 200)}`, this.claude());
     return [
       `Asked the user about ${key}${replaced ? ' (in place of your earlier question on it)' : ''}: it’s in the plan’s conversation and on their phone.`,

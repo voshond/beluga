@@ -100,6 +100,8 @@ const HOW_TO_PLAN = [
   '  what only the user can do (accounts, secrets, decisions). A task for "me" never gets a worktree: when it\'s',
   '  ready, the user is asked in this conversation. Give it a `decision`: the question, a few options (multi: true',
   '  when several can be picked); they can always write their own. Their answer is recorded on the task and the plan goes on.',
+  '  When it\'s something they run (sudo, a deploy, a login, a step on another machine), give the decision a `run`: the exact',
+  '  commands, the machine (on), the full path (cwd) and what success looks like (expect). Never just ask "done?".',
   '- Use short, stable ids (like "auth-api"): keep them when you revise, so tasks keep their history.',
   '- Ask for proof that fits: a task writes the tests it needs and runs typecheck and those tests; the e2e and full',
   '  suites run once per milestone, at its check, on the combined work (or only at the end, if the plan says so).',

@@ -251,6 +251,16 @@ export interface PlanAskInput {
   readonly options: ReadonlyArray<{ readonly label: string; readonly description?: string }>;
   readonly recommended?: string;
   readonly multi?: boolean;
+  /** What the user has to run for it (see PlanRun). */
+  readonly run?: PlanRunInput;
+}
+
+/** Commands for the user to run, as a tool gives them (see PlanRun in core/plans/model.ts). */
+export interface PlanRunInput {
+  readonly on?: string;
+  readonly cwd?: string;
+  readonly commands: readonly string[];
+  readonly expect?: string;
 }
 
 /**
