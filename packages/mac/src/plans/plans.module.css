@@ -390,9 +390,17 @@
   z-index: 5;
   top: 12px;
   left: 14px;
+  max-width: calc(100% - 28px);
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+}
+.stageTools:empty {
+  display: none;
 }
 .writing {
   flex: 1;
