@@ -630,6 +630,17 @@ export class WorkspaceController {
     };
   }
 
+  /** Other folders a main-folder conversation reads too (set by plans: a plan across repos plans from its primary). */
+  private readAlso: (workspaceId: string) => readonly string[] = () => [];
+
+  /** Say which other folders a main-folder conversation may read. → stop. */
+  setReadAlso(fn: (workspaceId: string) => readonly string[]): () => void {
+    this.readAlso = fn;
+    return () => {
+      if (this.readAlso === fn) this.readAlso = () => [];
+    };
+  }
+
   /** Where Claude runs for a workspace conversation: its folder, its own resumable session. */
   place(channel: string): AgentPlace | undefined {
     const id = workspaceIdOf(channel);
@@ -645,9 +656,10 @@ export class WorkspaceController {
     const runtime = agent?.runtime ?? this.deps.defaultRuntime?.() ?? SESSION_RUNTIME_DEFAULT;
     // An epic's worktree: its sub-tasks' worktrees in other repos too (BLG-561), still there.
     const also = ws.kind === 'worktree' && !ws.askOnly ? this.alsoIn(ws.id).filter((dir) => existsSync(dir)) : [];
+    const reads = ws.askOnly ? this.readAlso(ws.id).filter((dir) => dir !== ws.path && existsSync(dir)) : [];
     return {
       cwd: ws.path,
-      additionalDirectories: also,
+      additionalDirectories: [...also, ...reads],
       ...(also.length ? { alsoEdit: also } : {}),
       // Worktrees are disposable sandboxes, so edits there don't need approval.
       autoEdit: ws.kind === 'worktree',

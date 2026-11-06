@@ -50,6 +50,11 @@ const DEPENDS_ON = z
   .max(12)
   .describe('Ids of earlier milestones this one really builds on: it opens once they pass. Leave out to infer it from tasks’ blocked_by; [] runs it alongside from the start');
 
+const REPOS = z
+  .array(z.string().min(1).max(200))
+  .max(8)
+  .describe('A plan across repos: the repos this milestone works in (their names or ids, from the plan\'s). Normally one; several only when the work must land together. Leave out for the primary');
+
 const MILESTONE = z.object({
   id: id.optional(),
   title: z.string().min(1).max(200),
@@ -57,6 +62,7 @@ const MILESTONE = z.object({
   criteria: lines(12).describe('Pass criteria: concrete, checkable'),
   autonomy: AUTONOMY.optional(),
   depends_on: DEPENDS_ON.optional(),
+  repos: REPOS.optional(),
   tasks: z.array(TASK).max(40),
 });
 
@@ -101,7 +107,7 @@ export function taskInput(t: Partial<Task>): Partial<TaskInput> & { readonly iss
 const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('retitle'), title: z.string().max(200).optional(), goal: z.string().max(4000).optional() }),
   z.object({ op: z.literal('add_milestone'), milestone: MILESTONE.partial({ tasks: true, criteria: true }), after: z.string().max(40).optional() }),
-  z.object({ op: z.literal('update_milestone'), id: z.string().max(40), title: z.string().max(200).optional(), goal: z.string().max(4000).optional(), criteria: lines(12).optional(), autonomy: AUTONOMY.optional(), depends_on: DEPENDS_ON.optional() }),
+  z.object({ op: z.literal('update_milestone'), id: z.string().max(40), title: z.string().max(200).optional(), goal: z.string().max(4000).optional(), criteria: lines(12).optional(), autonomy: AUTONOMY.optional(), depends_on: DEPENDS_ON.optional(), repos: REPOS.optional() }),
   z.object({ op: z.literal('remove_milestone'), id: z.string().max(40) }),
   z.object({ op: z.literal('add_task'), milestone: z.string().max(40), task: TASK, after: z.string().max(40).optional() }),
   z.object({ op: z.literal('update_task'), id: z.string().max(40), patch: TASK.partial() }),

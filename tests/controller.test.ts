@@ -197,6 +197,19 @@ describe('WorkspaceController', () => {
     ctl.stop();
   });
 
+  it('a main-folder chat reads the folders plans name, never edits them (BLG-11)', async () => {
+    const chat = (await ctl.newChat(projectId(), 'Plan', undefined, { quiet: true }))!;
+    const other = path.dirname(repo);
+    expect(ctl.place(`ws:${chat.id}`)).toMatchObject({ additionalDirectories: [] });
+    const stop = ctl.setReadAlso((id) => (id === chat.id ? [other, chat.path, path.join(repo, 'gone')] : []));
+    const place = ctl.place(`ws:${chat.id}`)!;
+    expect(place).toMatchObject({ additionalDirectories: [other], autoEdit: false });
+    expect(place.alsoEdit).toBeUndefined();
+    stop();
+    expect(ctl.place(`ws:${chat.id}`)).toMatchObject({ additionalDirectories: [] });
+    ctl.stop();
+  });
+
   it('reviews, commits and merges; on conflicts it hands off to Claude', async () => {
     const ws = (await ctl.newWorktree(projectId(), 'change'))!;
     writeFileSync(path.join(ws.path, 'a.txt'), 'two\n');
