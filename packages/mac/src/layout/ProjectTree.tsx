@@ -8,8 +8,6 @@ import { setOverviewView } from '../views/overview/use-overview-prefs.js';
 import { Icon } from '../components/Icon.js';
 import { ActionsContext, ActionsDropdown, SpecContext, SpecDropdown, type ActionItem } from '../components/SpecMenu.js';
 import { ProjectIcon } from '../components/ProjectIcon.js';
-import { EarningsPill } from '../components/EarningsPill.js';
-import { stripeMenuItem } from '../lib/earnings.js';
 import { Badge, Dot, IconButton, cx } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
 import { inApp, webServed } from '../lib/boot.js';
@@ -151,7 +149,6 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
   const plansState = useApp((st) => st.plans);
   const board = useApp((st) => st.board);
   const state = useMemo(() => ({ plans: plansState, board }), [plansState, board]);
-  const earning = useApp((st) => Boolean(st.earnings[p.root]));
   const busy = useApp((st) => projectWorking(st, p));
   // What's inside: how many conversations have news, and whether one needs you (folded, it's how you notice).
   const tallyKey = useApp((st) => {
@@ -198,7 +195,7 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
   const importItem: ActionItem[] = p.root ? [{ label: 'Import from Claude Code…', icon: 'claude', onSelect: () => openSheet({ kind: 'import_conversation', projectId: p.id }) }] : [];
   // Its variables and its main folder's .env, without going through Settings (BLG-369).
   const envItem: ActionItem[] = p.root ? [{ label: 'Environment…', icon: 'lock', onSelect: () => openSheet({ kind: 'project_env', projectId: p.id }) }] : [];
-  const extra: ActionItem[] = [...shareItem, ...teamItems, ...importItem, ...envItem, ...showArchivedItem, ...cleanUpItem, ...moveItems(entries, item, arrange), ...groupItems(p, entries, arrange), stripeMenuItem(p, earning), ...githubItems, ...iconItems, { label: 'Hide Project', danger: true, separate: true, onSelect: () => hide(p) }, { label: 'Delete Project…', danger: true, onSelect: () => openSheet({ kind: 'delete_project', projectId: p.id }) }];
+  const extra: ActionItem[] = [...shareItem, ...teamItems, ...importItem, ...envItem, ...showArchivedItem, ...cleanUpItem, ...moveItems(entries, item, arrange), ...groupItems(p, entries, arrange), ...githubItems, ...iconItems, { label: 'Hide Project', danger: true, separate: true, onSelect: () => hide(p) }, { label: 'Delete Project…', danger: true, onSelect: () => openSheet({ kind: 'delete_project', projectId: p.id }) }];
   const kids = depth + 2;
   // Nothing to unfold: no arrow (its place kept, so the icons stay in line).
   const sessions = useCcSessions();
@@ -255,7 +252,6 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
           trailing={
             <>
               <TeamBadge projectId={p.id} />
-              <EarningsPill root={p.root} projectId={p.id} celebrate />
               <span className={side.hoverTools}>
                 <IconButton icon="branch" label={`New worktree in ${p.name}`} onClick={(e) => (e.stopPropagation(), actions.run({ type: 'new_worktree', projectId: p.id }))} />
                 <IconButton icon="plus" label={`New chat in ${p.name}`} onClick={(e) => (e.stopPropagation(), actions.run({ type: 'new_chat', projectId: p.id }))} />

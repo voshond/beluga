@@ -3,7 +3,7 @@ import { SourceSchema } from '../../shared/view-spec.js';
 import { CHART_TILE_KINDS, LEGACY_TILE_KINDS, OUTPUT_SHOWS, TILE_KINDS } from './dashboard-model.js';
 import { COLUMN_ENCODINGS, COLUMN_KINDS, FILES_KEEP_MAX } from './columns.js';
 import { COMPARE } from './metrics.js';
-import { ACCESS, BELUGA_EVENTS, KEEP_CHATS, BETTER, SCRIPT_CODE_MAX, SCRIPT_LANGUAGES, GITHUB_EVENTS, MEASURE_FROM, METRIC_KINDS, NOTIFY_WHERE, ROWS_KEPT, SCHEDULE_EVERY, SENTRY_EVENTS, STRIPE_EVENTS } from './model.js';
+import { ACCESS, BELUGA_EVENTS, KEEP_CHATS, BETTER, SCRIPT_CODE_MAX, SCRIPT_LANGUAGES, GITHUB_EVENTS, MEASURE_FROM, METRIC_KINDS, NOTIFY_WHERE, ROWS_KEPT, SCHEDULE_EVERY, SENTRY_EVENTS } from './model.js';
 
 /**
  * Sentinels as zod checks: what the API takes (sentinel-api.ts), what sentinel.json holds, and
@@ -31,12 +31,20 @@ export const TriggerSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('after'), sentinelId: z.string().max(80), on: z.enum(['success', 'failure', 'always']).default('failure') }),
   z.object({ kind: z.literal('beluga'), what: z.enum(BELUGA_EVENTS), projectId: id.optional() }),
   z.object({ kind: z.literal('github'), what: z.enum(GITHUB_EVENTS), label: text(64).optional(), minutes: z.number().int().min(1).max(60).optional() }),
-  z.object({ kind: z.literal('stripe'), what: z.enum(STRIPE_EVENTS) }),
   z.object({ kind: z.literal('uptime'), url: z.string().url().max(2000), minutes: z.union([z.literal(1), z.literal(5), z.literal(15)]), expect: z.number().int().min(100).max(599).optional() }),
   // Its organization and project may be filled in later (empty: the page says to).
   z.object({ kind: z.literal('sentry'), org: text(100), project: text(100), what: z.enum(SENTRY_EVENTS) }),
-  z.object({ kind: z.literal('webhook'), signature: z.enum(['github', 'stripe']).optional() }),
+  z.object({ kind: z.literal('webhook'), signature: z.enum(['github']).optional() }),
 ]);
+
+/** A saved Stripe trigger (Stripe is gone) waits for Run, and a Stripe-signed webhook takes any post, instead of being set aside. */
+const withoutStripe = (raw: unknown): unknown => {
+  if (typeof raw !== 'object' || raw === null) return raw;
+  const { kind, signature, ...rest } = raw as { kind?: unknown; signature?: unknown };
+  if (kind === 'stripe') return { kind: 'manual' };
+  if (kind === 'webhook' && signature === 'stripe') return { kind, ...rest };
+  return raw;
+};
 
 const stepId = z.string().min(1).max(40).optional();
 const stepName = z.string().max(80).optional();
@@ -133,7 +141,7 @@ export const SavedSentinelSchema = z
     name: z.string().min(1).max(80),
     icon: z.string().default('eye'),
     projectId: id.optional(),
-    trigger: TriggerSchema,
+    trigger: z.preprocess(withoutStripe, TriggerSchema),
     steps: z.array(StepInputSchema.and(z.object({ id: z.string().min(1), name: z.string() }))).default([]),
     access: z.enum(ACCESS).default('look'),
     limits: LimitsSchema.default({ minutes: 30, pauseAfter: 3 }),

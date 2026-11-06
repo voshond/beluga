@@ -215,7 +215,7 @@ export interface RunnerDeps {
   readonly pollMs?: number;
   /** A view source, run by the daemon with your environment (Keep the numbers from a source) → its rows, or why not in words. */
   readonly fetchSource?: SourceFetch;
-  /** Variables only Call a service steps get, from Beluga's own connections (the project's Earnings key as $STRIPE_EARNINGS_KEY). */
+  /** Variables only Call a service steps get (the demo's pretend keys). */
   readonly serviceEnv?: (projectId: string | undefined) => Record<string, string>;
   /** The effort levels an agent's model takes (undefined agent: your default), when they're known. */
   readonly efforts?: (agent: AgentRef | undefined) => readonly string[] | undefined;

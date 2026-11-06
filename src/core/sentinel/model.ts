@@ -14,7 +14,7 @@ import { ASSISTANT_TITLE } from '../../shared/assistant.js';
 
 // ---------------------------------------------------------------- triggers
 
-export const TRIGGER_KINDS = ['schedule', 'manual', 'after', 'beluga', 'github', 'stripe', 'uptime', 'sentry', 'webhook'] as const;
+export const TRIGGER_KINDS = ['schedule', 'manual', 'after', 'beluga', 'github', 'uptime', 'sentry', 'webhook'] as const;
 export type TriggerKind = (typeof TRIGGER_KINDS)[number];
 
 export const SCHEDULE_EVERY = ['hours', 'day', 'other-day', 'week', 'month'] as const;
@@ -49,7 +49,6 @@ export interface AfterTrigger {
 
 export const BELUGA_EVENTS = ['task-done', 'pr-opened', 'pr-merged', 'milestone-passed', 'claude-finished', 'friend-asks'] as const;
 export const GITHUB_EVENTS = ['issue-opened', 'issue-labelled', 'pr-opened', 'workflow-failed', 'deployment-failed'] as const;
-export const STRIPE_EVENTS = ['payment-failed', 'subscription-started', 'subscription-ended', 'dispute-opened', 'refund'] as const;
 export const SENTRY_EVENTS = ['new-issue', 'regression', 'spike'] as const;
 
 /** Phase 3: something in Beluga happened. */
@@ -65,12 +64,6 @@ export interface GitHubTrigger {
   readonly what: (typeof GITHUB_EVENTS)[number];
   readonly label?: string;
   readonly minutes?: number;
-}
-
-/** Phase 3: the project's Stripe connection (Earnings). */
-export interface StripeTrigger {
-  readonly kind: 'stripe';
-  readonly what: (typeof STRIPE_EVENTS)[number];
 }
 
 /** Phase 3: a URL stops answering, or is back (fires on the change, never every check). */
@@ -92,10 +85,10 @@ export interface SentryTrigger {
 /** Phase 3: something posts to its URL. The secret never enters the state (sentinel.webhookUrl). */
 export interface WebhookTrigger {
   readonly kind: 'webhook';
-  readonly signature?: 'github' | 'stripe';
+  readonly signature?: 'github';
 }
 
-export type Trigger = ScheduleTrigger | ManualTrigger | AfterTrigger | BelugaTrigger | GitHubTrigger | StripeTrigger | UptimeTrigger | SentryTrigger | WebhookTrigger;
+export type Trigger = ScheduleTrigger | ManualTrigger | AfterTrigger | BelugaTrigger | GitHubTrigger | UptimeTrigger | SentryTrigger | WebhookTrigger;
 
 // ---------------------------------------------------------------- steps
 
@@ -905,7 +898,6 @@ export const TRIGGER_INFO: Readonly<Record<TriggerKind, { readonly label: string
   after: { label: 'After another sentinel', phase: 2 },
   beluga: { label: 'When something happens in Beluga', phase: 3 },
   github: { label: 'When something happens on GitHub', phase: 3 },
-  stripe: { label: 'When something happens in Stripe', phase: 3 },
   uptime: { label: 'When a site stops answering', phase: 3 },
   sentry: { label: 'When Sentry sees something', phase: 3 },
   webhook: { label: 'When something posts to its URL', phase: 3 },
@@ -994,8 +986,6 @@ const triggerTarget = (t: Trigger): string => {
       return stable({ k: t.kind, what: t.what, projectId: t.projectId });
     case 'github':
       return stable({ k: t.kind, what: t.what, label: t.label });
-    case 'stripe':
-      return stable({ k: t.kind, what: t.what });
     case 'uptime':
       return stable({ k: t.kind, url: t.url });
     case 'sentry':
@@ -1123,11 +1113,6 @@ const WORDS: Readonly<Record<string, string>> = {
   'issue-labelled': 'an issue gets a label',
   'workflow-failed': 'a workflow fails',
   'deployment-failed': 'a deployment fails',
-  'payment-failed': 'a payment fails',
-  'subscription-started': 'a subscription starts',
-  'subscription-ended': 'a subscription ends',
-  'dispute-opened': 'a dispute opens',
-  refund: 'a refund happens',
   'new-issue': 'Sentry sees a new issue',
   regression: 'Sentry sees a regression',
   spike: 'Sentry sees a spike',
@@ -1173,14 +1158,12 @@ export function scheduleSentence(trigger: Trigger, nameOf: (id: string) => strin
       return `When ${WORDS[trigger.what] ?? trigger.what}`;
     case 'github':
       return trigger.what === 'issue-labelled' && trigger.label ? `When an issue gets the label “${trigger.label}” on GitHub` : `When ${WORDS[trigger.what] ?? trigger.what} on GitHub`;
-    case 'stripe':
-      return `When ${WORDS[trigger.what] ?? trigger.what} in Stripe`;
     case 'uptime':
       return `When ${hostOf(trigger.url)} stops answering (checked every ${trigger.minutes === 1 ? 'minute' : `${trigger.minutes} minutes`}), and when it’s back`;
     case 'sentry':
       return `When ${WORDS[trigger.what] ?? trigger.what}${trigger.org && trigger.project ? ` in ${trigger.org}/${trigger.project}` : ''}`;
     case 'webhook':
-      return trigger.signature === 'github' ? 'When GitHub posts to its URL' : trigger.signature === 'stripe' ? 'When Stripe posts to its URL' : 'When something posts to its URL';
+      return trigger.signature === 'github' ? 'When GitHub posts to its URL' : 'When something posts to its URL';
   }
 }
 

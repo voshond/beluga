@@ -28,7 +28,6 @@ import { McpSettings } from './McpSettings.js';
 import { LaunchFlagsSettings } from './LaunchFlagsSettings.js';
 import { SkillsPane } from './agent-setup/SkillsPane.js';
 import { LocalModelsSettings } from './LocalModelsSettings.js';
-import { EarningsSettings } from './EarningsSettings.js';
 import { NotificationSettings } from './NotificationSettings.js';
 import { VoiceSettings } from './VoiceSettings.js';
 import { KeyboardSettings } from './KeyboardSettings.js';
@@ -187,7 +186,6 @@ function General() {
           />
         </Row>
       </Group>
-      <EarningsSettings />
     </>
   );
 }

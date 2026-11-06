@@ -118,7 +118,7 @@ function measureNames(s: Sentinel): string {
 export function sentinelNote(): string {
   return [
     '',
-    'Sentinel: Beluga runs watchers for the user on a schedule, by hand, after another one, or when something happens (GitHub, Stripe, a site going down, Sentry, a webhook, Beluga itself) (mcp__beluga_sentinel__*: sentinel_list,',
+    'Sentinel: Beluga runs watchers for the user on a schedule, by hand, after another one, or when something happens (GitHub, a site going down, Sentry, a webhook, Beluga itself) (mcp__beluga_sentinel__*: sentinel_list,',
     'sentinel_get, sentinel_create, sentinel_update, sentinel_run, sentinel_test, sentinel_try_source, sentinel_pause, sentinel_remove). When the user asks for something to',
     'happen regularly ("every morning…"), offer to set one up with sentinel_create; it starts paused, so say so and link it as',
     '`sentinel:<id>` (inline code) for them to turn on. "Make the morning brief weekly" is sentinel_update. You can run one that is on and',
@@ -330,10 +330,9 @@ function howSentinelsWork(others: readonly Sentinel[], recipes: readonly Recipe[
     'When it runs: schedule (every: hours | day | other-day | week | month, at "HH:MM", days for week, day for month), manual (only when',
     `the user presses Run), after (another sentinel’s run ends: on success, failure or always${others.length ? `; the others: ${others.map((o) => `${fence(o.name)} (${o.id})`).join(', ')}` : ''}),`,
     'or an event: beluga (what: task-done | pr-opened | pr-merged | milestone-passed | claude-finished | friend-asks), github (the project’s',
-    'repository, polled; what: issue-opened | issue-labelled with label | pr-opened | workflow-failed | deployment-failed), stripe (the',
-    'project’s Stripe from Earnings; what: payment-failed | subscription-started | subscription-ended | dispute-opened | refund), uptime',
+    'repository, polled; what: issue-opened | issue-labelled with label | pr-opened | workflow-failed | deployment-failed), uptime',
     '(url, minutes 1 | 5 | 15, expect a status; fires when it goes down and when it’s back), sentry (org, project, what: new-issue |',
-    'regression | spike; needs $SENTRY_TOKEN), webhook (its URL is on the sentinel’s page; signature github | stripe). What fired is {{trigger}}',
+    'regression | spike; needs $SENTRY_TOKEN), webhook (its URL is on the sentinel’s page; signature github). What fired is {{trigger}}',
     'and {{trigger.json}} in prompts.',
     'Steps, each with a short name:',
     ...kinds.map((k) => `- ${k}: ${STEP_INFO[k].label}, ${STEP_INFO[k].hint.toLowerCase()} (${STEP_FIELDS[k]}; needs ${ACCESS_INFO[accessNeeded(k)].label} access${k === 'claude' ? ', Work in a worktree' : ''})`),

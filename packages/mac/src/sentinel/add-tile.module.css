@@ -106,9 +106,6 @@
   color: color-mix(in srgb, var(--tint) 85%, var(--text));
   background: color-mix(in srgb, var(--tint) 16%, transparent);
 }
-.mark[data-source='stripe'] {
-  --tint: var(--epic);
-}
 .mark[data-source='github'] {
   --tint: var(--text-2);
 }

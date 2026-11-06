@@ -11,7 +11,6 @@ import {
   DEFAULT_AUTONOMY,
   type Plan,
 } from "@beluga/core/plans/model.js";
-import { EarningsPill } from "../components/EarningsPill.js";
 import { Icon } from "../components/Icon.js";
 import { ProjectIcon } from "../components/ProjectIcon.js";
 import { Select } from "../components/Select.js";
@@ -47,7 +46,6 @@ import { MentionHighlighter } from "../chat/MentionHighlighter.js";
 import { DictationStrip, MicButton } from "../chat/Dictation.js";
 import { useDictationTarget } from "../lib/dictation.js";
 import { HomeHistory } from "./history/HomeHistory.js";
-import { EarningsSection } from "./project/EarningsSection.js";
 import { GitHubRow } from "./project/GitHubRow.js";
 import { PullRow, usePullList } from "./project/PullRow.js";
 import { RunRow } from "../ci/parts.js";
@@ -73,8 +71,7 @@ import { TeamOffers } from "../team/Team.js";
  * A project's home: what you see when you click a project. Its main folder is never worked in,
  * so the big box starts work in a new worktree (or just asks a question about the project, or
  * plans big work with Claude), and below are its plans, worktrees, the questions asked in main,
- * the latest of its tasks and GitHub issues (each with the way to all of them), what was put away,
- * and (with Stripe connected) a folded row of how it's earning.
+ * the latest of its tasks and GitHub issues (each with the way to all of them), and what was put away.
  */
 export function ProjectHome({ id }: { id: string }) {
   const project = useApp((st) =>
@@ -186,7 +183,6 @@ function Header({ model }: { model: HomeModel }) {
           >
             <strong>{stats.archived}</strong> archived
           </button>
-          <EarningsPill key={project.id} root={project.root} projectId={project.id} />
           {project.root ? <EnvPill projectId={project.id} root={project.root} /> : null}
           <GitHubRow projectId={project.id} />
         </div>
@@ -647,8 +643,6 @@ function Lists({ model }: { model: HomeModel }) {
           ))}
         </Section>
       ) : null}
-      {/* Last and folded: a glance, not the page's point. Its own per project (what's new is what arrived while it was shown). */}
-      <EarningsSection key={project.id} project={project} />
     </div>
   );
 }

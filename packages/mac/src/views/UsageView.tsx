@@ -5,7 +5,6 @@ import { toast, useApi, useApp, useBeluga } from '../lib/beluga.js';
 import { ActivityCard } from './usage/ActivityCard.js';
 import { Breakdown } from './usage/Breakdown.js';
 import { CleanupCard } from './usage/CleanupCard.js';
-import { EarningsSummaryCard } from './usage/EarningsSummaryCard.js';
 import { PlanCard } from './usage/PlanCard.js';
 import { StorageCard } from './usage/StorageCard.js';
 import { type SortKey, cleanups, projectRows } from './usage/usage-model.js';
@@ -52,8 +51,7 @@ function useMeasure(): { measuring: boolean; measure: () => void } {
 }
 
 /**
- * Usage: your Claude plan's limits (and friends'), what Claude used this week, what connected
- * projects earned (Stripe), and the disk your worktrees take, by project; then every project and worktree side by side, with what
+ * Usage: your Claude plan's limits (and friends'), what Claude used this week, and the disk your worktrees take, by project; then every project and worktree side by side, with what
  * can be put away to free space.
  */
 export function UsageView() {
@@ -88,7 +86,6 @@ export function UsageView() {
           <div className={s.summary}>
             <PlanCard state={state} now={now} />
             <ActivityCard state={state} now={now} />
-            <EarningsSummaryCard />
           </div>
         </div>
         <StorageCard rows={rows} measuring={measuring} measured={measured} onMeasure={measure} />

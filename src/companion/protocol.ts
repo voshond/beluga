@@ -805,7 +805,7 @@ export const SentinelSummary = z.object({
   sentence: z.string().max(300),
   paused: z.boolean(),
   pausedWhy: z.string().max(300).optional(),
-  /** BLG-239: why its event trigger can't watch now, with what to do (no gh, no Stripe key, no token). */
+  /** BLG-239: why its event trigger can't watch now, with what to do (no gh, no token). */
   trouble: z.string().max(300).optional(),
   last: z.object({ state: SentinelRunState, headline: z.string().max(300), at: ts }).optional(),
   nextAt: ts.optional(),
