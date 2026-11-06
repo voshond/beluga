@@ -572,7 +572,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `plans.here` | ✓ the composer's mode menu › Plan with Tasks (the agent plans in the conversation you're in) |
 | `plans.approve` | ✓ Approve Plan / Apply Changes on a plan's page and its strip above the conversation; Approve Plan's ▾ › Approve, worked by ▸ (BLG-506: `plans.setWorkAgent`, then approve) |
 | `plans.discard` | ✓ Discard Draft / Discard Changes on a plan's page |
-| `plans.edit` | ✓ editing a plan's outline (rename, criteria, move, remove, what waits on what); the repo row under a plan's title (BLG-31): ✕ on a + or − repo turns the agent's suggestion down (op `repo`, recorded as your decision), Repos ▾ puts one of this Mac's projects in or takes one out; the phone shows the repo changes read-only (1.45) |
+| `plans.edit` | ✓ editing a plan's outline (rename, criteria, move, remove, what waits on what); the repo row under a plan's title (BLG-31): ✕ on a + or − repo turns the agent's suggestion down (op `repo`, recorded as your decision), Repos ▾ puts one of this Mac's projects in or takes one out, and so does tagging "@project" in the plan's chat (BLG-32, the daemon reads it from the message, so the phone's chat does it too); the phone shows the repo changes read-only (1.45) |
 | `plans.setAutonomy` | ✓ Step by Step · Check-ins · Autopilot on a plan's page (a milestone's own from its menu); the phone plan page's autonomy chip (1.5) |
 | `plans.setPaused` | ✓ Pause / Resume on a plan's page |
 | `plans.setParallel` | ✓ a plan's ⋯ › Run at Once ▸ |

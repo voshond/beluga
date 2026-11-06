@@ -119,6 +119,16 @@ describe('planning finds the repos near it (BLG-28, BLG-30)', () => {
     expect(draft.decisions).toEqual([{ question: 'Should this plan cover whisper-api?', answer: 'No: leave whisper-api out', by: 'user' }]);
   });
 
+  it('a repo you tag in the plan’s chat goes in the draft as yours; agents, emails, unknown and covered names don’t (BLG-32)', () => {
+    const t = planning();
+    const brief = t.plansWork.forRun('ws:main', 'p-me', 'Delete stale recordings. Also touch @whisper-api. Ask @claude:mia, mail bob@unit-frames.dev, see @nope and @calendar-desktop')!.brief!;
+    const draft = t.plans.need(t.plan.id).draft!;
+    expect(draft.repoChanges).toEqual([{ repo: 'whisper', change: 'add', why: 'you tagged it in the plan’s chat', by: 'user' }]);
+    expect(brief).toContain('- whisper-api (id whisper), added in this draft by the user (you tagged it in the plan’s chat): /tmp/whisper');
+    t.plansWork.forRun('ws:main', 'p-me', 'and @whisper-api again');
+    expect(t.plans.need(t.plan.id).draft!.repoChanges).toHaveLength(1);
+  });
+
   it('approving applies the repos: the plan covers them, its tasks run in their repos', () => {
     const t = planning();
     t.run().tools!.write({ title: 'Delete stale recordings', goal: 'g', milestones: [{ id: 'gw', title: 'Gateway discard', repos: ['calendar-api'], tasks: [{ id: 'route', title: 'Discard route' }] }, { id: 'ui', title: 'Delete buttons', tasks: [{ id: 'btn', title: 'Delete button' }] }], repoEdits: [{ repo: 'calendar-api', on: true, why: 'the 409' }] });

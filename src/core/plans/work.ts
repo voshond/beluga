@@ -63,6 +63,9 @@ const WS = 'ws:';
 type PackageScripts = { readonly scripts?: Readonly<Record<string, string>> };
 
 /** A repo's test commands, from its package.json scripts (none there, or no package.json: none). */
+/** A project tagged in a message: "@calendar-api" (not "@claude:mia", nor inside an email address). */
+const TAG = /(?:^|[\s(,])@([A-Za-z0-9][\w.-]*)(?![\w:@])/g;
+
 /** How many projects outside the plan's sidebar group the planner hears of, by name. */
 const MAX_NEAR_OTHERS = 15;
 const MAX_GUIDE = 1200;
@@ -523,12 +526,34 @@ export class PlansWork {
     }
     const found = planForHome(this.plans.state(), channel);
     if (!found) return this.workerOf(channel);
-    const plan = (said && this.plans.noteRequest(found.id, said)) || found;
+    const plan = this.tagged((said && this.plans.noteRequest(found.id, said)) || found, said ?? '');
     const board = this.deps.store.getState().board;
     const view = this.pilot.view(plan);
     const planning = planningBrief(plan, board, this.plans.planningStyle, this.repoInfos(plan), this.nearRepos(plan));
     const brief = plan.body ? headBrief(view) + planning : planning;
     return { tools: this.toolsFor(plan.id), brief };
+  }
+
+  /**
+   * Repos you tag in the plan's chat ("also touch @calendar-api", BLG-32): projects of this Mac it
+   * doesn't cover yet go in its draft as your repo changes, so its Claude plans with them. Only
+   * proposed, on an approved plan too: approving applies them.
+   */
+  private tagged(plan: Plan, said: string): Plan {
+    if (plan.status === 'done' || !(plan.draft ?? plan.body)) return plan;
+    const names = new Set([...said.matchAll(TAG)].map((m) => m[1]!.replace(/[.-]+$/, '').toLowerCase()));
+    const covered = new Set(proposedRepos(plan));
+    const add = this.deps.store
+      .getState()
+      .projects.filter((p) => p.root && names.has(p.name.toLowerCase()) && !covered.has(p.id))
+      .map((p) => p.id);
+    if (!add.length) return plan;
+    try {
+      return this.plans.editDraft(plan.id, add.map((repo) => ({ op: 'repo' as const, repo, on: true, why: 'you tagged it in the plan’s chat', by: 'user' as const })), this.me(), 'tagged in the chat');
+    } catch (err) {
+      this.deps.store.dispatch({ type: 'system', channel: plan.home, text: `Couldn’t add ${add.map((id) => this.repoInfo(id).name).join(', ')} to the plan: ${err instanceof Error ? err.message : String(err)}`, level: 'info' });
+      return plan;
+    }
   }
 
   /** A worktree doing a running plan's tasks (its milestone's one Claude, or one task's): the plan and which tasks are its. */
