@@ -232,6 +232,8 @@ export interface PlanMerge {
     /** The branch that conflicted, and its task's key. */
     readonly merging: string;
     readonly key?: string;
+    /** The repo it conflicts in (project id); absent, the plan's primary. */
+    readonly projectId?: string;
     readonly files: readonly string[];
     /** Claude was asked and it's still there: it waits for you. */
     readonly stuck?: boolean;
@@ -322,6 +324,8 @@ export interface Plan {
   readonly watch?: Readonly<Record<string, TaskWatch>>;
   /** Its branch (plan/<slug>, from main): every task starts from it, passed milestones merge into it, and it ends as one PR. */
   readonly branch?: string;
+  /** A plan across repos: each repo's plan/<slug> (by project id; the primary's is `branch` too). Absent: only `branch`, in the primary. */
+  readonly branches?: Readonly<Record<string, string>>;
   /** Passed milestones being merged into the branch (by milestone id). */
   readonly merging?: Readonly<Record<string, PlanMerge>>;
   /** Main being merged into the plan's branch (its PR conflicted with main), or stopped at a conflict for Claude to fix. */
@@ -497,6 +501,10 @@ export function planTaskOfIssue(state: PlansState, issueId: string): { readonly 
 export const planRepos = (plan: Pick<Plan, 'projectId' | 'repos'>): readonly string[] => [...new Set([plan.projectId, ...(plan.repos ?? [])])];
 
 export const isMultiRepo = (plan: Pick<Plan, 'projectId' | 'repos'>): boolean => planRepos(plan).length > 1;
+
+/** A repo's plan branch: its own, else (plans from before branches per repo) `branch` for the primary. */
+export const planBranchFor = (plan: Pick<Plan, 'projectId' | 'branch' | 'branches'>, projectId: string): string | undefined =>
+  plan.branches?.[projectId] ?? (projectId === plan.projectId ? plan.branch : undefined);
 
 export function milestoneRepos(plan: Pick<Plan, 'projectId' | 'repos'>, milestone: Pick<PlanMilestone, 'repos'> | undefined): readonly string[] {
   const all = planRepos(plan);

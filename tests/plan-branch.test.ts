@@ -109,4 +109,28 @@ describe('a plan’s branch', () => {
     expect(await manager.mergeBranchIntoMain(id, 'plan/p')).toEqual({ ok: true });
     expect(await manager.inDefaultBranch(id, 'klaud/a')).toBe(true);
   });
+
+  it('across repos: each has its own plan/<slug>, and a merge in one leaves the other’s alone (BLG-13)', async () => {
+    const { base, dir, manager, id } = await project();
+    const other = path.join(base, 'code', 'desk');
+    mkdirSync(other, { recursive: true });
+    sh(other, 'init', '-q', '-b', 'main');
+    sh(other, 'config', 'user.email', 't@t');
+    sh(other, 'config', 'user.name', 'Tess');
+    writeFileSync(path.join(other, 'ui.txt'), 'one\n');
+    sh(other, 'add', '.');
+    sh(other, 'commit', '-qm', 'init');
+    sh(other, 'branch', 'plan/p');
+    await manager.refresh();
+    const desk = manager.list.find((p) => p.root === other)!.id;
+    expect(await manager.planBranch(id, 'plan/p')).toEqual({ made: true });
+    expect(await manager.planBranch(desk, 'plan/p')).toEqual({ made: false });
+    branch(other, 'klaud/ui', 'ui.txt', 'two\n', 'plan/p');
+    const appHead = sh(dir, 'rev-parse', 'plan/p');
+    expect(await manager.mergeIntoPlan(desk, 'plan/p', ['klaud/ui'])).toMatchObject({ ok: true });
+    expect(sh(other, 'show', 'plan/p:ui.txt')).toBe('two\n');
+    expect(sh(dir, 'rev-parse', 'plan/p')).toBe(appHead);
+    await manager.dropBranch(desk, 'klaud/ui', 'plan/p');
+    expect(sh(other, 'branch', '--list', 'klaud/ui').trim()).toBe('');
+  });
 });

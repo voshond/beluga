@@ -1,5 +1,5 @@
 import { type BoardState, type Issue, issueById } from '../board/model.js';
-import { type Autonomy, type Combining, type MilestoneAgent, type MilestoneRun, type Plan, type PlanBody, type PlanMerge, type PlanMilestone, type PlanTask, type TaskWatch, autonomyOf, milestoneDeps, openMilestones, shownBody } from './model.js';
+import { type Autonomy, type Combining, type MilestoneAgent, type MilestoneRun, type Plan, type PlanBody, type PlanMerge, type PlanMilestone, type PlanTask, type TaskWatch, autonomyOf, milestoneDeps, milestoneRepos, openMilestones, planBranchFor, shownBody } from './model.js';
 import { type RunInfo, type TaskPulse, type WaitingMessage, messageState, pulseOf, pulseWords } from './watchdog.js';
 
 /**
@@ -281,7 +281,9 @@ export function planView(plan: Plan, board: BoardState, live: Live = NOBODY_LIVE
       if (state === 'ready') {
         // Board blockers from outside the plan count too.
         const outside = (own.issue?.blockedBy ?? []).map((id) => issueById(board, id)).filter((i): i is Issue => Boolean(i && i.status !== 'done' && i.status !== 'canceled' && i.status !== 'in_review' && !body.milestones.some((x) => x.tasks.some((y) => y.issueId === i.id))));
-        const unmerged = t.blockedBy.filter((b) => finished(b) && !merged(b));
+        // Only branches in its own repo can be built on; one in another repo reaches it through that repo's plan branch.
+        const repo = own.issue?.projectId ?? milestoneRepos(plan, m)[0]!;
+        const unmerged = t.blockedBy.filter((b) => finished(b) && !merged(b) && (base.get(b)?.issue?.projectId ?? repo) === repo);
         if (!openIds.has(m.id) && !plan.runs[m.id]?.passedAt) {
           state = 'later';
           const waits = milestoneDeps(body, m).filter((d) => !plan.runs[d]?.passedAt);
@@ -297,7 +299,8 @@ export function planView(plan: Plan, board: BoardState, live: Live = NOBODY_LIVE
           from = base.get(unmerged[0]!)?.issue?.branch;
         }
         // Nothing unmerged to build on: the plan's branch as it is now (earlier milestones merged in).
-        if (state === 'ready' && !from && !froms && plan.branch) from = plan.branch;
+        const repoBranch = planBranchFor(plan, repo);
+        if (state === 'ready' && !from && !froms && repoBranch) from = repoBranch;
         // Being combined right now: shown as under way, never as waiting in silence.
         combining = state === 'ready' ? plan.combining?.[t.id] : undefined;
         if (combining) {
