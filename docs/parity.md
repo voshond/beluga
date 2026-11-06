@@ -652,7 +652,8 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | Steer: the agent reads it at its next step without stopping (a run that can't take it: stop it, run this next) | `session.submit` with `urgent` | Option+Return · the split button's **Steer** |
 | What waits, in run order (text, who asked) | `queueIn` (`src/ui/compose.ts`), the prompt comes with the `queued` event | the queue above the box |
 | Run a waiting message now (steering, as above) | `host.promote` | queue › Steer |
-| A steered message the agent hasn't read yet: sent, not read (its card is a note till the agent reads it: `READS_AFTER_STEP`, `STOPPING_FOR`, then `STEERED_IN` or its own turn) | `steerWaiting` (`src/shared/claude-notices.ts`), the message's `request` | your message dimmed, a clock and “Sent · waiting for the agent to read it” |
+| A steered message the agent hasn't read yet: sent, not read (its card is a note till the agent reads it: `READS_AFTER_STEP`, `STOPPING_FOR`, then `STEERED_IN` or its own turn) | `steerWaiting` (`src/shared/claude-notices.ts`), the message's `request` | your message dimmed, a clock and “HH:MM · Sent · waiting for the agent to read it”, below the working turn |
+| Where a steered message sits: below everything while unread, then at the moment the agent read it (its card's `readAt`), the turn split there with what came before above it (BLG-47) | `asRead` (`src/shared/claude-notices.ts`), `textMarks` and `endedAt` for the split (BLG-45) | Mac chat and the phone's conversation |
 | Send it now: the agent's step stops (its interrupt, as Stop does) and the conversation goes on from your message | `host.steerNow` | **Send now** on that message · ⇧⌥↩ |
 | Drop a waiting message | `host.cancelQueued` | queue › ✕ |
 | Edit a waiting message (back into the box) | `host.cancelQueued`, then the box | queue › ✎ |

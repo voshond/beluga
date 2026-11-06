@@ -18,8 +18,8 @@ import { isCompactItem } from './context-model.js';
 import { ShippedDivider, isShippedItem } from './ShippedDivider.js';
 import { DialogueCard, isDialogueItem } from './DialogueCard.js';
 import { useClaudeStarting } from './flight.js';
-import { withLiveTails } from './live-tail.js';
-import { asSent, steeredMessages } from '@beluga/shared/claude-notices.js';
+import { type Shown, withLiveTails } from './live-tail.js';
+import { asRead, asSent, steeredMessages } from '@beluga/shared/claude-notices.js';
 import { inYourQueue } from '@beluga/ui/compose.js';
 import s from './chat.module.css';
 import f from './flight.module.css';
@@ -130,12 +130,14 @@ export function ChatLog({ channel, empty }: { channel: string; empty?: React.Rea
   const steered = useMemo(() => steeredMessages(sent), [sent]);
   const drawn = useMemo(() => (steered.notes.size ? sent.filter((l) => !steered.notes.has(l.id)) : sent), [sent, steered]);
   const tasks = useApp((st) => tasksIn(st, channel), sameItems);
-  const placed = useMemo(() => placeTasks(drawn, tasks), [drawn, tasks]);
+  // A steered message is drawn where the agent read it; until then it waits below everything (BLG-47).
+  const read = useMemo(() => asRead(drawn, steered.waiting), [drawn, steered]);
+  const placed = useMemo(() => placeTasks(read.rows, tasks), [read, tasks]);
   // A card's tasks stay the same list while they're the same tasks, so its memo holds.
   const turnTasks = useRef<ReadonlyMap<string, readonly TaskView[]>>(undefined);
   const inTurn = useMemo(() => (turnTasks.current = keepSameLists(turnTasks.current, placed.inTurn)), [placed]);
   // A turn you spoke during goes on below what you said: its live part is the chat's last row (BLG-22).
-  const shown = useMemo(() => withLiveTails(placed.rows), [placed]);
+  const shown = useMemo<Shown<Row>[]>(() => [...withLiveTails(placed.rows), ...read.pinned.map((row) => ({ row, key: row.id }))], [placed, read]);
   const rows = useMemo(() => shown.map((x) => x.row), [shown]);
   const latest = useMemo(() => latestCard(items), [items]);
   const parent = useRef<HTMLDivElement>(null);

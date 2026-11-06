@@ -111,6 +111,8 @@ export type LogItem =
       readonly slotWait?: SlotWait;
       /** When it left the queue (it waited its turn): where the chat draws it and the message it answers (see shared/claude-notices.ts asSent). */
       readonly queuedUntil?: number;
+      /** When the agent read the steered message this card is a note about: where the chat draws it (see shared/claude-notices.ts asRead, BLG-47). */
+      readonly readAt?: number;
       readonly status: AgentItemStatus;
       readonly text: string;
       /** When each stretch of `text` was written, in order (missing on items saved before it was kept, or when the answer replaced the words): how a split turn shares its words. */
@@ -900,6 +902,8 @@ function reduceAgent(state: DomainState, raw: Extract<Action, { type: 'agent_eve
   const { textMarks: _marks, ...unmarked } = rest as typeof rest & { textMarks?: readonly TextMark[] };
   // A steered message's note ("reads this after its current step") isn't Claude's words: its own turn starting (or going back in line) ends it, a newer note replaces it.
   const renoted = noted && (a.event === 'started' || a.event === 'text' || a.event === 'queued');
+  // Its note giving way to its own turn, its words or being taken in: the agent read it (not going back in line, nor a newer note).
+  const read = noted && a.event !== 'queued' && a.event !== 'error' && a.event !== 'progress' && !(a.event === 'text' && (a.text === READS_AFTER_STEP || a.text === STOPPING_FOR));
   const text = renoted
     ? a.event === 'text' ? a.text : ''
     : // Each thing Claude says between steps is its own paragraph (one newline would run them into one blob).
@@ -925,6 +929,7 @@ function reduceAgent(state: DomainState, raw: Extract<Action, { type: 'agent_eve
     ...(a.event === 'queued' && a.text ? { prompt: a.text } : {}),
     ...(a.event === 'queued' && a.slotWait ? { slotWait: a.slotWait } : {}),
     ...(existing?.status === 'queued' && a.event !== 'queued' ? { queuedUntil: a.ts } : {}),
+    ...(read ? { readAt: a.ts } : {}),
     // Any event may name the agent (the first one an older card saw may not have).
     ...(a.agent ? { agent: a.agent } : {}),
   } satisfies LogItem;
