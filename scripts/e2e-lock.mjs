@@ -219,15 +219,25 @@ export function processesTagged(key, value) {
   }
 }
 
-/** Who listens on a TCP port (pids). */
+const lsofListeners = (port) =>
+  execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+    .split('\n')
+    .map(Number)
+    .filter((n) => n > 0);
+
+const ssListeners = (port) =>
+  [...execFileSync('ss', ['-Hltnp', `sport = :${port}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).matchAll(/pid=(\d+)/g)].map((m) => Number(m[1]));
+
+/** Who listens on a TCP port (pids): lsof, or ss where there's none (a bare Linux). */
 export function listeners(port) {
   try {
-    return execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
-      .split('\n')
-      .map(Number)
-      .filter((n) => n > 0);
+    return lsofListeners(port);
   } catch {
-    return [];
+    try {
+      return [...new Set(ssListeners(port))];
+    } catch {
+      return [];
+    }
   }
 }
 

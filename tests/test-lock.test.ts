@@ -134,11 +134,12 @@ describe.skipIf(process.platform === 'win32')("vitest's global setup", () => {
   });
 });
 
-// Not on Windows: nice and ps.
+// Not on Windows: nice and ps. On Linux the nice comes from /proc: ps prints "-" for a SCHED_IDLE
+// process (ananicy-cpp sets that), and ananicy renices some programs by name, so the reader is plain sh.
 
 describe.skipIf(process.platform === 'win32')("a worktree's Claude Code runs at lower priority", () => {
   it('nices a run that carries KLAUD_WORKTREE, and what it starts inherits it', async () => {
-    const child = spawn('/bin/sh', ['-c', "sleep 0.3; /bin/sh -c 'ps -o nice= -p $$'"], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const child = spawn('/bin/sh', ['-c', "sleep 0.3; /bin/sh -c 'if [ -r /proc/$$/stat ]; then cut -d\" \" -f19 /proc/$$/stat; else ps -o nice= -p $$; fi'"], { stdio: ['ignore', 'pipe', 'ignore'] });
     expect(niceForWorktree(child.pid!, { KLAUD_WORKTREE: '/w/kld-49' })).toBe(true);
     expect(os.getPriority(child.pid!)).toBe(10);
     let out = '';
