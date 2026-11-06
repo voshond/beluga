@@ -3,7 +3,7 @@
  * lives in dialogs/settings-index.ts, the field and the jump in dialogs/SettingsSearch.tsx.
  */
 
-export type SettingsPane = 'general' | 'appearance' | 'claude' | 'notifications' | 'workspaces' | 'terminal' | 'fire' | 'menubar' | 'environment' | 'people' | 'phone' | 'voice' | 'keyboard' | 'advanced' | 'about';
+export type SettingsPane = 'general' | 'appearance' | 'claude' | 'skills' | 'notifications' | 'workspaces' | 'terminal' | 'fire' | 'menubar' | 'environment' | 'people' | 'phone' | 'voice' | 'keyboard' | 'advanced' | 'about';
 
 /** Find… (⌘F) while Settings is open: runCommand sends it to Settings' search, not the conversation behind. */
 export const SETTINGS_FIND_EVENT = 'beluga:settings-find';

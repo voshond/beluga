@@ -334,6 +334,17 @@ export const PHONE: Record<Method, Side> = {
   'claudeCode.mcpSignIn': 'mac',
   'claudeCode.mcpSignedIn': 'mac',
   'claudeCode.mcpSetEnabled': 'mac',
+
+  // ---- your agents' skills, global AGENTS.md and Beluga's built-in instructions: settings, the Mac's
+  'agentSetup.skills': 'mac',
+  'agentSetup.readSkill': 'mac',
+  'agentSetup.saveSkill': 'mac',
+  'agentSetup.removeSkill': 'mac',
+  'agentSetup.repairSkills': 'mac',
+  'agentSetup.agentsDoc': 'mac',
+  'agentSetup.saveAgentsDoc': 'mac',
+  'agentSetup.linkAgentsDoc': 'mac',
+  'agentSetup.instructions': 'mac',
   // A step's details are code (commands, diffs); the phone gets steps in words in its views.
   'agent.steps': 'mac',
   'agent.step': 'mac',

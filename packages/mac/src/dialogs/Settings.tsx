@@ -26,6 +26,7 @@ import { ParallelSettings } from './ParallelSettings.js';
 import { ChatLimitSettings } from './ChatLimitSettings.js';
 import { McpSettings } from './McpSettings.js';
 import { LaunchFlagsSettings } from './LaunchFlagsSettings.js';
+import { SkillsPane } from './agent-setup/SkillsPane.js';
 import { LocalModelsSettings } from './LocalModelsSettings.js';
 import { EarningsSettings } from './EarningsSettings.js';
 import { NotificationSettings } from './NotificationSettings.js';
@@ -616,6 +617,7 @@ const BODY: Record<SettingsPane, () => ReactNode> = {
   general: General,
   appearance: Appearance,
   claude: AgentPane,
+  skills: SkillsPane,
   notifications: NotificationSettings,
   workspaces: Workspaces,
   terminal: TerminalSettings,
