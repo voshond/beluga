@@ -69,10 +69,11 @@ export const PLANS_API = {
   // The plan's one pull request (plan/<slug> → main), merging it on GitHub, or merging the branch into main here → the plan.
   'plans.openPr': { args: z.tuple([id]) },
   // auto: GitHub merges it once its checks and reviews pass.
-  'plans.mergePr': { args: z.tuple([id, z.object({ auto: z.boolean().optional() }).strict().optional()]) },
-  'plans.mergeLocal': { args: z.tuple([id]) },
+  // Across repos: one repo's (project id), or none for Merge All, upstream repos first.
+  'plans.mergePr': { args: z.tuple([id, z.object({ auto: z.boolean().optional() }).strict().optional(), id.optional()]) },
+  'plans.mergeLocal': { args: z.tuple([id, id.optional()]) },
   // Its pull request conflicts with main: main merged into the plan's branch, a conflict fixed by the plan's Claude.
-  'plans.bringInMain': { args: z.tuple([id]) },
+  'plans.bringInMain': { args: z.tuple([id, id.optional()]) },
   // A conflict Claude couldn't fix: ask it again; or show the folder it waits in (Finder).
   'plans.retryConflicts': { args: z.tuple([id]) },
   'plans.showConflict': { args: z.tuple([id]) },

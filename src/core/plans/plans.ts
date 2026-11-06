@@ -38,8 +38,13 @@ import {
   type TestsAt,
   diffBodies,
   isEmptyDiff,
+  isMultiRepo,
+  planBranchFor,
   planById,
+  planPrFor,
   planRepos,
+  prRef,
+  shipOrder,
 } from './model.js';
 
 /**
@@ -445,24 +450,50 @@ export class Plans {
   }
 
   /** The branch's pull request as last seen (what changed goes in the activity). */
-  setPr(id: string, found: PlanPr): Plan {
+  setPr(id: string, found: PlanPr, repo?: string): Plan {
     const plan = this.need(id);
-    const before = plan.pr;
+    const multi = isMultiRepo(plan);
+    const inRepo = repo ?? plan.projectId;
+    const before = planPrFor(plan, inRepo);
     // Only what the plan shows (GitHub's answer carries more, like each check run).
     const { number, url, state, title, draft, checks, review, conflicts, autoMerge, mergeState } = found;
     const pr: PlanPr = { number, url, state, title, draft, checks, ...(review ? { review } : {}), ...(conflicts ? { conflicts } : {}), ...(autoMerge ? { autoMerge } : {}), ...(mergeState ? { mergeState } : {}) };
     if (before && before.number === pr.number && before.state === pr.state && before.checks === pr.checks && before.review === pr.review && before.title === pr.title && before.draft === pr.draft && before.conflicts === pr.conflicts && before.autoMerge === pr.autoMerge && before.mergeState === pr.mergeState) return plan;
     const notes: PlanEvent[] = [];
     const at = this.now();
-    if (!before || before.number !== pr.number) notes.push(event({ kind: 'beluga' }, 'note', `opened pull request #${pr.number}: ${plan.branch ?? 'the plan’s branch'} → main`, at));
-    if (pr.state === 'CLOSED' && before?.state !== 'CLOSED') notes.push(event({ kind: 'beluga' }, 'problem', `pull request #${pr.number} was closed without merging: its tasks stay merged into the plan`, at));
-    return this.change(plan, { pr }, notes);
+    const name = multi ? this.repoName(inRepo) : undefined;
+    const branch = planBranchFor(plan, inRepo) ?? 'the plan’s branch';
+    if (!before || before.number !== pr.number) notes.push(event({ kind: 'beluga' }, 'note', name ? `opened pull request ${prRef(pr)}: ${branch} → main in ${name}` : `opened pull request #${pr.number}: ${branch} → main`, at));
+    if (pr.state === 'CLOSED' && before?.state !== 'CLOSED') notes.push(event({ kind: 'beluga' }, 'problem', name ? `${name}’s pull request ${prRef(pr)} was closed without merging: its tasks stay merged into the plan` : `pull request #${pr.number} was closed without merging: its tasks stay merged into the plan`, at));
+    const primary = inRepo === plan.projectId;
+    return this.change(plan, { ...(primary ? { pr } : {}), ...(multi ? { prs: { ...plan.prs, [inRepo]: pr } } : {}) }, notes);
   }
 
-  setShipped(id: string, shipped: PlanShipped): Plan {
+  setShipped(id: string, shipped: PlanShipped, repo?: string): Plan {
     const plan = this.need(id);
     if (plan.shipped) return plan;
-    return this.change(plan, { shipped }, [event({ kind: 'beluga' }, 'done', shipped.how === 'pr' ? `merged into main via #${shipped.number}` : 'merged into main here', shipped.at)]);
+    if (!isMultiRepo(plan)) return this.change(plan, { shipped }, [event({ kind: 'beluga' }, 'done', shipped.how === 'pr' ? `merged into main via #${shipped.number}` : 'merged into main here', shipped.at)]);
+    const inRepo = repo ?? plan.projectId;
+    if (plan.shippedIn?.[inRepo]) return plan;
+    const shippedIn = { ...plan.shippedIn, [inRepo]: shipped };
+    const pr = planPrFor(plan, inRepo);
+    const notes = [event({ kind: 'beluga' }, 'done', shipped.how === 'pr' && pr ? `merged into main in ${this.repoName(inRepo)} via ${prRef(pr)}` : `merged into main here in ${this.repoName(inRepo)}`, shipped.at)];
+    const repos = shipOrder(plan);
+    if (!repos.every((r) => shippedIn[r])) return this.change(plan, { shippedIn }, notes);
+    const how = repos.every((r) => shippedIn[r]!.how === 'pr') ? 'pr' : 'local';
+    const number = shippedIn[plan.projectId]?.number;
+    const all: PlanShipped = { at: shipped.at, how, ...(number !== undefined ? { number } : {}) };
+    return this.change(plan, { shippedIn, shipped: all, mergeAll: undefined }, [...notes, event({ kind: 'beluga' }, 'done', `every repo’s work is in main (${repos.length} repos)`, shipped.at)]);
+  }
+
+  setMergeAll(id: string, mergeAll: Plan['mergeAll']): Plan {
+    const plan = this.need(id);
+    if (!mergeAll && !plan.mergeAll) return plan;
+    return this.change(plan, { mergeAll }, []);
+  }
+
+  private repoName(projectId: string): string {
+    return this.deps.store.getState().projects.find((p) => p.id === projectId)?.name ?? projectId;
   }
 
   setCaughtUp(id: string): Plan {

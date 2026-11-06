@@ -509,6 +509,7 @@ describe('fixers and checkers per repo, and the final integrated check (BLG-15)'
       mainRef: async () => 'origin/main',
       mergePr: async () => undefined,
       mergeLocal: async () => ({ ok: true }),
+      editPrBody: async () => undefined,
     };
     const asked: Array<{ prompt: string; channel: string }> = [];
     const board = new Board({ store, dir: null, projectName: (id) => store.getState().projects.find((p) => p.id === id)?.name });

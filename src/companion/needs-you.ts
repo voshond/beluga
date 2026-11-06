@@ -3,7 +3,7 @@ import { OFFER_DETAIL, knockWords, offerWords } from '../core/team/model.js';
 import type { PendingQuestion } from '../core/collab-store.js';
 import type { TaskView as GwTask } from '../core/gateway/model.js';
 import { parseDecisionQid } from '../core/plans/decisions.js';
-import { type Plan, planTitle } from '../core/plans/model.js';
+import { type Plan, isMultiRepo, planBranchFor, planPrFor, planTitle, prRef, shipOrder, shippedIn } from '../core/plans/model.js';
 import { firstLine, sentinelById } from '../core/sentinel/model.js';
 import { type PlanView as PlanProgress, planView } from '../core/plans/progress.js';
 import { type NeedsYou, Topic } from './protocol.js';
@@ -229,6 +229,25 @@ function stuckItems(plan: Plan, progress: PlanProgress, at: Pick<NeedsYou, 'topi
     }),
   );
   return [...stalled, ...rescued, ...conflicts];
+}
+
+function shipItems(state: DomainState, plan: Plan): NeedsYou[] {
+  const topic = planTopic(plan.id);
+  const at = { ...(topic ? { topic } : {}), from: `the plan “${clip(planTitle(plan), 80)}”` };
+  const nameOf = (id: string): string => state.projects.find((x) => x.id === id)?.name ?? id;
+  const main = plan.mainMerge?.conflict?.stuck ? plan.mainMerge : undefined;
+  const mainIn = main ? (main.projectId ?? plan.projectId) : undefined;
+  return shipOrder(plan)
+    .filter((repo) => !shippedIn(plan, repo))
+    .flatMap((repo): NeedsYou[] => {
+      const pr = planPrFor(plan, repo);
+      const name = nameOf(repo);
+      if (main?.conflict && mainIn === repo)
+        return [{ id: `plan:${plan.id}:conflict:main:${repo}`, kind: 'stuck', title: clip(`A merge conflict in ${name} Claude couldn’t fix`, 500), detail: clip(`While merging ${main.main} into ${planBranchFor(plan, repo) ?? 'the plan’s branch'} for its pull request: ${main.conflict.files.join(', ')}`, 64_000), ...at, askedAt: main.conflict.at, actions: [{ label: 'Ask Claude again', tone: 'main', method: 'plans.retryConflicts', args: [plan.id] }] }];
+      if (pr?.state === 'CLOSED') return [{ id: `plan:${plan.id}:closed:${repo}`, kind: 'stuck', title: clip(`${name}’s pull request ${prRef(pr)} was closed`, 500), detail: 'Closed without merging, so the plan can’t be Done: open it again from the plan on your Mac (Open PRs Again), or merge locally.', ...at, askedAt: plan.updatedAt, actions: [] }];
+      if (pr?.state === 'OPEN' && pr.conflicts && !plan.mainMerge) return [{ id: `plan:${plan.id}:resolve:${repo}`, kind: 'stuck', title: clip(`${name}’s pull request ${prRef(pr)} conflicts with main`, 500), detail: 'Merge All waits for it: Resolve Conflicts on your Mac brings main into its plan branch.', ...at, askedAt: plan.updatedAt, actions: [] }];
+      return [];
+    });
 }
 
 /** What a plan waits for from you: approving its draft, passing a milestone at its gate, or what it couldn't move on itself. */
@@ -555,6 +574,7 @@ export function waitingNeeds(state: DomainState): NeedsYou[] {
     ...state.questions.map((q) => questionItem(state, q)),
     ...state.gateway.tasks.flatMap((t) => gatewayItems(state, t)),
     ...state.plans.plans.filter((p) => p.status !== 'done').flatMap((p) => planItems(p, progressOf(state, p))),
+    ...state.plans.plans.filter((p) => p.status === 'done' && !p.shipped && isMultiRepo(p)).flatMap((p) => shipItems(state, p)),
     ...knockItems(state),
     ...joinItems(state),
     ...offerItems(state),

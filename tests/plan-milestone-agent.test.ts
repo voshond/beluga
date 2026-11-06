@@ -299,6 +299,7 @@ describe('Pass Anyway is instant (BLG-16)', () => {
       mainRef: async () => 'origin/main',
       mergePr: async () => undefined,
       mergeLocal: async () => ({ ok: true }),
+      editPrBody: async () => undefined,
     };
     return { git, merged };
   }
@@ -393,6 +394,7 @@ describe('milestone agents per repo, and spanning milestones (BLG-14)', () => {
       mainRef: async () => 'origin/main',
       mergePr: async () => undefined,
       mergeLocal: async () => ({ ok: true }),
+      editPrBody: async () => undefined,
     };
     return { git, steps };
   }
