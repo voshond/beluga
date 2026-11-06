@@ -413,11 +413,20 @@ export class Plans {
     return this.change(plan, { watch: Object.keys(next).length ? next : undefined }, []);
   }
 
-  /** The plan's branch is there (made from main, or one that was there already). */
-  setBranch(id: string, branch: string, made: boolean): Plan {
+  /**
+   * The plan's branch is there in a repo (made from main, or one that was there already). A plan of
+   * one repo keeps only `branch`; across repos each is in `branches`, the primary's in `branch` too.
+   */
+  setBranch(id: string, branch: string, made: boolean, projectId?: string): Plan {
     const plan = this.need(id);
-    if (plan.branch === branch) return plan;
-    return this.change(plan, { branch }, [event({ kind: 'beluga' }, 'note', made ? `made the plan’s branch ${branch} from main` : `collects the plan’s work on ${branch}`, this.now())]);
+    const repo = projectId ?? plan.projectId;
+    const multi = planRepos(plan).length > 1;
+    const primary = repo === plan.projectId;
+    if ((primary ? plan.branch === branch : true) && (!multi || plan.branches?.[repo] === branch)) return plan;
+    const name = multi ? this.deps.store.getState().projects.find((p) => p.id === repo)?.name ?? repo : undefined;
+    const where = name ? ` in ${name}` : '';
+    const text = made ? `made the plan’s branch ${branch} from main${where}` : `collects the plan’s work on ${branch}${where}`;
+    return this.change(plan, { ...(primary ? { branch } : {}), ...(multi ? { branches: { ...plan.branches, [repo]: branch } } : {}) }, [event({ kind: 'beluga' }, 'note', text, this.now())]);
   }
 
   /** A passed milestone being merged into the plan's branch (undefined: no longer). */

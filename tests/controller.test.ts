@@ -189,7 +189,13 @@ describe('WorkspaceController', () => {
     // An epic's worktree (BLG-561): the board names other worktrees it works in; ones gone from disk are left out.
     const stop = ctl.setAlsoIn((id) => (id === ws.id ? [repo, path.join(repo, 'gone')] : []));
     expect(ctl.place(`ws:${ws.id}`)).toMatchObject({ additionalDirectories: [repo], alsoEdit: [repo] });
+    // A plan milestone building on another repo (BLG-14): that folder is read, never edited, and one it edits isn't listed twice.
+    const other = path.dirname(repo);
+    const stopReads = ctl.setReadAlso((id) => (id === ws.id ? [other, repo] : []));
+    expect(ctl.place(`ws:${ws.id}`)).toMatchObject({ additionalDirectories: [repo, other], alsoEdit: [repo] });
     stop();
+    expect(ctl.place(`ws:${ws.id}`)).toMatchObject({ additionalDirectories: [other, repo] });
+    stopReads();
     expect(ctl.place(`ws:${ws.id}`)).toMatchObject({ additionalDirectories: [] });
     expect(ctl.place(`ws:${ws.id}`)?.alsoEdit).toBeUndefined();
     store.dispatch({ type: 'chat', id: 'm1', from: 'me', text: 'build it', ts: 1, byAgent: false, channel: `ws:${ws.id}` });

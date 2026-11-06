@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Board } from '../src/core/board/board.js';
 import { BoardWork } from '../src/core/board/work.js';
 import { type BodyInput, PlanError, applyOps, normalizeBody } from '../src/core/plans/edit.js';
-import { diffBodies, milestoneDeps, planForHome } from '../src/core/plans/model.js';
+import { diffBodies, milestoneDeps, planBranchFor, planForHome } from '../src/core/plans/model.js';
 import { boardOf, isVisiting, reposOf, showsOn } from '../src/core/board/model.js';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -954,25 +954,32 @@ describe('a task that builds on several unfinished tasks starts from their combi
 describe('the plan’s branch: tasks start from it, milestones merge into it, one PR at the end', () => {
   /** A fake of git and GitHub: what was asked, and what it answers. */
   function fakeGit() {
-    const log = { pushed: [] as string[], ensured: [] as string[], merged: [] as Array<{ into: string; branches: readonly string[] }>, retired: [] as Array<{ ws: string; branch?: string }> };
+    /** `inRepo`: each git step with the repo it ran in ("merge cal plan/x ← klaud/y"). */
+    const log = { pushed: [] as string[], ensured: [] as string[], merged: [] as Array<{ into: string; branches: readonly string[] }>, retired: [] as Array<{ ws: string; branch?: string }>, inRepo: [] as string[] };
+    /** Branches there already: "plan/x" in every repo, "cal:plan/x" in one. */
     const existing = new Set<string>();
     const inMain = new Set<string>();
     let pr: PlanPr | undefined;
-    let conflict: ((branches: readonly string[]) => CombineResult | undefined) | undefined;
+    let conflict: ((branches: readonly string[], repo: string) => CombineResult | undefined) | undefined;
     let mergeError: string | undefined;
     const git: PlanGit = {
-      ensureBranch: async (_p, b) => {
+      ensureBranch: async (p, b) => {
         log.ensured.push(b);
-        const made = !existing.has(b);
-        existing.add(b);
+        log.inRepo.push(`ensure ${p} ${b}`);
+        const made = !existing.has(b) && !existing.has(`${p}:${b}`);
+        existing.add(`${p}:${b}`);
         return { made };
       },
-      mergeInto: async (_p, into, branches) => {
+      mergeInto: async (p, into, branches) => {
         log.merged.push({ into, branches });
-        return conflict?.(branches) ?? { ok: true, branch: into };
+        log.inRepo.push(`merge ${p} ${into} ← ${branches.join(' ')}`);
+        return conflict?.(branches, p) ?? { ok: true, branch: into };
       },
       inMain: async (_p, b) => inMain.has(b),
-      retire: async (_p, ws, branch) => void log.retired.push({ ws: ws ?? '', ...(branch ? { branch } : {}) }),
+      retire: async (p, ws, branch, into) => {
+        log.retired.push({ ws: ws ?? '', ...(branch ? { branch } : {}) });
+        log.inRepo.push(`retire ${p} ${branch ?? '-'} into ${into}`);
+      },
       findPr: async () => pr,
       openPr: async (_p, _branch, title) => (pr = { number: 7, url: 'https://github.com/bob/api/pull/7', state: 'OPEN', title, draft: false, checks: 'pending' }),
       push: async (_p, b) => void log.pushed.push(b),
@@ -1323,6 +1330,95 @@ describe('the plan’s branch: tasks start from it, milestones merge into it, on
     expect(ISSUE_STATUSES.slice(3, 6)).toEqual(['in_review', 'in_plan', 'done']);
     expect(STATUS_INFO.in_plan.label).toBe('Merged into Plan');
   });
+
+  describe('across repos: a plan branch in each (BLG-13)', () => {
+    const ACROSS: BodyInput = {
+      title: 'Invites',
+      goal: 'One feature across three repos',
+      milestones: [
+        { id: 'hooks', title: 'Transcripts', tasks: [{ id: 'hook', title: 'Transcript hook' }] },
+        { id: 'contract', title: 'Invite API', repos: ['cal'], tasks: [{ id: 'schema', title: 'Invite schema' }] },
+        { id: 'desktop', title: 'Desktop invites', repos: ['desk'], dependsOn: ['contract'], tasks: [{ id: 'ui', title: 'Invite UI', blockedBy: ['schema'] }] },
+      ],
+    };
+
+    async function across() {
+      const g = fakeGit();
+      // calendar-api kept one by hand: adopted there, made in the others.
+      g.existing.add('cal:plan/invites');
+      const t = setup({ git: g.git });
+      t.store.dispatch({ type: 'projects', projects: [...t.store.getState().projects, project('cal', 'calendar-api'), project('desk', 'calendar-desktop')] });
+      const plan = t.plans.create({ projectId: 'api', repos: ['api', 'cal', 'desk'], home: 'ws:main', autonomy: 'gated' }, t.claude);
+      t.work.forRun('ws:main', 'p-me')!.tools!.write(ACROSS);
+      t.work.approve(plan.id);
+      for (let n = 0; n < 100 && t.made.length < 2; n++) await tick(5);
+      await tick(10);
+      const issue = (title: string) => t.store.getState().board.issues.find((i) => i.title === title)!;
+      const settle = async () => {
+        await tick(10);
+        for (let n = 0; n < 100 && Object.values(t.plans.need(plan.id).merging ?? {}).some((m) => !m.conflict); n++) await tick(5);
+        await tick(10);
+      };
+      return { ...t, ...g, plan, issue, settle };
+    }
+
+    it('approving makes plan/<slug> in every repo (adopting one that’s there), the primary last; each milestone starts from its repo’s', async () => {
+      const t = await across();
+      expect(t.log.inRepo.filter((l) => l.startsWith('ensure'))).toEqual(['ensure cal plan/invites', 'ensure desk plan/invites', 'ensure api plan/invites']);
+      const plan = t.plans.need(t.plan.id);
+      expect(plan.branch).toBe('plan/invites');
+      expect(plan.branches).toEqual({ api: 'plan/invites', cal: 'plan/invites', desk: 'plan/invites' });
+      const said = plan.activity.map((e) => e.text);
+      expect(said).toContain('collects the plan’s work on plan/invites in calendar-api');
+      expect(said).toContain('made the plan’s branch plan/invites from main in calendar-desktop');
+      const worktrees = t.store.getState().projects.flatMap((p) => p.workspaces).filter((w) => w.kind === 'worktree');
+      expect(worktrees.map((w) => w.projectId).sort()).toEqual(['api', 'cal']);
+      expect(t.made.map((m) => m.base)).toEqual(['plan/invites', 'plan/invites']);
+      // Never made twice: another look changes nothing.
+      t.work.pilot.schedule();
+      await tick(20);
+      expect(t.log.ensured).toHaveLength(3);
+    });
+
+    it('passing a milestone merges only into its repo’s plan branch and retires against it', async () => {
+      const t = await across();
+      const schema = t.issue('Invite schema');
+      t.board.update(schema.id, { status: 'in_review' }, t.claude);
+      await tick(10);
+      t.work.pass(t.plan.id, 'contract');
+      await t.settle();
+      const branch = t.issue('Invite schema').branch!;
+      expect(t.log.inRepo.filter((l) => l.startsWith('merge'))).toEqual([`merge cal plan/invites ← ${branch}`]);
+      for (let n = 0; n < 50 && !t.log.inRepo.some((l) => l.startsWith('retire')); n++) await tick(5);
+      expect(t.log.inRepo.filter((l) => l.startsWith('retire'))).toEqual([`retire cal ${branch} into plan/invites`]);
+      expect(t.issue('Invite schema').status).toBe('in_plan');
+      expect(t.plans.need(t.plan.id).activity.map((e) => e.text)).toContain(`merged ${schema.key} into plan/invites in calendar-api`);
+      expect(t.plans.need(t.plan.id).runs.contract?.passedAt).toBeDefined();
+    });
+
+    it('a conflict says which repo it’s in; the others aren’t touched', async () => {
+      const t = await across();
+      t.setConflict((branches, repo) => (repo === 'cal' ? { ok: false, branch: 'plan/invites', dir: '/tmp/.bases/cal/plan-invites', merging: branches[0]!, files: ['src/invite.ts'] } : undefined));
+      t.board.update(t.issue('Invite schema').id, { status: 'in_review' }, t.claude);
+      await tick(10);
+      t.work.pass(t.plan.id, 'contract');
+      await t.settle();
+      const conflict = t.plans.need(t.plan.id).merging?.contract?.conflict;
+      expect(conflict).toMatchObject({ projectId: 'cal', dir: '/tmp/.bases/cal/plan-invites', key: t.issue('Invite schema').key });
+      expect(t.log.inRepo.some((l) => l.startsWith('merge api') || l.startsWith('merge desk'))).toBe(false);
+      expect(t.plans.need(t.plan.id).activity.some((e) => e.text.startsWith('merging “Invite API” into plan/invites in calendar-api:'))).toBe(true);
+    });
+
+    it('a plan of one repo keeps only `branch` (no branches), every step in its repo', async () => {
+      const t = await running();
+      await t.passSafe();
+      expect(t.plans.need(t.plan.id).branches).toBeUndefined();
+      expect(t.log.inRepo.length).toBeGreaterThan(2);
+      expect(t.log.inRepo.every((l) => l.split(' ')[1] === 'api')).toBe(true);
+      expect(planBranchFor(t.plans.need(t.plan.id), 'api')).toBe('plan/payments');
+      expect(planBranchFor(t.plans.need(t.plan.id), 'cal')).toBeUndefined();
+    });
+  });
 });
 
 describe('soak: a long plan on Autopilot reaches the end by itself, with Claudes that misbehave (BLG-473)', () => {
@@ -1339,12 +1435,55 @@ describe('soak: a long plan on Autopilot reaches the end by itself, with Claudes
     ],
   } as BodyInput;
 
+  /** The same plan in two repos (BLG-14): B and D in calendar-api, D building on A's C, E spanning both. */
+  const ACROSS: BodyInput = { ...LONG, milestones: LONG.milestones.map((m) => ({ ...m, ...(m.id === 'b' || m.id === 'd' ? { repos: ['cal'] } : m.id === 'e' ? { repos: ['cal', 'api'] } : {}) })) } as BodyInput;
+
+  /** A git where every merge goes in: each step with its repo. */
+  const okGit = () => {
+    const steps: string[] = [];
+    const git: PlanGit = {
+      ensureBranch: async (p, b) => (steps.push(`ensure ${p} ${b}`), { made: true }),
+      mergeInto: async (p, into, branches) => (steps.push(`merge ${p} ${into} ← ${branches.join(' ')}`), { ok: true, branch: into }),
+      inMain: async () => false,
+      retire: async (p, _ws, branch) => void steps.push(`retire ${p} ${branch ?? '-'}`),
+      findPr: async () => undefined,
+      openPr: async () => {
+        throw new Error('no');
+      },
+      push: async () => undefined,
+      mainRef: async () => 'origin/main',
+      mergePr: async () => undefined,
+      mergeLocal: async () => ({ ok: true }),
+    };
+    return { git, steps };
+  };
+
   it('Claudes that stop after one task or never answer, checks without a verdict, and a restart: it still gets there, never left to you', async () => {
+    await soak(LONG);
+  });
+
+  it('across two repos with plan branches: milestones run in their repos, a spanning one in both, and it still gets there', async () => {
+    const g = okGit();
+    const t = await soak(ACROSS, { git: g.git, repos: ['api', 'cal'] });
+    const done = t.plans.need(t.planId);
+    expect(done.branches).toEqual({ api: 'plan/long-run', cal: 'plan/long-run' });
+    const repoOf = (id: string) => t.store.getState().projects.flatMap((p) => p.workspaces).find((w) => w.id === id)?.projectId;
+    expect(['a', 'b', 'c', 'd', 'e'].map((m) => repoOf(done.runs[m]!.agent!.worktree))).toEqual(['api', 'cal', 'api', 'cal', 'cal']);
+    expect(done.runs.e!.agent!.along?.map((a) => a.projectId)).toEqual(['api']);
+    // Each milestone merged into its own repo's branch only; E into both.
+    const merges = g.steps.filter((s) => s.startsWith('merge'));
+    expect(merges.some((s) => s.startsWith('merge cal') && s.includes(t.issue('B one').branch!))).toBe(true);
+    expect(merges.some((s) => s.startsWith('merge api') && s.includes(t.issue('B one').branch!))).toBe(false);
+    expect(merges.some((s) => s.startsWith('merge api') && s.includes(done.runs.e!.agent!.along![0]!.branch!))).toBe(true);
+  });
+
+  async function soak(body: BodyInput, opts: { git?: PlanGit; repos?: readonly string[] } = {}) {
     // A minute passes between looks; a milestone quiet for three is moved along.
     let clock = 1_000_000;
-    const t = setup({ rescueMs: 3 * 60_000, now: () => clock });
-    const plan = t.plans.create({ projectId: 'api', home: 'ws:main', autonomy: 'autopilot' }, t.claude);
-    t.work.forRun('ws:main', 'p-me')!.tools!.write(LONG);
+    const t = setup({ rescueMs: 3 * 60_000, now: () => clock, ...(opts.git ? { git: opts.git } : {}) });
+    if (opts.repos) t.store.dispatch({ type: 'projects', projects: [...t.store.getState().projects, project('cal', 'calendar-api')] });
+    const plan = t.plans.create({ projectId: 'api', ...(opts.repos ? { repos: opts.repos } : {}), home: 'ws:main', autonomy: 'autopilot' }, t.claude);
+    t.work.forRun('ws:main', 'p-me')!.tools!.write(body);
     let work = t.work;
     work.approve(plan.id);
     await tick(5);
@@ -1395,7 +1534,7 @@ describe('soak: a long plan on Autopilot reaches the end by itself, with Claudes
       // A restart partway: everything Beluga kept in memory is gone, the plan and the board stay.
       if (i === 40) {
         work.stop();
-        work = new PlansWork({ store: t.store, plans: t.plans, board: t.boardWork, controller: t.controller, askClaude: (prompt, channel, echo) => `ask-${t.asked.push({ prompt, channel, echo })}`, intend: () => undefined, delayMs: 0, rescueMs: 3 * 60_000, now: () => clock });
+        work = new PlansWork({ store: t.store, plans: t.plans, board: t.boardWork, controller: t.controller, askClaude: (prompt, channel, echo) => `ask-${t.asked.push({ prompt, channel, echo })}`, intend: () => undefined, delayMs: 0, rescueMs: 3 * 60_000, now: () => clock, ...(opts.git ? { git: opts.git } : {}) });
       }
       clock += 60_000;
       work.pilot.tick();
@@ -1411,10 +1550,12 @@ describe('soak: a long plan on Autopilot reaches the end by itself, with Claudes
     expect(Object.values(done.rescue ?? {}).some((r) => r.yours)).toBe(false);
     // Every rung was needed somewhere: sent on, woken, started over, asked again, a fresh checker, the head Claude.
     const said = done.activity.map((a) => a.text).join('\n');
-    for (const rung of ['sent the Claude doing', 'woke BOB-', 'started it again', 'asked for the check of', 'to a fresh checker', 'asked the plan’s Claude to decide']) expect(said).toContain(rung);
+    for (const rung of ['sent the Claude doing', 'woke ', 'started it again', 'asked for the check of', 'to a fresh checker', 'asked the plan’s Claude to decide']) expect(said).toContain(rung);
     // Its epics followed it: every milestone's is In Review (merged into the plan with no branch here, then done once shipped).
     for (const id of Object.values(done.epics!.milestones)) expect(['in_review', 'in_plan', 'done']).toContain(t.board.need(id).status);
-  });
+    const issue = (title: string) => t.store.getState().board.issues.find((i) => i.title === title)!;
+    return { ...t, planId: plan.id, issue };
+  }
 });
 
 describe('a plan across several repos (BLG-10)', () => {

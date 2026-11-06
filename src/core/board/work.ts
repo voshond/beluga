@@ -66,6 +66,8 @@ export class BoardWork {
   private readonly offs: Array<() => void> = [];
   /** More for a run doing a task (the plan it's part of): see setBriefExtra. */
   private briefExtra: (issue: Issue) => string = () => '';
+  /** More folders a worktree's Claude works in (a plan milestone across repos): see setAlsoExtra. */
+  private alsoExtra: (workspaceId: string) => readonly string[] = () => [];
   /** A run's own instructions (a plan milestone's worktree): see setRunBrief. */
   private runBrief: (channel: string) => { readonly brief: string; readonly current?: Issue } | undefined = () => undefined;
   /** Tasks Claude is writing from a description (by id): starting one waits for its words. */
@@ -75,7 +77,8 @@ export class BoardWork {
     this.board = deps.board;
     if (deps.controller) this.offs.push(deps.controller.onWorktree((e) => this.onWorktree(e)));
     // An epic's worktree works in its sub-tasks' worktrees in other repos too (BLG-561).
-    if (deps.controller?.setAlsoIn) this.offs.push(deps.controller.setAlsoIn((id) => this.alsoIn(id).map((w) => w.path)));
+    // A plan milestone across repos too: its worktree works in the ones made beside it (setAlsoExtra).
+    if (deps.controller?.setAlsoIn) this.offs.push(deps.controller.setAlsoIn((id) => [...new Set([...this.alsoIn(id).map((w) => w.path), ...this.alsoExtra(id)])]));
     // Proof made in a worktree outlives it: kept before its folder goes (proof-files.ts).
     if (deps.controller?.onWorktreeGoing) this.offs.push(deps.controller.onWorktreeGoing((ws) => void this.board.keepProofs(ws.path)));
     // After the action that caused it has reached everyone (never inside its dispatch).
@@ -481,6 +484,23 @@ export class BoardWork {
     const issue = this.board.need(ref);
     if (!issue.worktrees.includes(ws.id) || issue.worktrees.at(-1) !== ws.id) this.board.linkWorktree(issue.id, ws.id, { branch: ws.branch, name: ws.name, shared: true }, this.me());
     return this.board.need(issue.id);
+  }
+
+  /** Other worktrees' folders a worktree's Claude edits too, beside an epic's (Plans: a milestone across repos). */
+  setAlsoExtra(fn: (workspaceId: string) => readonly string[]): void {
+    this.alsoExtra = fn;
+  }
+
+  /**
+   * A worktree in another repo beside a milestone's own (a plan milestone across repos): quiet,
+   * linked to no task (the milestone's tasks are in its first repo), from `base`. → the workspace.
+   */
+  async startAlongside(projectId: string, name: string, opts: { readonly base?: string; readonly agent?: AgentRef } = {}): Promise<Workspace> {
+    const controller = this.deps.controller;
+    if (!controller) throw new Error('Worktrees need a project folder');
+    const ws = await controller.newWorktree(projectId, slugify(name).slice(0, 48) || 'along', { quiet: true, ...(opts.base ? { base: opts.base } : {}), ...(opts.agent ? { agent: opts.agent } : {}) });
+    if (!ws) throw new Error('the worktree wasn’t made');
+    return ws;
   }
 
   /** Instructions of their own for a run (a plan milestone's worktree): instead of the one task's brief. */
