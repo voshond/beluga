@@ -10,7 +10,7 @@ import type { WorkspaceController } from '../workspace-controller.js';
 import { ApplyError, applyDraft } from './apply.js';
 import { dropEpics, syncEpics } from './epics.js';
 import type { BodyInput, PlanOp, TaskInput } from './edit.js';
-import { type Autonomy, type Plan, type TestsAt, allTasks, checkerOf, planForHome, planTaskOfIssue, planTitle } from './model.js';
+import { type Autonomy, MAX_PLAN_REPOS, type Plan, type TestsAt, allTasks, checkerOf, planForHome, planRepos, planTaskOfIssue, planTitle } from './model.js';
 import { type PilotDeps, PlanPilot } from './pilot.js';
 import type { TaskView } from './progress.js';
 import { type PlanGit, planGitOf } from './plan-git.js';
@@ -126,15 +126,16 @@ export class PlansWork {
    * the code there and changes nothing), and the plan's page. Claude starts planning from `goal`.
    */
   /** `quiet`: started from elsewhere (Your Mac), so the Mac's window stays where it is. */
-  async create(input: { readonly projectId: string; readonly goal: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentRef }, opts: { readonly quiet?: boolean } = {}): Promise<Plan> {
+  async create(input: { readonly projectId: string; readonly projectIds?: readonly string[]; readonly goal: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentRef }, opts: { readonly quiet?: boolean } = {}): Promise<Plan> {
     const controller = this.deps.controller;
     if (!controller) throw new Error('Plans need a project folder');
     const goal = input.goal.trim();
     if (!goal) throw new Error('Say what the plan is for');
+    const repos = this.localRepos(input.projectId, input.projectIds);
     const chat = await controller.newChat(input.projectId, UNTITLED, undefined, { quiet: true });
     if (!chat) throw new Error('Couldn’t start the plan’s conversation');
     const home = `${WS}${chat.id}`;
-    const plan = this.plans.create({ projectId: input.projectId, home, goal, ...(input.autonomy ? { autonomy: input.autonomy } : {}), ...(input.testsAt ? { testsAt: input.testsAt } : {}), ...(input.agent ? { agent: input.agent } : {}) }, this.me());
+    const plan = this.plans.create({ projectId: input.projectId, ...(repos.length > 1 ? { repos } : {}), home, goal, ...(input.autonomy ? { autonomy: input.autonomy } : {}), ...(input.testsAt ? { testsAt: input.testsAt } : {}), ...(input.agent ? { agent: input.agent } : {}) }, this.me());
     if (!opts.quiet) this.deps.intend({ type: 'navigate', view: { kind: 'plan', id: plan.id } });
     this.deps.askClaude(goal, home, true);
     // Named in a moment by a quick model (your message is never its name); Claude's plan_write names it after that.
@@ -146,6 +147,17 @@ export class PlansWork {
       })
       .catch(() => undefined);
     return plan;
+  }
+
+  /** The repos a new plan covers (primary first): each one a project on this Mac, with its folder. */
+  private localRepos(primary: string, more: readonly string[] | undefined): readonly string[] {
+    const repos = planRepos({ projectId: primary, repos: more ?? [] });
+    if (repos.length === 1) return repos;
+    if (repos.length > MAX_PLAN_REPOS) throw new Error(`A plan covers at most ${MAX_PLAN_REPOS} projects`);
+    const projects = this.deps.store.getState().projects;
+    const missing = repos.filter((id) => !projects.some((p) => p.id === id && p.root));
+    if (missing.length) throw new Error(`A plan can only cover projects on this Mac: ${missing.map((id) => `"${id}"`).join(', ')} ${missing.length > 1 ? "aren't" : "isn't"} one of them`);
+    return repos;
   }
 
   /** A plan's own conversation goes by the plan's name (in the sidebar too), unless you renamed it. */

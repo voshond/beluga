@@ -141,13 +141,15 @@ export class Plans {
   // ------------------------------------------------------------------ drafting
 
   /** A new plan: an empty draft in its conversation (Claude writes it there). Your goal is never its title: a quick model names it (autoTitle), and Claude's plan_write after that. */
-  create(input: { readonly projectId: string; readonly home: string; readonly title?: string; readonly goal?: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentRef }, by: Actor): Plan {
+  create(input: { readonly projectId: string; readonly repos?: readonly string[]; readonly home: string; readonly title?: string; readonly goal?: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentRef }, by: Actor): Plan {
     const at = this.now();
+    const repos = planRepos(input);
     const title = (input.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 80) || UNTITLED;
     const request = input.goal?.trim().slice(0, MAX_REQUEST);
     const plan: Plan = {
       id: short('pl'),
       projectId: input.projectId,
+      ...(repos.length > 1 ? { repos } : {}),
       home: input.home,
       status: 'draft',
       ...(request ? { request } : {}),

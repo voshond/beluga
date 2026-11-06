@@ -1412,3 +1412,42 @@ describe('soak: a long plan on Autopilot reaches the end by itself, with Claudes
     for (const id of Object.values(done.epics!.milestones)) expect(['in_review', 'in_plan', 'done']).toContain(t.board.need(id).status);
   });
 });
+
+describe('a plan across several repos (BLG-10)', () => {
+  const multiSetup = () => {
+    const t = setup();
+    t.store.dispatch({ type: 'projects', projects: [...t.store.getState().projects, project('cal', 'calendar-api'), project('desk', 'calendar-desktop')] });
+    return t;
+  };
+
+  it('plans.create with projectIds keeps them, primary first, once', async () => {
+    const t = multiSetup();
+    const plan = await t.work.create({ projectId: 'api', projectIds: ['api', 'cal', 'desk', 'cal'], goal: 'One feature everywhere' });
+    expect(plan.projectId).toBe('api');
+    expect(plan.repos).toEqual(['api', 'cal', 'desk']);
+    expect(t.plans.need(plan.id).repos).toEqual(['api', 'cal', 'desk']);
+  });
+
+  it('one project, or none extra, stays a plain single-repo plan', async () => {
+    const t = multiSetup();
+    expect('repos' in (await t.work.create({ projectId: 'api', goal: 'Solo' }))).toBe(false);
+    expect('repos' in (await t.work.create({ projectId: 'api', projectIds: ['api'], goal: 'Solo' }))).toBe(false);
+  });
+
+  it('refuses projects that aren’t on this Mac, before starting a conversation', async () => {
+    const t = multiSetup();
+    const chats = (): number => t.store.getState().projects.flatMap((p) => p.workspaces).length;
+    const before = chats();
+    await expect(t.work.create({ projectId: 'api', projectIds: ['cal', 'friend-repo'], goal: 'Nope' })).rejects.toThrow(/only cover projects on this Mac: "friend-repo" isn't one of them/);
+    expect(chats()).toBe(before);
+    expect(t.plans.list()).toHaveLength(0);
+  });
+
+  it('drafts of a multi-repo plan may name its repos, and only those', async () => {
+    const t = multiSetup();
+    const plan = await t.work.create({ projectId: 'api', projectIds: ['cal'], goal: 'Two repos' });
+    const drafted = t.plans.writeDraft(plan.id, { title: 'Two repos', goal: 'g', milestones: [{ title: 'Calendar', repos: ['cal'], tasks: [{ title: 'Do it' }] }] }, t.claude);
+    expect(drafted.draft!.milestones[0]!.repos).toEqual(['cal']);
+    expect(() => t.plans.writeDraft(plan.id, { title: 'Two repos', goal: 'g', milestones: [{ title: 'Desktop', repos: ['desk'] }] }, t.claude)).toThrow(/isn't one of this plan's repos/);
+  });
+});
