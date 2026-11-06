@@ -18,6 +18,7 @@ import { BtwDesk } from './btw.js';
 import { SCRATCH_DIR, ensureScratch } from '../workspaces/scratch.js';
 import { isImportedItem } from '../agent/transcript.js';
 import { PHONE_LOOK_TOOLS } from '../agent/phone-tools.js';
+import { buildMachineAppend } from '../agent/prompt.js';
 import type { StepPage, StepRecord } from '../shared/steps.js';
 import { READS_AFTER_STEP, STEERED_IN, STOPPING_FOR } from '../shared/claude-notices.js';
 import { span } from '../shared/clock.js';
@@ -1306,6 +1307,7 @@ export class AgentHost {
         ...(from === this.selfId ? { ownerMcp: true } : {}),
         // Your own flags for `claude` and `codex` (Settings › Agents), never on a friend's run.
         ...(from === this.selfId ? this.launchArgs() : {}),
+        ...(from === this.selfId ? this.machineBrief() : {}),
         // Your variables can hold secrets: only runs you asked for get them, never a friend's.
         // Your own runs also get adb on PATH (and ANDROID_SERIAL) when a phone is set up, so Bash can drive it (BLG-174).
         ...(from === this.selfId && (this.deps.envFor || phone?.env) ? { env: { ...this.deps.envFor?.(body.channel, place?.cwd), ...(phone?.env ?? {}), ...tag } } : worktree ? { env: tag } : {}),
@@ -1394,6 +1396,7 @@ export class AgentHost {
         ...this.modelFor(place.model, place.agent, place.effort),
         ownerMcp: true,
         ...this.launchArgs(),
+        ...this.machineBrief(),
         env: { ...this.deps.envFor?.(channel, place.cwd), ...(phone?.env ?? {}), ...tag },
       },
       sink,
@@ -1415,6 +1418,7 @@ export class AgentHost {
       requesterName,
       viaAgent: false,
       context: [],
+      ...this.machineBrief(),
       ...input,
       scope: input.scope ?? 'full',
       channel,
@@ -1428,6 +1432,11 @@ export class AgentHost {
       ...(opts.defaultModel ? this.modelFor(opts.place?.model, opts.place?.agent, opts.place?.effort) : {}),
     });
     return { text, tokens };
+  }
+
+  private machineBrief(): Pick<AgentRunInput, 'machineBrief'> {
+    const { machineNote, machineNoteOn } = this.store.getState().prefs;
+    return machineNoteOn && machineNote.trim() ? { machineBrief: buildMachineAppend(machineNote) } : {};
   }
 
   /** Your launch flags per runtime (Settings › Agents › Launch flags), when you set any. */

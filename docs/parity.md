@@ -608,6 +608,15 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `claudeCode.mcpSignIn` | ✓ Settings › Agent › MCP servers › Sign In…: opens the server's sign-in page in your browser |
 | `claudeCode.mcpSignedIn` | ✓ Settings › Agent › MCP servers: the row waits for the browser, then says whether you're signed in |
 | `claudeCode.mcpSetEnabled` | ✓ Settings › Agent › MCP servers: a Codex server's switch turns it on or off in its config.toml |
+| `agentSetup.skills` | ✓ Settings › Skills & instructions › Shared skills: the skills in `~/.agents/skills`, each with whether Claude (a link in its skills folder) and Codex (reads the folder itself) see it, and a too-deep link to the whole folder |
+| `agentSetup.readSkill` | ✓ Shared skills › Edit: a skill's SKILL.md |
+| `agentSetup.saveSkill` | ✓ Shared skills › New Skill (a name and a description) and Edit › Save; it links the skill for Claude |
+| `agentSetup.removeSkill` | ✓ Shared skills › Edit › Delete, asked twice; its Claude link goes too |
+| `agentSetup.repairSkills` | ✓ Shared skills › Repair Links: one link per skill for Claude, in place of a link to the whole folder; never over a folder Claude has of its own |
+| `agentSetup.agentsDoc` | ✓ Settings › Skills & instructions › Global AGENTS.md: `~/.agents/AGENTS.md` and whether `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` point at it |
+| `agentSetup.saveAgentsDoc` | ✓ Global AGENTS.md › Save |
+| `agentSetup.linkAgentsDoc` | ✓ Global AGENTS.md › Link beside Claude or Codex: a file of its own is kept as a backup (or becomes the shared file when there is none yet) |
+| `agentSetup.instructions` | ✓ Settings › Skills & instructions › Built-in instructions: each piece Beluga adds to a run's instructions, in order, when it's added, its source, and its text where it's fixed |
 | `agent.steps` | ✓ an agent card's steps as disclosure rows (an icon per tool, ✓/✗, how long it took), thinking as “Thought for 12s”, sub-agents' steps |
 | `agent.step` | ✓ opening a step on an agent card: Bash's command and output (colours kept), the file read, an edit's diff, a search's matches, a page fetched, an MCP tool's input and output as JSON, the thinking |
 | `view.fetch` | ✓ a live table, chart, stats or code view in a conversation fetching its next page, sorted or searched, or refreshing it (docs/views.md) |
@@ -677,6 +686,7 @@ What an agent run does on each runtime (BLG-461, OpenCode BLG-686). A cell is **
 | Edit a sent message (Rewind Here, New Fork) | `workspaces.editPrompt` | pass | fallback (`fallback:rewind`): the files go back; the line under the edit says the conversation starts afresh | fallback (`fallback:rewind`): the files go back; the line under the edit says the conversation starts afresh |
 | Skills and custom commands | `claudeCode.skills`, `skills` | pass (native) | fallback (`fallback:skills`): translated; each one in the / list says what isn't on Codex | pass (it loads your Claude Code skills itself; custom commands are expanded for it, Claude Code's own built-ins go in as text with a note) |
 | MCP servers of your own | `claudeCode.mcpServers`, `claudeCode.mcpSignIn`, `claudeCode.mcpSetEnabled` | pass | pass (its own from `~/.codex/config.toml` through `mcpServerStatus/list`, signed in with `mcpServer/oauth/login`, turned on and off with `config/value/write`; a friend's task gets them switched off) | n/a: the ones in your OpenCode config run in its runs, as in OpenCode; Settings lists Claude Code's and Codex's |
+| About this machine (your note on your own runs) | `session.setPrefs` (`machineNote`, `machineNoteOn`) | pass (system prompt) | pass (developer instructions) | pass (its instructions file) |
 | Questions the agent asks you mid-run | `questions.answer`, `canAskUser` | pass | n/a: Codex asks in its answer, and you reply in the box | n/a: its question tool is off (it can't reach you over ACP), so it asks in its answer and you reply in the box |
 | Sub-agents and background agents | `claudeCode.findAgent`, `hasSubagents`, `hasBackgroundAgents` | pass | pass (its multi_agent on for your own runs, off for friends' and side calls: each sub-agent a row on the card with its name, prompt, steps and report, on the phone's sub-agent sheet too; the run stays open while ones it didn't wait for still work, up to the same 3 hours; Stop interrupts each one's turn. No Watch page or sidebar row: Codex keeps no Claude Code transcript for them) | pass (its task tool's sub-agents, each a row on the card; no background agents: a run ends when it answers) |
 | Claude Code sessions outside Beluga | `claudeCode.steps` | pass | n/a: Claude Code's own transcripts | n/a: Claude Code's own transcripts |

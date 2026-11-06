@@ -20,6 +20,7 @@ import type { Args, Method } from './api.js';
 import { NETWORK_HANDLERS } from './network-handlers.js';
 import { STRIPE_HANDLERS } from './stripe-handlers.js';
 import { SUPPORT_HANDLERS } from './support-handlers.js';
+import { AGENT_SETUP_HANDLERS } from './agent-setup-handlers.js';
 import { WEB_HANDLERS } from './web-handlers.js';
 import { DIAGNOSTICS_HANDLERS } from './diagnostics-handlers.js';
 import { CLAUDE_CODE_HANDLERS } from './claude-code-handlers.js';
@@ -395,6 +396,7 @@ export const HANDLERS = {
   ...NETWORK_HANDLERS,
   ...STRIPE_HANDLERS,
   ...SUPPORT_HANDLERS,
+  ...AGENT_SETUP_HANDLERS,
   ...WEB_HANDLERS,
   ...DIAGNOSTICS_HANDLERS,
   ...CLAUDE_CODE_HANDLERS,

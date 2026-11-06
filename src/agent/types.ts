@@ -123,6 +123,7 @@ export interface AgentRunInput {
   /** Your phone (core/phone): tools to act on your own paired phone, and what Claude is told about it. */
   readonly phoneTools?: PhoneTools;
   readonly phoneBrief?: string;
+  readonly machineBrief?: string;
   /** Your own runs: sentinels (core/sentinel), and what Claude is told (a sentinel run's brief, or a short note). */
   readonly sentinelTools?: SentinelTools;
   readonly sentinelBrief?: string;

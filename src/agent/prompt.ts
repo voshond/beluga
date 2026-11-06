@@ -80,6 +80,10 @@ export function buildSystemAppend(ownerName: string, agent: AgentRef = CLAUDE_AG
   ].join('\n');
 }
 
+export function buildMachineAppend(note: string): string {
+  return ['', '', 'About this machine, from its owner (true for this computer; use what it allows when the work needs it):', '<machine_context>', note.trim(), '</machine_context>'].join('\n');
+}
+
 /** A workspace's scratch folder: where screenshots and intermediate output go (shown live to the owner). */
 export function buildScratchAppend(dir: string): string {
   return [

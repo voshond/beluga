@@ -9,6 +9,7 @@ export const PANES: ReadonlyArray<PaneInfo<SettingsPane> & { icon: IconName; key
   { id: 'general', label: 'General', icon: 'gear', keywords: 'profile account' },
   { id: 'appearance', label: 'Appearance', icon: 'eye', keywords: 'look themes colors colours display' },
   { id: 'claude', label: 'Agent', icon: 'spark', keywords: 'claude codex model ai' },
+  { id: 'skills', label: 'Skills & instructions', icon: 'book', keywords: 'skills agents.md claude.md instructions prompt machine ssh nas' },
   { id: 'notifications', label: 'Notifications', icon: 'bell', keywords: 'alerts sounds' },
   { id: 'workspaces', label: 'Workspaces', icon: 'branch', keywords: 'worktrees projects git' },
   { id: 'terminal', label: 'Terminal', icon: 'terminal', keywords: 'shell console xterm' },
@@ -106,6 +107,16 @@ export const SETTINGS: readonly Entry[] = [
     ['Pull request instructions', 'How your agent writes pull requests.', 'pr prompt github'],
     ['Templates', 'Ways to start a task.', 'task templates start'],
   ]),
+
+  // Skills & instructions
+  ...rows('skills', 'About this machine', [['Tell your agents about this computer', 'Added to every run you start here, never a friend’s.', 'machine ssh nas keys deploy access server local context']]),
+  ...rows('skills', 'Shared skills', [['Skills for Claude Code and Codex', 'In ~/.agents/skills, linked for Claude Code.', 'skills skill.md new repair links codex claude']]),
+  ...rows('skills', 'Global AGENTS.md', [
+    ['Instructions for every project', 'Your ~/.agents/AGENTS.md.', 'agents.md claude.md global instructions memory'],
+    ['Claude Code reads it', '~/.claude/CLAUDE.md points here.', 'claude.md link symlink'],
+    ['Codex reads it', '~/.codex/AGENTS.md points here.', 'codex agents.md link symlink'],
+  ]),
+  ...rows('skills', 'Built-in instructions', [['What Beluga adds to every run', 'Each piece, when it is added, and its source.', 'system prompt built in baked in hook developer instructions']]),
 
   // Notifications
   ...rows('notifications', undefined, [

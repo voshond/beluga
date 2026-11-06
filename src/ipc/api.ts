@@ -5,6 +5,7 @@ import { BRANCH_PREFIX_RE, EFFORTS, KEEP_AWAKE, LOW_POWER, NotifySettings, THEME
 import { AUTO_COMPACT_MAX, AUTO_COMPACT_MIN } from '../shared/context-usage.js';
 import { PARALLEL_RUNS_MAX, PARALLEL_RUNS_MIN } from '../shared/run-slots.js';
 import { CHAT_LIMIT_MAX } from '../shared/chat-limit.js';
+import { MACHINE_NOTE_MAX } from '../shared/agent-setup.js';
 import { ENV_KEY, MAX_ENV_VALUE, MAX_ENV_VARS } from '../shared/env-vars.js';
 import { type ArgsRuntime, MAX_AGENT_ARGS, MAX_AGENT_ARG_LENGTH, agentArgsProblem } from '../shared/agent-args.js';
 import { NETWORK_API } from './network-api.js';
@@ -28,6 +29,7 @@ import { VIEWS_API } from './views-api.js';
 import { FILES_EDIT_API } from './files-api.js';
 import { COMPANION_API } from './companion-api.js';
 import { ASSISTANT_API } from './assistant-api.js';
+import { AGENT_SETUP_API } from './agent-setup-api.js';
 import { VOICE_API } from './voice-api.js';
 import { CALLS_API } from './calls-api.js';
 import { TERMINAL_IMPORT_API } from './terminal-import-api.js';
@@ -94,6 +96,8 @@ export const PrefsPatch = z
     parallelRuns: z.number().int().min(PARALLEL_RUNS_MIN).max(PARALLEL_RUNS_MAX),
     chatLimit: z.number().int().min(0).max(CHAT_LIMIT_MAX),
     scratchFolder: bool,
+    machineNote: z.string().max(MACHINE_NOTE_MAX),
+    machineNoteOn: bool,
     subagents: z.enum(['full', 'compact', 'hidden']),
     hiddenButtons: z.array(z.string().max(40)).max(40),
     friendWorktrees: z.enum(['ask', 'off']),
@@ -489,6 +493,8 @@ export const API = {
   ...AGENT_TERM_API,
   // ---- browsers on the web port: join links, the ones let in, revoking (web-api.ts)
   ...WEB_API,
+  // ---- your agents' shared skills, the global AGENTS.md and Beluga's built-in instructions (agent-setup-api.ts)
+  ...AGENT_SETUP_API,
 } as const;
 
 export type Api = typeof API;

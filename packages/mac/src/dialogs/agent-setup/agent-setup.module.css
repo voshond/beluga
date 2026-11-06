@@ -1,0 +1,122 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px 12px;
+}
+.editor + .editor,
+.row + .editor,
+.editor + .row {
+  border-top: 0.5px solid var(--hairline);
+}
+.textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bg-raised);
+  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  resize: vertical;
+  user-select: text;
+}
+.textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent), 0 0 0 3.5px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.tall {
+  min-height: 280px;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.flex {
+  flex: 1;
+}
+.muted {
+  color: var(--text-3);
+  font-size: 0.86rem;
+}
+.error {
+  color: var(--error);
+  font-size: 0.86rem;
+}
+.field {
+  height: 25px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bg-raised);
+  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  user-select: text;
+}
+.name {
+  width: 180px;
+  font-family: var(--font-mono);
+}
+.description {
+  flex: 1;
+  min-width: 0;
+}
+.badges {
+  display: flex;
+  gap: 6px;
+}
+.badge {
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.good {
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  color: var(--ok);
+}
+.warn {
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--warn);
+}
+.piece {
+  padding: 8px 14px;
+}
+.piece + .piece {
+  border-top: 0.5px solid var(--hairline);
+}
+.pieceHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pieceLabel {
+  font-weight: 500;
+}
+.pre {
+  max-height: 320px;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--bg-raised);
+  box-shadow: 0 0 0 0.5px var(--hairline);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  user-select: text;
+}
+.code {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
