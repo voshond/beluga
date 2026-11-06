@@ -55,6 +55,12 @@ export const useNow = useClock;
 
 const time = (ts: number): string => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+/** When a turn (or the part of it drawn) began, and when it answered: "13:30 · answered 13:34", a split turn's tail "continued · 13:32" (BLG-46). */
+const turnTime = (item: AgentItem, part: TurnPart | undefined): string => {
+  const began = part?.side === 'tail' ? `continued · ${time(part.cut)}` : time(item.ts);
+  return item.status === 'done' && item.endTs ? `${began} · answered ${time(item.endTs)}` : began;
+};
+
 /** What a message's right-click menu needs: the box to quote into, and how to reach Claude here. */
 /** What runs the agent and its model, small and quiet beside its name ("Opus", "Codex · GPT-5"). */
 function AgentBadge({ agent }: { agent: AgentRef | undefined }) {
@@ -110,14 +116,17 @@ function Folding({ children }: { children: ReactNode }) {
  * Under a message you steered in that Claude hasn't read yet: sent, not read, and (while it waits
  * for Claude's next step) Send now. Once Claude reads it the line goes and the message reads as any other.
  */
-function SteerWaiting({ steer }: { steer: SteeredMessage }) {
+function SteerWaiting({ steer, at }: { steer: SteeredMessage; at: number | undefined }) {
   const { client } = useBeluga();
   const stopping = steer.waiting === 'stopping';
   const agent = useMyAgentName();
   return (
     <div className={s.steerWaiting} data-steer-waiting={steer.waiting} role="status">
       <Icon name="clock" size={11} />
-      <span>{stopping ? `Sent · ${agent} is stopping its step to read it` : `Sent · waiting for ${agent} to read it`}</span>
+      <span>
+        {at === undefined ? '' : `${time(at)} · `}
+        {stopping ? `Sent · ${agent} is stopping its step to read it` : `Sent · waiting for ${agent} to read it`}
+      </span>
       {stopping ? null : (
         <Tip label={`Stop ${agent}’s current step so it reads this now`} keys={shortcutKeys('composer-send-now')}>
           <button type="button" className={s.steerNow} onClick={() => sendSteerNow(client, steer.request)}>
@@ -196,7 +205,8 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
             ) : null}
             <ImageGrid images={images} />
             {reactions.chips}
-            {steer ? <SteerWaiting steer={steer} /> : null}
+            {prefs.timestamps && ends && !steer ? <span className={s.ownTime}>{time(item.ts)}</span> : null}
+            {steer ? <SteerWaiting steer={steer} at={prefs.timestamps ? item.ts : undefined} /> : null}
             {item.request && item.channel ? <Delivery request={item.request} channel={item.channel} /> : null}
           </div>
         </div>
@@ -232,7 +242,7 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
             ) : null}
             <ImageGrid images={images} />
             {reactions.chips}
-            {steer ? <SteerWaiting steer={steer} /> : null}
+            {steer ? <SteerWaiting steer={steer} at={prefs.timestamps ? item.ts : undefined} /> : null}
           </div>
         </div>
       </ActionsContext>
@@ -263,7 +273,7 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
           ) : null}
           <ImageGrid images={images} />
           {reactions.chips}
-          {steer ? <SteerWaiting steer={steer} /> : null}
+          {steer ? <SteerWaiting steer={steer} at={prefs.timestamps ? item.ts : undefined} /> : null}
         </div>
       </div>
     </ActionsContext>
@@ -358,6 +368,7 @@ function TurnHead({ item, part, mine }: { item: AgentItem; part: TurnPart; mine:
             {mine ? agentName(item.agent) : `${item.ownerName}'s ${agentName(item.agent)}`}
           </span>
           <AgentBadge agent={item.agent} />
+          {prefs.timestamps ? <span className={s.time}>{time(item.ts)}</span> : null}
         </div>
         <StepsFold folded={folded}>
           <AgentSteps item={item} running={false} part={part} />
@@ -492,6 +503,7 @@ function TurnCard({
             </span>
             <AgentBadge agent={item.agent} />
             {forSomeoneElse ? <span className={s.time}>for {item.requesterName}</span> : null}
+            {prefs.timestamps && !steeredIn && item.status !== 'queued' ? <span className={s.time}>{turnTime(item, part)}</span> : null}
             {!running && item.text && item.status === 'done' && !steeredIn ? (
               <span className={s.hoverActions}>
                 {/* Folded: anyone's steps show again; kept showing, only your own Claude's open further. */}
