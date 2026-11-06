@@ -1,17 +1,19 @@
 import '@xyflow/react/dist/base.css';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Background, BackgroundVariant, BaseEdge, type Edge, EdgeLabelRenderer, type EdgeProps, Handle, type Node, type NodeProps, Panel, Position, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
-import { AUTONOMY_INFO } from '@beluga/core/plans/model.js';
+import { AUTONOMY_INFO, draftRepoPlan, isMultiRepo, milestoneRepos, planRepos } from '@beluga/core/plans/model.js';
 import type { MilestoneView, PlanView, TaskView } from '@beluga/core/plans/progress.js';
 import { IconButton, Working, cx } from '../components/ui.js';
 import { Icon } from '../components/Icon.js';
+import { ProjectIcon } from '../components/ProjectIcon.js';
+import { useApp } from '../lib/beluga.js';
 import { useDocTheme } from '../components/markdown/use-doc-theme.js';
 import { type ElkInput, type ElkOutput, type Placed, type Point, type Route, placesOf, roundedPath, routesOf } from '../components/graph/graph-model.js';
 import { layout } from '../components/graph/layout.js';
 import { useSharpZoom } from '../components/graph/sharp-zoom.js';
 import { breath, turn, useLive } from '../lib/live-motion.js';
-import { MILESTONE_STATE, type MilestoneJoin, type PlanGraphShape, TASK_STATE, changeMarks, gateId, graphShape, groupId, lockWords, milestoneJoin, milestoneLink, milestoneNowWords, startingMilestones, taskNodeId, taskWords } from './plans-model.js';
-import { COMPACT_STATES, FOLDS_KEY, type Folds, MILESTONE, type MilestoneFrame, PLAN_GAPS, arrowHead, isFolded, labelAt, milestoneAnchors, milestoneFrame, milestoneRoute, placeMilestones, readFolds, taskSize, withFold } from './plan-layout.js';
+import { MILESTONE_STATE, type MilestoneJoin, type PlanGraphShape, TASK_STATE, changeMarks, gateId, graphShape, groupId, lockWords, milestoneJoin, milestoneLink, milestoneNowWords, repoProgress, startingMilestones, taskNodeId, taskWords } from './plans-model.js';
+import { COMPACT_STATES, FOLDS_KEY, type Folds, type Lane, MILESTONE, type MilestoneFrame, PLAN_GAPS, arrowHead, isFolded, labelAt, milestoneAnchors, milestoneFrame, milestoneRoute, placeInLanes, placeMilestones, readFolds, taskSize, withFold } from './plan-layout.js';
 import { useCheckerChat, useClock, usePlanActions } from './use-plans.js';
 import { useGlide } from './use-glide.js';
 import { LiveDot, LockMark, RepoChip, TaskChatMark, TaskStateIcon } from './marks.js';
@@ -68,7 +70,13 @@ interface GateData extends Record<string, unknown> {
   readonly selected: boolean;
   readonly folded: boolean;
 }
-type PlanNode = Node<TaskData, 'task'> | Node<MilestoneData, 'milestone'> | Node<GateData, 'gate'>;
+/** A repo's lane behind its milestones, on a plan across repos (BLG-33): its icon, name and how far its tasks got. */
+interface LaneData extends Record<string, unknown> {
+  readonly repo: string;
+  readonly done: number;
+  readonly total: number;
+}
+type PlanNode = Node<TaskData, 'task'> | Node<MilestoneData, 'milestone'> | Node<GateData, 'gate'> | Node<LaneData, 'lane'>;
 
 interface LineData extends Record<string, unknown> {
   readonly kind: 'blocks' | 'next';
@@ -116,6 +124,8 @@ interface Laid {
   readonly places: ReadonlyMap<string, Placed>;
   readonly frames: ReadonlyMap<string, MilestoneFrame>;
   readonly routes: ReadonlyMap<string, Route>;
+  /** A plan across repos: a lane per repo, its milestones down it. */
+  readonly lanes: readonly Lane[];
 }
 
 /** ELK's options for a milestone's inside: its tasks left to right by what waits on what. */
@@ -209,7 +219,10 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
     };
   }, [shape.key, slimKey]);
 
-  // Each box around its tasks with its gate at its foot, the boxes in their rows, and their lines between.
+  // A plan across repos (as its draft would make it): which lane each milestone goes in, in the plan's repo order.
+  const covering = draftRepoPlan(view.plan);
+  const laneKey = isMultiRepo(covering) ? JSON.stringify([planRepos(covering), view.milestones.map((m) => [m.milestone.id, milestoneRepos(covering, m.milestone)[0]!])]) : '';
+  // Each box around its tasks with its gate at its foot, the boxes in their rows (in lanes across repos), and their lines between.
   const laid = useMemo<Laid | undefined>(() => {
     if (!inner) return undefined;
     const { shape } = inner;
@@ -226,7 +239,9 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
     const next = shape.edges.filter((e) => e.kind === 'next').map((e) => ({ id: e.id, from: e.from.replace(/^gate:/, ''), to: e.to.replace(/^m:/, '') }));
     const parents = new Map<string, string[]>();
     for (const e of next) parents.set(e.to, [...(parents.get(e.to) ?? []), e.from]);
-    const boxes = placeMilestones(shape.rows, frames, parents);
+    const across = laneKey ? (JSON.parse(laneKey) as [string[], [string, string][]]) : undefined;
+    const placed = across ? placeInLanes(shape.rows, frames, new Map(across[1]), across[0]) : { boxes: placeMilestones(shape.rows, frames, parents), lanes: [] };
+    const boxes = placed.boxes;
 
     const places = new Map<string, Placed>();
     const routes = new Map<string, Route>();
@@ -261,8 +276,8 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
       const obstacles = [...boxes].filter(([id]) => id !== e.from && id !== e.to).map(([, box]) => box);
       routes.set(e.id, { points: milestoneRoute(milestoneAnchors(a, fa.gate).out, milestoneAnchors(b).in, exitY, enterY, obstacles) });
     }
-    return { places, frames, routes };
-  }, [inner, foldKey]);
+    return { places, frames, routes, lanes: placed.lanes };
+  }, [inner, foldKey, laneKey]);
 
   const lane = useMemo(() => new Map(shape.milestones.flatMap((m) => m.tasks.map((t) => [taskNodeId(t), m.id] as const))), [shape]);
   // What the picked task waits on, or is waited on by, in other milestones: ringed, not wired across the lanes.
@@ -278,6 +293,11 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
   const nodes = useMemo<PlanNode[]>(() => {
     if (!laid) return [];
     const out: PlanNode[] = [];
+    const progress = repoProgress(view);
+    for (const l of laid.lanes) {
+      const sum = progress.get(l.id) ?? { done: 0, total: 0 };
+      out.push({ id: `lane:${l.id}`, type: 'lane', position: { x: l.x, y: l.y }, style: { width: l.width, height: l.height }, width: l.width, height: l.height, measured: { width: l.width, height: l.height }, data: { repo: l.id, ...sum }, selectable: false, draggable: false, focusable: false, zIndex: -2 });
+    }
     for (const m of view.milestones) {
       const id = m.milestone.id;
       const box = laid.places.get(groupId(id));
@@ -389,7 +409,8 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
     const groups = ids.map((id) => laid?.places.get(groupId(id))).filter((g): g is Placed => !!g);
     if (!box || !groups.length) return undefined;
     const x0 = Math.min(...groups.map((g) => g.x));
-    const y0 = Math.min(...groups.map((g) => g.y));
+    // Across repos, the lanes' heads (each repo's name) stay in view above the milestones.
+    const y0 = Math.min(...groups.map((g) => g.y), ...(laid?.lanes ?? []).map((l) => l.y));
     const width = Math.max(...groups.map((g) => g.x + g.width)) - x0;
     const height = Math.max(...groups.map((g) => g.y + g.height)) - y0;
     const zoom = Math.min(1, (box.clientWidth - 2 * MARGIN.side) / width, (box.clientHeight - MARGIN.top - MARGIN.side) / height);
@@ -433,7 +454,7 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
         zoomOnPinch
         panOnDrag
         // A milestone (open, anywhere but its cards) or its gate: the milestone's details; a card: its task's.
-        onNodeClick={(_e, n) => (n.className === c.foldedAway || (n.type === 'milestone' && n.data.folded) ? undefined : onSelect(n.type === 'gate' ? n.id : n.type === 'milestone' ? gateId(n.id.replace(/^m:/, '')) : n.id.replace(/^t:/, '')))}
+        onNodeClick={(_e, n) => (n.type === 'lane' || n.className === c.foldedAway || (n.type === 'milestone' && n.data.folded) ? undefined : onSelect(n.type === 'gate' ? n.id : n.type === 'milestone' ? gateId(n.id.replace(/^m:/, '')) : n.id.replace(/^t:/, '')))}
         onNodeMouseEnter={(_e, n) => (n.type === 'task' ? setHot(n.id) : undefined)}
         onNodeMouseLeave={(_e, n) => (n.type === 'task' ? setHot((h) => (h === n.id ? undefined : h)) : undefined)}
         onPaneClick={() => onSelect(undefined)}
@@ -607,7 +628,8 @@ const MilestoneNode = memo(function MilestoneNode({ data }: NodeProps<Node<Miles
               </span>
             ) : null}
             {m.milestone.autonomy ? <span className={p.msAuto}>{AUTONOMY_INFO[m.autonomy].label}</span> : null}
-            <RepoChip plan={data.plan} milestone={m.milestone} />
+            {/* Its lane names its repo: the chip only for a milestone whose work lands in several. */}
+            {milestoneRepos(draftRepoPlan(data.plan), m.milestone).length > 1 ? <RepoChip plan={data.plan} milestone={m.milestone} /> : null}
             {data.starting ? (
               <span className={c.starting} role="status">
                 <Working />
@@ -736,7 +758,25 @@ const GateNode = memo(function GateNode({ data }: NodeProps<Node<GateData, 'gate
   );
 });
 
-const NODE_TYPES = { task: TaskNode, milestone: MilestoneNode, gate: GateNode } as const;
+/** A repo's lane: a quiet column behind its milestones, its repo named at the top as the sidebar draws it. */
+const LaneNode = memo(function LaneNode({ data }: NodeProps<Node<LaneData, 'lane'>>) {
+  const name = useApp((st) => st.projects.find((x) => x.id === data.repo)?.name) ?? data.repo;
+  return (
+    <div className={c.lane} data-lane={data.repo}>
+      <div className={c.laneHead}>
+        <ProjectIcon id={data.repo} name={name} size={16} />
+        <span className={c.laneName}>{name}</span>
+        {data.total ? (
+          <span className={c.laneCount}>
+            {data.done}/{data.total}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+});
+
+const NODE_TYPES = { task: TaskNode, milestone: MilestoneNode, gate: GateNode, lane: LaneNode } as const;
 
 // ---------------------------------------------------------------- lines
 

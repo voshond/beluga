@@ -359,7 +359,7 @@ function Page({ view, prefs, setPrefs, picked, setPicked }: { view: PlanView; pr
             <IconButton icon="back" label="All Plans" className={p.back} onClick={() => openList(plan.projectId)} />
             <TitleField value={titleOf(plan)} onSave={(title) => void act(() => api.edit(plan.id, [{ op: 'retitle', title }]))} />
           </div>
-          <PlanRepos plan={plan} />
+          <PlanRepos view={view} />
           {drafting ? null : (
             <>
               {view.milestones.length && plan.body ? <PlanProgress columns={barColumns(view)} /> : null}

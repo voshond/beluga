@@ -1,9 +1,11 @@
 import { MAX_PLAN_REPOS, type Plan, type PlanRepoChange, planRepos, proposedRepos } from '@beluga/core/plans/model.js';
+import type { PlanView } from '@beluga/core/plans/progress.js';
 import { Icon } from '../components/Icon.js';
 import { ProjectIcon } from '../components/ProjectIcon.js';
 import { ActionsDropdown, type ActionItem } from '../components/SpecMenu.js';
 import { Button, cx } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
+import { repoProgress } from './plans-model.js';
 import { usePlanActions } from './use-plans.js';
 import p from './plans.module.css';
 
@@ -20,9 +22,12 @@ const changeTitle = (c: PlanRepoChange, name: string): string => {
  * A draft's repo changes show as + (added) and − (dropped) with why on hover, each turned down with ✕
  * (your agent hears it and won't suggest it again); Repos… puts one in or takes one out yourself.
  * Approving applies them: the plan then has a branch, a pull request and a merge step in each repo.
+ * Once it runs, each chip says how far that repo's tasks got (BLG-33).
  */
-export function PlanRepos({ plan }: { plan: Plan }) {
+export function PlanRepos({ view }: { view: PlanView }) {
+  const plan = view.plan;
   const projects = useApp((st) => st.projects);
+  const progress = repoProgress(view);
   const { api, act } = usePlanActions();
   const changes = plan.draft?.repoChanges ?? [];
   const covered = proposedRepos(plan);
@@ -59,6 +64,11 @@ export function PlanRepos({ plan }: { plan: Plan }) {
             {change ? <span className={p.repoMark}>+</span> : null}
             <ProjectIcon id={id} name={name} size={13} />
             <span className={p.repoName}>{name}</span>
+            {plan.body && covered.length > 1 && progress.get(id)?.total ? (
+              <span className={p.repoCount} aria-label={`${progress.get(id)!.done} of ${progress.get(id)!.total} tasks done`}>
+                {progress.get(id)!.done}/{progress.get(id)!.total}
+              </span>
+            ) : null}
             {change ? (
               <button type="button" className={p.repoUndo} aria-label={`Leave ${name} out`} title={`Leave ${name} out`} onClick={() => setRepo(id, false)}>
                 <Icon name="x" size={10} />

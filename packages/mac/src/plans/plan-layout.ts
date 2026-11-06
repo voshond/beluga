@@ -207,6 +207,56 @@ export function placeMilestones(rows: ReadonlyArray<readonly string[]>, sizes: R
   return out;
 }
 
+/** A plan across repos on the canvas: each repo's lane (its header's height, and the room between lanes). */
+export const LANE = { head: 40, gap: 36 } as const;
+
+export interface Lane {
+  readonly id: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * Milestones in lanes, one per repo (BLG-33): a lane is a column, its repo's milestones down it, and
+ * rows stay across every lane (milestoneRows), so what waits on something still sits below it. Two
+ * milestones of one repo in one row sit side by side in its lane. Lanes go in the plan's repo order;
+ * one with no milestone isn't drawn. → each milestone's box and each lane.
+ */
+export function placeInLanes(rows: ReadonlyArray<readonly string[]>, sizes: ReadonlyMap<string, Size>, laneOf: ReadonlyMap<string, string>, order: readonly string[]): { readonly boxes: Map<string, Box>; readonly lanes: Lane[] } {
+  const sizeOf = (id: string): Size => sizes.get(id) ?? { width: 0, height: 0 };
+  const lanes = order.filter((l) => rows.some((row) => row.some((id) => laneOf.get(id) === l)));
+  const inLane = (row: readonly string[], lane: string): string[] => row.filter((id) => laneOf.get(id) === lane);
+  const widthOf = (ids: readonly string[]): number => ids.reduce((w, id) => w + sizeOf(id).width, 0) + Math.max(0, ids.length - 1) * PLAN_GAPS.side;
+  const widths = new Map(lanes.map((l) => [l, Math.max(...rows.map((row) => widthOf(inLane(row, l))))] as const));
+  const lefts = new Map<string, number>();
+  let x = PLAN_GAPS.pad;
+  for (const l of lanes) {
+    lefts.set(l, x);
+    x += widths.get(l)! + LANE.gap;
+  }
+  const boxes = new Map<string, Box>();
+  let y = PLAN_GAPS.pad + LANE.head;
+  for (const row of rows) {
+    let tallest = 0;
+    for (const l of lanes) {
+      const ids = inLane(row, l);
+      let at = lefts.get(l)! + (widths.get(l)! - widthOf(ids)) / 2;
+      for (const id of ids) {
+        const s = sizeOf(id);
+        boxes.set(id, { x: Math.round(at), y, width: s.width, height: s.height });
+        at += s.width + PLAN_GAPS.side;
+        tallest = Math.max(tallest, s.height);
+      }
+    }
+    if (tallest) y += tallest + PLAN_GAPS.row;
+  }
+  const bottom = Math.max(PLAN_GAPS.pad + LANE.head, ...[...boxes.values()].map((b) => b.y + b.height)) + PLAN_GAPS.pad;
+  const pad = LANE.gap / 2 - 4;
+  return { boxes, lanes: lanes.map((l) => ({ id: l, x: lefts.get(l)! - pad, y: PLAN_GAPS.pad - 8, width: widths.get(l)! + 2 * pad, height: bottom - PLAN_GAPS.pad + 8 })) };
+}
+
 const crosses = (b: Box, x: number, y0: number, y1: number, margin: number): boolean => x > b.x - margin && x < b.x + b.width + margin && Math.max(y0, y1) > b.y && Math.min(y0, y1) < b.y + b.height;
 const crossesAcross = (b: Box, y: number, x0: number, x1: number): boolean => y > b.y && y < b.y + b.height && Math.max(x0, x1) > b.x && Math.min(x0, x1) < b.x + b.width;
 

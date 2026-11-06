@@ -3,7 +3,6 @@ import { Fragment, memo, useEffect, useMemo, useRef } from 'react';
 import type { Project } from '@beluga/workspaces/types.js';
 import { worktreeOrigin } from '@beluga/workspaces/origin.js';
 import { isPlanOwned, planConversations, planOfPlace } from '@beluga/core/plans/owner.js';
-import { planRepos } from '@beluga/core/plans/model.js';
 import type { UiAction } from '@beluga/ui/workspace-models.js';
 import { setOverviewView } from '../views/overview/use-overview-prefs.js';
 import { Icon } from '../components/Icon.js';
@@ -278,14 +277,14 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
       {fold.folded ? (
         // Folded: only the item you're in stays (its plan, when it's part of one), until you go elsewhere.
         <>
-          {plans.filter((x) => x.id === inPlan).map((x) => <PlanRow key={x.id} plan={x} indent={kids} more={planRepos(x).length - 1} />)}
+          {plans.filter((x) => x.id === inPlan).map((x) => <PlanRow key={x.id} plan={x} indent={kids} />)}
           {live.filter((w) => w.id === here && w.kind !== 'main' && !isPlanOwned(state, w.id)).map((w) => <WorkspaceRow key={w.id} ws={w} indent={kids} />)}
         </>
       ) : (
         <>
           {plans.map((x) => (
             <Fragment key={x.id}>
-              <PlanRow plan={x} indent={kids} more={planRepos(x).length - 1} />
+              <PlanRow plan={x} indent={kids} />
               {taskChats(x.id).map((w) => (
                 <WorkspaceWithAgents key={w.id} ws={w} indent={kids + 1} />
               ))}

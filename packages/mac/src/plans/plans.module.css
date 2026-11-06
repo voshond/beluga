@@ -2226,6 +2226,11 @@ textarea.goalBox {
 .repoMark {
   font-weight: 700;
 }
+.repoCount {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
 .repoAdded {
   color: var(--ok);
   background: color-mix(in srgb, var(--ok) 12%, transparent);
@@ -2258,4 +2263,38 @@ textarea.goalBox {
 .repoHint {
   font-size: 11.5px;
   color: var(--text-3);
+}
+
+/* A plan across repos as one mark: its repos' icons stacked (BLG-33). */
+.repoStack {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+.repoStackOne {
+  position: relative;
+  display: inline-flex;
+  border-radius: 5px;
+  box-shadow: 0 0 0 1.5px var(--bg);
+}
+.repoStackOne + .repoStackOne {
+  margin-left: -6px;
+}
+.repoStackMore {
+  margin-left: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+/* A narrow milestone (side by side in List): its name keeps room, what it's doing gives way first. */
+.oHead .oTitle {
+  flex: 0 0 auto;
+  max-width: 55%;
+}
+.oHead .msState {
+  flex: 0 3 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

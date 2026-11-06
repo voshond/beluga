@@ -630,3 +630,34 @@
   font-weight: 500;
   color: var(--text-3);
 }
+
+/* A repo's lane on a plan across repos (BLG-33): a quiet column behind its milestones, its repo at the top. */
+.lane {
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-hover) 55%, transparent);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  pointer-events: none;
+}
+.laneHead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-2);
+}
+.laneName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.laneCount {
+  margin-left: auto;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}

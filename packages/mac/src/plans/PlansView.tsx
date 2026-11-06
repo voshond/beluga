@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import type { Plan } from '@beluga/core/plans/model.js';
+import { type Plan, isMultiRepo, planRepos } from '@beluga/core/plans/model.js';
 import { Icon } from '../components/Icon.js';
 import { ProjectIcon } from '../components/ProjectIcon.js';
 import { ActionsDropdown } from '../components/SpecMenu.js';
@@ -9,7 +9,7 @@ import { currentSheet, openSheet } from '../lib/sheets.js';
 import { PickMenu } from '../tasks/PickMenu.js';
 import { ago, projectToShow } from '../tasks/tasks-model.js';
 import { useBoard, useTasksPrefs } from '../tasks/use-tasks.js';
-import { MilestoneBar, TonePill } from './marks.js';
+import { MilestoneBar, RepoStack, TonePill } from './marks.js';
 import { bars, nextWords, planStatus, plansOf, titleOf } from './plans-model.js';
 import { usePlanActions, usePlanView, usePlans } from './use-plans.js';
 import p from './plans.module.css';
@@ -106,6 +106,7 @@ function PlanRow({ plan }: { plan: Plan }) {
   return (
     <li>
       <button type="button" className={p.row} onClick={() => open(plan.id)} aria-label={`${titleOf(plan)}, ${status.label}`}>
+        {isMultiRepo(plan) ? <RepoStack repos={planRepos(plan)} size={16} /> : null}
         <span className={p.rowMain}>
           <span className={p.rowTitle}>{titleOf(plan)}</span>
           <span className={p.rowSub}>{plan.body ? (next.detail ? `${next.title} · ${next.detail}` : next.title) : `${view.milestones.length} milestones · ${view.total} tasks · draft`}</span>

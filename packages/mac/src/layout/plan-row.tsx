@@ -1,11 +1,12 @@
 import type { Project } from '@beluga/workspaces/types.js';
-import type { Plan } from '@beluga/core/plans/model.js';
+import { type Plan, isMultiRepo, planRepos } from '@beluga/core/plans/model.js';
 import { isLivePlan, planOfPlace } from '@beluga/core/plans/owner.js';
 import { Icon } from '../components/Icon.js';
 import { ActionsContext, type ActionItem } from '../components/SpecMenu.js';
 import { Badge } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
 import { sameDeep } from '../lib/stable.js';
+import { RepoStack } from '../plans/marks.js';
 import { ProgressRing } from '../plans/PlansNav.js';
 import { nextWords, planStatus, titleOf } from '../plans/plans-model.js';
 import { usePlanActions, usePlanView } from '../plans/use-plans.js';
@@ -22,10 +23,10 @@ import m from './signal.module.css';
  * (they stay off the sidebar). Its name, a small ring of how far it got (breathing while Claude
  * works its tasks), a dot when it waits for you, a count of what's new in its own conversation
  * (never its tasks' added up: news there is a quiet dot), as a chat row has.
- * It stays marked while you're in its conversation or in one of its tasks. A plan across repos
- * under its primary project (its repos aren't all in one group) says how many more: "+2 repos".
+ * It stays marked while you're in its conversation or in one of its tasks. A plan across repos shows
+ * its repos' icons stacked in place of the flag (BLG-33), wherever its row sits.
  */
-export function PlanRow({ plan, indent, more = 0 }: { plan: Plan; indent: number; more?: number }) {
+export function PlanRow({ plan, indent }: { plan: Plan; indent: number }) {
   const view = usePlanView(plan)!;
   const { open, openList } = usePlanActions();
   const uiPrefs = usePrefs();
@@ -57,17 +58,12 @@ export function PlanRow({ plan, indent, more = 0 }: { plan: Plan; indent: number
         aria-label={title}
         data-plan-row={plan.id}
         data-signal-row={signal.level}
-        icon={<Icon name="flag" size={14} />}
+        icon={isMultiRepo(plan) ? <RepoStack repos={planRepos(plan)} size={13} /> : <Icon name="flag" size={14} />}
         label={<span className={nameClass(signal)}>{title}</span>}
         detail={tip}
         onClick={() => open(plan.id)}
         trailing={
           <>
-            {more ? (
-              <span className={m.repos} title={`Also in ${more} more project${more === 1 ? '' : 's'}`}>
-                +{more} repo{more === 1 ? '' : 's'}
-              </span>
-            ) : null}
             {unread ? (
               <span className={m.count} data-signal="unread">
                 <Badge count={unread} urgent />

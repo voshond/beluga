@@ -179,6 +179,27 @@ export function RepoChip({ plan, milestone }: { plan: Pick<Plan, 'projectId' | '
   );
 }
 
+/**
+ * A plan across repos as one mark (BLG-33): its repos' icons stacked, the primary on top, as the
+ * sidebar draws each project; three at most, the rest as +N. Names are in the title.
+ */
+export function RepoStack({ repos, size = 14 }: { repos: readonly string[]; size?: number }) {
+  const projects = useApp((st) => st.projects);
+  const nameOf = (id: string): string => projects.find((x) => x.id === id)?.name ?? id;
+  const shown = repos.slice(0, 3);
+  const rest = repos.length - shown.length;
+  return (
+    <span className={p.repoStack} title={`Across ${repos.map(nameOf).join(', ')}`} role="img" aria-label={`Across ${repos.map(nameOf).join(', ')}`} data-repo-stack={repos.length}>
+      {shown.map((id, n) => (
+        <span key={id} className={p.repoStackOne} style={{ zIndex: shown.length - n }}>
+          <ProjectIcon id={id} name={nameOf(id)} size={size} />
+        </span>
+      ))}
+      {rest > 0 ? <span className={p.repoStackMore}>+{rest}</span> : null}
+    </span>
+  );
+}
+
 /** A padlock, shut (a milestone waits on gates not passed yet) or open (they passed). */
 export function LockMark({ open = false, size = 12 }: { open?: boolean; size?: number }) {
   return (

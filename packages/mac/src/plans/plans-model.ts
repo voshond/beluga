@@ -1,6 +1,6 @@
 import type { BoardState } from '../../../../src/core/board/model.js';
 import type { Actor } from '../../../../src/core/board/model.js';
-import { AUTONOMY_INFO, type Autonomy, MAX_PLAN_REPOS, type Plan, type PlanBody, type PlanEvent, type PlanMilestone, type PlanPr, type PlansState, diffBodies, isMultiRepo, milestoneDeps, milestoneRepos, planBranchFor, planTitle, prRef, shownBody } from '../../../../src/core/plans/model.js';
+import { AUTONOMY_INFO, type Autonomy, MAX_PLAN_REPOS, type Plan, type PlanBody, type PlanEvent, type PlanMilestone, type PlanPr, type PlansState, diffBodies, draftRepoPlan, isMultiRepo, milestoneDeps, milestoneRepos, planBranchFor, planTitle, prRef, shownBody } from '../../../../src/core/plans/model.js';
 import { type MilestoneState, type MilestoneView, type NextStep, type PlanView, type ShipRepo, type TaskState, type TaskView, agentNowWords } from '../../../../src/core/plans/progress.js';
 import { pulseWords } from '../../../../src/core/plans/watchdog.js';
 
@@ -160,6 +160,20 @@ export const titleOf = planTitle;
 export function milestoneRepoNames(plan: Pick<Plan, 'projectId' | 'repos'>, milestone: Pick<PlanMilestone, 'repos'>, projects: ReadonlyArray<{ readonly id: string; readonly name: string }>): readonly string[] {
   if (!isMultiRepo(plan)) return [];
   return milestoneRepos(plan, milestone).map((id) => projects.find((p) => p.id === id)?.name ?? id);
+}
+
+/** How far each repo's work got (BLG-33): its milestones' tasks done of all, by project id (the draft's repos while drafting). */
+export function repoProgress(view: Pick<PlanView, 'plan' | 'milestones'>): ReadonlyMap<string, { readonly done: number; readonly total: number }> {
+  const covering = draftRepoPlan(view.plan);
+  const out = new Map<string, { done: number; total: number }>();
+  for (const m of view.milestones) {
+    const repo = milestoneRepos(covering, m.milestone)[0]!;
+    const sum = out.get(repo) ?? { done: 0, total: 0 };
+    sum.done += m.tasks.filter((t) => t.state === 'done').length;
+    sum.total += m.tasks.length;
+    out.set(repo, sum);
+  }
+  return out;
 }
 
 /** New Plan's title: "Plan in api", or across several ("Plan across whisper-api, calendar-api…"). */
