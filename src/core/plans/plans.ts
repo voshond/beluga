@@ -380,12 +380,13 @@ export class Plans {
     return this.change(plan, { repos: covered.length > 1 ? covered : undefined, ...(draft ? { draft } : {}) }, [event(by, 'changed', said, this.now())]);
   }
 
-  /** Its epics on the board (see epics.ts). */
-  setBoard(id: string, board: string): Plan {
+  /** The board of its own a plan from before kept (BLG-12); undefined: its tasks are on their repos' boards (BLG-34). */
+  setBoard(id: string, board: string | undefined): Plan {
     const plan = this.need(id);
     return plan.board === board ? plan : this.change(plan, { board }, []);
   }
 
+  /** Its epics on the board (see epics.ts). */
   setEpics(id: string, epics: PlanEpics): Plan {
     const plan = this.need(id);
     if (JSON.stringify(plan.epics) === JSON.stringify(epics)) return plan;

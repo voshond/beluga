@@ -1747,7 +1747,7 @@ describe('a plan across several repos (BLG-10)', () => {
   });
 });
 
-describe('approving a plan across repos onto one board (BLG-12)', () => {
+describe('approving a plan across repos onto its repos’ boards (BLG-12, BLG-34)', () => {
   const roots = ['/tmp/bob-api', '/tmp/calendar-api', '/tmp/calendar-desktop'];
   const multiSetup = (groups?: ReadonlyArray<{ name: string; projects: readonly string[] }>) => {
     const t = setup();
@@ -1770,45 +1770,60 @@ describe('approving a plan across repos onto one board (BLG-12)', () => {
   };
   const issueOf = (t: ReturnType<typeof multiSetup>, plan: ReturnType<typeof t.plans.need>, task: string) => t.board.need(plan.body!.milestones.flatMap((m) => m.tasks).find((x) => x.id === task)!.issueId!);
 
-  it('a plan of three repos goes on one new board covering them, each task in its milestone’s repo', async () => {
+  it('a plan of three repos puts each task on its own repo’s board, the plan’s epic in each repo (BLG-34)', async () => {
     const t = multiSetup();
     const plan = await approve3(t);
-    expect(plan.board).toMatch(/^board_/);
-    expect([...reposOf(t.board.state(), plan.board!)].sort()).toEqual(['api', 'cal', 'desk']);
-    expect(t.board.state().projects[plan.board!]!.name).toBe('Invites with transcripts');
+    expect(plan.board).toBeUndefined();
+    expect(Object.keys(t.board.state().projects).some((id) => id.startsWith('board_'))).toBe(false);
     expect(['schema', 'hook', 'ui'].map((id) => issueOf(t, plan, id).projectId)).toEqual(['cal', 'api', 'desk']);
-    for (const id of ['schema', 'hook', 'ui']) expect(boardOf(issueOf(t, plan, id))).toBe(plan.board);
-    expect(isVisiting(issueOf(t, plan, 'schema'), 'cal')).toBe(true);
-    expect(showsOn(issueOf(t, plan, 'ui'), 'desk')).toBe(true);
+    expect(['schema', 'hook', 'ui'].map((id) => boardOf(issueOf(t, plan, id)))).toEqual(['cal', 'api', 'desk']);
+    expect(isVisiting(issueOf(t, plan, 'schema'), 'cal')).toBe(false);
     expect(showsOn(issueOf(t, plan, 'ui'), 'cal')).toBe(false);
     expect(issueOf(t, plan, 'ui').blockedBy).toEqual([issueOf(t, plan, 'schema').id]);
     const epics = plan.epics!;
-    expect(boardOf(t.board.need(epics.plan))).toBe(plan.board);
     expect(t.board.need(epics.plan).projectId).toBe('api');
+    expect(Object.keys(epics.repos!).sort()).toEqual(['cal', 'desk']);
+    expect(boardOf(t.board.need(epics.repos!.cal!))).toBe('cal');
     expect(['contract', 'transcribe', 'desktop'].map((m) => t.board.need(epics.milestones[m]!).projectId)).toEqual(['cal', 'api', 'desk']);
+    expect(t.board.need(epics.milestones.contract!).parent).toBe(epics.repos!.cal);
+    expect(t.board.need(epics.milestones.transcribe!).parent).toBe(epics.plan);
     expect(issueOf(t, plan, 'schema').parent).toBe(epics.milestones.contract);
   });
 
-  it('a board named after the sidebar group holding the repos; one covering exactly them is reused', async () => {
+  it('a plan that kept a board of its own (BLG-12) stays on it while it covers the plan’s repos, else lets it go', async () => {
     const t = multiSetup([{ name: 'Calendar', projects: roots }]);
-    const first = await approve3(t);
-    expect(t.board.state().projects[first.board!]!.name).toBe('Calendar');
-    const second = await approve3(t);
-    expect(second.board).toBe(first.board);
+    const made = t.board.createBoard({ name: 'Calendar', repos: ['desk', 'api', 'cal'] });
+    const plan = await t.work.create({ projectId: 'api', projectIds: ['cal', 'desk'], goal: 'Invites' });
+    t.plans.setBoard(plan.id, made);
+    t.plans.writeDraft(plan.id, BODY, t.claude);
+    const kept = t.work.approve(plan.id);
+    expect(kept.board).toBe(made);
+    for (const id of ['schema', 'hook', 'ui']) expect(boardOf(issueOf(t, kept, id))).toBe(made);
+    expect(kept.epics!.repos).toBeUndefined();
+    expect(boardOf(t.board.need(kept.epics!.plan))).toBe(made);
     const u = multiSetup();
-    const made = u.board.createBoard({ name: 'Mine', repos: ['desk', 'api', 'cal'] });
-    expect((await approve3(u)).board).toBe(made);
+    const narrow = u.board.createBoard({ name: 'Mine', repos: ['api', 'cal'] });
+    const other = await u.work.create({ projectId: 'api', projectIds: ['cal', 'desk'], goal: 'Invites' });
+    u.plans.setBoard(other.id, narrow);
+    u.plans.writeDraft(other.id, BODY, u.claude);
+    expect(u.work.approve(other.id).board).toBeUndefined();
   });
 
-  it('changes keep the board; a task not started follows its milestone to another repo', async () => {
+  it('a task not started follows its milestone to another repo: made again on that repo’s board', async () => {
     const t = multiSetup();
     const plan = await approve3(t);
+    const was = issueOf(t, plan, 'hook');
     t.plans.editDraft(plan.id, [{ op: 'update_milestone', id: 'transcribe', repos: ['desk'] }], t.claude);
     const again = t.work.approve(plan.id);
-    expect(again.board).toBe(plan.board);
-    expect(issueOf(t, again, 'hook').projectId).toBe('desk');
-    expect(t.board.need(again.epics!.milestones.transcribe!).projectId).toBe('desk');
-    expect(again.epics!.milestones.transcribe).toBe(plan.epics!.milestones.transcribe);
+    const now = issueOf(t, again, 'hook');
+    expect(now.id).not.toBe(was.id);
+    expect([now.projectId, boardOf(now)]).toEqual(['desk', 'desk']);
+    expect(t.board.need(was.id).status).toBe('canceled');
+    expect(t.board.need(was.id).plan).toBeUndefined();
+    const epic = t.board.need(again.epics!.milestones.transcribe!);
+    expect([epic.projectId, epic.parent]).toEqual(['desk', again.epics!.repos!.desk]);
+    expect(now.parent).toBe(epic.id);
+    expect(t.board.need(plan.epics!.milestones.transcribe!).status).toBe('canceled');
   });
 
   it('a single-repo plan approves as before: no board of its own, tasks on the repo’s board', async () => {

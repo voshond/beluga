@@ -194,14 +194,6 @@ export class PlansWork {
     return plan;
   }
 
-  /** What a new board for a plan across repos is called: the sidebar group holding all its repos, else the plan's title. */
-  private boardNameFor(plan: Plan): string {
-    const state = this.deps.store.getState();
-    const roots = this.repoInfos(plan).map((r) => r.root);
-    const group = (state.projectGroups ?? []).find((g) => roots.every((root) => root && g.projects.includes(root)));
-    return group?.name ?? planTitle(plan);
-  }
-
   private repoInfo(id: string): PlanRepoInfo {
     const p = this.deps.store.getState().projects.find((x) => x.id === id);
     return { id, name: p?.name ?? id, root: p?.root ?? '' };
@@ -335,8 +327,7 @@ export class PlansWork {
     try {
       // The repos the draft adds or drops are the plan's first (BLG-30): its board, branches and PRs follow them.
       const covering = this.adoptRepos(plan, by);
-      const boardId = planBoard(covering, this.deps.board.board, this.boardNameFor(covering));
-      applied = applyDraft(boardId ? this.plans.setBoard(id, boardId) : covering, this.deps.board.board, { by, me: this.deps.board.me() });
+      applied = applyDraft(this.plans.setBoard(id, planBoard(covering, this.deps.board.board)), this.deps.board.board, { by, me: this.deps.board.me() });
     } catch (err) {
       // What was made stays linked to the draft, so approving again doesn't make it twice.
       if (err instanceof ApplyError) this.plans.linkDraft(id, err.linked);

@@ -3,7 +3,7 @@ import { criteria, criterionLine } from '../board/criteria.js';
 import { labelsFor } from '../board/labels.js';
 import { type Actor, type Assignee, type BriefSection, type Issue, boardOf, isOpen, reposOf } from '../board/model.js';
 import { PlanError } from './edit.js';
-import { type Plan, type PlanBody, type PlanTask, allTasks, decisionLines, diffBodies, isMultiRepo, milestoneDeps, milestoneRepos, planRepos, taskById } from './model.js';
+import { type Plan, type PlanBody, type PlanTask, allTasks, decisionLines, diffBodies, milestoneDeps, milestoneRepos, planRepos, taskById } from './model.js';
 
 /**
  * Approving a plan: its draft goes on the board. New tasks are made (in the plan's milestone, its
@@ -37,20 +37,16 @@ const inPlanSet = (board: Board, issue: Issue, labels: readonly string[]): strin
   return labels.map((l) => l.toLowerCase()).filter((l) => set.has(l) || issue.labels.includes(l));
 };
 
-const sameRepos = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((r) => b.includes(r));
-
 /**
- * The board a plan across repos puts its tasks on (BLG-12): the one it has while that still covers
- * its repos, else one covering exactly them, else a new board of its own called `name` (the sidebar
- * group they're in, or the plan's title). A single-repo plan: none (each task on its repo's board).
+ * The board a plan across repos puts its tasks on: none (BLG-34), so each task goes on the board of
+ * the repo it runs in, and the plan is the view across them. A plan given a board of its own before
+ * (BLG-12) keeps it while it still covers the plan's repos; once it doesn't, it's let go and new tasks
+ * go on their repos' boards (those already made stay where they are).
  */
-export function planBoard(plan: Plan, board: Board, name: string): string | undefined {
-  if (!isMultiRepo(plan)) return undefined;
-  const repos = planRepos(plan);
-  const boards = board.state().projects;
-  if (plan.board && boards[plan.board] && repos.every((r) => reposOf(board.state(), plan.board!).includes(r))) return plan.board;
-  const same = Object.keys(boards).find((id) => sameRepos(reposOf(board.state(), id), repos));
-  return same ?? board.createBoard({ name, repos });
+export function planBoard(plan: Plan, board: Board): string | undefined {
+  if (!plan.board) return undefined;
+  const state = board.state();
+  return state.projects[plan.board] && planRepos(plan).every((r) => reposOf(state, plan.board!).includes(r)) ? plan.board : undefined;
 }
 
 export function applyDraft(plan: Plan, board: Board, actors: ApplyActors): Applied {
@@ -82,8 +78,16 @@ function applyInto(plan: Plan, board: Board, actors: ApplyActors, linked: Map<st
     const fresh = waiting.has(milestone.id) ? 'backlog' : 'todo';
     // Yours is assigned to you; Claude's is no one's (a task is for a person, BLG-278): who's on it shows while it runs.
     const assignee = task.assignee === 'me' ? actors.me : undefined;
-    const existing = issueOf.get(task.id);
+    let existing = issueOf.get(task.id);
     const repo = milestoneRepos(plan, milestone)[0]!;
+    // On its repos' own boards (BLG-34) a task not started yet that follows its milestone to another
+    // repo is made again on that repo's board (a task's key is its board's); the old one is canceled.
+    if (existing && !plan.board && existing.projectId !== repo && (existing.status === 'todo' || existing.status === 'backlog')) {
+      board.update(existing.id, { status: 'canceled' }, actors.by);
+      board.setPlan(existing.id, undefined, actors.by, 'its milestone moved to another repo: a task on that repo’s board takes over');
+      issueOf.delete(task.id);
+      existing = undefined;
+    }
     if (!existing) {
       const made = board.create(
         {
@@ -121,7 +125,7 @@ function applyInto(plan: Plan, board: Board, actors: ApplyActors, linked: Map<st
         // Claude wrote the plan: its labels come from the project's set (and any the task already had).
         ...(task.labels && old && differs('labels') ? { labels: inPlanSet(board, existing, task.labels) } : {}),
         ...((notStarted && moved && existing.status !== fresh) || revived ? { status: fresh } : {}),
-        // A plan across repos: a task not started yet follows its milestone to another repo.
+        // A plan on a board of its own (BLG-12): a task not started yet follows its milestone to another repo, keeping its board and key.
         ...(plan.board && notStarted && existing.projectId !== repo ? { projectId: repo } : {}),
       },
       actors.by,

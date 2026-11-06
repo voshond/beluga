@@ -401,10 +401,15 @@ export interface PlanRescue {
   readonly yours?: boolean;
 }
 
-/** A plan's epics on the board (task ids): the plan's own, and each milestone's (by milestone id). */
+/**
+ * A plan's epics on the board (task ids): the plan's own, and each milestone's (by milestone id). A
+ * plan across repos on its repos' own boards (BLG-34) has the plan's epic once per repo: `plan` on the
+ * primary's board, `repos` on each other repo's (by project id), each milestone's epic under its repo's.
+ */
 export interface PlanEpics {
   readonly plan: string;
   readonly milestones: Readonly<Record<string, string>>;
+  readonly repos?: Readonly<Record<string, string>>;
 }
 
 export interface PlansState {
@@ -471,7 +476,7 @@ export const planForHome = (state: PlansState, channel: string): Plan | undefine
 export function planEpicOf(state: PlansState, issueId: string): { readonly plan: Plan; readonly milestone?: PlanMilestone } | undefined {
   for (const plan of state.plans) {
     if (!plan.epics) continue;
-    if (plan.epics.plan === issueId) return { plan };
+    if (plan.epics.plan === issueId || Object.values(plan.epics.repos ?? {}).includes(issueId)) return { plan };
     const id = Object.entries(plan.epics.milestones).find(([, epic]) => epic === issueId)?.[0];
     const milestone = id ? shownBody(plan)?.milestones.find((m) => m.id === id) : undefined;
     if (milestone) return { plan, milestone };

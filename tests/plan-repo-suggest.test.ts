@@ -125,9 +125,10 @@ describe('planning finds the repos near it (BLG-28, BLG-30)', () => {
     const approved = t.plansWork.approve(t.plan.id);
     expect(approved.repos).toEqual(['api', 'cal']);
     expect(approved.draft).toBeUndefined();
-    expect(approved.board).toBeDefined();
+    expect(approved.board).toBeUndefined();
     const issues = t.store.getState().board.issues;
     expect(issues.find((i) => i.title === 'Discard route')?.projectId).toBe('cal');
+    expect(issues.find((i) => i.title === 'Discard route')?.board).toBeUndefined();
     expect(issues.find((i) => i.title === 'Delete button')?.projectId).toBe('api');
     expect(approved.activity.some((e) => e.text === 'added calendar-api')).toBe(true);
   });
