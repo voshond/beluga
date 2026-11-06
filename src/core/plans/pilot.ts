@@ -9,7 +9,7 @@ import { type MilestoneAlong, type Plan, type PlanMerge, type PlanMilestone, all
 import type { PlanGit } from './plan-git.js';
 import type { Plans } from './plans.js';
 import { FINISHED, type MilestoneView, type PlanView, type TaskState, type TaskView, agentTasks, agentsAtWork, liveFrom, planView, startable, tidyOffer, waitingOnYou } from './progress.js';
-import { checkFailedPrompt, checkNudgePrompt, checkPrompt, criteriaNeedCheck, fixupPrompt, mainFixupPrompt, mergeFixupPrompt, milestoneNextPrompt, milestonePrompt, milestoneWhere, recapPrompt, stuckPrompt } from './prompt.js';
+import { checkFailedPrompt, checkNudgePrompt, checkPrompt, criteriaNeedCheck, fixupPrompt, mainFixupPrompt, mergeFixupPrompt, milestoneNextPrompt, milestonePrompt, milestoneWhere, recapPrompt, type RepoCheck, repoChecks, stuckPrompt } from './prompt.js';
 import { TaskWatchdog } from './watchdog.js';
 import { PLAN_PR_FAST_MS, PLAN_PR_FOCUS_FRESH_MS, planPrCadence } from './pr-cadence.js';
 import { pace } from '../power-saver.js';
@@ -79,7 +79,9 @@ export interface PilotDeps {
    * A conversation of its own to fix the plan's merge conflicts in (its workspace id, BLG-4): the head
    * Claude routes and never fills up with code work. Without it, the head Claude fixes them (as before).
    */
-  readonly fixerChat?: (plan: Plan) => Promise<string | undefined>;
+  readonly fixerChat?: (plan: Plan, projectId: string) => Promise<string | undefined>;
+  /** A repo's test commands (its main folder → "npm test"…), for a check across repos to run. */
+  readonly testsOf?: (root: string) => readonly string[];
   /** A checker's (or fixer's) conversation is no longer needed: archived, what was said kept. */
   readonly retireChat?: (workspaceId: string) => void;
   /**
@@ -709,7 +711,7 @@ export class PlanPilot {
           this.stepMerges(plan);
           return `merged “${title}” again`;
         }
-        void this.askFixup(plan.id, mergeFixupPrompt(title, planBranchFor(plan, c.projectId ?? plan.projectId) ?? planBranchName(plan), c.key ?? c.merging, c), c.dir).catch(() => undefined);
+        void this.askFixup(plan.id, mergeFixupPrompt(title, planBranchFor(plan, c.projectId ?? plan.projectId) ?? planBranchName(plan), c.key ?? c.merging, c), c.dir, undefined, 0, c.projectId).catch(() => undefined);
         return `asked ${this.deps.plans.need(plan.id).fixer ? 'the fixer' : 'the plan’s Claude'} to fix the merge conflict in ${c.files.slice(0, 3).join(', ')}`;
       }
       default:
@@ -937,7 +939,8 @@ export class PlanPilot {
     if (m.run.checkAsked === undefined) {
       if (!this.deps.checkerChat) {
         // Asked first: if asking fails, the check isn't marked as asked (it's tried again).
-        const id = this.deps.askClaude(checkPrompt(view, m), plan.home, false);
+        const repos = this.repoChecks(plan, m.milestone);
+        const id = this.deps.askClaude(checkPrompt(view, m, repos ? { repos } : {}), plan.home, false);
         if (id) this.checkRuns.set(`${plan.id}:${m.milestone.id}`, id);
         this.deps.plans.checkAsked(plan.id, m.milestone.id);
         this.deps.system(plan.home, `Every task of “${m.milestone.title}” is finished: the agent is checking its pass criteria.`);
@@ -975,10 +978,16 @@ export class PlanPilot {
     const m = view.milestones.find((x) => x.milestone.id === milestone.id);
     if (!m) return;
     const own = channel !== plan.home;
-    const id = this.deps.askClaude(checkPrompt(view, m, { checker: own }), channel, false);
+    const repos = this.repoChecks(plan, milestone);
+    const id = this.deps.askClaude(checkPrompt(view, m, { checker: own, ...(repos ? { repos } : {}) }), channel, false);
     if (id) this.checkRuns.set(`${plan.id}:${milestone.id}`, id);
     this.deps.plans.checkAsked(plan.id, milestone.id);
     this.deps.system(plan.home, own ? `Every task of “${milestone.title}” is finished: a Claude of its own is checking its pass criteria. You can keep talking here.` : `Every task of “${milestone.title}” is finished: Claude is checking its pass criteria.`);
+  }
+
+  /** A plan across repos: every repo as a milestone's check sees it (undefined: one repo). */
+  repoChecks(plan: Plan, milestone: PlanMilestone): readonly RepoCheck[] | undefined {
+    return repoChecks(plan, milestone, plan.runs[milestone.id]?.agent, this.deps.store.getState().projects, this.deps.testsOf ?? (() => []));
   }
 
   /** The conversation that checks a milestone: the one it had (still there), or a new one. */
@@ -1156,7 +1165,7 @@ export class PlanPilot {
     this.deps.plans.setCombining(plan.id, t.task.id, { at: was?.at ?? Date.now(), from, conflict });
     if (!stuck) {
       if (!asks) this.deps.plans.note(plan.id, 'problem', `combining ${from.join(' and ')} for ${issue.key}: ${res.merging} conflicts in ${res.files.join(', ')}; the agent is fixing it`, { kind: 'beluga' });
-      await this.askFixup(plan.id, fixupPrompt(issue.key, t.task.title, from, res), res.dir, issue.id, asks);
+      await this.askFixup(plan.id, fixupPrompt(issue.key, t.task.title, from, res), res.dir, issue.id, asks, issue.projectId);
     } else if (!was?.conflict?.stuck) {
       this.deps.plans.note(plan.id, 'problem', `combining ${from.join(' and ')} for ${issue.key}: the conflict in ${res.files.join(', ')} is still there; fix it in ${res.dir} and ${issue.key} starts`, { kind: 'beluga' });
     }
@@ -1173,14 +1182,15 @@ export class PlanPilot {
   /**
    * A conflict to fix in a hidden worktree (`dir`): its fixer (made the first time, BLG-4) may edit
    * there, and is asked. The head Claude hears one line; no fixer can be made: it fixes it, as before.
-   * `key`/`asks`: counted, so a conflict asked about twice waits for you.
+   * `key`/`asks`: counted, so a conflict asked about twice waits for you. `repo`: the one it's in (a
+   * new fixer is made there; default the plan's primary).
    */
-  private async askFixup(planId: string, prompt: string, dir: string, key?: string, asks = 0): Promise<void> {
+  private async askFixup(planId: string, prompt: string, dir: string, key?: string, asks = 0, repo?: string): Promise<void> {
     const had = this.fixupHome(planId);
     let channel = had;
     const plan = this.deps.plans.need(planId);
     if (channel === plan.home && this.deps.fixerChat) {
-      const made = await this.deps.fixerChat(plan).catch(() => undefined);
+      const made = await this.deps.fixerChat(plan, repo ?? plan.projectId).catch(() => undefined);
       if (made) {
         this.deps.plans.setFixer(planId, made);
         channel = `${WS_PREFIX}${made}`;
@@ -1478,7 +1488,7 @@ export class PlanPilot {
       this.deps.plans.setMerging(planId, milestoneId, { ...merge, conflict });
       if (!stuck) {
         if (!asks) this.deps.plans.note(planId, 'problem', `merging “${m.milestone.title}” into ${this.branchIn(plan, repo)}: ${conflictKey} conflicts in ${res.files.join(', ')}; the agent is fixing it`, beluga);
-        await this.askFixup(planId, mergeFixupPrompt(m.milestone.title, into, conflictKey, res), res.dir, key, asks);
+        await this.askFixup(planId, mergeFixupPrompt(m.milestone.title, into, conflictKey, res), res.dir, key, asks, repo);
       } else if (!was?.stuck) {
         this.deps.plans.note(planId, 'problem', `merging “${m.milestone.title}” into ${this.branchIn(plan, repo)}: the conflict in ${res.files.join(', ')} is still there; fix it in ${res.dir} and the milestone passes`, beluga);
       }

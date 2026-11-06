@@ -1,4 +1,6 @@
 import type { PlanAskInput, PlanTools } from '../../agent/types.js';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { AgentRef } from '../../protocol.js';
 import { agentName } from '../../shared/agent-label.js';
 import type { Actor, Issue } from '../board/model.js';
@@ -10,7 +12,7 @@ import type { WorkspaceController } from '../workspace-controller.js';
 import { ApplyError, applyDraft, planBoard } from './apply.js';
 import { dropEpics, syncEpics } from './epics.js';
 import type { BodyInput, PlanOp, TaskInput } from './edit.js';
-import { type Autonomy, MAX_PLAN_REPOS, type Plan, type TestsAt, allTasks, checkerOf, isMultiRepo, planForHome, planRepos, planTaskOfIssue, planTitle } from './model.js';
+import { type Autonomy, MAX_PLAN_REPOS, type Plan, type TestsAt, allTasks, checkerOf, isMultiRepo, milestoneRepos, planForHome, planRepos, planTaskOfIssue, planTitle } from './model.js';
 import { type PilotDeps, PlanPilot } from './pilot.js';
 import type { TaskView } from './progress.js';
 import { type PlanGit, planGitOf } from './plan-git.js';
@@ -58,6 +60,18 @@ export interface PlansWorkDeps {
 
 const WS = 'ws:';
 
+type PackageScripts = { readonly scripts?: Readonly<Record<string, string>> };
+
+/** A repo's test commands, from its package.json scripts (none there, or no package.json: none). */
+const testsOf = (root: string): readonly string[] => {
+  try {
+    const { scripts } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as PackageScripts;
+    return ['typecheck', 'lint', 'test'].filter((s) => scripts?.[s]).map((s) => (s === 'test' ? 'npm test' : `npm run ${s}`));
+  } catch {
+    return [];
+  }
+};
+
 export class PlansWork {
   readonly plans: Plans;
   readonly pilot: PlanPilot;
@@ -80,14 +94,16 @@ export class PlansWork {
       ...(deps.controller
         ? {
             // On the plan's agent (BLG-503), like its workers; none picked: the project's.
+            // In the milestone's repo (BLG-15): its branches are there to diff; the plan's other repos are read beside it.
             checkerChat: async (plan, milestone) => {
-              const ws = await deps.controller!.newChat(plan.projectId, `Check: ${milestone.title}`.slice(0, 40), undefined, { quiet: true });
+              const ws = await deps.controller!.newChat(milestoneRepos(plan, milestone)[0]!, `Check: ${milestone.title}`.slice(0, 40), undefined, { quiet: true });
               if (ws && plan.agent) deps.controller!.manager.setAgent(ws.id, plan.agent);
               return ws?.id;
             },
             // Its merge conflicts (BLG-4): a conversation of its own, so the head Claude only routes.
-            fixerChat: async (plan) => {
-              const ws = await deps.controller!.newChat(plan.projectId, `Fix: ${planTitle(plan)}`.slice(0, 40), undefined, { quiet: true });
+            // In the repo that conflicts (BLG-15); it may edit only the hidden worktree it's given (allowFixup).
+            fixerChat: async (plan, projectId) => {
+              const ws = await deps.controller!.newChat(projectId, `Fix: ${planTitle(plan)}`.slice(0, 40), undefined, { quiet: true });
               if (ws && plan.agent) deps.controller!.manager.setAgent(ws.id, plan.agent);
               return ws?.id;
             },
@@ -104,6 +120,7 @@ export class PlansWork {
       ...(deps.forYou ? { forYou: deps.forYou } : {}),
       ...(deps.rescueMs !== undefined ? { rescueMs: deps.rescueMs } : {}),
       structure: (plan) => this.structure(plan.id),
+      testsOf,
     });
     // A task of a plan: its worktree's Claude knows the plan and what runs beside it.
     deps.board.setBriefExtra((issue) => this.workerBrief(issue));
@@ -113,7 +130,7 @@ export class PlansWork {
     deps.board.setAlsoExtra((id) => this.alongPaths(id));
     // A plan across repos: its home reads the other repos' main folders too (read-only: it's a main-folder chat),
     // and a milestone reads the repos of earlier milestones it builds on.
-    this.offReads = deps.controller?.setReadAlso?.((id) => [...this.homeReads(id), ...this.upstreamReads(id)]);
+    this.offReads = deps.controller?.setReadAlso?.((id) => [...new Set([...this.homeReads(id), ...this.upstreamReads(id), ...this.helperReads(id)])]);
   }
 
   private readonly offReads: (() => void) | undefined;
@@ -422,7 +439,7 @@ export class PlansWork {
       if (checking.plan.status !== 'active' || !checking.plan.body) return undefined;
       const view = this.pilot.view(checking.plan);
       const m = view.milestones.find((x) => x.milestone.id === checking.milestone);
-      return m ? { tools: this.checkerTools(checking.plan.id, m.milestone.id), brief: checkerBrief(view, m) } : undefined;
+      return m ? { tools: this.checkerTools(checking.plan.id, m.milestone.id), brief: checkerBrief(view, m, this.pilot.repoChecks(checking.plan, m.milestone)) } : undefined;
     }
     const found = planForHome(this.plans.state(), channel);
     if (!found) return this.workerOf(channel);
@@ -563,6 +580,21 @@ export class PlansWork {
   alongPaths(workspaceId: string): readonly string[] {
     const found = this.milestoneIn(workspaceId);
     return found ? (this.whereOf(found.plan, found.id)?.along.map((a) => a.path) ?? []) : [];
+  }
+
+  /**
+   * A plan across repos: what its fixer and its checkers read beside their own main folder, never
+   * edit: the plan's other repos, and a checker its milestone's worktrees (every repo it worked in).
+   */
+  helperReads(workspaceId: string): readonly string[] {
+    const channel = `${WS}${workspaceId}`;
+    const checking = checkerOf(this.plans.state(), channel);
+    const plan = checking?.plan ?? this.plans.list().find((p) => p.fixer === workspaceId);
+    if (!plan || plan.status === 'done' || !isMultiRepo(plan)) return [];
+    const milestone = checking ? plan.body?.milestones.find((m) => m.id === checking.milestone) : undefined;
+    const worktrees = milestone ? (this.pilot.repoChecks(plan, milestone) ?? []).flatMap((r) => r.worktrees) : [];
+    const own = this.deps.store.getState().projects.find((p) => p.workspaces.some((w) => w.id === workspaceId))?.root;
+    return [...worktrees, ...this.repoInfos(plan).map((r) => r.root).filter((root) => root && root !== own)];
   }
 
   /** A milestone building on earlier ones in other repos: their main folders, read-only. */
