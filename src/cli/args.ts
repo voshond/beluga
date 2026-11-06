@@ -20,7 +20,7 @@ export const COMMANDS = {
   status: { usage: ['beluga status [--json]'], summary: 'whether Beluga is running, its version, projects and phones', options: { json: { type: 'boolean' } } },
   stop: { usage: ['beluga stop'], summary: 'stop Beluga', options: {} },
   logs: { usage: ['beluga logs [-f] [-n <lines>]'], summary: "show Beluga's log (-f: keep showing new lines)", options: { follow: { type: 'boolean', short: 'f' }, lines: { type: 'string', short: 'n' } } },
-  project: { usage: ['beluga project add <folder or git URL> [--into <folder>]', 'beluga project list', 'beluga project remove <name>'], summary: 'add a project (a git URL is cloned first), list them, or remove one', options: { into: { type: 'string' } } },
+  project: { usage: ['beluga project add <folder or git URL> [--into <folder>]', 'beluga project list', 'beluga project move <name> --into <folder>', 'beluga project remove <name>'], summary: 'add a project (a git URL is cloned first), list them, move one\'s folder, or remove one', options: { into: { type: 'string' } } },
   pair: { usage: ['beluga pair'], summary: 'pair a phone: scan the QR code or type the code, then confirm', options: {} },
   phones: { usage: ['beluga phones', 'beluga phones remove <name>'], summary: 'list the paired phones, or remove one', options: {} },
   service: { usage: ['beluga service [install | remove]'], summary: 'keep Beluga running, from boot (systemd on Linux, launchd on a Mac)', options: {} },

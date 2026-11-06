@@ -76,7 +76,9 @@ export interface ControllerDeps {
   /** An archived worktree is back; `remake` makes again what the archive threw away (npm install…). */
   readonly onWorktreeRestored?: (ws: Workspace, remake: readonly string[]) => void;
   /** A project's own variables in Beluga (BLG-369): whether keys a worktree adds go back on their own, and Save in Beluga. */
-  readonly env?: { readonly newKeysBack: (projectId: string) => boolean; readonly merge: (projectId: string, vars: Readonly<Record<string, string>>) => number };
+  readonly env?: { readonly newKeysBack: (projectId: string) => boolean; readonly merge: (projectId: string, vars: Readonly<Record<string, string>>) => number; readonly moveProject?: (from: string, to: string) => void };
+  /** Whether your Claude is working in a conversation now (Move Project waits for that). */
+  readonly runningIn?: (channel: string) => boolean;
   /** Claude Code's folder, where its sub-agents' worktrees are found (default: ~/.claude). */
   readonly claudeHome?: string;
   /** Move a folder to the Trash (Delete Project; default: the system's Trash, see workspaces/trash.ts). */
@@ -1507,6 +1509,31 @@ export class WorkspaceController {
     if (!res) return false;
     const kept = res.archived ? ` ${res.archived} worktree${res.archived === 1 ? '' : 's'} archived (nothing lost).` : '';
     this.deps.toast(`Removed ${project?.name ?? 'the project'} from Beluga.${res.trashed ? ' Its folder is in the Trash.' : ''}${kept}`, 'success');
+    return true;
+  }
+
+  /**
+   * Move Project: its folder goes into `toParent` (worktrees, tasks and history stay its own).
+   * Refused while your Claude works in any of its places. False: it couldn't (and says why).
+   */
+  async moveProject(projectId: string, toParent: string): Promise<boolean> {
+    const project = this.deps.manager.list.find((p) => p.id === projectId && p.root);
+    if (!project) {
+      this.deps.toast('That project is gone', 'error');
+      return false;
+    }
+    const live = project.workspaces.filter((w) => !w.archived);
+    if (live.some((w) => this.deps.runningIn?.(`${WS_PREFIX}${w.id}`))) {
+      this.deps.toast(`Claude is working in ${project.name}: move it once that's done`, 'warn');
+      return false;
+    }
+    // Shells in the main folder would be left in the old place.
+    for (const w of live.filter((x) => x.kind !== 'worktree')) this.deps.onWorkspaceGoing?.(w.id);
+    const res = await this.inLane(project.root, () => this.act(`Couldn't move ${project.name}`, () => this.deps.manager.moveProject(projectId, toParent)));
+    this.publish();
+    if (!res) return false;
+    this.deps.env?.moveProject?.(res.from, res.to);
+    this.deps.toast(`Moved ${project.name} to ${res.to}`, 'success');
     return true;
   }
 

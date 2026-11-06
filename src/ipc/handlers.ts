@@ -222,6 +222,7 @@ export const HANDLERS = {
   'workspaces.showProject': (s, root) => ctl(s)?.showProject(root) ?? false,
   'workspaces.hideProject': (s, projectId) => ctl(s)?.hideProject(projectId),
   'workspaces.removeProject': (s, projectId, opts) => ctl(s)?.removeProject(projectId, opts?.trash ?? false) ?? false,
+  'workspaces.moveProject': (s, projectId, to) => ctl(s)?.moveProject(projectId, expandHome(to)) ?? false,
   'workspaces.cleanAgentWorktrees': (s, projectId) => ctl(s)?.cleanAgentWorktrees(projectId),
   'workspaces.otherOrigins': (s, projectId) => ctl(s)?.others.origins(projectId) ?? {},
   'workspaces.otherActivity': (s, projectId) => ctl(s)?.others.activity(projectId) ?? {},
@@ -370,7 +371,7 @@ export const HANDLERS = {
   // Every repo found (the sheet shows the newest, and its Filter searches them all).
   'projects.suggest': (s) => suggestProjects(s.store.getState().projects.map((p) => p.root).filter(Boolean), undefined, SUGGEST_ALL),
   'projects.create': async (s, name, parent) => {
-    const dir = await createProject(name, parent ? expandHome(parent) : undefined);
+    const dir = await createProject(name, parent ? expandHome(parent) : undefined, s.store.getState().prefs.projectsHome);
     const added = await ctl(s)?.addProject(dir);
     return { id: added?.project?.id ?? projectId(dir), path: dir };
   },
@@ -383,7 +384,15 @@ export const HANDLERS = {
     return { id: projectId(dir), path: dir };
   },
   'projects.cloneProgress': (_s, target) => cloneProgress(expandHome(target)),
-  'projects.newHome': () => defaultProjectsHome(),
+  'projects.newHome': (s) => defaultProjectsHome(os.homedir(), s.store.getState().prefs.projectsHome),
+  // Where new projects and clones go (null: back to the first code folder found); it's watched for projects too.
+  'projects.setHome': async (s, dir) => {
+    if (!dir) return s.setPrefs({ projectsHome: null });
+    const abs = expandHome(dir);
+    if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new Error(`${abs} isn't a folder`);
+    s.setPrefs({ projectsHome: abs });
+    await ctl(s)?.addFolder(abs);
+  },
   'local.listDirs': (s, dir) => {
     const entries = listLocalDirs(dir);
     s.store.dispatch({ type: 'dir_cache', key: localDirKey(dir), entries });

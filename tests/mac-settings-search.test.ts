@@ -125,7 +125,7 @@ const PANE_SOURCES: Record<string, string> = {
   skills: ['MachineNoteSettings', 'SharedSkillsSettings', 'AgentsDocSettings', 'BuiltInInstructions'].map((f) => read(`dialogs/agent-setup/${f}.tsx`)).join('\n'),
   notifications: ['dialogs/NotificationSettings.tsx', 'dialogs/sound/SoundSettings.tsx', 'dialogs/sound/TestNotification.tsx'].map(read).join('\n'),
   // Its toolbar buttons' rows are made from HIDEABLE_BUTTONS, and so are their entries.
-  workspaces: [s('Workspaces', 'HiddenProjectsGroup', 'BranchPrefixRow'), ...HIDEABLE_BUTTONS.map(([, label]) => `'${label}'`)].join('\n'),
+  workspaces: [s('Workspaces', 'HiddenProjectsGroup', 'BranchPrefixRow'), read('dialogs/ProjectsHomeRow.tsx'), ...HIDEABLE_BUTTONS.map(([, label]) => `'${label}'`)].join('\n'),
   terminal: ['dialogs/TerminalSettings.tsx', 'dialogs/TerminalThemes.tsx', 'dialogs/TerminalImport.tsx'].map(read).join('\n'),
   fire: read('dialogs/FireSettings.tsx'),
   menubar: read('dialogs/MenuBarSettings.tsx'),

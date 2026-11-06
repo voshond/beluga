@@ -299,6 +299,8 @@ export interface Prefs {
   readonly autoSetup: boolean;
   /** What new worktrees' branches start with (`beluga/`; empty: none). */
   readonly branchPrefix: string;
+  /** Where new projects and clones go (undefined: the first code folder found, see workspaces/new-project.ts). */
+  readonly projectsHome?: string;
   readonly contextMeter: boolean;
   /** Compact a conversation on its own when its context passes `autoCompactAt` percent. */
   readonly autoCompact: boolean;
@@ -707,7 +709,7 @@ export const DEFAULT_PREFS: Prefs = {
 
 /** The preference fields out of saved settings. */
 export function prefsFrom(settings: Partial<Settings>): Prefs {
-  const picked = Object.fromEntries(Object.keys(DEFAULT_PREFS).concat(['model', 'effort', 'defaultAgent', 'projectAgents', 'shell']).filter((k) => settings[k as keyof Settings] !== undefined).map((k) => [k, settings[k as keyof Settings]]));
+  const picked = Object.fromEntries(Object.keys(DEFAULT_PREFS).concat(['model', 'effort', 'defaultAgent', 'projectAgents', 'shell', 'projectsHome']).filter((k) => settings[k as keyof Settings] !== undefined).map((k) => [k, settings[k as keyof Settings]]));
   return { ...DEFAULT_PREFS, ...picked };
 }
 

@@ -1,7 +1,7 @@
 import { type MergePreview, mergePreview } from './merge-preview.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { systemOpen } from '../core/os-open.js';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { findProjects, isMainCheckout } from './discovery.js';
@@ -16,7 +16,8 @@ import { type ArchiveManifest, type ArchivePhase, type ArchivePreview, archiveWo
 import { worktreeOrigin } from './origin.js';
 import { deleteFolderInBackground, removeWorktreeKeepingBranch, sweepSetAside } from './others.js';
 import { moveToTrash } from './trash.js';
-import { dropFolderSessions, dropSession, pathVariants, sessionFoldersUnder } from '../agent/runtime/claude/claude-sessions.js';
+import { carryFolderSessions, dropFolderSessions, dropSession, pathVariants, sessionFoldersUnder } from '../agent/runtime/claude/claude-sessions.js';
+import { isUnder } from '../shared/path-inside.js';
 import { dropCodexSessions } from '../agent/runtime/codex/codex-sessions.js';
 import { dropOpenCodeFolder, dropOpenCodeSession } from '../agent/runtime/opencode/sessions.js';
 import { addDay, dayKey } from './usage-days.js';
@@ -68,7 +69,16 @@ async function isWorktreeOf(repo: string, dir: string): Promise<boolean> {
   return !list || list.some((w) => real(w.path) === real(dir));
 }
 
-export const projectId = (root: string): string => createHash('sha1').update(real(root)).digest('hex').slice(0, 10);
+/** Moved projects keep the id they had (by their new real root; ProjectsConfig.ids). */
+const movedIds = new Map<string, string>();
+const rememberMoved = (ids: Readonly<Record<string, string>> | undefined): void => {
+  for (const [root, id] of Object.entries(ids ?? {})) movedIds.set(root, id);
+};
+
+export const projectId = (root: string): string => {
+  const at = real(root);
+  return movedIds.get(at) ?? createHash('sha1').update(at).digest('hex').slice(0, 10);
+};
 const pathId = (p: string): string => `wt-${createHash('sha1').update(real(p)).digest('hex').slice(0, 10)}`;
 /** New workspaces get a fresh id, so a reused name never inherits an old record or history. */
 const freshId = (): string => `wt-${randomUUID().slice(0, 12)}`;
@@ -136,6 +146,7 @@ export class WorkspaceManager {
     // No standing main conversation (BLG-70): one from before becomes a chat in its project, once.
     this.records = migrateMainConversations(store, store.loadRecords()).records;
     this.config = store.loadConfig();
+    rememberMoved(this.config.ids);
   }
 
   get list(): readonly Project[] {
@@ -420,6 +431,75 @@ export class WorkspaceManager {
     }
     await this.refresh();
     return { root, archived, trashed };
+  }
+
+  /**
+   * Move a project's folder into another folder (Move Project), keeping its name. It keeps its id
+   * (ProjectsConfig.ids), so tasks, history and worktrees stay its own; its worktrees are pointed at
+   * it again, and every place Beluga keeps its old path is moved along. Refused when something is in
+   * the way or the folder is on another disk; when the worktrees can't be repaired it goes back.
+   */
+  async moveProject(id: string, toParent: string): Promise<{ from: string; to: string }> {
+    const project = this.repoProject(id);
+    const from = real(project.root);
+    const parent = path.resolve(toParent);
+    const to = path.join(parent, path.basename(from));
+    if (!existsSync(parent) || !statSync(parent).isDirectory()) throw new WorkspaceError(`${parent} isn't there`);
+    if (real(parent) === path.dirname(from)) throw new WorkspaceError(`${project.name} is already in ${parent}`);
+    if (isUnder(from, real(parent))) throw new WorkspaceError(`${project.name} can't go inside itself`);
+    if (existsSync(to)) throw new WorkspaceError(`${to} is already there`);
+    const linked = (await g.listWorktrees(from)).map((w) => w.path).filter((p) => real(p) !== from && existsSync(p));
+    try {
+      renameSync(from, to);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      throw new WorkspaceError(code === 'EXDEV' ? `${parent} is on another disk: move it there yourself, then add it again` : `Couldn't move ${project.name}: ${(err instanceof Error ? err.message : String(err))}`);
+    }
+    try {
+      if (linked.length) await g.repairWorktrees(to, linked);
+    } catch (err) {
+      renameSync(to, from);
+      throw new WorkspaceError(`Couldn't point ${project.name}'s worktrees at its new place, so it stayed where it was: ${(err instanceof Error ? err.message : String(err))}`);
+    }
+    this.rehome(from, real(to), id);
+    await carryFolderSessions(from, to).catch(() => 0);
+    await this.refresh();
+    return { from, to: real(to) };
+  }
+
+  /** Every path Beluga keeps for a project that moved from `from` to `to`, moved along (its id stays). */
+  private rehome(from: string, to: string, id: string): void {
+    const moved = (p: string): string => {
+      if (!p) return p;
+      const at = real(p);
+      return isUnder(from, at) ? path.join(to, path.relative(from, at)) : p;
+    };
+    const was = (p: string): boolean => moved(p) !== p;
+    const rekey = <T>(rec: Readonly<Record<string, T>> | undefined): Record<string, T> | undefined => rec && Object.fromEntries(Object.entries(rec).map(([k, v]) => [moved(k), v]));
+    const { ids = {}, ...config } = this.config;
+    const kept = Object.fromEntries(Object.entries(ids).filter(([root]) => root !== from));
+    this.config = {
+      ...config,
+      projects: [...new Set([...config.projects.map(moved), to])],
+      hidden: config.hidden.map(moved),
+      ...(config.removed ? { removed: config.removed.map(moved) } : {}),
+      ...(config.groups ? { groups: config.groups.map((gr) => ({ ...gr, projects: gr.projects.map(moved) })) } : {}),
+      ...(config.order ? { order: config.order.map((k) => (isGroupKey(k) ? k : moved(k))) } : {}),
+      ...(config.scripts ? { scripts: rekey(config.scripts) } : {}),
+      ...(config.approvedScripts ? { approvedScripts: rekey(config.approvedScripts) } : {}),
+      ids: { ...kept, [to]: id },
+    };
+    rememberMoved({ [to]: id });
+    this.store.saveConfig(this.config);
+    this.records = this.records.map((r) => (was(r.projectRoot) || was(r.path) ? { ...r, projectRoot: moved(r.projectRoot), path: moved(r.path) } : r));
+    this.store.saveRecords(this.records);
+    for (const map of [this.fetchState, this.forks, this.remoteDefaults] as Map<string, unknown>[]) {
+      for (const [k, v] of [...map]) {
+        if (!was(k)) continue;
+        map.delete(k);
+        map.set(moved(k), v);
+      }
+    }
   }
 
   /**

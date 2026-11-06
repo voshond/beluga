@@ -54,6 +54,11 @@ export async function listWorktrees(repo: string): Promise<WorktreeEntry[]> {
   return parseWorktreeList(await git(repo, ['worktree', 'list', '--porcelain']));
 }
 
+/** After the main checkout moved: point each linked worktree's .git back at it (and it at them). */
+export async function repairWorktrees(repo: string, worktrees: readonly string[]): Promise<void> {
+  await git(repo, ['worktree', 'repair', ...worktrees]);
+}
+
 export async function isGitRepo(dir: string): Promise<boolean> {
   return (await tryGit(dir, ['rev-parse', '--is-inside-work-tree']))?.trim() === 'true';
 }

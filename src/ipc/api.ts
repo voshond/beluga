@@ -301,6 +301,8 @@ export const API = {
   'workspaces.hideProject': args(id),
   // Delete Project: out of Beluga (worktrees archived losslessly); `trash`: its folder to the Trash too.
   'workspaces.removeProject': args(id, opt(z.object({ trash: opt(bool) }).strict())),
+  // Move Project: its folder into another folder (same name); worktrees, tasks and history stay its own. → whether it moved.
+  'workspaces.moveProject': args(id, path),
   'workspaces.cleanAgentWorktrees': args(id),
   // Worktrees Beluga didn't make (Conductor's, Claude Code's, a script's): who made them, their info page, tidying up.
   'workspaces.otherOrigins': args(id),
@@ -435,6 +437,7 @@ export const API = {
   'projects.cloneProgress': args(path),
   // Where a new project goes unless you pick somewhere.
   'projects.newHome': args(),
+  'projects.setHome': args(opt(path.nullable())),
   // The icon of a folder that isn't a project yet (one of the suggestions).
   'projects.iconAt': args(path),
 

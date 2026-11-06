@@ -39,7 +39,7 @@ export class WorkspaceStore {
 
   loadConfig(): ProjectsConfig {
     const raw = readJson<Partial<ProjectsConfig>>(path.join(this.home, 'projects.json'), {});
-    return { roots: raw.roots ?? DEFAULT_ROOTS, projects: raw.projects ?? [], hidden: raw.hidden ?? [], ...(Array.isArray(raw.removed) && raw.removed.length ? { removed: raw.removed.filter((r): r is string => typeof r === 'string') } : {}), groups: raw.groups ?? [], scripts: raw.scripts ?? {}, approvedScripts: raw.approvedScripts ?? {}, ...(Array.isArray(raw.order) ? { order: raw.order.filter((k): k is string => typeof k === 'string') } : {}) };
+    return { roots: raw.roots ?? DEFAULT_ROOTS, projects: raw.projects ?? [], hidden: raw.hidden ?? [], ...(Array.isArray(raw.removed) && raw.removed.length ? { removed: raw.removed.filter((r): r is string => typeof r === 'string') } : {}), groups: raw.groups ?? [], scripts: raw.scripts ?? {}, approvedScripts: raw.approvedScripts ?? {}, ...(raw.ids && typeof raw.ids === 'object' ? { ids: raw.ids } : {}), ...(Array.isArray(raw.order) ? { order: raw.order.filter((k): k is string => typeof k === 'string') } : {}) };
   }
 
   saveConfig(config: ProjectsConfig): void {

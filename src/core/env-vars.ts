@@ -336,6 +336,15 @@ export class EnvVars {
     this.save();
   }
 
+  /** A project's folder moved (Move Project): its own variables and choices go with it. */
+  moveProject(from: string, to: string): void {
+    const own = this.data.projects[from];
+    if (!own) return;
+    const { [from]: _gone, ...rest } = this.data.projects;
+    this.data = { ...this.data, projects: { ...rest, [to]: own } };
+    this.save();
+  }
+
   /** Your endpoints, keys and all: for runs on this Mac only (never a screen: see local-endpoints.ts). */
   endpoints(): readonly Endpoint[] {
     return this.data.endpoints;

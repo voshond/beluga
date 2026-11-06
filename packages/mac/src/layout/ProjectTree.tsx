@@ -17,7 +17,7 @@ import { sameDeep } from '../lib/stable.js';
 import { openProjectHome } from '../lib/project-home.js';
 import { openSheet } from '../lib/sheets.js';
 import { getPrefs, setPrefs, usePrefs } from '../lib/prefs.js';
-import { pickImage, reloadProjectIcon } from '../lib/projects.js';
+import { pickFolders, pickImage, reloadProjectIcon } from '../lib/projects.js';
 import { showUndo } from '../lib/undo-toast.js';
 import { useArrangeDrag } from './arrange-drag.js';
 import { GroupHeader, NewGroupRow, groupItems, isGroupOption, moveItems, moveKey, planAcrossItems } from './ProjectGroups.js';
@@ -143,6 +143,7 @@ function useProjectFold(projectId: string): { folded: boolean; toggle: (all: boo
  */
 const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: { p: Project; depth: 0 | 1; entries: readonly Entry[]; arrange: Arrange }) {
   const actions = useActions();
+  const api = useApi();
   const { client } = useBeluga();
   const view = useApp((st) => st.view);
   // Only the plans and the board (not the whole state): an open menu here isn't rebuilt on every change.
@@ -195,7 +196,13 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
   const importItem: ActionItem[] = p.root ? [{ label: 'Import from Claude Code…', icon: 'claude', onSelect: () => openSheet({ kind: 'import_conversation', projectId: p.id }) }] : [];
   // Its variables and its main folder's .env, without going through Settings (BLG-369).
   const envItem: ActionItem[] = p.root ? [{ label: 'Environment…', icon: 'lock', onSelect: () => openSheet({ kind: 'project_env', projectId: p.id }) }] : [];
-  const extra: ActionItem[] = [...shareItem, ...teamItems, ...importItem, ...envItem, ...showArchivedItem, ...cleanUpItem, ...moveItems(entries, item, arrange), ...groupItems(p, entries, arrange), ...githubItems, ...iconItems, { label: 'Hide Project', danger: true, separate: true, onSelect: () => hide(p) }, { label: 'Delete Project…', danger: true, onSelect: () => openSheet({ kind: 'delete_project', projectId: p.id }) }];
+  // Its folder somewhere else on disk (worktrees, tasks and history go along).
+  const handleMoveFolder = async (): Promise<void> => {
+    const [into] = (await pickFolders(`Move ${p.name} into…`)) ?? [];
+    if (into) await api.workspaces.moveProject(p.id, into);
+  };
+  const moveFolderItem: ActionItem[] = p.root ? [{ label: 'Move Folder…', icon: 'folder', disabled: busy, ...(busy ? { hint: 'Once your agent is done' } : {}), onSelect: () => void handleMoveFolder() }] : [];
+  const extra: ActionItem[] = [...shareItem, ...teamItems, ...importItem, ...envItem, ...moveFolderItem, ...showArchivedItem, ...cleanUpItem, ...moveItems(entries, item, arrange), ...groupItems(p, entries, arrange), ...githubItems, ...iconItems, { label: 'Hide Project', danger: true, separate: true, onSelect: () => hide(p) }, { label: 'Delete Project…', danger: true, onSelect: () => openSheet({ kind: 'delete_project', projectId: p.id }) }];
   const kids = depth + 2;
   // Nothing to unfold: no arrow (its place kept, so the icons stay in line).
   const sessions = useCcSessions();
