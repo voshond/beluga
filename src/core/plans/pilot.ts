@@ -1349,17 +1349,16 @@ export class PlanPilot {
 
   /** The repos whose plan branch isn't there yet (nor given up on): the primary last, as tasks wait for it. */
   private branchesToMake(plan: Plan): readonly string[] {
-    const multi = isMultiRepo(plan);
     return planRepos(plan)
-      .filter((r) => !this.noBranch.has(r === plan.projectId ? plan.id : `${plan.id}:${r}`) && !(multi ? plan.branches?.[r] : plan.branch))
+      .filter((r) => !this.noBranch.has(r === plan.projectId ? plan.id : `${plan.id}:${r}`) && !planBranchFor(plan, r))
       .sort((a, b) => Number(a === plan.projectId) - Number(b === plan.projectId));
   }
 
-  /** plan/<slug> from main in each of its repos (one that's there already is the plan's, never made twice). */
+  /** plan/<slug> from main in each of its repos (one that's there already is the plan's, never made twice); a repo added later gets the name the others have. */
   private async makeBranch(plan: Plan): Promise<void> {
     if (this.branching.has(plan.id)) return;
     this.branching.add(plan.id);
-    const branch = planBranchName(plan);
+    const branch = plan.branch ?? Object.values(plan.branches ?? {})[0] ?? planBranchName(plan);
     try {
       for (const repo of this.branchesToMake(plan)) {
         const primary = repo === plan.projectId;

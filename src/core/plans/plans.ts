@@ -369,6 +369,17 @@ export class Plans {
     return this.change(plan, { rescue }, []);
   }
 
+  /**
+   * The repos it covers from now on (BLG-30: an approved draft's repo changes), primary first; the
+   * draft stops carrying the changes. A repo new to it gets its plan branch from the pilot.
+   */
+  setRepos(id: string, repos: readonly string[], by: Actor, said: string): Plan {
+    const plan = this.need(id);
+    const draft = plan.draft ? (({ repoChanges: _r, ...rest }) => rest)(plan.draft) : undefined;
+    const covered = planRepos({ projectId: plan.projectId, repos });
+    return this.change(plan, { repos: covered.length > 1 ? covered : undefined, ...(draft ? { draft } : {}) }, [event(by, 'changed', said, this.now())]);
+  }
+
   /** Its epics on the board (see epics.ts). */
   setBoard(id: string, board: string): Plan {
     const plan = this.need(id);

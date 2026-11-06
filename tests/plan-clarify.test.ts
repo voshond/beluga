@@ -268,14 +268,15 @@ describe('a plan across repos: the planner sees and plans them all (BLG-11)', ()
     expect(brief).toMatch(/Contract first/);
   });
 
-  it('a single-repo plan’s prompt is unchanged', () => {
+  it('a single-repo plan’s prompt has no repos section, only how to find the repos it reaches (BLG-28)', () => {
     const t = multi();
     const plan = t.plans.need(t.plan.id);
     const board = t.store.getState().board;
     const brief = t.run().brief!;
-    expect(brief).toBe(planningBrief(plan, board, ''));
     expect(planningBrief(plan, board, '', [{ id: 'api', name: 'whisper-api', root: '/tmp/whisper-api' }])).toBe(planningBrief(plan, board, ''));
     expect(brief).not.toContain('several repos');
+    expect(brief).toContain('Which repos the work reaches is yours to work out');
+    expect(brief).toContain('Other projects on this Mac (not readable unless you add one): calendar-api, calendar-desktop.');
   });
 
   it('the home reads the other repos’ main folders; a single-repo plan’s reads none', () => {

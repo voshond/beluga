@@ -11,7 +11,7 @@ import type { CcAgent } from '../core/claude-code/model.js';
 import type { PendingQuestion } from '../core/collab-store.js';
 import { type TaskView as GwTask, isFinal, requestGist, stateLabel, stateTone, targetLabel } from '../core/gateway/model.js';
 import { parseDecisionQid } from '../core/plans/decisions.js';
-import { type Plan, type PlanPr, isMultiRepo, milestoneRepos, planForHome, planRepos, planTitle, prRef } from '../core/plans/model.js';
+import { type Plan, type PlanPr, draftRepoPlan, isMultiRepo, milestoneRepos, planForHome, planRepos, planTitle, prRef } from '../core/plans/model.js';
 import { planOwnerOf } from '../core/plans/owner.js';
 import { branchState } from '../core/branch-state.js';
 import { type RunSummary, type Sentinel, type SentinelState, activeSentinelChat, firstLine, isLive, isSentinelChat, lastRunOf, pausedWords, runsOf, scheduleSentence, sentinelById, sentinelChatTitle } from '../core/sentinel/model.js';
@@ -893,13 +893,16 @@ export function planPageView(state: DomainState, id: string): PlanView | undefin
   const goal = (plan.body ?? plan.draft)?.goal;
   const notes = plan.draft ?? plan.body;
   const topic = planTopic(plan.id);
-  // A plan across repos names them, and each milestone its own (BLG-20).
+  // A plan across repos names them, and each milestone its own (BLG-20); a draft's as it would make them, with its repo changes (BLG-31).
   const repoName = (pid: string): string => clip(state.projects.find((p) => p.id === pid)?.name ?? pid, 200);
-  const across = isMultiRepo(plan);
+  const covering = draftRepoPlan(plan);
+  const across = isMultiRepo(covering);
+  const repoChanges = (plan.draft?.repoChanges ?? []).slice(0, 8).map((c) => ({ name: repoName(c.repo), change: c.change, by: c.by, ...(c.why ? { why: clip(plainLine(c.why, 400), 400) } : {}) }));
   return {
     id: clip(plan.id, 200),
     title: clip(planTitle(plan), 300),
-    ...(across ? { repos: planRepos(plan).slice(0, 8).map(repoName) } : {}),
+    ...(across ? { repos: planRepos(covering).slice(0, 8).map(repoName) } : {}),
+    ...(repoChanges.length ? { repoChanges } : {}),
     ...(goal ? { goal: clip(plainLine(goal, 4000), 4000) } : {}),
     state: planState(plan, progress),
     ...(home ? { topic: home } : {}),
@@ -929,7 +932,7 @@ export function planPageView(state: DomainState, id: string): PlanView | undefin
       ...(m.autonomy !== plan.autonomy ? { autonomy: m.autonomy } : {}),
       ...checkerOfMilestone(state, m.run.checker),
       ...agentNowOf(m),
-      ...(across ? { repos: milestoneRepos(plan, m.milestone).slice(0, 8).map(repoName) } : {}),
+      ...(across ? { repos: milestoneRepos(covering, m.milestone).slice(0, 8).map(repoName) } : {}),
     })),
     autonomy: plan.autonomy,
     ...shipOf(state, plan, progress),

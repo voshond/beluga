@@ -150,7 +150,7 @@ export default function Plan() {
                   </T>
                 </View>
               ) : null}
-              <PlanRepos repos={p.repos ?? []} />
+              <PlanRepos repos={p.repos ?? []} changes={p.repoChanges ?? []} />
               {p.topic ? <PlanChat topic={p.topic} drafting={drafting} /> : null}
             </View>
 

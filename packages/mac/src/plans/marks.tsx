@@ -1,8 +1,9 @@
 import type { Actor } from '@beluga/core/board/model.js';
-import type { Plan, PlanMilestone, PlanPr } from '@beluga/core/plans/model.js';
+import { type Plan, type PlanMilestone, type PlanPr, draftRepoPlan, milestoneRepos } from '@beluga/core/plans/model.js';
 import type { TaskState } from '@beluga/core/plans/progress.js';
 import { useRef } from 'react';
 import { Icon } from '../components/Icon.js';
+import { ProjectIcon } from '../components/ProjectIcon.js';
 import { Avatar, Button, cx } from '../components/ui.js';
 import { openExternal } from '../lib/system.js';
 import { useApp } from '../lib/beluga.js';
@@ -156,15 +157,24 @@ export function Said({ line, className }: { line: Headline; className?: string }
   );
 }
 
-/** The repo a milestone runs in (several when its work must land together); nothing on a one-repo plan (BLG-20). */
-export function RepoChip({ plan, milestone }: { plan: Pick<Plan, 'projectId' | 'repos'>; milestone: Pick<PlanMilestone, 'repos'> }) {
+/**
+ * The repos a milestone runs in (several when its work must land together), each with its icon as the
+ * sidebar draws it; on a draft, as its repo changes would make them (BLG-33). Nothing on a one-repo plan.
+ */
+export function RepoChip({ plan, milestone }: { plan: Pick<Plan, 'projectId' | 'repos' | 'draft'>; milestone: Pick<PlanMilestone, 'repos'> }) {
   const projects = useApp((st) => st.projects);
-  const names = milestoneRepoNames(plan, milestone, projects);
+  const covering = draftRepoPlan(plan);
+  const names = milestoneRepoNames(covering, milestone, projects);
   if (!names.length) return null;
+  const ids = milestoneRepos(covering, milestone);
   return (
     <span className={p.msRepo} title={`Runs in ${names.join(' and ')}`} data-repo-chip>
-      <Icon name="folder" size={10} />
-      {names.join(' + ')}
+      {ids.map((id, n) => (
+        <span key={id} className={p.msRepoOne}>
+          <ProjectIcon id={id} name={names[n]!} size={11} />
+          {names[n]}
+        </span>
+      ))}
     </span>
   );
 }

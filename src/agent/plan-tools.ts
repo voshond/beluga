@@ -53,7 +53,7 @@ const DEPENDS_ON = z
 const REPOS = z
   .array(z.string().min(1).max(200))
   .max(8)
-  .describe('A plan across repos: the repos this milestone works in (their names or ids, from the plan\'s). Normally one; several only when the work must land together. Leave out for the primary');
+  .describe('The repos this milestone works in (names or ids: the plan\'s, or one the draft adds with op repo). Normally one; several only when the work must land together. Leave out for the primary');
 
 const MILESTONE = z.object({
   id: id.optional(),
@@ -73,6 +73,13 @@ const DECISION = z.object({
   why: z.string().max(400).optional().describe('One sentence on why (for a default: why it’s the sensible one)'),
   by: z.enum(['user', 'default']).optional().describe('user: they answered it; default (the default): you chose it without asking'),
   tasks: z.array(z.string().max(40)).max(20).optional().describe('Ids of the tasks it bears on: their briefs get it'),
+});
+
+/** A repo in or out of the plan (BLG-29): applied when the user approves it. */
+const REPO_CHANGE = z.object({
+  repo: z.string().min(1).max(200).describe('The project’s name (or id): one of the plan’s, or one listed as near it'),
+  on: z.boolean().describe('true: the plan covers it; false: drop it (not the primary)'),
+  why: z.string().min(1).max(400).describe('One line on what links it to the work (or why it isn’t needed), naming a file when you can'),
 });
 
 type Task = z.infer<typeof TASK>;
@@ -116,6 +123,7 @@ const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('decide'), decision: DECISION }),
   z.object({ op: z.literal('open_question'), question: z.string().min(1).max(400), on: z.boolean().describe('true: still to settle; false: settled or dropped') }),
   z.object({ op: z.literal('block'), id: z.string().max(40), by: z.string().max(40), on: z.boolean() }),
+  REPO_CHANGE.extend({ op: z.literal('repo') }),
 ]);
 
 /** Tool ops → the plan's ops. */
@@ -159,12 +167,13 @@ export function createPlanToolDefs(plan: PlanTools) {
         milestones: z.array(MILESTONE).min(1).max(12),
         decisions: z.array(DECISION).max(40).optional().describe('What was settled while planning: the user’s answers (by user) and every default you chose without asking (by default)'),
         open_questions: z.array(z.string().min(1).max(400)).max(40).optional().describe('What is still to settle: the plan can’t be approved while one is open'),
+        repo_changes: z.array(REPO_CHANGE).max(8).optional().describe('Repos the plan should cover or drop (applied with approval): before milestones name a repo, it must be in the plan'),
       },
-      (a) => guarded(() => plan.write({ title: a.title, goal: a.goal, milestones: a.milestones.map(milestoneInput), ...(a.decisions ? { decisions: a.decisions } : {}), ...(a.open_questions ? { openQuestions: a.open_questions } : {}) } as BodyInput)),
+      (a) => guarded(() => plan.write({ title: a.title, goal: a.goal, milestones: a.milestones.map(milestoneInput), ...(a.decisions ? { decisions: a.decisions } : {}), ...(a.open_questions ? { openQuestions: a.open_questions } : {}), ...(a.repo_changes ? { repoEdits: a.repo_changes } : {}) } as BodyInput)),
     ),
     tool(
       'plan_update',
-      'Change the plan with ops, applied in order: retitle, add_milestone, update_milestone, remove_milestone, add_task, update_task (patch), remove_task, move_task, block (id waits on by; on false removes it), decide (record a decision: it closes the open question it answers), open_question (on: a question still to settle; off: drop it). On an approved plan the changes are proposed for the user to approve (applied at once on autopilot).',
+      'Change the plan with ops, applied in order: retitle, add_milestone, update_milestone, remove_milestone, add_task, update_task (patch), remove_task, move_task, block (id waits on by; on false removes it), decide (record a decision: it closes the open question it answers), open_question (on: a question still to settle; off: drop it), repo (on: the plan covers that repo, off: drop it, with why; the user approves it with the plan). On an approved plan the changes are proposed for the user to approve (applied at once on autopilot).',
       { ops: z.array(OP).min(1).max(40), reason: z.string().max(200).optional().describe('Why, in a few words (shown in the plan’s history)') },
       (a) => guarded(() => plan.update(toOps(a.ops), a.reason)),
     ),

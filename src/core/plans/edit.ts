@@ -1,5 +1,5 @@
 import { ESTIMATES, PRIORITIES, type Priority } from '../board/model.js';
-import { AUTONOMIES, type Autonomy, MAX_MILESTONES, MAX_PLAN_TASKS, type PlanBody, type PlanDecision, type PlanDecisionEntry, type PlanMilestone, type PlanTask, allTasks } from './model.js';
+import { AUTONOMIES, type Autonomy, MAX_MILESTONES, MAX_PLAN_REPOS, MAX_PLAN_TASKS, type PlanBody, type PlanDecision, type PlanDecisionEntry, type PlanMilestone, type PlanRepoChange, type PlanTask, allTasks, reposWith } from './model.js';
 
 /**
  * Writing a plan: a whole one (Claude's plan_write), or a change at a time (Claude's plan_update,
@@ -69,6 +69,16 @@ export interface BodyInput {
   readonly milestones: readonly MilestoneInput[];
   readonly decisions?: readonly DecisionInput[];
   readonly openQuestions?: readonly string[];
+  /** Repos to add to the plan (on) or drop from it (off), applied when it's approved. */
+  readonly repoEdits?: readonly RepoChangeInput[];
+}
+
+/** A repo in (on) or out of (off) the plan (BLG-29): a project id, and why. */
+export interface RepoChangeInput {
+  readonly repo: string;
+  readonly on: boolean;
+  readonly why?: string;
+  readonly by?: 'claude' | 'user';
 }
 
 /** A decision as Claude writes it (BLG-8): `by` left out is a default it chose. */
@@ -93,7 +103,9 @@ export type PlanOp =
   /** Settle a question (a new decision, or a new answer to one): it's no longer open (BLG-8). */
   | { readonly op: 'decide'; readonly decision: DecisionInput }
   /** A question still to settle (on), or settled or dropped (off). */
-  | { readonly op: 'open_question'; readonly question: string; readonly on: boolean };
+  | { readonly op: 'open_question'; readonly question: string; readonly on: boolean }
+  /** A repo in or out of the plan, once it's approved (BLG-29). */
+  | ({ readonly op: 'repo' } & RepoChangeInput);
 
 const oneLine = (text: string, max: number): string => text.replace(/\s+/g, ' ').trim().slice(0, max);
 const block = (text: string | undefined, max: number): string | undefined => {
@@ -199,7 +211,38 @@ export function normalizeBody(input: BodyInput, previous?: readonly (PlanBody | 
   const goal = block(input.goal, MAX_GOAL) ?? '';
   const decisions = dedupeDecisions((input.decisions ?? []).map(decisionEntry));
   const openQuestions = questionList(input.openQuestions ?? []).filter((q) => !decisions.some((d) => sameText(d.question, q)));
-  return checkBody({ title, goal, milestones, ...(decisions.length ? { decisions } : {}), ...(openQuestions.length ? { openQuestions } : {}) }, repos);
+  // The repo changes drafted before stay (a whole plan rewrites the milestones, not which repos it covers).
+  const kept = withRepoChanges({ title, goal, milestones, ...(decisions.length ? { decisions } : {}), ...(openQuestions.length ? { openQuestions } : {}) }, previous?.[0]?.repoChanges ?? []);
+  const body = (input.repoEdits ?? []).reduce((b, c) => withRepo(b, c, repos), kept);
+  return checkBody(body, repos && reposWith(repos, body.repoChanges));
+}
+
+/** The body with these repo changes (none: the field goes). */
+function withRepoChanges(body: PlanBody, changes: readonly PlanRepoChange[]): PlanBody {
+  const { repoChanges: _r, ...rest } = body;
+  return changes.length ? { ...rest, repoChanges: changes } : rest;
+}
+
+/**
+ * A repo in or out of the plan (`base`: its repos now, primary first). In one it already covers, or
+ * out of one it doesn't, takes back a change drafted before. The primary always stays.
+ */
+function withRepo(body: PlanBody, input: RepoChangeInput, base: readonly string[] | undefined): PlanBody {
+  if (!base?.length) throw new PlanError('This plan’s repos aren’t known here');
+  const repo = input.repo.trim();
+  if (!repo) throw new PlanError('Say which repo');
+  if (!input.on && repo === base[0]) throw new PlanError('The plan’s primary repo stays in it: its conversation runs there');
+  if (!input.on) {
+    const using = body.milestones.find((m) => m.repos?.includes(repo));
+    if (using) throw new PlanError(`Milestone "${using.id}" works in "${repo}": move it to another repo (update_milestone repos) before dropping it`);
+  }
+  const inPlan = base.includes(repo);
+  const change: PlanRepoChange['change'] | undefined = input.on ? (inPlan ? undefined : 'add') : inPlan ? 'drop' : undefined;
+  const why = input.why ? oneLine(input.why, MAX_LINE) : '';
+  const rest = (body.repoChanges ?? []).filter((c) => c.repo !== repo);
+  const next: PlanRepoChange[] = change ? [...rest, { repo, change, ...(why ? { why } : {}), by: input.by === 'user' ? 'user' : 'claude' }] : rest;
+  if (reposWith(base, next).length > MAX_PLAN_REPOS) throw new PlanError(`A plan covers at most ${MAX_PLAN_REPOS} repos`);
+  return withRepoChanges(body, next);
 }
 
 const MAX_DECISIONS = 40;
@@ -238,11 +281,11 @@ function withNotes(body: PlanBody, decisions: readonly PlanDecisionEntry[], open
   return { ...rest, ...(decisions.length ? { decisions } : {}), ...(open.length ? { openQuestions: open } : {}) };
 }
 
-/** Changes, one after another; the result is checked as a whole. */
+/** Changes, one after another; the result is checked as a whole. `repos`: the plan's now (its draft's repo changes go on top). */
 export function applyOps(body: PlanBody, ops: readonly PlanOp[], repos?: readonly string[]): PlanBody {
   let next = body;
-  for (const op of ops) next = applyOp(next, op);
-  return checkBody(prunedDecisions(next), repos);
+  for (const op of ops) next = applyOp(next, op, repos);
+  return checkBody(prunedDecisions(next), repos && reposWith(repos, next.repoChanges));
 }
 
 /** Decisions only name tasks still in the plan (a task taken out leaves them). */
@@ -258,7 +301,7 @@ function prunedDecisions(body: PlanBody): PlanBody {
   return { ...body, decisions };
 }
 
-function applyOp(body: PlanBody, op: PlanOp): PlanBody {
+function applyOp(body: PlanBody, op: PlanOp, repos: readonly string[] | undefined): PlanBody {
   const milestoneIds = new Set(body.milestones.map((m) => m.id));
   const taskIds = new Set(allTasks(body).map((t) => t.task.id));
   const needMilestone = (id: string): PlanMilestone => {
@@ -276,6 +319,8 @@ function applyOp(body: PlanBody, op: PlanOp): PlanBody {
     milestones: body.milestones.map((m) => ({ ...m, tasks: m.tasks.flatMap((t) => fn(t) ?? []) })),
   });
   switch (op.op) {
+    case 'repo':
+      return withRepo(body, op, repos);
     case 'decide': {
       const d = decisionEntry(op.decision);
       const decisions = dedupeDecisions([...(body.decisions ?? []), d]);

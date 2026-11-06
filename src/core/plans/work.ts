@@ -11,13 +11,13 @@ import type { LogItem, Store } from '../store.js';
 import type { WorkspaceController } from '../workspace-controller.js';
 import { ApplyError, applyDraft, planBoard } from './apply.js';
 import { dropEpics, syncEpics } from './epics.js';
-import type { BodyInput, PlanOp, TaskInput } from './edit.js';
-import { type Autonomy, MAX_PLAN_REPOS, type Plan, type TestsAt, allTasks, checkerOf, isMultiRepo, milestoneRepos, planForHome, planRepos, planTaskOfIssue, planTitle } from './model.js';
+import type { BodyInput, PlanOp, RepoChangeInput, TaskInput } from './edit.js';
+import { type Autonomy, MAX_PLAN_REPOS, type Plan, type TestsAt, allTasks, checkerOf, isMultiRepo, milestoneRepos, planForHome, planRepos, planTaskOfIssue, planTitle, proposedRepos } from './model.js';
 import { type PilotDeps, PlanPilot } from './pilot.js';
 import type { TaskView } from './progress.js';
 import { type PlanGit, planGitOf } from './plan-git.js';
 import { type Plans, UNTITLED } from './plans.js';
-import { type MilestoneWhere, type PlanRepoInfo, checkFailedPrompt, checkerBrief, describePlan, handbackPrompt, headBrief, milestoneNote, milestoneWhere, planningBrief, sizeWords, workerNote } from './prompt.js';
+import { type MilestoneWhere, type NearRepo, type PlanRepoInfo, checkFailedPrompt, checkerBrief, describePlan, handbackPrompt, headBrief, milestoneNote, milestoneWhere, planningBrief, sizeWords, workerNote } from './prompt.js';
 
 /**
  * Plans at work: making a plan (its own conversation, in the project's main folder where Claude
@@ -63,6 +63,26 @@ const WS = 'ws:';
 type PackageScripts = { readonly scripts?: Readonly<Record<string, string>> };
 
 /** A repo's test commands, from its package.json scripts (none there, or no package.json: none). */
+/** How many projects outside the plan's sidebar group the planner hears of, by name. */
+const MAX_NEAR_OTHERS = 15;
+const MAX_GUIDE = 1200;
+const GUIDE_FILES = ['CLAUDE.md', 'AGENTS.md'];
+
+/** The top of a repo's CLAUDE.md or AGENTS.md (whole lines, capped): where people say how their repos fit together. */
+const guideOf = (root: string): NearRepo['guide'] => {
+  for (const file of GUIDE_FILES) {
+    try {
+      const text = readFileSync(path.join(root, file), 'utf8').trim();
+      if (!text) continue;
+      const cut = text.length > MAX_GUIDE ? text.slice(0, text.lastIndexOf('\n', MAX_GUIDE) > 0 ? text.lastIndexOf('\n', MAX_GUIDE) : MAX_GUIDE) : text;
+      return { file, text: cut };
+    } catch {
+      // Not there: the next one.
+    }
+  }
+  return undefined;
+};
+
 const testsOf = (root: string): readonly string[] => {
   try {
     const { scripts } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as PackageScripts;
@@ -182,30 +202,74 @@ export class PlansWork {
     return group?.name ?? planTitle(plan);
   }
 
-  /** A plan's repos as the planner sees them: name and main folder (primary first). */
-  private repoInfos(plan: Plan): readonly PlanRepoInfo[] {
-    const projects = this.deps.store.getState().projects;
-    return planRepos(plan).map((id) => {
-      const p = projects.find((x) => x.id === id);
-      return { id, name: p?.name ?? id, root: p?.root ?? '' };
-    });
+  private repoInfo(id: string): PlanRepoInfo {
+    const p = this.deps.store.getState().projects.find((x) => x.id === id);
+    return { id, name: p?.name ?? id, root: p?.root ?? '' };
   }
 
-  /** The other repos' main folders a plan's home reads (none for a single-repo plan, or one that's done). */
+  /** A plan's repos as the planner sees them: name and main folder (primary first), with what its draft adds and drops. */
+  private repoInfos(plan: Plan): readonly PlanRepoInfo[] {
+    return [...new Set([...proposedRepos(plan), ...planRepos(plan)])].map((id) => this.repoInfo(id));
+  }
+
+  /**
+   * The projects on this Mac near a plan that it doesn't cover (BLG-28): those sharing a sidebar group
+   * with one of its repos first (with the top of their CLAUDE.md or AGENTS.md), then the rest by name.
+   */
+  private nearRepos(plan: Plan): readonly NearRepo[] {
+    const state = this.deps.store.getState();
+    const covered = new Set(this.repoInfos(plan).map((r) => r.id));
+    const roots = new Set(this.repoInfos(plan).map((r) => r.root).filter(Boolean));
+    const local = state.projects.filter((p) => p.root && !covered.has(p.id) && !state.hiddenProjects.includes(p.root) && !state.hiddenProjects.includes(p.id));
+    const groupOf = new Map<string, string>();
+    for (const g of state.projectGroups ?? []) {
+      if (!g.projects.some((root) => roots.has(root))) continue;
+      for (const root of g.projects) if (!groupOf.has(root)) groupOf.set(root, g.name);
+    }
+    const grouped = local.filter((p) => groupOf.has(p.root)).slice(0, MAX_PLAN_REPOS);
+    const others = local.filter((p) => !groupOf.has(p.root)).slice(0, MAX_NEAR_OTHERS);
+    return [
+      ...grouped.map((p) => {
+        const guide = guideOf(p.root);
+        return { id: p.id, name: p.name, root: p.root, group: groupOf.get(p.root)!, ...(guide ? { guide } : {}) };
+      }),
+      ...others.map((p) => ({ id: p.id, name: p.name, root: p.root })),
+    ];
+  }
+
+  /**
+   * The main folders a plan's home reads beside its own (never edits: it's a main-folder chat): its
+   * other repos, what its draft adds, and while it isn't done, the projects in their sidebar group.
+   */
   homeReads(workspaceId: string): readonly string[] {
     const plan = planForHome(this.plans.state(), `${WS}${workspaceId}`);
-    if (!plan || plan.status === 'done' || !isMultiRepo(plan)) return [];
-    return this.repoInfos(plan).slice(1).map((r) => r.root).filter(Boolean);
+    if (!plan || plan.status === 'done') return [];
+    const own = this.repoInfo(plan.projectId).root;
+    const near = this.nearRepos(plan).filter((r) => r.group);
+    return [...new Set([...this.repoInfos(plan), ...near].map((r) => r.root).filter((root) => root && root !== own))];
   }
 
-  /** Milestone repos as Claude names them (a project's name or id) → the plan's ids; one it can't place is left for the check to refuse. */
+  /** Repos as Claude names them (a project's name or id) → project ids: the plan's first, then this Mac's; one it can't place is left as said, for the check to refuse. */
   private repoIds(planId: string, repos: readonly string[] | null | undefined): readonly string[] | null | undefined {
     if (!repos) return repos;
-    const infos = this.repoInfos(this.plans.need(planId));
+    const plan = this.plans.need(planId);
+    const local = this.deps.store.getState().projects.filter((p) => p.root).map((p) => ({ id: p.id, name: p.name }));
+    const infos = [...this.repoInfos(plan), ...local];
     return repos.map((r) => {
       const said = r.trim().toLowerCase();
       return infos.find((x) => x.id.toLowerCase() === said)?.id ?? infos.find((x) => x.name.toLowerCase() === said)?.id ?? r.trim();
     });
+  }
+
+  /** A repo change as Claude or you name it → a project on this Mac (by id), or a clear refusal. */
+  private repoChange<T extends RepoChangeInput>(planId: string, change: T, by: 'claude' | 'user'): T {
+    const [id] = this.repoIds(planId, [change.repo]) ?? [];
+    const known = this.deps.store.getState().projects.some((p) => p.id === id && p.root);
+    if (!known) {
+      const near = this.nearRepos(this.plans.need(planId)).map((r) => r.name);
+      throw new Error(`“${change.repo}” isn’t a project on this Mac${near.length ? ` (near this plan: ${near.join(', ')})` : ''}`);
+    }
+    return { ...change, repo: id!, by };
   }
 
   private withRepoIds<T extends { readonly repos?: readonly string[] | null }>(planId: string, m: T): T {
@@ -269,8 +333,10 @@ export class PlansWork {
     if (open.length && !opts.anyway) throw new Error(`${open.length === 1 ? 'A question is' : `${open.length} questions are`} still open: ${open.map((q) => `“${q}”`).join(', ')}. Answer ${open.length === 1 ? 'it' : 'them'} in the plan’s conversation, or approve anyway.`);
     let applied: ReturnType<typeof applyDraft>;
     try {
-      const boardId = planBoard(plan, this.deps.board.board, this.boardNameFor(plan));
-      applied = applyDraft(boardId ? this.plans.setBoard(id, boardId) : plan, this.deps.board.board, { by, me: this.deps.board.me() });
+      // The repos the draft adds or drops are the plan's first (BLG-30): its board, branches and PRs follow them.
+      const covering = this.adoptRepos(plan, by);
+      const boardId = planBoard(covering, this.deps.board.board, this.boardNameFor(covering));
+      applied = applyDraft(boardId ? this.plans.setBoard(id, boardId) : covering, this.deps.board.board, { by, me: this.deps.board.me() });
     } catch (err) {
       // What was made stays linked to the draft, so approving again doesn't make it twice.
       if (err instanceof ApplyError) this.plans.linkDraft(id, err.linked);
@@ -283,12 +349,25 @@ export class PlansWork {
     return done;
   }
 
+  /** A draft's repo changes made the plan's own (each repo still a project on this Mac). */
+  private adoptRepos(plan: Plan, by: Actor): Plan {
+    const changes = plan.draft?.repoChanges;
+    if (!changes?.length) return plan;
+    const repos = this.localRepos(plan.projectId, proposedRepos(plan));
+    const said = changes.map((c) => `${c.change === 'add' ? 'added' : 'dropped'} ${this.repoInfo(c.repo).name}`).join(', ');
+    return this.plans.setRepos(plan.id, repos, by, said);
+  }
+
   discard(id: string): Plan | undefined {
     return this.plans.discard(id, this.me());
   }
 
-  /** Your changes: an approved plan without waiting changes takes them at once (you're the one approving). */
-  edit(id: string, ops: readonly PlanOp[]): Plan {
+  /**
+   * Your changes: an approved plan without waiting changes takes them at once (you're the one approving).
+   * A repo you put in or take out is yours; turning down one Claude suggested is a decision it holds to.
+   */
+  edit(id: string, given: readonly PlanOp[]): Plan {
+    const ops = given.flatMap((o) => (o.op === 'repo' ? this.yourRepoOp(id, o) : [o]));
     const plan = this.plans.need(id);
     const retitle = ops.length === 1 && ops[0]!.op === 'retitle' && ops[0]!.goal === undefined && ops[0]!.title !== undefined;
     if (retitle) {
@@ -299,6 +378,16 @@ export class PlansWork {
     const direct = Boolean(plan.body) && !plan.draft;
     const next = this.plans.editDraft(id, ops, this.me());
     return direct && next.draft ? this.approve(id) : next;
+  }
+
+  private yourRepoOp(id: string, op: Extract<PlanOp, { op: 'repo' }>): PlanOp[] {
+    const mine = this.repoChange(id, op, 'user');
+    const suggested = this.plans.need(id).draft?.repoChanges?.find((c) => c.repo === mine.repo && c.by === 'claude');
+    const refused = suggested && (suggested.change === 'add') !== mine.on;
+    if (!refused) return [mine];
+    const name = this.repoInfo(mine.repo).name;
+    this.deps.store.dispatch({ type: 'system', channel: this.plans.need(id).home, text: mine.on ? `You kept ${name} in the plan.` : `You left ${name} out of the plan.`, level: 'info' });
+    return [mine, { op: 'decide', decision: { question: `Should this plan cover ${name}?`, answer: mine.on ? `Yes: keep ${name} in it` : `No: leave ${name} out`, by: 'user' } }];
   }
 
   setAutonomy(id: string, autonomy: Autonomy, milestone?: string): Plan {
@@ -446,7 +535,7 @@ export class PlansWork {
     const plan = (said && this.plans.noteRequest(found.id, said)) || found;
     const board = this.deps.store.getState().board;
     const view = this.pilot.view(plan);
-    const planning = planningBrief(plan, board, this.plans.planningStyle, this.repoInfos(plan));
+    const planning = planningBrief(plan, board, this.plans.planningStyle, this.repoInfos(plan), this.nearRepos(plan));
     const brief = plan.body ? headBrief(view) + planning : planning;
     return { tools: this.toolsFor(plan.id), brief };
   }
@@ -667,12 +756,12 @@ export class PlansWork {
     };
     return {
       get: () => describePlan(this.pilot.view(plans.need(planId))),
-      write: (body: BodyInput) => after(() => plans.writeDraft(planId, { ...body, milestones: body.milestones.map((m) => ({ ...this.withRepoIds(planId, m), tasks: (m.tasks ?? []).map((t) => this.adopt(t, planId)) })) }, this.claude())),
+      write: (body: BodyInput) => after(() => plans.writeDraft(planId, { ...body, milestones: body.milestones.map((m) => ({ ...this.withRepoIds(planId, m), tasks: (m.tasks ?? []).map((t) => this.adopt(t, planId)) })), ...(body.repoEdits ? { repoEdits: body.repoEdits.map((c) => this.repoChange(planId, c, 'claude')) } : {}) }, this.claude())),
       update: (ops: readonly PlanOp[], reason?: string) =>
         after(() =>
           plans.editDraft(
             planId,
-            ops.map((o) => (o.op === 'add_task' ? { ...o, task: this.adopt(o.task, planId) } : o.op === 'update_task' ? { ...o, patch: this.adopt(o.patch, planId) } : o.op === 'add_milestone' ? { ...o, milestone: { ...this.withRepoIds(planId, o.milestone), tasks: (o.milestone.tasks ?? []).map((t) => this.adopt(t, planId)) } } : o.op === 'update_milestone' ? this.withRepoIds(planId, o) : o)),
+            ops.map((o) => (o.op === 'add_task' ? { ...o, task: this.adopt(o.task, planId) } : o.op === 'update_task' ? { ...o, patch: this.adopt(o.patch, planId) } : o.op === 'add_milestone' ? { ...o, milestone: { ...this.withRepoIds(planId, o.milestone), tasks: (o.milestone.tasks ?? []).map((t) => this.adopt(t, planId)) } } : o.op === 'update_milestone' ? this.withRepoIds(planId, o) : o.op === 'repo' ? this.repoChange(planId, o, 'claude') : o)),
             this.claude(),
             reason,
           ),

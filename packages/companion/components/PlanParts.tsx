@@ -148,14 +148,35 @@ function MapNode({ m, i, onPress }: { readonly m: Milestone; readonly i: number;
   );
 }
 
-/** The repos a plan across repos covers (BLG-20), primary first; nothing on a one-repo plan. */
-export function PlanRepos({ repos }: { readonly repos: readonly string[] }) {
-  if (repos.length < 2) return null;
+type RepoChange = NonNullable<PlanView['repoChanges']>[number];
+
+/**
+ * The repos a plan across repos covers (BLG-20), primary first; nothing on a one-repo plan. A draft's
+ * repo changes (BLG-31) show as + (mint) and − (rose), each with why: approving on the Mac applies them.
+ */
+export function PlanRepos({ repos, changes = [] }: { readonly repos: readonly string[]; readonly changes?: readonly RepoChange[] }) {
+  const dropped = changes.filter((c) => c.change === 'drop');
+  if (repos.length < 2 && !changes.length) return null;
+  const changeOf = new Map(changes.map((c) => [c.name, c]));
+  const words = changes.map((c) => `${c.change === 'add' ? 'adds' : 'drops'} ${c.name}`).join(', ');
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }} accessibilityLabel={`Across ${repos.join(', ')}`}>
-      {repos.map((r) => (
-        <Pill key={r} label={r} Icon={FolderGit2} />
-      ))}
+    <View style={{ gap: 6 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }} accessibilityLabel={`Across ${repos.join(', ')}${words ? `; this draft ${words}` : ''}`}>
+        {repos.map((r) => (
+          <Pill key={r} label={changeOf.has(r) ? `+ ${r}` : r} Icon={FolderGit2} tone={changeOf.has(r) ? 'mint' : 'plain'} />
+        ))}
+        {dropped.map((c) => (
+          <Pill key={c.name} label={`− ${c.name}`} Icon={FolderGit2} tone="rose" />
+        ))}
+      </View>
+      {changes.map((c) =>
+        c.why ? (
+          <T key={c.name} v="caption" c={color.text2} numberOfLines={2}>
+            {c.change === 'add' ? 'Adds' : 'Drops'} {c.name}
+            {c.by === 'user' ? ' (you)' : ''}: {c.why}
+          </T>
+        ) : null,
+      )}
     </View>
   );
 }

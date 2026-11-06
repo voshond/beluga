@@ -28,6 +28,7 @@ import { PlanChat } from './PlanChat.js';
 import { BRANCH, FEED, PlanDetails } from './PlanDetails.js';
 import { DECISIONS, planNotes } from './PlanDecisions.js';
 import { PlanOutline } from './PlanOutline.js';
+import { PlanRepos } from './PlanRepos.js';
 import { CHAT_DEFAULT, DEFAULT_PLAN_LAYOUT, type Display, PLAN_LAYOUT_KEY, type PlanLayout, chatOpen, clampChatWidth, readPlanLayout, setChatOpen } from './plan-layout.js';
 import { barColumns, changeWords, headline, nextWords, shipAction, shipAllAction, titleOf } from './plans-model.js';
 import { useCheckerChat, useConversationLoaded, usePlanActions, usePlanStep, usePlanView, usePlans } from './use-plans.js';
@@ -358,6 +359,7 @@ function Page({ view, prefs, setPrefs, picked, setPicked }: { view: PlanView; pr
             <IconButton icon="back" label="All Plans" className={p.back} onClick={() => openList(plan.projectId)} />
             <TitleField value={titleOf(plan)} onSave={(title) => void act(() => api.edit(plan.id, [{ op: 'retitle', title }]))} />
           </div>
+          <PlanRepos plan={plan} />
           {drafting ? null : (
             <>
               {view.milestones.length && plan.body ? <PlanProgress columns={barColumns(view)} /> : null}

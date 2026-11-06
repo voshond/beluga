@@ -119,6 +119,18 @@ export interface PlanDecisionEntry {
   readonly tasks?: readonly string[];
 }
 
+/**
+ * A repo the draft adds to the plan or drops from it (BLG-29), with why: Claude's suggestion (it
+ * found the work reaches that repo, or doesn't) or yours (you tagged it). Approving applies them.
+ */
+export interface PlanRepoChange {
+  /** The project id. */
+  readonly repo: string;
+  readonly change: 'add' | 'drop';
+  readonly why?: string;
+  readonly by: 'claude' | 'user';
+}
+
 /** What a plan says: the part Claude writes and you approve. */
 export interface PlanBody {
   readonly title: string;
@@ -128,6 +140,8 @@ export interface PlanBody {
   readonly decisions?: readonly PlanDecisionEntry[];
   /** What's still to be settled: the plan can't be approved while one is open. */
   readonly openQuestions?: readonly string[];
+  /** A draft's changes to the plan's repos (never on an approved body: approving applies them to `Plan.repos`). */
+  readonly repoChanges?: readonly PlanRepoChange[];
 }
 
 /** The plan's decisions that bear on one task, as lines for its brief's Decisions. */
@@ -515,6 +529,19 @@ export const planRepos = (plan: Pick<Plan, 'projectId' | 'repos'>): readonly str
 
 export const isMultiRepo = (plan: Pick<Plan, 'projectId' | 'repos'>): boolean => planRepos(plan).length > 1;
 
+/** The repos `changes` make of `base` (primary first, and never dropped). */
+export function reposWith(base: readonly string[], changes: readonly PlanRepoChange[] | undefined): readonly string[] {
+  const dropped = new Set((changes ?? []).filter((c) => c.change === 'drop').map((c) => c.repo));
+  const added = (changes ?? []).filter((c) => c.change === 'add').map((c) => c.repo);
+  return [...new Set([...base.filter((r, i) => i === 0 || !dropped.has(r)), ...added])];
+}
+
+/** The repos a plan covers once its draft is approved: what the draft's milestones may name (BLG-29). */
+export const proposedRepos = (plan: Pick<Plan, 'projectId' | 'repos' | 'draft'>): readonly string[] => reposWith(planRepos(plan), plan.draft?.repoChanges);
+
+/** The plan's repos as its draft would make them: for what's drawn and checked while drafting. */
+export const draftRepoPlan = (plan: Pick<Plan, 'projectId' | 'repos' | 'draft'>): Pick<Plan, 'projectId' | 'repos'> => ({ projectId: plan.projectId, repos: proposedRepos(plan) });
+
 /** A repo's plan branch: its own, else (plans from before branches per repo) `branch` for the primary. */
 export const planBranchFor = (plan: Pick<Plan, 'projectId' | 'branch' | 'branches'>, projectId: string): string | undefined =>
   plan.branches?.[projectId] ?? (projectId === plan.projectId ? plan.branch : undefined);
@@ -611,6 +638,8 @@ export interface PlanDiff {
   readonly milestones: number;
   /** Decisions and open questions added, changed or taken out (BLG-8). */
   readonly decisions: number;
+  /** Repos the draft adds or drops (BLG-29). */
+  readonly repos: number;
 }
 
 export function diffBodies(before: PlanBody | undefined, after: PlanBody | undefined): PlanDiff {
@@ -629,7 +658,7 @@ export function diffBodies(before: PlanBody | undefined, after: PlanBody | undef
   const was = notes(before);
   const is = notes(after);
   const decisions = [...is].filter((x) => !was.has(x)).length + [...was].filter((x) => !is.has(x)).length;
-  return { added, changed, removed, milestones, decisions };
+  return { added, changed, removed, milestones, decisions, repos: after?.repoChanges?.length ?? 0 };
 }
 
 /** What makes a task different, without what the board gave it. */
@@ -638,4 +667,4 @@ export function taskSignature(t: PlanTask): string {
   return JSON.stringify(rest);
 }
 
-export const isEmptyDiff = (d: PlanDiff): boolean => !d.added.length && !d.changed.length && !d.removed.length && !d.milestones && !d.decisions;
+export const isEmptyDiff = (d: PlanDiff): boolean => !d.added.length && !d.changed.length && !d.removed.length && !d.milestones && !d.decisions && !d.repos;

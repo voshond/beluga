@@ -476,7 +476,7 @@ export function changeMarks(plan: Plan): ReadonlyMap<string, 'added' | 'changed'
 
 export function changeWords(plan: Plan): string {
   const d = diffBodies(plan.body, plan.draft);
-  const parts = [d.added.length ? `${d.added.length} new` : '', d.changed.length ? `${d.changed.length} changed` : '', d.removed.length ? `${d.removed.length} taken out` : '', d.decisions ? (d.decisions === 1 ? 'a decision' : `${d.decisions} decisions`) : ''].filter(Boolean);
+  const parts = [d.added.length ? `${d.added.length} new` : '', d.changed.length ? `${d.changed.length} changed` : '', d.removed.length ? `${d.removed.length} taken out` : '', d.decisions ? (d.decisions === 1 ? 'a decision' : `${d.decisions} decisions`) : '', d.repos ? (d.repos === 1 ? 'a repo' : `${d.repos} repos`) : ''].filter(Boolean);
   return parts.length ? parts.join(' · ') : 'Milestones changed';
 }
 

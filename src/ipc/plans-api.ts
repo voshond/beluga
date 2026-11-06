@@ -38,6 +38,8 @@ export const PlanOpSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('remove_task'), id: ref }),
   z.object({ op: z.literal('move_task'), id: ref, milestone: ref, before: ref.optional() }),
   z.object({ op: z.literal('block'), id: ref, by: ref, on: z.boolean() }),
+  // A repo in or out of the plan (BLG-29): yours (tagged, or Claude's suggestion turned down), applied with approval.
+  z.object({ op: z.literal('repo'), repo: z.string().min(1).max(200), on: z.boolean(), why: z.string().max(400).optional() }),
 ]);
 
 export const PLANS_API = {

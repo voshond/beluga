@@ -282,6 +282,10 @@ chats do the same on a person's turn (`TurnView.reactions`, `reactable`, `ConvVi
 each marked You or Default) and what's still open (`PlanView.openQuestions`). While a question is open, the
 approve card says which and offers Approve Anyway (`plans.approve` with `{ anyway: true }`). An older Mac
 sends neither, and its approve card is as before.
+1.45 (BLG-31) shows a draft's repo changes on the phone's plan page: the repos it adds (+, mint) and
+drops (−, rose) with why and whether the agent or you made the change (`PlanView.repoChanges`), and
+`repos` (and each milestone's) as the plan covers them once it's approved. Read-only: approving applies
+them. An older Mac sends none.
 - `chats` and `chat:<conversation>`: friends' DMs and channels.
 - `people`: friends, presence, their usage and what they let your agent do.
 
