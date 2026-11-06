@@ -3,6 +3,7 @@ import { Fragment, memo, useEffect, useMemo, useRef } from 'react';
 import type { Project } from '@beluga/workspaces/types.js';
 import { worktreeOrigin } from '@beluga/workspaces/origin.js';
 import { isPlanOwned, planConversations, planOfPlace } from '@beluga/core/plans/owner.js';
+import { planRepos } from '@beluga/core/plans/model.js';
 import type { UiAction } from '@beluga/ui/workspace-models.js';
 import { setOverviewView } from '../views/overview/use-overview-prefs.js';
 import { Icon } from '../components/Icon.js';
@@ -26,12 +27,12 @@ import { GroupHeader, NewGroupRow, groupItems, isGroupOption, moveItems, moveKey
 import { type Entry, type Place, type Target, keyOfEntry, stepOf, useArrange, useLayout } from './project-layout.js';
 import { OutsideWorktrees } from './OtherWorktrees.js';
 import { ProjectAgents, WorkspaceWithAgents, useAgentOrigins, useCcSessions } from './SubAgents.js';
-import { hasRowsInside } from './project-rows.js';
+import { hasRowsInside, planPlace } from './project-rows.js';
 import { type Tally, groupTally, groupWorking, projectPlans, projectTally, projectWorking, tallyTip } from './attention-model.js';
 import { TallyMark } from './signal-marks.js';
 import { Row } from './sidebar-parts.js';
 import { WorkspaceRow } from './workspace-row.js';
-import { PlanRow } from './plan-row.js';
+import { GroupPlans, PlanRow } from './plan-row.js';
 import { useGitHubMenuItems } from '../views/project/GitHubRow.js';
 import { TeamBadge, useTeamMenuItems } from '../team/Team.js';
 import side from './Sidebar.module.css';
@@ -51,6 +52,8 @@ const ownWay = (id: string): boolean => isGroupOption(id) || id === 'p-hide';
 
 /** A folder hovered while you drag a project into it opens after a moment (spring-loaded, as in Finder). */
 const SPRING_MS = 700;
+
+const groupsOf = (entries: readonly Entry[]) => entries.flatMap((e) => (e.kind === 'group' ? [e] : []));
 
 /** Hide a project, with Undo (it comes back where it was). */
 function useHide(): (p: Project) => void {
@@ -170,7 +173,8 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
   // Not the main checkout (work happens in worktrees); questions asked in its folder stay, as chats.
   // A plan is one row: its conversation and its tasks' worktrees stay off the tree (they're reached
   // from the plan). A finished plan's conversation shows only while you're in it.
-  const plans = projectPlans(state, p);
+  // A plan across repos all in one group sits under the group instead (BLG-20).
+  const plans = projectPlans(state, p).filter((x) => 'project' in planPlace(x, groupsOf(entries)));
   const planHomes = new Set(plansState.plans.map((x) => x.home));
   // A plan you asked to show its tasks' chats: they sit under its row (its home is the plan's page).
   const showTasks = usePrefs().planTaskChats;
@@ -274,14 +278,14 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
       {fold.folded ? (
         // Folded: only the item you're in stays (its plan, when it's part of one), until you go elsewhere.
         <>
-          {plans.filter((x) => x.id === inPlan).map((x) => <PlanRow key={x.id} plan={x} indent={kids} />)}
+          {plans.filter((x) => x.id === inPlan).map((x) => <PlanRow key={x.id} plan={x} indent={kids} more={planRepos(x).length - 1} />)}
           {live.filter((w) => w.id === here && w.kind !== 'main' && !isPlanOwned(state, w.id)).map((w) => <WorkspaceRow key={w.id} ws={w} indent={kids} />)}
         </>
       ) : (
         <>
           {plans.map((x) => (
             <Fragment key={x.id}>
-              <PlanRow plan={x} indent={kids} />
+              <PlanRow plan={x} indent={kids} more={planRepos(x).length - 1} />
               {taskChats(x.id).map((w) => (
                 <WorkspaceWithAgents key={w.id} ws={w} indent={kids + 1} />
               ))}
@@ -436,6 +440,7 @@ export function Projects() {
                         if (place) arrange({ group: e.name }, place);
                       }}
                     />
+                    <GroupPlans name={e.name} groups={groupsOf(entries)} folded={collapsed.includes(`group:${e.name}`)} indent={2} />
                     {collapsed.includes(`group:${e.name}`)
                       ? null
                       : e.projects.map((p) => (

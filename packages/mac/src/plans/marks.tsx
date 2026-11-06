@@ -1,5 +1,5 @@
 import type { Actor } from '@beluga/core/board/model.js';
-import type { PlanPr } from '@beluga/core/plans/model.js';
+import type { Plan, PlanMilestone, PlanPr } from '@beluga/core/plans/model.js';
 import type { TaskState } from '@beluga/core/plans/progress.js';
 import { useRef } from 'react';
 import { Icon } from '../components/Icon.js';
@@ -10,7 +10,7 @@ import { agentName, useMyAgent } from '../lib/agent-words.js';
 import { breath, turn, useLive } from '../lib/live-motion.js';
 import { type Need, type Signal, signalOf } from '../layout/attention-model.js';
 import { SignalMark } from '../layout/signal-marks.js';
-import { type Headline, type Tone, type Who, TASK_STATE, prWords } from './plans-model.js';
+import { type Headline, type Tone, type Who, TASK_STATE, milestoneRepoNames, prWords } from './plans-model.js';
 import p from './plans.module.css';
 
 /** Small marks shared by the plan's graph, outline and lists: a task's state, a tone pill, progress. */
@@ -152,6 +152,19 @@ export function Said({ line, className }: { line: Headline; className?: string }
         {line.who === 'you' ? <strong className={p.saidYou}>You: </strong> : null}
         {line.who === 'you' ? line.text.charAt(0).toLowerCase() + line.text.slice(1) : line.text}
       </span>
+    </span>
+  );
+}
+
+/** The repo a milestone runs in (several when its work must land together); nothing on a one-repo plan (BLG-20). */
+export function RepoChip({ plan, milestone }: { plan: Pick<Plan, 'projectId' | 'repos'>; milestone: Pick<PlanMilestone, 'repos'> }) {
+  const projects = useApp((st) => st.projects);
+  const names = milestoneRepoNames(plan, milestone, projects);
+  if (!names.length) return null;
+  return (
+    <span className={p.msRepo} title={`Runs in ${names.join(' and ')}`} data-repo-chip>
+      <Icon name="folder" size={10} />
+      {names.join(' + ')}
     </span>
   );
 }

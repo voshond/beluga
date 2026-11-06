@@ -3,7 +3,7 @@ import { normalizeBody } from '../src/core/plans/edit.js';
 import type { Plan } from '../src/core/plans/model.js';
 import { planView } from '../src/core/plans/progress.js';
 import { NO_BOARD } from '../src/core/board/model.js';
-import { barColumns, branchFlow, changeMarks, changeWords, feedOf, firstRepos, gateId, graphShape, groupId, headline, milestoneRows, modeChange, newPlanTitle, nextWords, planStatus, plansOf, prWords, shipAction, taskHeadline, taskNodeId, withPrimary, withRepo } from '../packages/mac/src/plans/plans-model.js';
+import { barColumns, branchFlow, changeMarks, changeWords, feedOf, firstRepos, gateId, graphShape, groupId, headline, milestoneRepoNames, milestoneRows, modeChange, newPlanTitle, nextWords, planStatus, plansOf, prWords, shipAction, taskHeadline, taskNodeId, withPrimary, withRepo } from '../packages/mac/src/plans/plans-model.js';
 import type { PlanPr } from '../src/core/plans/model.js';
 import type { PlanEvent } from '../src/core/plans/model.js';
 import type { PlanView } from '../src/core/plans/progress.js';
@@ -288,5 +288,18 @@ describe('New Plan across several projects (BLG-19)', () => {
   it('a new primary goes first and the others stay ticked', () => {
     expect(withPrimary(['a', 'b', 'c'], 'c')).toEqual(['c', 'a', 'b']);
     expect(withPrimary(['a'], 'b')).toEqual(['b', 'a']);
+  });
+});
+
+describe('a milestone’s repo chip (BLG-20)', () => {
+  const projects = [{ id: 'api', name: 'whisper-api' }, { id: 'cal', name: 'calendar-api' }];
+  it('nothing on a one-repo plan', () => {
+    expect(milestoneRepoNames({ projectId: 'api' }, { repos: ['api'] }, projects)).toEqual([]);
+  });
+  it('its repos by name on a plan across repos; the primary when it names none', () => {
+    const across = { projectId: 'api', repos: ['api', 'cal'] };
+    expect(milestoneRepoNames(across, {}, projects)).toEqual(['whisper-api']);
+    expect(milestoneRepoNames(across, { repos: ['cal'] }, projects)).toEqual(['calendar-api']);
+    expect(milestoneRepoNames(across, { repos: ['api', 'cal'] }, projects)).toEqual(['whisper-api', 'calendar-api']);
   });
 });

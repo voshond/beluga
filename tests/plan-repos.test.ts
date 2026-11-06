@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { PlanError, applyOps, normalizeBody } from '../src/core/plans/edit.js';
-import { diffBodies, isMultiRepo, milestoneRepos, planRepos } from '../src/core/plans/model.js';
+import { diffBodies, isMultiRepo, milestoneRepos, planRepos, type Plan } from '../src/core/plans/model.js';
+import { initialState } from '../src/core/store.js';
+import { planPageView } from '../src/companion/views.js';
+import type { Project } from '../src/workspaces/types.js';
 
 const oldPlan = { projectId: 'p_api' };
 const multi = { projectId: 'p_api', repos: ['p_api', 'p_cal', 'p_desk'] };
@@ -66,5 +69,26 @@ describe('plan repos', () => {
     const b = normalizeBody({ title: 'Solo', goal: 'g', milestones: [{ id: 'm', title: 'M', tasks: [{ id: 'a', title: 'A' }] }] }, [], planRepos(oldPlan));
     expect(b.milestones[0]).toEqual({ id: 'm', title: 'M', criteria: [], tasks: [{ id: 'a', title: 'A', acceptance: [], blockedBy: [] }] });
     expect(applyOps(b, [{ op: 'add_task', milestone: 'm', task: { title: 'B' } }], planRepos(oldPlan)).milestones[0]!.tasks).toHaveLength(2);
+  });
+});
+
+describe('the phone’s plan page names the repos (BLG-20)', () => {
+  const project = (id: string, name: string): Project => ({ id, name, root: `/r/${id}`, base: 'main', workspaces: [] });
+  const page = (over: Partial<Plan>) => {
+    const p: Plan = { id: 'pl', projectId: 'p_api', home: 'ws:h', status: 'draft', draft: body(['p_cal']), draftRev: 1, autonomy: 'gated', maxParallel: 3, testsAt: 'milestone', paused: false, runs: {}, activity: [], createdAt: 0, updatedAt: 0, ...over };
+    const state = { ...initialState('room'), projects: [project('p_api', 'whisper-api'), project('p_cal', 'calendar-api'), project('p_desk', 'calendar-desktop')], plans: { enabled: true, plans: [p], style: '' } };
+    return planPageView(state, 'pl')!;
+  };
+
+  it('a plan across repos: its repos, primary first, and each milestone’s', () => {
+    const v = page({ repos: multi.repos });
+    expect(v.repos).toEqual(['whisper-api', 'calendar-api', 'calendar-desktop']);
+    expect(v.milestones.map((m) => m.repos)).toEqual([['calendar-api'], ['whisper-api']]);
+  });
+
+  it('a one-repo plan leaves them out', () => {
+    const v = page({ draft: body() });
+    expect('repos' in v).toBe(false);
+    expect(v.milestones.every((m) => !('repos' in m))).toBe(true);
   });
 });

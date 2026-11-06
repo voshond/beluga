@@ -11,7 +11,7 @@ import type { CcAgent } from '../core/claude-code/model.js';
 import type { PendingQuestion } from '../core/collab-store.js';
 import { type TaskView as GwTask, isFinal, requestGist, stateLabel, stateTone, targetLabel } from '../core/gateway/model.js';
 import { parseDecisionQid } from '../core/plans/decisions.js';
-import { type Plan, planForHome, planTitle } from '../core/plans/model.js';
+import { type Plan, isMultiRepo, milestoneRepos, planForHome, planRepos, planTitle } from '../core/plans/model.js';
 import { planOwnerOf } from '../core/plans/owner.js';
 import { branchState } from '../core/branch-state.js';
 import { type RunSummary, type Sentinel, type SentinelState, activeSentinelChat, firstLine, isLive, isSentinelChat, lastRunOf, pausedWords, runsOf, scheduleSentence, sentinelById, sentinelChatTitle } from '../core/sentinel/model.js';
@@ -866,9 +866,13 @@ export function planPageView(state: DomainState, id: string): PlanView | undefin
   const goal = (plan.body ?? plan.draft)?.goal;
   const notes = plan.draft ?? plan.body;
   const topic = planTopic(plan.id);
+  // A plan across repos names them, and each milestone its own (BLG-20).
+  const repoName = (pid: string): string => clip(state.projects.find((p) => p.id === pid)?.name ?? pid, 200);
+  const across = isMultiRepo(plan);
   return {
     id: clip(plan.id, 200),
     title: clip(planTitle(plan), 300),
+    ...(across ? { repos: planRepos(plan).slice(0, 8).map(repoName) } : {}),
     ...(goal ? { goal: clip(plainLine(goal, 4000), 4000) } : {}),
     state: planState(plan, progress),
     ...(home ? { topic: home } : {}),
@@ -898,6 +902,7 @@ export function planPageView(state: DomainState, id: string): PlanView | undefin
       ...(m.autonomy !== plan.autonomy ? { autonomy: m.autonomy } : {}),
       ...checkerOfMilestone(state, m.run.checker),
       ...agentNowOf(m),
+      ...(across ? { repos: milestoneRepos(plan, m.milestone).slice(0, 8).map(repoName) } : {}),
     })),
     autonomy: plan.autonomy,
     ...(notes?.decisions?.length ? { decisions: notes.decisions.slice(0, 40).map((d) => ({ question: clip(d.question, 400), answer: clip(d.answer, 400), by: d.by, ...(d.why ? { why: clip(d.why, 400) } : {}) })) } : {}),

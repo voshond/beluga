@@ -104,3 +104,16 @@
   display: inline-grid;
   place-items: center;
 }
+
+/* A plan across repos under its primary project: how many more repos it covers (BLG-20). */
+.repos {
+  flex: none;
+  margin-left: 2px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  color: var(--text-3);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  white-space: nowrap;
+}

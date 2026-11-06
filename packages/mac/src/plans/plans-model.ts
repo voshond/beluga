@@ -1,6 +1,6 @@
 import type { BoardState } from '../../../../src/core/board/model.js';
 import type { Actor } from '../../../../src/core/board/model.js';
-import { AUTONOMY_INFO, type Autonomy, MAX_PLAN_REPOS, type Plan, type PlanBody, type PlanEvent, type PlanPr, type PlansState, diffBodies, milestoneDeps, planTitle, shownBody } from '../../../../src/core/plans/model.js';
+import { AUTONOMY_INFO, type Autonomy, MAX_PLAN_REPOS, type Plan, type PlanBody, type PlanMilestone, isMultiRepo, milestoneRepos, type PlanEvent, type PlanPr, type PlansState, diffBodies, milestoneDeps, planTitle, shownBody } from '../../../../src/core/plans/model.js';
 import { type MilestoneState, type MilestoneView, type NextStep, type PlanView, type TaskState, type TaskView, agentNowWords } from '../../../../src/core/plans/progress.js';
 import { pulseWords } from '../../../../src/core/plans/watchdog.js';
 
@@ -149,6 +149,12 @@ export function plansOf(state: PlansState, projectId: string | undefined): Plan[
 }
 
 export const titleOf = planTitle;
+
+/** Which repos a milestone runs in, by name, for its chip: only on a plan across repos (BLG-20). */
+export function milestoneRepoNames(plan: Pick<Plan, 'projectId' | 'repos'>, milestone: Pick<PlanMilestone, 'repos'>, projects: ReadonlyArray<{ readonly id: string; readonly name: string }>): readonly string[] {
+  if (!isMultiRepo(plan)) return [];
+  return milestoneRepos(plan, milestone).map((id) => projects.find((p) => p.id === id)?.name ?? id);
+}
 
 /** New Plan's title: "Plan in api", or across several ("Plan across whisper-api, calendar-api…"). */
 export function newPlanTitle(names: readonly string[]): string {

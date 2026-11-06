@@ -6,8 +6,8 @@ import { isLivePlan, isPlanOwned, planConversations, planOf, planOfPlace, planOw
 
 /** A plan's task worktrees belong to the plan: the sidebar shows the plan, and the plan merges them. */
 
-const issue = (id: string, status: Issue['status'], worktrees: string[]): Issue =>
-  ({ id, key: `X-${id}`, number: 1, projectId: 'x', title: id, status, priority: 'medium', labels: [], blockedBy: [], related: [], rank: 0, brief: {}, revisions: [], worktrees }) as unknown as Issue;
+const issue = (id: string, status: Issue['status'], worktrees: string[], projectId = 'x'): Issue =>
+  ({ id, key: `X-${id}`, number: 1, projectId, title: id, status, priority: 'medium', labels: [], blockedBy: [], related: [], rank: 0, brief: {}, revisions: [], worktrees }) as unknown as Issue;
 const body = normalizeBody({
   title: 'P',
   goal: 'g',
@@ -69,5 +69,30 @@ describe('the one rule: what folds into a plan (planOf)', () => {
     expect(planConversations(st(plan({ status: 'draft', body: undefined, draft: body })), 'p')).toEqual(['home']);
     expect(isPlanOwned(st(plan({ status: 'done' })), 'home')).toBe(false);
     expect(isPlanOwned(st(plan({ status: 'done' })), 'w1')).toBe(false);
+  });
+});
+
+describe('a plan across repos folds its worktrees from every repo (BLG-20)', () => {
+  const across = normalizeBody(
+    {
+      title: 'P',
+      goal: 'g',
+      milestones: [
+        { id: 'api', title: 'API', repos: ['x'], tasks: [{ id: 'a', title: 'A', issueId: 'ia' }] },
+        { id: 'cal', title: 'Calendar', repos: ['y'], tasks: [{ id: 'b', title: 'B', issueId: 'ib' }] },
+        { id: 'both', title: 'Both', repos: ['x', 'y'], tasks: [{ id: 'c', title: 'C', issueId: 'ic' }] },
+      ],
+    },
+    [],
+    ['x', 'y'],
+  );
+  const multiBoard: BoardState = { ...NO_BOARD, issues: [issue('ia', 'in_progress', ['wx'], 'x'), issue('ib', 'in_progress', ['wy'], 'y'), issue('ic', 'in_review', ['wxy'], 'x')] };
+  const st = { plans: plans(plan({ repos: ['x', 'y'], body: across })), board: multiBoard };
+
+  it('each repo’s task worktree is part of the one plan', () => {
+    expect(planOf(st, 'wx')?.id).toBe('p');
+    expect(planOf(st, 'wy')?.id).toBe('p');
+    expect(planConversations(st, 'p')).toEqual(['home', 'wx', 'wy', 'wxy']);
+    expect(planOfPlace(st.plans, st.board, { kind: 'workspace', id: 'wy' })).toBe('p');
   });
 });
