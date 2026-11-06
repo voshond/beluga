@@ -1,5 +1,5 @@
 import * as Popover from '@radix-ui/react-popover';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { View } from '@beluga/core/store.js';
 import type { Method } from '@beluga/ipc/api.js';
 import type { Notice } from '@beluga/core/work-store.js';
@@ -229,7 +229,7 @@ function Empty({ filter, any }: { filter: NoticeFilter; any: boolean }) {
 }
 
 /** What happened while you were elsewhere: Today and Earlier, filters, read, clear. */
-function Center({ close }: { close: () => void }) {
+export function Center({ close }: { close: () => void }) {
   const api = useApi();
   const actions = useActions();
   const { ui, client } = useBeluga();
@@ -331,10 +331,24 @@ function Center({ close }: { close: () => void }) {
   );
 }
 
+const bellShown = (bell: HTMLElement | null): boolean => {
+  const column = bell?.closest('main');
+  if (!bell || !column) return false;
+  const at = bell.getBoundingClientRect();
+  const room = column.getBoundingClientRect();
+  return at.width > 0 && at.left >= room.left && at.right <= room.right && at.right <= window.innerWidth;
+};
+
 /** The bell in the toolbar: how many things are new, and the notification centre under it. */
 export function NotificationBell() {
-  const { ui } = useBeluga();
+  const { ui, client } = useBeluga();
   const open = useUi((u) => u.notices);
+  const trigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open || bellShown(trigger.current)) return;
+    ui.patch({ notices: false });
+    client.store.dispatch({ type: 'view', view: { kind: 'notifications' } });
+  }, [open]);
   // Just the two counts: the bell is drawn again only when one of them changes.
   const { waiting, unread } = useApp((st) => {
     const list = waitingList(st);
@@ -345,7 +359,7 @@ export function NotificationBell() {
   return (
     <Popover.Root open={open} onOpenChange={(o) => ui.patch({ notices: o })}>
       <Popover.Trigger asChild>
-        <IconButton icon="bell" label={label} active={open} badge={waiting + unread} className={cx(quiet && s.bellQuiet)} />
+        <IconButton ref={trigger} icon="bell" label={label} active={open} badge={waiting + unread} className={cx(quiet && s.bellQuiet)} />
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content className={s.popover} align="end" sideOffset={6} collisionPadding={12} aria-label="Notifications">

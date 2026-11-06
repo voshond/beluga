@@ -13,6 +13,16 @@
   animation: drop var(--dur) var(--ease-out);
   overflow: hidden;
 }
+.page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  max-width: 720px;
+  min-height: 0;
+  margin: 0 auto;
+  padding-top: 6px;
+}
 @keyframes drop {
   from {
     opacity: 0;

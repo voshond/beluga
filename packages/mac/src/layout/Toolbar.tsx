@@ -41,7 +41,7 @@ const TITLE_MIN = 210;
 const RIGHT_FIXED = 3 * 30 + 16;
 const FOLDS: BranchFold[] = ['none', 'pill', 'all'];
 
-const TITLES: Partial<Record<string, string>> = { overview: 'Overview', search: 'Search', usage: 'Usage', terminal: 'Terminal', files: 'Files', draft: 'New chat', draft_worktree: 'New worktree', claude_code: 'Activity', requests: 'Requests', tasks: 'Tasks', worktrees: 'Worktrees' };
+const TITLES: Partial<Record<string, string>> = { overview: 'Overview', search: 'Search', usage: 'Usage', terminal: 'Terminal', files: 'Files', draft: 'New chat', draft_worktree: 'New worktree', claude_code: 'Activity', requests: 'Requests', notifications: 'Notifications', tasks: 'Tasks', worktrees: 'Worktrees' };
 
 /** How wide the toolbar is (buttons that don't fit move under ⋯). */
 function useToolbarWidth(): [React.RefObject<HTMLElement | null>, number] {

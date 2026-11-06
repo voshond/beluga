@@ -357,6 +357,7 @@ export type View =
   | { readonly kind: 'project'; readonly id: string; readonly page?: 'history' }
   /** Tasks between Claudes (Mac app): what you and your Claude asked of others, and what they asked of you. */
   | { readonly kind: 'requests' }
+  | { readonly kind: 'notifications' }
   /** Tasks (Mac app): one project's board (the one you were last in when unset), and one task's page. */
   | { readonly kind: 'tasks'; readonly projectId?: string; /** Only the tasks this worktree does or carries. */ readonly worktree?: string }
   | { readonly kind: 'task'; readonly id: string }
