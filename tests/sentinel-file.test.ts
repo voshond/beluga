@@ -87,6 +87,14 @@ describe('sentinel.json', () => {
     expect(readdirSync(other).some((f) => f.startsWith('sentinel.json.unreadable-'))).toBe(true);
   });
 
+  it('a sentinel saved with a Stripe trigger waits for Run, and a Stripe-signed webhook takes any post', () => {
+    const dir = tmp();
+    writeFileSync(path.join(dir, 'sentinel.json'), JSON.stringify({ version: 1, items: [{ id: 'sn_pay', name: 'Failed payments', trigger: { kind: 'stripe', what: 'payment-failed' }, createdAt: 1, updatedAt: 1 }, { id: 'sn_hook', name: 'Hook', trigger: { kind: 'webhook', signature: 'stripe' }, createdAt: 1, updatedAt: 1 }] }));
+    const s = setup({ dir });
+    expect(s.sentinels.list().map((i) => [i.id, i.trigger])).toEqual([['sn_pay', { kind: 'manual' }], ['sn_hook', { kind: 'webhook' }]]);
+    expect(readdirSync(dir).some((f) => f.startsWith('sentinel.dropped-'))).toBe(false);
+  });
+
   it('folders no run has any more go (a deleted sentinel’s, with the next start)', () => {
     const dir = tmp();
     mkdirSync(path.join(dir, 'sentinel', 'runs', 'run_orphan'), { recursive: true });

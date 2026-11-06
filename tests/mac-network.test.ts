@@ -129,8 +129,8 @@ describe('presence', () => {
   it('says your own choice, how long it lasts and your note', () => {
     const now = new Date(2026, 9, 18, 15, 0).getTime();
     expect(selfLine({ state: 'offline' }, now)).toBe('Appear Offline');
-    expect(selfLine({ state: 'dnd', until: now + 30 * 60_000, note: 'focus' }, now)).toMatch(/^Do Not Disturb until 3:30\s?PM · focus$/);
-    expect(selfLine({ state: 'dnd', until: untilOf('tomorrow', now)! }, now)).toMatch(/until tomorrow, 9:00\s?AM/);
+    expect(selfLine({ state: 'dnd', until: now + 30 * 60_000, note: 'focus' }, now)).toMatch(/^Do Not Disturb until (3:30\s?PM|15:30) · focus$/);
+    expect(selfLine({ state: 'dnd', until: untilOf('tomorrow', now)! }, now)).toMatch(/until tomorrow, (9:00\s?AM|0?9:00)/);
   });
 
   it('builds a status: durations only for non-Online, notes trimmed', () => {

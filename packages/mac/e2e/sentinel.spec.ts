@@ -529,8 +529,8 @@ test('Add a Tile takes a description: Claude adds it, and sets up a draft sentin
   await expect(sheet.getByTestId('tile-preview').locator('.recharts-surface')).toBeVisible();
   await shoot(page, 'add-tile-pick');
   // Somewhere new asks what from it, with ideas.
-  await sheet.locator('[data-source="stripe"]').first().click();
-  await expect(sheet.getByRole('button', { name: 'Revenue per day' })).toBeVisible();
+  await sheet.locator('[data-source="github"]').first().click();
+  await expect(sheet.getByRole('button', { name: 'Open pull requests' })).toBeVisible();
   await shoot(page, 'add-tile-new');
   await sheet.getByRole('option', { name: /^Signups by day/ }).first().click();
   await sheet.getByRole('radio', { name: 'Bars' }).click();

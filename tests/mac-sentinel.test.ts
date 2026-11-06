@@ -48,7 +48,7 @@ import { initialAppState, reduceApp } from '../src/client/screen.js';
 import type { Action, AppState } from '../src/core/store.js';
 import type { Notice } from '../src/core/work-store.js';
 import type { Project, Workspace } from '../src/workspaces/types.js';
-import { BELUGA_EVENTS, CLAUDE_CHANGED, GITHUB_EVENTS, NO_SENTINEL, type RunSummary, SENTRY_EVENTS, STRIPE_EVENTS, type Sentinel, type SentinelState, type Step, type Trigger, presetFields, stepSentence, triggerSentence } from '../src/core/sentinel/model.js';
+import { BELUGA_EVENTS, CLAUDE_CHANGED, GITHUB_EVENTS, NO_SENTINEL, type RunSummary, SENTRY_EVENTS, type Sentinel, type SentinelState, type Step, type Trigger, presetFields, stepSentence, triggerSentence } from '../src/core/sentinel/model.js';
 import { TriggerSchema } from '../src/core/sentinel/schema.js';
 import { StepInputSchema } from '../src/core/sentinel/schema.js';
 
@@ -202,7 +202,7 @@ describe('Sentinel on the Mac', () => {
   it('offers only what this Beluga runs: the rest is shown for a later update, or refused by the access', () => {
     const triggers = triggerChoices();
     // Every kind runs now (phase 3): nothing is left for a later update.
-    expect(triggers.filter((c) => !c.disabled).map((c) => c.value)).toEqual(['schedule', 'manual', 'after', 'beluga', 'github', 'stripe', 'uptime', 'sentry', 'webhook']);
+    expect(triggers.filter((c) => !c.disabled).map((c) => c.value)).toEqual(['schedule', 'manual', 'after', 'beluga', 'github', 'uptime', 'sentry', 'webhook']);
     expect(triggers.some((c) => c.description === LATER)).toBe(false);
     expect(triggerOfKind('manual', { kind: 'schedule', every: 'day', at: '07:00', missed: 'skip' })).toEqual({ kind: 'manual' });
     expect(triggerOfKind('schedule', { kind: 'manual' })).toMatchObject({ kind: 'schedule', every: 'day' });
@@ -343,7 +343,6 @@ describe('Sentinel’s events on the Mac', () => {
       [{ kind: 'beluga', what: 'claude-finished' }, 'When a worktree’s agent finishes'],
       [{ kind: 'github', what: 'workflow-failed' }, 'When a workflow fails on GitHub'],
       [{ kind: 'github', what: 'issue-labelled', label: 'bug' }, 'When an issue gets the label “bug” on GitHub'],
-      [{ kind: 'stripe', what: 'payment-failed' }, 'When a payment fails in Stripe'],
       [{ kind: 'uptime', url: 'https://example.com/health', minutes: 5 }, 'When example.com stops answering (checked every 5 minutes), and when it’s back'],
       [{ kind: 'uptime', url: 'https://example.com', minutes: 1 }, 'When example.com stops answering (checked every minute), and when it’s back'],
       [{ kind: 'sentry', org: 'acme', project: 'checkout', what: 'regression' }, 'When Sentry sees a regression in acme/checkout'],
@@ -357,7 +356,6 @@ describe('Sentinel’s events on the Mac', () => {
   it('has a card for every event of each kind, and none for the kinds with fields', () => {
     expect(eventCards('beluga')!.map((c) => c.value)).toEqual([...BELUGA_EVENTS]);
     expect(eventCards('github')!.map((c) => c.value).sort()).toEqual([...GITHUB_EVENTS].sort());
-    expect(eventCards('stripe')!.map((c) => c.value)).toEqual([...STRIPE_EVENTS]);
     expect(eventCards('sentry')!.map((c) => c.value)).toEqual([...SENTRY_EVENTS]);
     expect(eventCards('uptime')).toBeUndefined();
     expect(eventCards('webhook')).toBeUndefined();

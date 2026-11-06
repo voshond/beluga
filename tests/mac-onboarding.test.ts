@@ -170,7 +170,7 @@ describe('Sentinel in the tour (BLG-362)', () => {
   it('explains a sentinel, then shows it at work, right after friends', () => {
     expect(stepBy('friends', 1)).toBe('sentinel');
     expect(stepBy('sentinel', 1)).toBe('uses');
-    expect(stepBy('uses', 1)).toBe('earnings');
+    expect(stepBy('uses', 1)).toBe('archive');
     expect(inTour('sentinel') && inTour('uses')).toBe(true);
     expect(TOUR_COPY.sentinel?.title).toBeTruthy();
     expect(TOUR_COPY.uses?.title).toBeTruthy();

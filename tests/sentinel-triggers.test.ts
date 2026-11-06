@@ -11,10 +11,9 @@ import { belugaCursor, belugaEvent, remembered } from '../src/core/sentinel/trig
 import { ghTrouble, lookGitHub, startGitHub, type GitHubCursor } from '../src/core/sentinel/triggers/github.js';
 import { Triggers } from '../src/core/sentinel/triggers/index.js';
 import { NO_SENTRY_TOKEN, type SentryCursor, fetchSentry, parseSentryIssues, sentryStep, startSentry } from '../src/core/sentinel/triggers/sentry.js';
-import { NO_STRIPE, type StripeCursor, lookStripe, moneyText, startStripe } from '../src/core/sentinel/triggers/stripe.js';
 import { type FetchLike, MAX_BACKOFF_MS, TROUBLE_MS, type TriggerDeps, type TriggerEvent, startPolling } from '../src/core/sentinel/triggers/types.js';
 import { checkUrl, uptimeStep, type UptimeCursor } from '../src/core/sentinel/triggers/uptime.js';
-import { HEADERS_TIMEOUT_MS, MAX_BODY, PER_MINUTE, REQUEST_TIMEOUT_MS, WebhookHub, githubSignatureOk, newSecret, sameSecret, stripeSignatureOk } from '../src/core/sentinel/triggers/webhook.js';
+import { HEADERS_TIMEOUT_MS, MAX_BODY, PER_MINUTE, REQUEST_TIMEOUT_MS, WebhookHub, githubSignatureOk, newSecret, sameSecret } from '../src/core/sentinel/triggers/webhook.js';
 import { Sentinels } from '../src/core/sentinel/sentinels.js';
 import type { GitHubRepo } from '../src/workspaces/github.js';
 import { project, setup, until } from './sentinel-fakes.js';
@@ -188,51 +187,6 @@ describe('GitHub', () => {
       const stop2 = startGitHub(t, offGitHub.ctx, { store: new Store(initialState('room')), selfId: () => 'me', gh: async () => '[]', repoOf: async () => undefined });
       await vi.advanceTimersByTimeAsync(1);
       expect(offGitHub.troubles).toEqual(['This project isn’t on GitHub: its main folder has no GitHub remote']);
-      stop2();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-});
-
-describe('Stripe', () => {
-  const event = (id: string, created: number, type: string, object: Record<string, unknown>) => ({ id, created, type, livemode: false, data: { object } });
-
-  it('reads only new events of its kinds, sums them up without card details, and never fires twice', async () => {
-    const t = { kind: 'stripe' as const, what: 'payment-failed' as const };
-    const list: unknown[] = [event('evt_0', 1000, 'invoice.payment_failed', {})];
-    const calls: string[] = [];
-    const f = jsonFetch(() => ({ body: { data: list, has_more: false } }), calls);
-    const first = await lookStripe(t, 'sk_test_x', undefined, f, T0);
-    expect(first).toEqual({ events: [], cursor: { at: 1000, seen: ['evt_0'] } });
-    expect(decodeURIComponent(calls[0]!)).toContain('types[]=payment_intent.payment_failed&types[]=invoice.payment_failed');
-    list.unshift(
-      event('evt_2', 1005, 'invoice.payment_failed', { id: 'in_1', amount_due: 1900, currency: 'eur', customer_email: 'max@acme.dev', customer: 'cus_2' }),
-      event('evt_1', 1003, 'payment_intent.payment_failed', { id: 'pi_1', amount: 4200, currency: 'usd', receipt_email: 'lena@acme.dev', description: 'Pro plan', last_payment_error: { message: 'Your card was declined.' }, payment_method: { card: { last4: '4242', number: '4242424242424242' } } }),
-    );
-    const next = await lookStripe(t, 'sk_test_x', first.cursor, f, T0);
-    expect(decodeURIComponent(calls[1]!)).toContain('created[gte]=1000');
-    expect(next.events.map((e) => e.summary)).toEqual(['Stripe: payment failed, $42.00', 'Stripe: payment failed, €19.00']);
-    expect(next.events[0]!.payload).toEqual({ id: 'evt_1', type: 'payment_intent.payment_failed', livemode: false, amount: 4200, currency: 'usd', amountText: '$42.00', email: 'lena@acme.dev', description: 'Pro plan', reason: 'Your card was declined.', object: 'pi_1' });
-    expect(JSON.stringify(next.events)).not.toMatch(/4242/);
-    expect(next.cursor).toEqual({ at: 1005, seen: ['evt_2'] });
-    expect((await lookStripe(t, 'sk_test_x', next.cursor, f, T0)).events).toEqual([]);
-    expect(moneyText(500, 'jpy')).toBe('¥500');
-  });
-
-  it('without a key, or with one that can’t read events, says what to do', async () => {
-    vi.useFakeTimers();
-    try {
-      const t = { kind: 'stripe' as const, what: 'refund' as const };
-      const none = context<StripeCursor>(sentinel(t));
-      const stop = startStripe(t, none.ctx, { store: new Store(initialState('room')), selfId: () => 'me', fetch: jsonFetch(() => ({ body: {} })), stripeKey: () => undefined });
-      await vi.advanceTimersByTimeAsync(1);
-      expect(none.troubles).toEqual([NO_STRIPE]);
-      stop();
-      const restricted = context<StripeCursor>(sentinel(t));
-      const stop2 = startStripe(t, restricted.ctx, { store: new Store(initialState('room')), selfId: () => 'me', fetch: jsonFetch(() => ({ status: 403, body: {} })), stripeKey: () => 'rk_live_x' });
-      await vi.advanceTimersByTimeAsync(1);
-      expect(restricted.troubles[0]).toMatch(/can’t read events: give it Events: Read/);
       stop2();
     } finally {
       vi.useRealTimers();
@@ -426,11 +380,10 @@ function post(port: number, pathname: string, body: string | Buffer, headers: Re
 describe('the webhook server', () => {
   const secret = newSecret();
   const signingSecret = newSecret();
-  const stripeSecret = 'whsec_test_123';
   let hub: WebhookHub;
   let fired: Array<[string, TriggerEvent]>;
   let states: Array<{ ready: boolean; url?: string }>;
-  let signature: 'github' | 'stripe' | undefined;
+  let signature: 'github' | undefined;
   let now = Date.now();
   let port = 0;
 
@@ -440,7 +393,7 @@ describe('the webhook server', () => {
     signature = undefined;
     now = Date.now();
     hub = new WebhookHub({
-      hook: (id) => (id === 'sn_hook' ? { secret, signingSecret, ...(signature ? { signature } : {}), stripeSecret } : undefined),
+      hook: (id) => (id === 'sn_hook' ? { secret, signingSecret, ...(signature ? { signature } : {}) } : undefined),
       fire: (id, e) => void fired.push([id, e]),
       onState: (st) => void states.push(st),
       tunnel: async () => ({ url: 'https://quiet-harbor.trycloudflare.com/', close: () => undefined }),
@@ -494,20 +447,6 @@ describe('the webhook server', () => {
     expect((await post(port, `/hook/sn_hook/${secret}`, body)).status).toBe(401);
     expect(fired).toHaveLength(1);
     expect(githubSignatureOk(Buffer.from(body), sig, signingSecret)).toBe(true);
-  });
-
-  it('checks Stripe’s signature when asked: valid, wrong, stale', async () => {
-    signature = 'stripe';
-    const body = '{"id":"evt_1","type":"invoice.paid"}';
-    const signed = (t: number, key = stripeSecret) => `t=${t},v1=${createHmac('sha256', key).update(`${t}.${body}`).digest('hex')}`;
-    const t = Math.floor(now / 1000);
-    expect((await post(port, `/hook/sn_hook/${secret}`, body, { 'Stripe-Signature': signed(t) })).status).toBe(202);
-    expect(fired[0]![1].summary).toBe('Webhook from Stripe: invoice.paid');
-    expect((await post(port, `/hook/sn_hook/${secret}`, body, { 'Stripe-Signature': signed(t, 'whsec_other') })).status).toBe(401);
-    expect((await post(port, `/hook/sn_hook/${secret}`, body, { 'Stripe-Signature': signed(t - 6 * 60) })).status).toBe(401);
-    expect(stripeSignatureOk(Buffer.from(body), signed(t - 4 * 60), stripeSecret, now)).toBe(true);
-    expect(stripeSignatureOk(Buffer.from(body), `t=${t}`, stripeSecret, now)).toBe(false);
-    expect(fired).toHaveLength(1);
   });
 
   it('refuses bodies over 1 MB, said or not, and more than 60 posts a minute', async () => {
@@ -838,26 +777,6 @@ describe('the review’s fixes', () => {
     expect(again.events).toHaveLength(1);
     expect(again.events[0]!.payload).toMatchObject({ run: 2, attempt: 2 });
     expect((await lookGitHub(t, repo, again.cursor, gh, T0 + 8 * MIN)).events).toEqual([]);
-  });
-
-  it('Stripe: more than 100 events between looks are read page by page, none lost, oldest first', async () => {
-    const all = Array.from({ length: 250 }, (_, i) => ({ id: `evt_${i + 1}`, type: 'invoice.payment_failed', created: 2000 + i, livemode: false, data: { object: { amount_due: 100, currency: 'usd' } } })).reverse();
-    const calls: string[] = [];
-    const fetchFn = jsonFetch((url) => {
-      const q = new URL(url).searchParams;
-      const after = q.get('starting_after');
-      const from = after ? all.findIndex((e) => e.id === after) + 1 : 0;
-      const page = all.filter((e) => e.created >= Number(q.get('created[gte]') ?? 0)).slice(0, all.length).slice(from, from + Number(q.get('limit')));
-      return { body: { data: page, has_more: from + page.length < all.length } };
-    }, calls);
-    const t = { kind: 'stripe' as const, what: 'payment-failed' as const };
-    const r = await lookStripe(t, 'rk_test', { at: 2000, seen: [] }, fetchFn, 0, 'https://stripe.test');
-    expect(calls).toHaveLength(3);
-    expect(calls[1]).toContain('starting_after=evt_151');
-    expect(r.events).toHaveLength(250);
-    expect(r.events[0]!.payload).toMatchObject({ id: 'evt_1' });
-    expect(r.events.at(-1)!.payload).toMatchObject({ id: 'evt_250' });
-    expect(r.cursor).toEqual({ at: 2249, seen: ['evt_250'] });
   });
 
   it('uptime: this Mac offline (no DNS, no network) is neither down nor back', async () => {

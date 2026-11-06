@@ -178,7 +178,7 @@ More: [what friends' agents can do](docs/network.md#what-your-friends-agents-can
   </picture>
 </p>
 
-A sentinel is work you describe once, in a sentence. It waits for its moment (seven in the morning, a failing test, a Stripe payment, your site going quiet), works through its steps with your agent, and leaves you a report. It runs on your Mac, as you, with your logins.
+A sentinel is work you describe once, in a sentence. It waits for its moment (seven in the morning, a failing test, a new error in Sentry, your site going quiet), works through its steps with your agent, and leaves you a report. It runs on your Mac, as you, with your logins.
 
 <p align="center">
   <picture>
@@ -188,7 +188,7 @@ A sentinel is work you describe once, in a sentence. It waits for its moment (se
 </p>
 <p align="center"><sub><b>Sentinel</b>: eleven recipes to start from, every run kept with its report, and a fix waiting for your Merge.</sub></p>
 
-- **When**: a schedule, by hand, after another sentinel, or an event from GitHub, Stripe, Sentry, a site that stops answering, or a webhook.
+- **When**: a schedule, by hand, after another sentinel, or an event from GitHub, Sentry, a site that stops answering, or a webhook.
 - **Then**: ask your agent, run a script, call a service, open a pull request, merge, notify you, or ask a friend's agent.
 - **Safe by default**: a new sentinel starts paused, and a merge always needs green checks and your **Merge**, on the Mac or the phone.
 
@@ -198,15 +198,11 @@ More: [Sentinel](docs/sentinel.md)
 
 <p align="center">
   <picture>
-    <source media="(min-width: 700px)" srcset="assets/scenes/earnings-dark.gif">
-    <img src="assets/scenes/earnings-dark-still.png" alt="A project's Stripe earnings this month, per repository, ticking up as a new subscription comes in" width="420">
-  </picture>
-  <picture>
     <source media="(min-width: 700px)" srcset="assets/scenes/archive-dark.gif">
     <img src="assets/scenes/archive-dark-still.png" alt="Archiving fix/safari-scroll: the folder goes and the disk drops to 0.6 MB, while the branch and the conversation stay" width="420">
   </picture>
 </p>
-<p align="center"><sub><b>Earnings</b>: connect Stripe and each project shows what it earns, next to the work. <b>Archive</b>: the folder goes, so your disk stays light; the branch and the conversation stay.</sub></p>
+<p align="center"><sub><b>Archive</b>: the folder goes, so your disk stays light; the branch and the conversation stay.</sub></p>
 
 <p align="center">
   <img src="assets/mac/hero.png" alt="Beluga for Mac: a worktree with the agent's finished run in the middle, its changes and diff in the right panel, projects and friends in the sidebar" width="900">

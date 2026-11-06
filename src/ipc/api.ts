@@ -9,7 +9,6 @@ import { MACHINE_NOTE_MAX } from '../shared/agent-setup.js';
 import { ENV_KEY, MAX_ENV_VALUE, MAX_ENV_VARS } from '../shared/env-vars.js';
 import { type ArgsRuntime, MAX_AGENT_ARGS, MAX_AGENT_ARG_LENGTH, agentArgsProblem } from '../shared/agent-args.js';
 import { NETWORK_API } from './network-api.js';
-import { STRIPE_API } from './stripe-api.js';
 import { SUPPORT_API } from './support-api.js';
 import { WEB_API } from './web-api.js';
 import { DIAGNOSTICS_API } from './diagnostics-api.js';
@@ -108,7 +107,6 @@ export const PrefsPatch = z
     shellArgs: z.array(z.string().max(200)).max(20),
     claudeArgs: agentArgs('claude'),
     codexArgs: agentArgs('codex'),
-    earningsCurrency: z.string().regex(/^[a-z]{3}$/).nullable().optional(),
   })
   .partial();
 
@@ -454,8 +452,6 @@ export const API = {
   // ---- the Beluga network: friends, direct messages, groups, your status (network-api.ts)
   ...NETWORK_API,
 
-  // ---- earnings from Stripe, per project (stripe-api.ts)
-  ...STRIPE_API,
   // ---- supporting Beluga: the star and coffee asks merges bring (support-api.ts)
   ...SUPPORT_API,
   // ---- problem reports: the daemon's black box in one redacted file (diagnostics-api.ts)

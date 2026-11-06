@@ -6,7 +6,6 @@ import { Mark } from './Mark.js';
 import type { Step } from './onboarding-model.js';
 import { Agents } from './scenes/Agents.js';
 import { Archive } from './scenes/Archive.js';
-import { Earnings } from './scenes/Earnings.js';
 import { Friends } from './scenes/Friends.js';
 import { Parallel } from './scenes/Parallel.js';
 import { Sentinel } from './scenes/Sentinel.js';
@@ -61,7 +60,6 @@ const SCENES: Partial<Record<Step, () => ReactNode>> = {
   friends: () => <Friends />,
   sentinel: () => <Sentinel />,
   uses: () => <SentinelUses />,
-  earnings: () => <Earnings />,
   archive: () => <Archive />,
 };
 

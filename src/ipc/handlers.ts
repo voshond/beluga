@@ -18,7 +18,6 @@ import { projectId } from '../workspaces/manager.js';
 import { SUGGEST_ALL, chooseProjectIcon, readProjectIcon, suggestProjects } from '../core/project-icons.js';
 import type { Args, Method } from './api.js';
 import { NETWORK_HANDLERS } from './network-handlers.js';
-import { STRIPE_HANDLERS } from './stripe-handlers.js';
 import { SUPPORT_HANDLERS } from './support-handlers.js';
 import { AGENT_SETUP_HANDLERS } from './agent-setup-handlers.js';
 import { WEB_HANDLERS } from './web-handlers.js';
@@ -403,7 +402,6 @@ export const HANDLERS = {
   'local.openFolder': (_s, dir) => openWithSystem(dir),
   'local.statFiles': (_s, paths) => paths.map(pathInfo),
   ...NETWORK_HANDLERS,
-  ...STRIPE_HANDLERS,
   ...SUPPORT_HANDLERS,
   ...AGENT_SETUP_HANDLERS,
   ...WEB_HANDLERS,

@@ -9,7 +9,7 @@ const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' }
 const home = (page: Page) => page.getByRole('main');
 
 async function openHome(page: Page, project = 'bob-api'): Promise<void> {
-  // The label itself (the row also holds the earnings pill and hover buttons).
+  // The label itself (the row also holds the hover buttons).
   await sidebar(page).getByText(project, { exact: true }).first().click();
   await expect(page.getByRole('heading', { level: 1, name: project })).toBeVisible();
 }

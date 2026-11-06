@@ -298,10 +298,6 @@ export const PHONE: Record<Method, Side> = {
   'network.messages.react': 'phone',
   'network.clear': 'phone',
 
-  'stripe.connect': 'mac',
-  'stripe.disconnect': 'mac',
-  'stripe.refresh': 'mac',
-
   // ---- supporting Beluga: the star and coffee asks are the Mac's (they open web pages there)
   'support.answer': 'mac',
   'diagnostics.report': 'mac',

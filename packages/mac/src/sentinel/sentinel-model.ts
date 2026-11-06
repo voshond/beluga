@@ -4,7 +4,6 @@ import {
   type BelugaTrigger,
   type GitHubTrigger,
   type SentryTrigger,
-  type StripeTrigger,
   type UptimeTrigger,
   type WebhookTrigger,
   hostOf,
@@ -71,7 +70,6 @@ export const TRIGGER_ICON: Readonly<Record<TriggerKind, IconName>> = {
   after: 'refresh',
   beluga: 'claude',
   github: 'pr',
-  stripe: 'coin',
   uptime: 'pulse',
   sentry: 'alert',
   webhook: 'link',
@@ -224,7 +222,7 @@ export function rowOf(state: SentinelState, s: Sentinel, now: number): Row {
 
 /**
  * Why a sentinel's trigger can't watch now, in words with what to do: its own trouble (no gh, no
- * Stripe key, no token), or for a webhook that's on, the tunnel's (it didn't open). A paused one has none.
+ * token), or for a webhook that's on, the tunnel's (it didn't open). A paused one has none.
  */
 export function troubleOf(state: Pick<SentinelState, 'troubles' | 'webhook'>, s: Pick<Sentinel, 'id' | 'paused' | 'trigger'>): string | undefined {
   if (s.paused) return undefined;
@@ -368,10 +366,9 @@ const TRIGGER_HINT: Readonly<Record<TriggerKind, string>> = {
   after: 'When another sentinel’s run ends',
   beluga: 'A task is done, a pull request opens, an agent finishes…',
   github: 'An issue, a pull request, a failed workflow or deployment',
-  stripe: 'A failed payment, a subscription, a dispute, a refund',
   uptime: 'A site stops answering, and when it’s back',
   sentry: 'A new issue, a regression, a spike',
-  webhook: 'Its own URL: GitHub, Stripe or anything that posts',
+  webhook: 'Its own URL: GitHub or anything that posts',
 };
 
 /** A trigger of another kind, with what it needs filled in (an uptime starts on the project's site when it has one). */
@@ -388,8 +385,6 @@ export function triggerOfKind(kind: TriggerKind, was: Trigger): Trigger | undefi
       return { kind: 'beluga', what: 'task-done' };
     case 'github':
       return { kind: 'github', what: 'workflow-failed', minutes: 2 };
-    case 'stripe':
-      return { kind: 'stripe', what: 'payment-failed' };
     case 'uptime':
       return { kind: 'uptime', url: 'https://example.com', minutes: 5 };
     case 'sentry':
@@ -424,14 +419,6 @@ export const GITHUB_CARDS: ReadonlyArray<EventCard<GitHubTrigger['what']>> = [
   { value: 'deployment-failed', label: 'A deployment fails', line: 'Its latest status says failed', icon: 'globe' },
 ];
 
-export const STRIPE_CARDS: ReadonlyArray<EventCard<StripeTrigger['what']>> = [
-  { value: 'payment-failed', label: 'A payment fails', line: 'A card declined, an invoice unpaid', icon: 'alert' },
-  { value: 'subscription-started', label: 'A subscription starts', line: 'A new customer subscribes', icon: 'play' },
-  { value: 'subscription-ended', label: 'A subscription ends', line: 'Cancelled or ran out', icon: 'stop' },
-  { value: 'dispute-opened', label: 'A dispute opens', line: 'A customer disputes a charge', icon: 'flag' },
-  { value: 'refund', label: 'A refund happens', line: 'From Stripe or your app', icon: 'refresh' },
-];
-
 export const SENTRY_CARDS: ReadonlyArray<EventCard<SentryTrigger['what']>> = [
   { value: 'new-issue', label: 'A new issue', line: 'An error Sentry hasn’t seen before', icon: 'spark' },
   { value: 'regression', label: 'A regression', line: 'A resolved error is back', icon: 'refresh' },
@@ -445,8 +432,6 @@ export function eventCards(kind: TriggerKind): ReadonlyArray<EventCard> | undefi
       return BELUGA_CARDS;
     case 'github':
       return GITHUB_CARDS;
-    case 'stripe':
-      return STRIPE_CARDS;
     case 'sentry':
       return SENTRY_CARDS;
     default:
@@ -459,7 +444,6 @@ export const UPTIME_MINUTES: ReadonlyArray<UptimeTrigger['minutes']> = [1, 5, 15
 export const SIGNATURES: ReadonlyArray<{ readonly value: 'none' | NonNullable<WebhookTrigger['signature']>; readonly label: string; readonly description: string }> = [
   { value: 'none', label: 'None', description: 'The secret in the URL is the check' },
   { value: 'github', label: 'GitHub', description: 'X-Hub-Signature-256, with this sentinel’s signing secret (Copy Secret)' },
-  { value: 'stripe', label: 'Stripe', description: 'Stripe-Signature, with STRIPE_WEBHOOK_SECRET from Settings › Environment' },
 ];
 
 const every = (minutes: number): string => (minutes === 1 ? 'every minute' : `every ${minutes} minutes`);
@@ -487,8 +471,6 @@ export function eventSentence(t: Trigger, where: { readonly project?: string; re
                 : 'a pull request opened, the run starts with it';
       return `Beluga asks GitHub about ${repo} ${every(t.minutes ?? 2)} with gh. When ${what}. What was there before it was on never fires.`;
     }
-    case 'stripe':
-      return `Beluga reads the project’s Stripe events every 2 minutes with its key from Earnings. Each new one starts a run with its amount, currency, the customer’s email and the description; never card details.`;
     case 'uptime':
       return `Beluga opens ${hostOf(t.url) || 'the address'} ${every(t.minutes)} and expects ${t.expect ?? 200} within 10 seconds. Two misses in a row start a run (“stopped answering”), and the first good answer after that starts another (“back”).`;
     case 'sentry':
@@ -498,9 +480,7 @@ export function eventSentence(t: Trigger, where: { readonly project?: string; re
     case 'webhook':
       return t.signature === 'github'
         ? 'Point GitHub’s webhook at this URL with Copy Secret’s secret as its Secret; it’s live while this sentinel is on. Each post starts a run with what was posted.'
-        : t.signature === 'stripe'
-          ? 'Point a Stripe webhook endpoint at this URL and keep its signing secret (whsec_…) in Settings › Environment as STRIPE_WEBHOOK_SECRET; it’s live while this sentinel is on.'
-          : 'Point GitHub’s webhook (or anything that posts) at this URL; it’s live while this sentinel is on. Each post starts a run with what was posted.';
+        : 'Point GitHub’s webhook (or anything that posts) at this URL; it’s live while this sentinel is on. Each post starts a run with what was posted.';
     default:
       return undefined;
   }
@@ -896,9 +876,9 @@ export function scopesOf(items: readonly Sentinel[], projects: ReadonlyArray<{ r
 
 /** The starting points on an empty Sentinel, grouped by what you get. */
 export const START_GROUPS: ReadonlyArray<{ readonly label: string; readonly ids: readonly string[] }> = [
-  { label: 'Tell me', ids: ['morning-brief', 'uptime-guard', 'review-new-prs', 'issues-to-tasks', 'release-notes', 'failed-payments', 'watch-the-web'] },
+  { label: 'Tell me', ids: ['morning-brief', 'uptime-guard', 'review-new-prs', 'issues-to-tasks', 'release-notes', 'watch-the-web'] },
   { label: 'Fix it', ids: ['fix-what-broke', 'nightly-tests', 'dependency-updates', 'fix-and-ship'] },
-  { label: 'Keep a number', ids: ['stripe-revenue', 'open-issues-prs', 'site-speed', 'customers-this-week', 'youtube-subscribers', 'last-job-run'] },
+  { label: 'Keep a number', ids: ['open-issues-prs', 'site-speed', 'customers-this-week', 'youtube-subscribers', 'last-job-run'] },
 ];
 
 /** The recipes in their groups, `per` at most in each (the rest are in New Sentinel › Recipe). */

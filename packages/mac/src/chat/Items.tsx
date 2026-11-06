@@ -28,7 +28,7 @@ import { Markdown } from './Markdown.js';
 import { AgentSteps, StepsFold, StepsToggle } from './steps/AgentSteps.js';
 import { useDisclosure } from './steps/step-memory.js';
 import { useFlightLanding } from './flight.js';
-import { type TurnPart, workingPhase } from './live-tail.js';
+import { type TurnPart, subInHead, wordsOf, workingPhase } from './live-tail.js';
 import { Shimmer } from './steps/StepRow.js';
 import { useMentionWorld } from './Mention.js';
 import type { TaskView } from '@beluga/core/gateway/model.js';
@@ -54,6 +54,12 @@ type SystemItem = Extract<LogItem, { type: 'system' }>;
 export const useNow = useClock;
 
 const time = (ts: number): string => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+/** When a turn (or the part of it drawn) began, and when it answered: "13:30 · answered 13:34", a split turn's tail "continued · 13:32" (BLG-46). */
+const turnTime = (item: AgentItem, part: TurnPart | undefined): string => {
+  const began = part?.side === 'tail' ? `continued · ${time(part.cut)}` : time(item.ts);
+  return item.status === 'done' && item.endTs ? `${began} · answered ${time(item.endTs)}` : began;
+};
 
 /** What a message's right-click menu needs: the box to quote into, and how to reach Claude here. */
 /** What runs the agent and its model, small and quiet beside its name ("Opus", "Codex · GPT-5"). */
@@ -110,14 +116,17 @@ function Folding({ children }: { children: ReactNode }) {
  * Under a message you steered in that Claude hasn't read yet: sent, not read, and (while it waits
  * for Claude's next step) Send now. Once Claude reads it the line goes and the message reads as any other.
  */
-function SteerWaiting({ steer }: { steer: SteeredMessage }) {
+function SteerWaiting({ steer, at }: { steer: SteeredMessage; at: number | undefined }) {
   const { client } = useBeluga();
   const stopping = steer.waiting === 'stopping';
   const agent = useMyAgentName();
   return (
     <div className={s.steerWaiting} data-steer-waiting={steer.waiting} role="status">
       <Icon name="clock" size={11} />
-      <span>{stopping ? `Sent · ${agent} is stopping its step to read it` : `Sent · waiting for ${agent} to read it`}</span>
+      <span>
+        {at === undefined ? '' : `${time(at)} · `}
+        {stopping ? `Sent · ${agent} is stopping its step to read it` : `Sent · waiting for ${agent} to read it`}
+      </span>
       {stopping ? null : (
         <Tip label={`Stop ${agent}’s current step so it reads this now`} keys={shortcutKeys('composer-send-now')}>
           <button type="button" className={s.steerNow} onClick={() => sendSteerNow(client, steer.request)}>
@@ -196,7 +205,8 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
             ) : null}
             <ImageGrid images={images} />
             {reactions.chips}
-            {steer ? <SteerWaiting steer={steer} /> : null}
+            {prefs.timestamps && ends && !steer ? <span className={s.ownTime}>{time(item.ts)}</span> : null}
+            {steer ? <SteerWaiting steer={steer} at={prefs.timestamps ? item.ts : undefined} /> : null}
             {item.request && item.channel ? <Delivery request={item.request} channel={item.channel} /> : null}
           </div>
         </div>
@@ -232,7 +242,7 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
             ) : null}
             <ImageGrid images={images} />
             {reactions.chips}
-            {steer ? <SteerWaiting steer={steer} /> : null}
+            {steer ? <SteerWaiting steer={steer} at={prefs.timestamps ? item.ts : undefined} /> : null}
           </div>
         </div>
       </ActionsContext>
@@ -263,7 +273,7 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
           ) : null}
           <ImageGrid images={images} />
           {reactions.chips}
-          {steer ? <SteerWaiting steer={steer} /> : null}
+          {steer ? <SteerWaiting steer={steer} at={prefs.timestamps ? item.ts : undefined} /> : null}
         </div>
       </div>
     </ActionsContext>
@@ -336,16 +346,17 @@ function WorkingLine({ item, quiet }: { item: AgentItem; quiet: boolean }) {
 }
 
 /**
- * Where a turn split by what was said during it began (see live-tail.ts): who, and the steps it
- * had finished by then; the rest (what it does now, its answer) is further down.
+ * Where a turn split by what was said during it began (see live-tail.ts): who, and the steps,
+ * background work and words it had finished by then; the rest (what it does now, its answer) is further down.
  */
 function TurnHead({ item, part, mine }: { item: AgentItem; part: TurnPart; mine: boolean }) {
   const prefs = usePrefs();
   const steps = useDisclosure(`${item.channel}/${item.id}`);
   const running = isRunning(item.status) && item.status !== 'queued';
   const folded = item.status === 'done' && Boolean(item.text) && prefs.doneSteps === 'fold' && !steps.shown;
-  // No step yet: a head would be a bare name over "continues below". Its tail says it all.
-  if (!item.steps.some((x) => !HIDDEN_STEPS.test(x))) return null;
+  const words = wordsOf(item, part);
+  // Nothing done yet: a head would be a bare name over "continues below". Its tail says it all.
+  if (!words && !item.steps.some((x) => !HIDDEN_STEPS.test(x)) && !item.subagents.some((x) => subInHead(x, part.cut))) return null;
   return (
     <div className={cx(s.message, s.agent, s.turnHead)} data-turn={item.status} data-turn-part="head">
       <div className={s.gutter}>
@@ -357,10 +368,12 @@ function TurnHead({ item, part, mine }: { item: AgentItem; part: TurnPart; mine:
             {mine ? agentName(item.agent) : `${item.ownerName}'s ${agentName(item.agent)}`}
           </span>
           <AgentBadge agent={item.agent} />
+          {prefs.timestamps ? <span className={s.time}>{time(item.ts)}</span> : null}
         </div>
         <StepsFold folded={folded}>
           <AgentSteps item={item} running={false} part={part} />
         </StepsFold>
+        {words ? <Markdown text={words} paths localImages={mine} tasks={mine} /> : null}
         <div className={s.continues}>
           <Icon name="chevronDown" size={11} />
           {running ? 'Still working · continues below' : 'Continued below'}
@@ -448,6 +461,8 @@ function TurnCard({
   const prefs = usePrefs();
   const steps = useDisclosure(`${item.channel}/${item.id}`);
   const answered = item.status === 'done' && Boolean(item.text);
+  // A split turn's tail has the words it wrote after what was said during it (its head has the rest).
+  const words = wordsOf(item, part);
   // A queued message Claude read mid-turn: its answer is the card above's.
   const steeredIn = (item.status === 'done' && item.text === STEERED_IN) || waitingNote;
   // Claude Code stopped at a plan limit: the newest card here (`latest`) offers to go on, in one click.
@@ -488,6 +503,7 @@ function TurnCard({
             </span>
             <AgentBadge agent={item.agent} />
             {forSomeoneElse ? <span className={s.time}>for {item.requesterName}</span> : null}
+            {prefs.timestamps && !steeredIn && item.status !== 'queued' ? <span className={s.time}>{turnTime(item, part)}</span> : null}
             {!running && item.text && item.status === 'done' && !steeredIn ? (
               <span className={s.hoverActions}>
                 {/* Folded: anyone's steps show again; kept showing, only your own Claude's open further. */}
@@ -524,9 +540,9 @@ function TurnCard({
             <div className={s.idle}>{item.text === STEERED_IN ? STEERED_BELOW : item.text}</div>
           ) : failure ? (
             <FailureNotice failure={failure} />
-          ) : item.text ? (
-            <Markdown text={item.text} paths localImages={mine} live={running} tasks={mine} />
-          ) : item.status === 'queued' && item.slotWait ? (
+          ) : words ? (
+            <Markdown text={words} paths localImages={mine} live={running} tasks={mine} />
+          ) : item.text ? null : item.status === 'queued' && item.slotWait ? (
             // Nothing runs here: your Claude works in as many other conversations as it may at once.
             <SlotWaitNotice wait={item.slotWait} requestId={mine && item.requester === selfId ? item.requestId : undefined} />
           ) : item.status === 'queued' ? (

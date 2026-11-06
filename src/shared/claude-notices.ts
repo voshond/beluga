@@ -92,22 +92,42 @@ export function asSent(items: readonly LogItem[], inQueue: (card: AgentCard) => 
     else if (l.queuedUntil !== undefined && l.status !== 'queued') ran.set(l.requestId, l.queuedUntil);
   }
   if (!hidden.size && !ran.size) return items;
-  const requestOf = (l: LogItem): string | undefined => (l.type === 'agent' ? l.requestId : l.type === 'chat' ? l.request : undefined);
+  return moveRequests(items, hidden, ran);
+}
+
+const requestOf = (l: LogItem): string | undefined => (l.type === 'agent' ? l.requestId : l.type === 'chat' ? l.request : undefined);
+
+/** The items with each request in `hidden` left out, and each in `to` (its message and card) moved to that time: after everything said before then. */
+function moveRequests(items: readonly LogItem[], hidden: ReadonlySet<string>, to: ReadonlyMap<string, number>): LogItem[] {
   const moved = new Map<string, LogItem[]>();
   const rows: LogItem[] = [];
   for (const l of items) {
     const request = requestOf(l);
-    if (request === undefined || !(hidden.has(request) || ran.has(request))) rows.push(l);
-    else if (ran.has(request)) moved.set(request, [...(moved.get(request) ?? []), at(l, ran.get(request)!)]);
+    if (request === undefined || !(hidden.has(request) || to.has(request))) rows.push(l);
+    else if (to.has(request)) moved.set(request, [...(moved.get(request) ?? []), at(l, to.get(request)!)]);
   }
-  // Each in the order it ran, after everything said before then.
-  for (const [request, when] of [...ran].sort((a, b) => a[1] - b[1])) {
+  for (const [request, when] of [...to].sort((a, b) => a[1] - b[1])) {
     const these = moved.get(request);
     if (!these) continue;
     const i = rows.findIndex((r) => r.ts > when);
     rows.splice(i < 0 ? rows.length : i, 0, ...these);
   }
   return rows;
+}
+
+/**
+ * Your steered messages placed where the agent read them (BLG-47): one it read is drawn (with its
+ * card) at the moment it did, so what the agent did before then stays above it; one it hasn't read
+ * yet is `pinned`, drawn below everything (the working turn too) until it does. `waiting`: the
+ * unread ones, by message id (see steeredMessages).
+ */
+export function asRead(items: readonly LogItem[], waiting: ReadonlyMap<string, SteeredMessage>): { readonly rows: readonly LogItem[]; readonly pinned: readonly LogItem[] } {
+  const unread = new Set([...waiting.values()].map((x) => x.request));
+  const read = new Map<string, number>();
+  for (const l of items) if (l.type === 'agent' && l.readAt !== undefined && !unread.has(l.requestId)) read.set(l.requestId, l.readAt);
+  if (!unread.size && !read.size) return { rows: items, pinned: [] };
+  const pinned = items.filter((l) => l.type === 'chat' && waiting.has(l.id));
+  return { rows: moveRequests(items, unread, read), pinned };
 }
 
 /**

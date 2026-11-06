@@ -1,6 +1,5 @@
 import type { IconName } from '../components/Icon.js';
 import type { Step } from './onboarding-model.js';
-import { thisComputer } from '../lib/os-words.js';
 
 /** The tour's words, one idea a step. Every line says what the app really does. */
 export interface TourCopy {
@@ -44,8 +43,8 @@ export const TOUR_COPY: Readonly<Partial<Record<Step, TourCopy>>> = {
     eyebrow: 'Sentinel',
     icon: 'sentinel',
     title: 'Say when. Say what. Beluga keeps watch.',
-    body: 'A sentinel is work you describe once, in a sentence. It waits for its moment (seven in the morning, a failing test, a Stripe payment, your site going quiet), then works through its steps in order and leaves you a report.',
-    points: ['When: a schedule, GitHub, Stripe, Sentry, a site, a webhook', 'Then: an agent, a script, a service, a pull request, a merge', 'Starts paused. You choose if the agent may look, work or ship'],
+    body: 'A sentinel is work you describe once, in a sentence. It waits for its moment (seven in the morning, a failing test, a new error in Sentry, your site going quiet), then works through its steps in order and leaves you a report.',
+    points: ['When: a schedule, GitHub, Sentry, a site, a webhook', 'Then: an agent, a script, a service, a pull request, a merge', 'Starts paused. You choose if the agent may look, work or ship'],
   },
   uses: {
     eyebrow: 'Sentinel at work',
@@ -53,13 +52,6 @@ export const TOUR_COPY: Readonly<Partial<Record<Step, TourCopy>>> = {
     title: 'Real work, done while you sleep.',
     body: 'A few of the sentinels people set up first. Tell Ask Sentinel what you want in your own words and your agent builds it, steps and all, ready for you to turn on.',
     points: ['A fix waiting for your merge by morning', 'Your numbers on a board, your desktop and your phone', 'Every run kept, with its report'],
-  },
-  earnings: {
-    eyebrow: 'Earnings',
-    icon: 'gauge',
-    title: 'Know what every project earns.',
-    body: 'Connect Stripe and each project shows its revenue right next to the work, kept up to date as sales come in.',
-    points: [`A read-only key, kept on ${thisComputer()}`, 'Per project and per month', 'In the currency you think in'],
   },
   archive: {
     eyebrow: 'Archive',

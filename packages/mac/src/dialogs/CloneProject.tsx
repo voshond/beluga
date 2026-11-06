@@ -4,6 +4,7 @@ import { Button } from '../components/ui.js';
 import { inApp } from '../lib/boot.js';
 import { useApi } from '../lib/beluga.js';
 import { pickFolders } from '../lib/projects.js';
+import { useClock } from '../lib/window-active.js';
 import s from './add-project.module.css';
 
 export const CloneProject = ({ onDone }: { onDone: () => void }) => {
@@ -23,13 +24,12 @@ export const CloneProject = ({ onDone }: { onDone: () => void }) => {
     void api.projects.newHome().then(setHome, () => undefined);
   }, []);
 
+  const tick = useClock(busy, 500);
+
   useEffect(() => {
     if (!busy) return;
-    const timer = window.setInterval(() => {
-      void api.projects.cloneProgress(target).then((value) => { if (value) setProgress(value); });
-    }, 500);
-    return () => window.clearInterval(timer);
-  }, [busy, target]);
+    void api.projects.cloneProgress(target).then((value) => { if (value) setProgress(value); });
+  }, [busy, target, tick]);
 
   const handleClone = async (): Promise<void> => {
     if (busy || !remote.trim() || !target.trim()) return;

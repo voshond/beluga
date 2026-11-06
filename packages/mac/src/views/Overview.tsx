@@ -7,7 +7,6 @@ import { Button, Empty, EmptyActions } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
 import { toast, useApp, useBeluga } from '../lib/beluga.js';
 import { sameDeep } from '../lib/stable.js';
-import { EarningsCard } from './EarningsCard.js';
 import { ConversationPeek, DeleteArchivedAlert } from './overview/ConversationPeek.js';
 import { FilterBar } from './overview/FilterBar.js';
 import { ActiveRow, type ArchivedActions, ArchivedRow } from './overview/OverviewRows.js';
@@ -131,7 +130,6 @@ export function OverviewView() {
         project={project}
         onProject={(id) => setPrefs({ project: id })}
       />
-      {!searching && !project && (prefs.filter === 'all' || prefs.filter === 'active') ? <EarningsCard /> : null}
       <div ref={listRef} onKeyDown={onListKey}>
         {groups.length ? (
           groups.map((g) => <Group key={g.project.id} group={g} filter={prefs.filter} current={current} onSelect={setSelected} onOpen={open} act={act} />)

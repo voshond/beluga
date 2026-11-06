@@ -7,6 +7,8 @@ import { LogTaskCard } from '../gateway/TaskCard.js';
 import { Icon } from '../components/Icon.js';
 import { Avatar, Empty, Working } from '../components/ui.js';
 import { useApi, useApp } from '../lib/beluga.js';
+import { usePrefs } from '../lib/prefs.js';
+import { dayLabel, sameDay } from '../network/net-model.js';
 import { agentName, useMyAgent } from '../lib/agent-words.js';
 import { keepSameLists, sameItems } from '../lib/stable.js';
 import { FindBar } from './FindBar.js';
@@ -16,8 +18,8 @@ import { isCompactItem } from './context-model.js';
 import { ShippedDivider, isShippedItem } from './ShippedDivider.js';
 import { DialogueCard, isDialogueItem } from './DialogueCard.js';
 import { useClaudeStarting } from './flight.js';
-import { withLiveTails } from './live-tail.js';
-import { asSent, steeredMessages } from '@beluga/shared/claude-notices.js';
+import { type Shown, withLiveTails } from './live-tail.js';
+import { asRead, asSent, steeredMessages } from '@beluga/shared/claude-notices.js';
 import { inYourQueue } from '@beluga/ui/compose.js';
 import s from './chat.module.css';
 import f from './flight.module.css';
@@ -111,6 +113,7 @@ export function ChatLog({ channel, empty }: { channel: string; empty?: React.Rea
   // Only this conversation's items and tasks: another one streaming doesn't draw this one again (KLD-48).
   const mine = useApp((st) => st.log.filter((l) => l.channel === channel), sameItems);
   const selfId = useApp((st) => st.selfId);
+  const prefs = usePrefs();
   // The agent this conversation runs on: a worktree's own pick, else yours.
   const myAgent = useMyAgent();
   const ownAgent = useApp(
@@ -127,12 +130,14 @@ export function ChatLog({ channel, empty }: { channel: string; empty?: React.Rea
   const steered = useMemo(() => steeredMessages(sent), [sent]);
   const drawn = useMemo(() => (steered.notes.size ? sent.filter((l) => !steered.notes.has(l.id)) : sent), [sent, steered]);
   const tasks = useApp((st) => tasksIn(st, channel), sameItems);
-  const placed = useMemo(() => placeTasks(drawn, tasks), [drawn, tasks]);
+  // A steered message is drawn where the agent read it; until then it waits below everything (BLG-47).
+  const read = useMemo(() => asRead(drawn, steered.waiting), [drawn, steered]);
+  const placed = useMemo(() => placeTasks(read.rows, tasks), [read, tasks]);
   // A card's tasks stay the same list while they're the same tasks, so its memo holds.
   const turnTasks = useRef<ReadonlyMap<string, readonly TaskView[]>>(undefined);
   const inTurn = useMemo(() => (turnTasks.current = keepSameLists(turnTasks.current, placed.inTurn)), [placed]);
   // A turn you spoke during goes on below what you said: its live part is the chat's last row (BLG-22).
-  const shown = useMemo(() => withLiveTails(placed.rows), [placed]);
+  const shown = useMemo<Shown<Row>[]>(() => [...withLiveTails(placed.rows), ...read.pinned.map((row) => ({ row, key: row.id }))], [placed, read]);
   const rows = useMemo(() => shown.map((x) => x.row), [shown]);
   const latest = useMemo(() => latestCard(items), [items]);
   const parent = useRef<HTMLDivElement>(null);
@@ -216,10 +221,27 @@ export function ChatLog({ channel, empty }: { channel: string; empty?: React.Rea
     );
   }
 
+  // When a row's part happened: a split turn's tail after what was said during it; its live part goes with the row before it.
+  const shownAt = (i: number): number | undefined => {
+    const part = shown[i]?.part;
+    if (part?.side === 'live') return undefined;
+    return part?.side === 'tail' ? part.cut : rows[i]?.ts;
+  };
+  // Where the date changes, a divider says which day it is (BLG-46).
+  const newDay = (i: number): boolean => {
+    const at = shownAt(i);
+    if (at === undefined) return false;
+    for (let j = i - 1; j >= 0; j--) {
+      const before = shownAt(j);
+      if (before !== undefined) return !sameDay(before, at);
+    }
+    return true;
+  };
+
   const continued = (i: number): boolean => {
     const a = rows[i - 1];
     const b = rows[i];
-    return Boolean(a && b && a.type === 'chat' && b.type === 'chat' && a.from === b.from && a.byAgent === b.byAgent && b.ts - a.ts < GROUP_GAP_MS);
+    return Boolean(a && b && a.type === 'chat' && b.type === 'chat' && a.from === b.from && a.byAgent === b.byAgent && b.ts - a.ts < GROUP_GAP_MS && !newDay(i));
   };
 
   const go = (index: number): void => {
@@ -239,6 +261,7 @@ export function ChatLog({ channel, empty }: { channel: string; empty?: React.Rea
             const part = shown[v.index]?.part;
             return (
               <div key={v.key} data-index={v.index} ref={virtualizer.measureElement} className={s.logRow}>
+                {prefs.timestamps && newDay(v.index) ? <div className={s.day}>{dayLabel(shownAt(v.index)!)}</div> : null}
                 {item.type === 'task' ? (
                   <LogTaskCard task={item.task} />
                 ) : item.type === 'chat' ? (

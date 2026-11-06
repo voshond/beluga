@@ -16,7 +16,6 @@ import { git, status } from '../../workspaces/git.js';
 import { findPr, mergePr } from '../../workspaces/pr.js';
 import type { PullRequest } from '../work-store.js';
 import { runGhCli } from '../issues/gh.js';
-import { loadStripeFile } from '../stripe-earnings.js';
 import { openTunnel, waitUntilReachable } from '../../net/tunnel.js';
 import { demoGitHub, demoServices, demoTriggers, seedDemoSentinel } from './demo.js';
 import type { FetchLike, TriggerDeps, WebhookTunnel } from './triggers/types.js';
@@ -58,17 +57,10 @@ export function launchSentinel(host: SentinelHost): () => void {
     github: host.demo ? demoGitHub() : github(session, store),
     chat: chat(session, store),
     friends: friends(session),
-    // The demo's GitHub, Stripe, Sentry, sites and tunnel answer without the network.
+    // The demo's GitHub, Sentry, sites and tunnel answer without the network.
     triggers: host.demo ? demoTriggers(store) : triggers(session, store),
     fetchSource: sourceRows,
-    ...(services ? { fetch: services.fetch } : {}),
-    // The Stripe revenue recipe calls Stripe with the key Earnings keeps for the project.
-    serviceEnv: (projectId) => {
-      if (services) return services.env;
-      const root = projectId ? store.getState().projects.find((p) => p.id === projectId)?.root : undefined;
-      const key = root && !host.demo ? loadStripeFile().projects[root]?.key : undefined;
-      return key ? { STRIPE_EARNINGS_KEY: key } : {};
-    },
+    ...(services ? { fetch: services.fetch, serviceEnv: () => services.env } : {}),
   });
   attachSentinel(session, sentinels);
   const stopSeed = host.demo && !sentinels.list().length ? seedDemoSentinel(store, sentinels, (ms) => (back = ms)) : () => undefined;
@@ -99,17 +91,13 @@ async function sourceRows(source: Source, cwd: string, _signal: AbortSignal, opt
   return { rows: got.rows, columns: got.columns };
 }
 
-/** Where the event triggers look: gh, the web, Earnings' Stripe keys, your variables, a Cloudflare quick tunnel. */
+/** Where the event triggers look: gh, the web, your variables, a Cloudflare quick tunnel. */
 function triggers(session: Session, store: Store): Omit<TriggerDeps, 'store' | 'selfId'> {
   const rootOf = (id: string | undefined): string | undefined => (id ? store.getState().projects.find((p) => p.id === id)?.root : undefined);
   return {
     gh: runGhCli,
     repoOf: async (id) => session.workspaces?.mainSync.githubRepo(id),
     fetch: globalThis.fetch as unknown as FetchLike,
-    stripeKey: (id) => {
-      const root = rootOf(id);
-      return root ? loadStripeFile().projects[root]?.key : undefined;
-    },
     env: (id) => commandEnv(rootOf(id)),
     tunnel: cloudflareTunnel,
     // The daemon's start replays tasks, pull requests and plans: none of that is news.

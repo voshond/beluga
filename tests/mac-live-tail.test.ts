@@ -3,7 +3,8 @@ import type { LogItem, SubAgent } from '../src/core/store.js';
 import type { StepSummary } from '../src/shared/steps.js';
 import { READS_AFTER_STEP, STEERED_IN, STOPPING_FOR, steeredMessages } from '../src/shared/claude-notices.js';
 import { Store, initialState } from '../src/core/store.js';
-import { inHead, isLiveTurn, withLiveTails, workingPhase } from '../packages/mac/src/chat/live-tail.js';
+import { inHead, isLiveTurn, subInHead, withLiveTails, wordsOf, workingPhase } from '../packages/mac/src/chat/live-tail.js';
+import { marksOf } from '../src/core/store.js';
 
 /** A turn you spoke during goes on below what you said; once it ends it stays where it was drawn (BLG-22). */
 
@@ -228,5 +229,76 @@ describe('workingPhase', () => {
     expect(workingPhase(turn('c', 1, { status: 'done', text: 'ok' }))).toBeUndefined();
     expect(workingPhase(turn('c', 1, { status: 'awaiting_approval' }))).toBeUndefined();
     expect(workingPhase(turn('q', 1, { status: 'queued' }))).toBeUndefined();
+  });
+});
+
+describe('subInHead', () => {
+  const sub = (id: string, more: Partial<SubAgent> = {}): SubAgent => ({ id, title: id, steps: [], status: 'done', kind: 'background', startedAt: 1, ...more });
+
+  it('keeps background work that had finished before the cut (BLG-45)', () => {
+    expect(subInHead(sub('a', { endedAt: 3 }), 5)).toBe(true);
+    expect(subInHead(sub('b', { endedAt: 8 }), 5)).toBe(false);
+  });
+
+  it('never one still running, or one whose end it can’t place', () => {
+    expect(subInHead(sub('run', { status: 'running' }), 5)).toBe(false);
+    expect(subInHead(sub('old'), 5)).toBe(false);
+  });
+});
+
+describe('wordsOf', () => {
+  const text = 'Before.\n\nAfter.';
+  const marked = turn('c', 1, { text, textMarks: [{ at: 2, end: 7 }, { at: 8, end: text.length }] });
+
+  it('gives a split turn’s head what it wrote before the cut, its tail the rest (BLG-45)', () => {
+    expect(wordsOf(marked, { side: 'head', cut: 5 })).toBe('Before.');
+    expect(wordsOf(marked, { side: 'tail', cut: 5 })).toBe('After.');
+    expect(wordsOf(marked, { side: 'head', cut: 9 })).toBe(text);
+    expect(wordsOf(marked, { side: 'tail', cut: 9 })).toBe('');
+  });
+
+  it('a whole card has all its words, a live part none', () => {
+    expect(wordsOf(marked, undefined)).toBe(text);
+    expect(wordsOf(marked, { side: 'live', cut: 1 })).toBe('');
+  });
+
+  it('words it can’t place in time are the tail’s', () => {
+    expect(wordsOf(turn('c', 1, { text }), { side: 'head', cut: 9 })).toBe('');
+    expect(wordsOf(turn('c', 1, { text }), { side: 'tail', cut: 9 })).toBe(text);
+    expect(wordsOf(turn('c', 1, { text: 'Rewritten', textMarks: [{ at: 2, end: 7 }] }), { side: 'tail', cut: 9 })).toBe('Rewritten');
+  });
+});
+
+describe('marksOf', () => {
+  it('marks each stretch Claude writes with its time', () => {
+    const first = marksOf('', undefined, 'One.', 2);
+    expect(first).toEqual([{ at: 2, end: 4 }]);
+    expect(marksOf('One.', first, 'One.\n\nTwo.', 5)).toEqual([{ at: 2, end: 4 }, { at: 5, end: 10 }]);
+  });
+
+  it('an answer that’s the end of what it said keeps that end’s marks', () => {
+    const marks = [{ at: 2, end: 4 }, { at: 5, end: 10 }];
+    expect(marksOf('One.\n\nTwo.', marks, 'Two.', undefined)).toEqual([{ at: 5, end: 4 }]);
+    expect(marksOf('One.\n\nTwo.', marks, 'One.\n\nTwo.', undefined)).toBe(marks);
+  });
+
+  it('leaves words it can’t place unmarked', () => {
+    expect(marksOf('One.', [{ at: 2, end: 4 }], 'Other words', undefined)).toBeUndefined();
+    expect(marksOf('Old words', undefined, 'Old words\n\nNew.', 5)).toBeUndefined();
+  });
+
+  it('the store keeps them as Claude writes, and ends background work with a time', () => {
+    const store = new Store(initialState('room', 'auto'));
+    const ev = (event: 'started' | 'text' | 'sub' | 'done', text: string, ts: number) => store.dispatch({ type: 'agent_event', owner: 'me', requestId: 'r', requester: 'me', event, text, ts, channel: 'ws:1' });
+    ev('started', '', 1);
+    ev('text', 'Looking.', 2);
+    ev('sub', JSON.stringify({ id: 'bg', phase: 'start', title: 'npm test', kind: 'background' }), 3);
+    ev('sub', JSON.stringify({ id: 'bg', phase: 'done' }), 4);
+    ev('text', 'Found it.', 6);
+    ev('done', 'Found it.', 7);
+    const card = store.getState().log.find((l): l is Agent => l.type === 'agent')!;
+    expect(card.text).toBe('Found it.');
+    expect(card.textMarks).toEqual([{ at: 6, end: 9 }]);
+    expect(card.subagents[0]).toMatchObject({ status: 'done', endedAt: 4 });
   });
 });
