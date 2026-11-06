@@ -365,6 +365,11 @@ export class Plans {
   }
 
   /** Its epics on the board (see epics.ts). */
+  setBoard(id: string, board: string): Plan {
+    const plan = this.need(id);
+    return plan.board === board ? plan : this.change(plan, { board }, []);
+  }
+
   setEpics(id: string, epics: PlanEpics): Plan {
     const plan = this.need(id);
     if (JSON.stringify(plan.epics) === JSON.stringify(epics)) return plan;

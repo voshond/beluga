@@ -290,6 +290,8 @@ export interface Plan {
   readonly projectId: string;
   /** Every repo it covers (project ids, primary first); absent, only projectId. */
   readonly repos?: readonly string[];
+  /** A plan across repos: the board its tasks go on (one covering its repos, BLG-12); absent, each repo's own. */
+  readonly board?: string;
   /** The conversation it's planned and run from (`ws:<id>`): its head Claude. */
   readonly home: string;
   readonly status: PlanStatus;

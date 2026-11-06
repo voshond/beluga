@@ -7,7 +7,7 @@ import type { CombineResult } from '../../workspaces/git.js';
 import type { Intent } from '../intents.js';
 import type { LogItem, Store } from '../store.js';
 import type { WorkspaceController } from '../workspace-controller.js';
-import { ApplyError, applyDraft } from './apply.js';
+import { ApplyError, applyDraft, planBoard } from './apply.js';
 import { dropEpics, syncEpics } from './epics.js';
 import type { BodyInput, PlanOp, TaskInput } from './edit.js';
 import { type Autonomy, MAX_PLAN_REPOS, type Plan, type TestsAt, allTasks, checkerOf, isMultiRepo, planForHome, planRepos, planTaskOfIssue, planTitle } from './model.js';
@@ -154,6 +154,14 @@ export class PlansWork {
     return plan;
   }
 
+  /** What a new board for a plan across repos is called: the sidebar group holding all its repos, else the plan's title. */
+  private boardNameFor(plan: Plan): string {
+    const state = this.deps.store.getState();
+    const roots = this.repoInfos(plan).map((r) => r.root);
+    const group = (state.projectGroups ?? []).find((g) => roots.every((root) => root && g.projects.includes(root)));
+    return group?.name ?? planTitle(plan);
+  }
+
   /** A plan's repos as the planner sees them: name and main folder (primary first). */
   private repoInfos(plan: Plan): readonly PlanRepoInfo[] {
     const projects = this.deps.store.getState().projects;
@@ -241,7 +249,8 @@ export class PlansWork {
     if (open.length && !opts.anyway) throw new Error(`${open.length === 1 ? 'A question is' : `${open.length} questions are`} still open: ${open.map((q) => `“${q}”`).join(', ')}. Answer ${open.length === 1 ? 'it' : 'them'} in the plan’s conversation, or approve anyway.`);
     let applied: ReturnType<typeof applyDraft>;
     try {
-      applied = applyDraft(plan, this.deps.board.board, { by, me: this.deps.board.me() });
+      const boardId = planBoard(plan, this.deps.board.board, this.boardNameFor(plan));
+      applied = applyDraft(boardId ? this.plans.setBoard(id, boardId) : plan, this.deps.board.board, { by, me: this.deps.board.me() });
     } catch (err) {
       // What was made stays linked to the draft, so approving again doesn't make it twice.
       if (err instanceof ApplyError) this.plans.linkDraft(id, err.linked);
