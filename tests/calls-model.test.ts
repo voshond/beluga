@@ -259,7 +259,8 @@ describe('calls you missed', () => {
       store.add(one);
       store.add(one);
       expect(seen[one.conversation]).toHaveLength(1);
-      expect(statSync(file).mode & 0o777).toBe(0o600);
+      // Windows has no Unix modes: the user profile's own ACL keeps it private there.
+      if (process.platform !== 'win32') expect(statSync(file).mode & 0o777).toBe(0o600);
       for (let i = 0; i < 25; i++) store.add({ ...one, id: i.toString(16).padStart(16, '0'), at: at - 1000 + i });
       // After a restart they're still there.
       const again = new MissedCalls({ file, now: () => at, publish: () => undefined });

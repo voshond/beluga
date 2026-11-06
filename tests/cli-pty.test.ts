@@ -88,10 +88,7 @@ async function pairThrough(term: ReturnType<typeof terminal>) {
 }
 
 async function pairing(term: ReturnType<typeof terminal>) {
-  const code = (await waitFor(() => /type this code on the phone: ([0-9A-Z-]{14})/.exec(term.text()), 20_000))[1]!;
-  const p = phone();
-  const paired = pairDevice(p.node, code, p.device, { timeoutMs: 60_000 }).catch((err: Error) => err);
-  await waitFor(() => term.text().includes('Pair? [y/N]'), 30_000);
+  const p = await askedToPair(term);
   // While it asks, the terminal is as the person left it: lines, echo, Ctrl+C a signal. readline's
   // raw mode (a tcsetattr that waits for the terminal to take all output, then blocking redraws)
   // held the whole command when the terminal was slow to read, over ssh -tt (BLG-681).
@@ -100,8 +97,40 @@ async function pairing(term: ReturnType<typeof terminal>) {
   // Some time at the prompt, as a person takes: the countdown and the link go on meanwhile.
   await new Promise((r) => setTimeout(r, 1500));
   term.type('y\r');
-  await waitFor(() => term.text().includes('Paired with Pixel 9'), 20_000);
-  return paired;
+  await waitFor(() => (p.keepTrying('after Pair?'), term.text().includes('Paired with Pixel 9')), 30_000);
+  return p.paired();
+}
+
+/** How many times the phone dials before the test gives up on it. */
+const PHONE_TRIES = 4;
+
+/**
+ * The phone types the code the terminal shows; resolves once the terminal asks Pair?. Like the
+ * app, it dials again when a try fails (the Mac waits on its newest link, BLG-674): on a busy
+ * machine one try can time out on the testnet, or its link drop, while the terminal waits.
+ */
+async function askedToPair(term: ReturnType<typeof terminal>) {
+  const code = (await waitFor(() => /type this code on the phone: ([0-9A-Z-]{14})/.exec(term.text()), 20_000))[1]!;
+  const { node, device } = phone();
+  let tries = 0;
+  let failed: Error | undefined;
+  let latest: Promise<Error | Awaited<ReturnType<typeof pairDevice>>>;
+  const dial = (): void => {
+    const n = ++tries;
+    failed = undefined;
+    latest = pairDevice(node, code, device, { timeoutMs: 60_000 }).catch((err: Error) => {
+      if (n === tries) failed = err;
+      return err;
+    });
+  };
+  const keepTrying = (when: string): void => {
+    if (!failed) return;
+    if (tries >= PHONE_TRIES) throw new Error(`the phone gave up ${when}, after ${tries} tries: ${failed.message}`);
+    dial();
+  };
+  dial();
+  await waitFor(() => (keepTrying('before Pair?'), term.text().includes('Pair? [y/N]')), 75_000);
+  return { paired: () => latest, keepTrying };
 }
 
 function normalMode(text: string): void {
@@ -119,22 +148,19 @@ describe.skipIf(process.platform === 'win32')('in a real terminal', () => {
     expect(await term.exited).toBe(0);
     expect(await paired).not.toBeInstanceOf(Error);
     normalMode(term.text());
-  }, 90_000);
+  }, 150_000);
 
   it('`beluga pair`: Ctrl+C at Pair? cancels cleanly', async () => {
     const d = await startHere();
     const term = terminal('pair');
-    const code = (await waitFor(() => /type this code on the phone: ([0-9A-Z-]{14})/.exec(term.text()), 20_000))[1]!;
-    const p = phone();
-    const paired = pairDevice(p.node, code, p.device, { timeoutMs: 60_000 }).catch((err: Error) => err);
-    await waitFor(() => term.text().includes('Pair? [y/N]'), 30_000);
+    const p = await askedToPair(term);
     term.type('\x03');
     expect(await term.exited).toBe(130);
     expect(term.text()).toContain('Pairing cancelled');
-    expect(await paired).toBeInstanceOf(Error);
+    expect(await p.paired()).toBeInstanceOf(Error);
     expect(d.core.session.store.getState().companion.pairing).toBeUndefined();
     normalMode(term.text());
-  }, 90_000);
+  }, 150_000);
 
   it('`beluga setup`: the phone step pairs with y in the same terminal', async () => {
     await startHere();
@@ -148,7 +174,7 @@ describe.skipIf(process.platform === 'win32')('in a real terminal', () => {
     expect(await term.exited).toBe(0);
     expect(await paired).not.toBeInstanceOf(Error);
     normalMode(term.text());
-  }, 120_000);
+  }, 180_000);
 
   it('`beluga setup`: Ctrl+C at Pair? stops setup, closes the pairing, leaves the terminal as it was', async () => {
     const d = await startHere();
@@ -156,16 +182,13 @@ describe.skipIf(process.platform === 'win32')('in a real terminal', () => {
     const term = terminal('setup');
     await waitFor(() => term.text().includes('A first project'), 30_000);
     term.type('\r');
-    const code = (await waitFor(() => /type this code on the phone: ([0-9A-Z-]{14})/.exec(term.text()), 20_000))[1]!;
-    const p = phone();
-    const paired = pairDevice(p.node, code, p.device, { timeoutMs: 60_000 }).catch((err: Error) => err);
-    await waitFor(() => term.text().includes('Pair? [y/N]'), 30_000);
+    const p = await askedToPair(term);
     term.type('\x03');
     expect(await term.exited).toBe(130);
     expect(term.text()).toContain('Setup stopped');
     expect(term.text()).not.toContain('Keep Beluga running');
-    expect(await paired).toBeInstanceOf(Error);
+    expect(await p.paired()).toBeInstanceOf(Error);
     expect(d.core.session.store.getState().companion.pairing).toBeUndefined();
     normalMode(term.text());
-  }, 120_000);
+  }, 180_000);
 });
