@@ -4,7 +4,7 @@ import type { Sentinel } from '../model.js';
 
 /**
  * Event triggers (docs/sentinel.md §1, phase 3): what each kind needs, what it tells its sentinel,
- * and the polling loop the polled kinds share (GitHub, Stripe, uptime, Sentry). Each kind is one
+ * and the polling loop the polled kinds share (GitHub, uptime, Sentry). Each kind is one
  * file with a `start(trigger, ctx, deps)` that returns its stop; what it saw last is its cursor,
  * which the sentinel's file keeps, so a restart neither fires twice nor misses what came meanwhile.
  */
@@ -44,8 +44,6 @@ export interface TriggerDeps {
   /** A project's GitHub repository (none: not on GitHub). */
   readonly repoOf?: (projectId: string) => Promise<GitHubRepo | undefined>;
   readonly fetch?: FetchLike;
-  /** A project's Stripe key from Earnings (~/.beluga/stripe.json), or none. */
-  readonly stripeKey?: (projectId: string) => string | undefined;
   /** Your variables (Settings › Environment) for a project, or yours with none. */
   readonly env?: (projectId: string | undefined) => Record<string, string>;
   /** Makes the webhook server public: a Cloudflare quick tunnel (none: the webhook kind has no address). */

@@ -22,7 +22,7 @@
 .dragging [role='button']:hover {
   background: transparent;
 }
-.dragging [role='button'] button:not([data-earnings-pill]) {
+.dragging [role='button'] button {
   opacity: 0 !important;
 }
 
@@ -195,11 +195,4 @@
 }
 .foldButton:hover .disclosure {
   color: var(--text);
-}
-/* Hovering a project row: its tools take the earnings' place (the amount comes back after), so
-   nothing slides under the pointer while you aim at the name. */
-.tree [data-drag]:hover [data-earnings-pill],
-.tree [data-drag]:focus-visible [data-earnings-pill],
-.tree [data-drag]:has(:focus-visible) [data-earnings-pill] {
-  display: none;
 }

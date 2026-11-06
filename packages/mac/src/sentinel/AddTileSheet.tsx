@@ -16,7 +16,7 @@ import { ASSISTANT_TITLE } from '@beluga/shared/assistant.js';
  * Add to the board (BLG-308). One box on top: say what you want to see and your Claude puts it
  * together (setting up a draft sentinel that fetches it when none does yet). Or pick it below. On the
  * left, what your sentinels already keep (numbers with their value now, kept arrays and rows, what a
- * step said last, a sentinel's report) and somewhere new (Stripe, GitHub, a database, a URL, a
+ * step said last, a sentinel's report) and somewhere new (GitHub, a database, a URL, a
  * script: Claude sets up the fetching for you). On the right, how to show it as pictures, its size as
  * shapes, a title, and the tile as it will look. A tile names a sentinel and what it keeps, never its source.
  */
@@ -143,7 +143,7 @@ export function AddTileSheet({ dashboardId, close }: { dashboardId: string; clos
             {NEW_SOURCES.map((src) => (
               <button key={src.id} type="button" role="option" aria-selected={keyOf(pick) === `n:${src.id}`} className={x.item} onClick={() => (setPick({ kind: 'new', source: src.id }), setWhat(''))} data-source={src.id}>
                 <span className={x.mark} data-source={src.id}>
-                  <Icon name={src.id === 'stripe' ? 'coin' : src.id === 'github' ? 'pr' : src.id === 'database' ? 'table' : src.id === 'url' ? 'globe' : 'terminal'} size={11} />
+                  <Icon name={src.id === 'github' ? 'pr' : src.id === 'database' ? 'table' : src.id === 'url' ? 'globe' : 'terminal'} size={11} />
                 </span>
                 <span className={x.itemText}>{src.label}</span>
                 <span className={x.value}>{src.hint}</span>

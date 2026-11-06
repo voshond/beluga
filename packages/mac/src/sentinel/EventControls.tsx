@@ -1,5 +1,5 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
-import type { BelugaTrigger, GitHubTrigger, Sentinel, SentryTrigger, StripeTrigger, Trigger, UptimeTrigger, WebhookAddress, WebhookTrigger } from '@beluga/core/sentinel/model.js';
+import type { BelugaTrigger, GitHubTrigger, Sentinel, SentryTrigger, Trigger, UptimeTrigger, WebhookAddress, WebhookTrigger } from '@beluga/core/sentinel/model.js';
 import { TextInput } from '../components/FormSheet.js';
 import { Icon } from '../components/Icon.js';
 import { Select } from '../components/Select.js';
@@ -14,7 +14,7 @@ import s from './sentinel.module.css';
 /**
  * The When card for events (docs/sentinel.md §3): the kind's events as cards (a radio group, the
  * arrows move), that kind's few fields, one sentence of what will happen, and what's in the way
- * (no gh, no Stripe key, no token, the tunnel) as a soft line with what to do.
+ * (no gh, no token, the tunnel) as a soft line with what to do.
  */
 
 type Save = (patch: { trigger: Trigger }) => void;
@@ -32,7 +32,6 @@ export function EventControls({ item, save }: { item: Sentinel; save: Save }) {
       {cards && 'what' in t ? <EventCards cards={cards} value={t.what} label="What starts it" onChange={(what) => set({ ...t, what } as Trigger)} /> : null}
       {t.kind === 'beluga' ? <BelugaFields t={t} set={set} /> : null}
       {t.kind === 'github' ? <GitHubFields t={t} set={set} repo={repo} hasProject={Boolean(item.projectId)} /> : null}
-      {t.kind === 'stripe' ? <StripeFields t={t} project={project?.name} /> : null}
       {t.kind === 'uptime' ? <UptimeFields t={t} set={set} /> : null}
       {t.kind === 'sentry' ? <SentryFields t={t} set={set} /> : null}
       {t.kind === 'webhook' ? <WebhookFields t={t} item={item} set={set} /> : null}
@@ -154,15 +153,6 @@ function GitHubFields({ t, set, repo, hasProject }: { t: GitHubTrigger; set: (t:
   );
 }
 
-function StripeFields({ project }: { t: StripeTrigger; project: string | undefined }) {
-  return (
-    <div className={s.controlRow}>
-      <span className={s.controlLabel}>Account</span>
-      <span className={s.staticValue}>{project ? `${project}’s Stripe, connected in Earnings` : 'Pick a project on the right'}</span>
-    </div>
-  );
-}
-
 function UptimeFields({ t, set }: { t: UptimeTrigger; set: (t: Trigger) => void }) {
   const [bad, setBad] = useState(false);
   const url = useDraft(t.url, (v) => {
@@ -239,7 +229,7 @@ function WebhookFields({ t, item, set }: { t: WebhookTrigger; item: Sentinel; se
     openSheet({
       kind: 'confirm',
       title: `A new secret for “${item.name}”?`,
-      message: 'Its URL and its signing secret change, and the old ones stop working at once: whatever posts to it (GitHub, Stripe) needs the new URL, and GitHub the new secret.',
+      message: 'Its URL and its signing secret change, and the old ones stop working at once: whatever posts to it (GitHub, anything else) needs the new URL, and GitHub the new secret.',
       confirm: 'Rotate Secret',
       destructive: true,
       run: () =>

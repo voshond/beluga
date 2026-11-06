@@ -122,11 +122,11 @@ export interface SentinelsDeps {
   /** How long a merge waits for your Merge (24 hours). */
   readonly approvalMs?: number;
   /**
-   * The event triggers' sources (gh, fetch, Stripe keys, your variables, the tunnel). Without
+   * The event triggers' sources (gh, fetch, your variables, the tunnel). Without
    * them no event trigger watches (the tests that don't test them, a CLI without the app).
    */
   readonly triggers?: Omit<TriggerDeps, 'store' | 'selfId'>;
-  /** Variables only Call a service steps get (the project's Earnings key as $STRIPE_EARNINGS_KEY). */
+  /** Variables only Call a service steps get (the demo's pretend keys). */
   readonly serviceEnv?: (projectId: string | undefined) => Record<string, string>;
   /** A view source run as you (Keep the numbers from a source): core/views/sources.ts fetchSource. */
   readonly fetchSource?: SourceFetch;
@@ -303,8 +303,7 @@ export class Sentinels {
             const secret = this.secrets[id];
             if (!s || s.paused || s.trigger.kind !== 'webhook' || !secret) return undefined;
             const signingSecret = this.signingSecrets[id];
-            const stripeSecret = s.trigger.signature === 'stripe' ? deps.triggers?.env?.(s.projectId).STRIPE_WEBHOOK_SECRET?.trim() : undefined;
-            return { secret, ...(signingSecret ? { signingSecret } : {}), ...(s.trigger.signature ? { signature: s.trigger.signature } : {}), ...(stripeSecret ? { stripeSecret } : {}) };
+            return { secret, ...(signingSecret ? { signingSecret } : {}), ...(s.trigger.signature ? { signature: s.trigger.signature } : {}) };
           },
         })
       : undefined;
@@ -443,7 +442,7 @@ export class Sentinels {
       ...(triggerChanged ? { lastScheduledAt: this.now() } : {}),
       updatedAt: this.now(),
     };
-    // Another trigger (or another project's GitHub, Stripe, board) watches from now: what the old one saw doesn't apply.
+    // Another trigger (or another project's GitHub, board) watches from now: what the old one saw doesn't apply.
     if (triggerChanged || projectId !== was.projectId) this.forgetCursor(next.id);
     this.replace(next);
     if (patch.steps) this.relabelNumbers(next);

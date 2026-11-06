@@ -25,7 +25,6 @@ import { launchChat } from '../core/chat/launch.js';
 import { launchCalls } from '../core/calls/launch.js';
 import { launchGateway } from '../core/gateway/launch.js';
 import { launchFriendShares } from '../core/friend-share/launch.js';
-import { launchEarnings } from '../core/stripe-launch.js';
 import { launchSupport } from '../core/merge-counter.js';
 import { claudeHome, launchClaudeCode } from '../core/claude-code/launch.js';
 import { launchCompanion } from '../companion/launch.js';
@@ -349,7 +348,6 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
   if (config.mode === 'join') session.system(`Joining ${room.room}…`);
 
   let stopNetwork = async (): Promise<void> => undefined;
-  let stopEarnings = (): void => undefined;
   let stopSupport = (): void => undefined;
   let stopClaudeCode = (): void => undefined;
   let stopGateway = (): void => undefined;
@@ -366,8 +364,6 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     // The Beluga network (friends, groups, presence): only the daemon runs it, and only when it's turned on.
     // It can be turned on and off later too (`network.setEnabled`).
     if (opts.network) stopNetwork = networkSwitch({ session, store, identity, name: config.name, dir: belugaHome(), demo: Boolean(demo), warn: (text) => session.system(text, 'warn') }, saved).stop;
-    // Earnings from Stripe per project (the Mac app shows them): the daemon counts them in the background.
-    if (opts.network) stopEarnings = launchEarnings({ session, store, demo: Boolean(demo) });
     // Merged work made in Beluga, counted once per branch: the first and fifth merge ask for a star and a coffee.
     if (opts.network) stopSupport = launchSupport({ session, store, demo: Boolean(demo), asks: belugaEnv('DEMO_ASKS') });
     // Claude Code sessions running outside Beluga (Conductor, a terminal): the Mac app shows them live, read-only.
@@ -433,7 +429,6 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     stopDialogues();
     await stopCompanion();
     await stopNetwork();
-    stopEarnings();
     stopSupport();
     stopClaudeCode();
     await session.stop();

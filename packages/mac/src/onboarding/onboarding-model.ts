@@ -22,7 +22,7 @@ export const FORCE_PARAM = 'welcome';
 /** The document event File › Onboard Again, Help › Welcome to Beluga and the palette send to show it again. */
 export const SHOW_WELCOME = 'beluga:welcome';
 
-const ALL_STEPS = ['hello', 'yourAgents', 'parallel', 'agents', 'tables', 'friends', 'sentinel', 'uses', 'earnings', 'archive', 'look', 'terminal', 'fire', 'setup', 'screen', 'accessibility', 'disk', 'automation', 'popups', 'phone', 'ready'] as const;
+const ALL_STEPS = ['hello', 'yourAgents', 'parallel', 'agents', 'tables', 'friends', 'sentinel', 'uses', 'archive', 'look', 'terminal', 'fire', 'setup', 'screen', 'accessibility', 'disk', 'automation', 'popups', 'phone', 'ready'] as const;
 export type Step = (typeof ALL_STEPS)[number];
 
 /** The steps on this computer: the macOS permissions only on a Mac (Linux and Windows don't ask). */
@@ -32,7 +32,7 @@ export const STEPS: readonly Step[] = keyPlatform() === 'mac' ? ALL_STEPS : ALL_
 export const LAST_SETTING: Step = 'phone';
 
 /** The tour: what Beluga does, one idea a step (Skip Tour goes past all of them). */
-export const TOUR: readonly Step[] = ['parallel', 'agents', 'tables', 'friends', 'sentinel', 'uses', 'earnings', 'archive'];
+export const TOUR: readonly Step[] = ['parallel', 'agents', 'tables', 'friends', 'sentinel', 'uses', 'archive'];
 
 /**
  * The macOS permissions, one a step, every one optional (Skip Permissions goes past all of them).

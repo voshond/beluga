@@ -11,7 +11,6 @@ import type { Bitmap } from '../image/bitmap.js';
 import { type CollabAction, type CollabState, initialCollab, reduceCollab } from './collab-store.js';
 import { type SearchState, type WorkAction, type WorkState, initialWork, reduceWork } from './work-store.js';
 import { type NetworkAction, type NetworkSlice, initialNetwork, reduceNetwork } from './network-store.js';
-import { type EarningsAction, type EarningsSlice, initialEarnings, reduceEarnings } from './earnings-store.js';
 import { type SupportAction, type SupportSlice, initialSupport } from './support-store.js';
 import { type ClaudeCodeAction, type ClaudeCodeSlice, initialClaudeCode, reduceClaudeCode } from './claude-code/model.js';
 import { type GatewayAction, type GatewaySlice, initialGateway, reduceGateway } from './gateway/model.js';
@@ -314,8 +313,6 @@ export interface Prefs {
   /** Your own flags for `claude` and `codex`, on your own runs (shared/agent-args.ts). */
   readonly claudeArgs: readonly string[];
   readonly codexArgs: readonly string[];
-  /** The currency every earnings total is shown in (lowercase ISO code; undefined: the one most was earned in). */
-  readonly earningsCurrency?: string;
 }
 
 export interface Transfer {
@@ -471,7 +468,7 @@ export interface MyShare {
  * Everything Beluga knows that isn't about a screen: the room, people, projects, conversations,
  * approvals… The core (the daemon) owns it and every client sees the same.
  */
-export interface DomainState extends CollabState, WorkState, NetworkSlice, EarningsSlice, SupportSlice, ClaudeCodeSlice, GatewaySlice, BoardSlice, SentinelSlice, PlansSlice, DialoguesSlice, CompanionSlice, FriendShareSlice, TeamSlice {
+export interface DomainState extends CollabState, WorkState, NetworkSlice, SupportSlice, ClaudeCodeSlice, GatewaySlice, BoardSlice, SentinelSlice, PlansSlice, DialoguesSlice, CompanionSlice, FriendShareSlice, TeamSlice {
   readonly room: string;
   readonly projects: readonly Project[];
   readonly projectGroups: readonly ProjectGroup[];
@@ -647,7 +644,6 @@ export type Action =
   | CollabAction
   | WorkAction
   | NetworkAction
-  | EarningsAction
   | ClaudeCodeAction
   | GatewayAction
   | FriendShareAction
@@ -698,7 +694,7 @@ export const DEFAULT_PREFS: Prefs = {
 
 /** The preference fields out of saved settings. */
 export function prefsFrom(settings: Partial<Settings>): Prefs {
-  const picked = Object.fromEntries(Object.keys(DEFAULT_PREFS).concat(['model', 'effort', 'defaultAgent', 'projectAgents', 'shell', 'earningsCurrency']).filter((k) => settings[k as keyof Settings] !== undefined).map((k) => [k, settings[k as keyof Settings]]));
+  const picked = Object.fromEntries(Object.keys(DEFAULT_PREFS).concat(['model', 'effort', 'defaultAgent', 'projectAgents', 'shell']).filter((k) => settings[k as keyof Settings] !== undefined).map((k) => [k, settings[k as keyof Settings]]));
   return { ...DEFAULT_PREFS, ...picked };
 }
 
@@ -740,7 +736,6 @@ export function initialState(room: string, policy: Policy = 'ask', prefs: Partia
     ...initialCollab,
     ...initialWork,
     ...initialNetwork,
-    ...initialEarnings,
     ...initialSupport,
     ...initialClaudeCode,
     ...initialGateway,
@@ -1233,9 +1228,6 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
       const { [action.channel]: _gone, ...rest } = state.btw ?? {};
       return { ...state, btw: action.btw ? { ...rest, [action.channel]: action.btw } : rest };
     }
-    case 'earnings':
-    case 'fx_rates':
-      return { ...state, ...reduceEarnings(state, action) };
     case 'claude_code':
     case 'codex_sessions':
       return ccFinished(state, { ...state, ...reduceClaudeCode(state, action) });

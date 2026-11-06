@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ACCESS, BELUGA_EVENTS, GITHUB_EVENTS, KEEP_CHATS, NOTIFY_WHERE, SENTRY_EVENTS, STRIPE_EVENTS } from './model.js';
+import { ACCESS, BELUGA_EVENTS, GITHUB_EVENTS, KEEP_CHATS, NOTIFY_WHERE, SENTRY_EVENTS } from './model.js';
 import { SOURCE_KINDS } from '../../shared/view-spec.js';
 import { LimitsSchema, MetricSpecSchema, ScheduleTriggerSchema } from './schema.js';
 import { ASSISTANT_TITLE } from '../../shared/assistant.js';
@@ -28,10 +28,9 @@ const TOOL_TRIGGER = z
     z.object({ kind: z.literal('after'), sentinelId: z.string().min(1).max(80).describe('The other sentinel’s id (sentinel_list)'), on: z.enum(['success', 'failure', 'always']) }),
     z.object({ kind: z.literal('beluga'), what: z.enum(BELUGA_EVENTS), projectId: z.string().max(80).optional() }).describe('Something in Beluga happened'),
     z.object({ kind: z.literal('github'), what: z.enum(GITHUB_EVENTS), label: z.string().max(64).optional().describe('For issue-labelled'), minutes: z.number().int().min(1).max(60).optional().describe('How often GitHub is asked (2 by default)') }).describe('The project’s GitHub repository'),
-    z.object({ kind: z.literal('stripe'), what: z.enum(STRIPE_EVENTS) }).describe('The project’s Stripe account (connected in Earnings)'),
     z.object({ kind: z.literal('uptime'), url: z.string().url().max(2000), minutes: z.union([z.literal(1), z.literal(5), z.literal(15)]), expect: z.number().int().min(100).max(599).optional() }).describe('Fires when the URL stops answering, and when it is back'),
     z.object({ kind: z.literal('sentry'), org: z.string().min(1).max(100), project: z.string().min(1).max(100), what: z.enum(SENTRY_EVENTS) }).describe('Needs $SENTRY_TOKEN in Settings › Environment'),
-    z.object({ kind: z.literal('webhook'), signature: z.enum(['github', 'stripe']).optional() }).describe('Something posts to its URL (shown on the sentinel’s page)'),
+    z.object({ kind: z.literal('webhook'), signature: z.enum(['github']).optional() }).describe('Something posts to its URL (shown on the sentinel’s page)'),
   ])
   .describe('When it runs');
 

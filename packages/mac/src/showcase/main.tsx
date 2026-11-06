@@ -9,7 +9,6 @@ import { EASE_OUT, Rise, Words } from '../onboarding/fx.js';
 import { Mark } from '../onboarding/Mark.js';
 import { Agents } from '../onboarding/scenes/Agents.js';
 import { Archive } from '../onboarding/scenes/Archive.js';
-import { Earnings } from '../onboarding/scenes/Earnings.js';
 import { Friends } from '../onboarding/scenes/Friends.js';
 import { Parallel } from '../onboarding/scenes/Parallel.js';
 import { Sentinel } from '../onboarding/scenes/Sentinel.js';
@@ -54,7 +53,6 @@ const SCENES: Record<string, () => ReactNode> = {
   friends: () => <Friends />,
   sentinel: () => <Sentinel />,
   uses: () => <SentinelUses />,
-  earnings: () => <Earnings />,
   archive: () => <Archive />,
 };
 

@@ -2,7 +2,6 @@ import type { Sentinel, Trigger, WebhookState } from '../model.js';
 import { startBeluga } from './beluga.js';
 import { startGitHub } from './github.js';
 import { startSentry } from './sentry.js';
-import { startStripe } from './stripe.js';
 import type { TriggerContext, TriggerDeps, TriggerEvent } from './types.js';
 import { startUptime } from './uptime.js';
 import { type HookOf, WebhookHub } from './webhook.js';
@@ -14,7 +13,7 @@ import { type HookOf, WebhookHub } from './webhook.js';
  * and all of them stopped with the daemon.
  */
 
-export const EVENT_KINDS: ReadonlySet<Trigger['kind']> = new Set(['beluga', 'github', 'stripe', 'uptime', 'sentry', 'webhook']);
+export const EVENT_KINDS: ReadonlySet<Trigger['kind']> = new Set(['beluga', 'github', 'uptime', 'sentry', 'webhook']);
 export const isEventTrigger = (t: Trigger): boolean => EVENT_KINDS.has(t.kind);
 
 export interface TriggersHost {
@@ -24,7 +23,7 @@ export interface TriggersHost {
   readonly fire: (sentinelId: string, event: TriggerEvent) => void;
   readonly trouble: (sentinelId: string, words: string | undefined) => void;
   readonly webhookState: (state: WebhookState) => void;
-  /** A webhook sentinel's secret, and Stripe's signing secret for its project. */
+  /** A webhook sentinel's secret and how its posts are signed. */
   readonly hook: (sentinelId: string) => HookOf | undefined;
 }
 
@@ -98,8 +97,6 @@ export class Triggers {
           return startBeluga(t, ctx, deps);
         case 'github':
           return startGitHub(t, ctx, deps);
-        case 'stripe':
-          return startStripe(t, ctx, deps);
         case 'uptime':
           return startUptime(t, ctx, deps);
         case 'sentry':

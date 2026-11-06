@@ -8,15 +8,13 @@ import { type TriggerEvent, type WebhookTunnel, clip, firstWords, isObj, str } f
  * Webhooks (docs/sentinel.md §1, §7): one local server (127.0.0.1, a random port) behind one
  * Cloudflare quick tunnel, open only while at least one webhook sentinel is on. A post to
  * `/hook/<sentinelId>/<secret>` starts that sentinel: the secret is compared in constant time, a
- * GitHub or Stripe signature is checked when the sentinel asks for it, bodies over 1 MB are
+ * GitHub signature is checked when the sentinel asks for it, bodies over 1 MB are
  * refused, at most 60 posts a minute per sentinel are taken, and everything else is a 404. No
  * answer ever says back what was posted.
  */
 
 export const MAX_BODY = 1024 * 1024;
 export const PER_MINUTE = 60;
-/** Stripe's signatures older (or newer) than this are refused. */
-export const STRIPE_TOLERANCE_S = 5 * 60;
 /** A tunnel that died (or never opened) is tried again after this long. */
 const RETRY_MS = 30_000;
 
@@ -37,27 +35,12 @@ export function githubSignatureOk(body: Buffer, header: string | undefined, secr
   return sameSecret(header, want);
 }
 
-/** Stripe's Stripe-Signature: "t=<seconds>,v1=<hex>[,v1=…]", the HMAC of "<t>.<body>", within 5 minutes of now. */
-export function stripeSignatureOk(body: Buffer, header: string | undefined, secret: string, nowMs: number): boolean {
-  if (!header) return false;
-  const parts = header.split(',').map((p) => p.trim().split('='));
-  const t = parts.find(([k]) => k === 't')?.[1];
-  const sigs = parts.filter(([k, v]) => k === 'v1' && v).map(([, v]) => v!);
-  const ts = Number(t);
-  if (!t || !Number.isFinite(ts) || !sigs.length) return false;
-  if (Math.abs(nowMs / 1000 - ts) > STRIPE_TOLERANCE_S) return false;
-  const want = createHmac('sha256', secret).update(`${t}.`).update(body).digest('hex');
-  return sigs.some((s) => sameSecret(s, want));
-}
-
 /** What a webhook sentinel the server knows needs: its secret, and how its posts are signed. */
 export interface HookOf {
   readonly secret: string;
   /** GitHub signs with this one (its webhook form's Secret, Copy Secret), never the URL's. */
   readonly signingSecret?: string;
   readonly signature?: WebhookTrigger['signature'];
-  /** Stripe signs with its own secret (whsec_…): $STRIPE_WEBHOOK_SECRET from Settings › Environment. */
-  readonly stripeSecret?: string;
 }
 
 export interface WebhookHubDeps {
@@ -94,10 +77,9 @@ export function webhookEvent(body: Buffer, headers: http.IncomingHttpHeaders): T
   }
   const gh = head['x-github-event'];
   const action = isObj(parsed) ? str(parsed.action) : undefined;
-  const stripeType = headers['stripe-signature'] && isObj(parsed) ? str(parsed.type) : undefined;
-  const summary = gh ? `Webhook from GitHub: ${gh}${action ? ` (${action})` : ''}` : stripeType ? `Webhook from Stripe: ${stripeType}` : head['x-gitlab-event'] ? `Webhook from GitLab: ${head['x-gitlab-event']}` : 'Webhook: something posted';
+  const summary = gh ? `Webhook from GitHub: ${gh}${action ? ` (${action})` : ''}` : head['x-gitlab-event'] ? `Webhook from GitLab: ${head['x-gitlab-event']}` : 'Webhook: something posted';
   // A big body (up to 1 MB comes in) is kept as the start of its JSON, at most 64 KB, marked truncated.
-  return { summary: clip(summary, 120), payload: capPayload({ headers: head, ...(gh ? { event: gh } : stripeType ? { event: stripeType } : {}), body: parsed }) };
+  return { summary: clip(summary, 120), payload: capPayload({ headers: head, ...(gh ? { event: gh } : {}), body: parsed }) };
 }
 
 /** The local server and its tunnel, for every webhook sentinel that's on. */
@@ -288,10 +270,6 @@ export class WebhookHub {
         return typeof v === 'string' ? v : undefined;
       };
       if (hook.signature === 'github' && (!hook.signingSecret || !githubSignatureOk(body, header('x-hub-signature-256'), hook.signingSecret))) return answer(401, 'The signature doesn’t match');
-      if (hook.signature === 'stripe') {
-        if (!hook.stripeSecret) return answer(401, 'Stripe’s signing secret isn’t set here');
-        if (!stripeSignatureOk(body, header('stripe-signature'), hook.stripeSecret, (this.deps.now ?? Date.now)())) return answer(401, 'The signature doesn’t match');
-      }
       try {
         this.deps.fire(id, webhookEvent(body, req.headers));
       } catch {

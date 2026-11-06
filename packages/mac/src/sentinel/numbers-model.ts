@@ -286,7 +286,6 @@ export const sizeFor = (look: TileLook): TileSizeId => (look === 'number' ? 'sma
 
 /** Somewhere a tile can come from that no sentinel fetches yet: Claude sets one up (a draft) when you pick it. */
 export const NEW_SOURCES = [
-  { id: 'stripe', label: 'Stripe', hint: 'revenue, payments', ideas: ['Revenue per day', 'New subscriptions this week', 'Failed payments'] },
   { id: 'github', label: 'GitHub', hint: 'pull requests, issues, CI', ideas: ['Open pull requests', 'Open issues', 'Failed CI runs this week'] },
   { id: 'database', label: 'A database', hint: 'Supabase, Postgres, SQLite', ideas: ['Sign-ups per day', 'Rows added yesterday', 'The latest 10 orders'] },
   { id: 'url', label: 'A URL or an API', hint: 'any JSON', ideas: ['A number from a JSON API', 'Whether my site answers'] },

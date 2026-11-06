@@ -105,11 +105,11 @@ describe('Sentinel as one page', () => {
 
   it('starting points come grouped by what you get, a few in each', () => {
     const r = (id: string): Recipe => ({ id, name: id, icon: 'clock', line: '', sentinel: { name: id } });
-    const groups = startingPoints(['morning-brief', 'fix-what-broke', 'stripe-revenue', 'site-speed', 'uptime-guard'].map(r), 1);
+    const groups = startingPoints(['morning-brief', 'fix-what-broke', 'site-speed', 'uptime-guard'].map(r), 1);
     expect(groups.map((g) => [g.label, g.recipes.map((x) => x.id)])).toEqual([
       ['Tell me', ['morning-brief']],
       ['Fix it', ['fix-what-broke']],
-      ['Keep a number', ['stripe-revenue']],
+      ['Keep a number', ['site-speed']],
     ]);
   });
 });
@@ -129,6 +129,6 @@ describe('the board', () => {
     expect(looksFor('rows')).toEqual(['table']);
     expect(looksFor('step')).toEqual(['text']);
     expect([sizeFor('number'), sizeFor('line'), sizeFor('text')]).toEqual(['small', 'half', 'big']);
-    expect(newSourceAsk('stripe', ' Revenue per day ')).toBe('Add a tile from Stripe: Revenue per day. If no sentinel fetches it yet, set one up (a draft) that does.');
+    expect(newSourceAsk('github', ' Open pull requests ')).toBe('Add a tile from GitHub: Open pull requests. If no sentinel fetches it yet, set one up (a draft) that does.');
   });
 });
