@@ -5,11 +5,11 @@ import type { BoardWork } from '../board/work.js';
 import type { Action, Store } from '../store.js';
 import { openMilestone } from './apply.js';
 import { openMilestoneEpic } from './epics.js';
-import { type Plan, type PlanMerge, type PlanMilestone, allTasks, isMultiRepo, openMilestones, planBranchFor, planBranchName, planRepos } from './model.js';
+import { type MilestoneAlong, type Plan, type PlanMerge, type PlanMilestone, allTasks, isMultiRepo, milestoneRepos, openMilestones, planBranchFor, planBranchName, planRepos } from './model.js';
 import type { PlanGit } from './plan-git.js';
 import type { Plans } from './plans.js';
 import { FINISHED, type MilestoneView, type PlanView, type TaskState, type TaskView, agentTasks, agentsAtWork, liveFrom, planView, startable, tidyOffer, waitingOnYou } from './progress.js';
-import { checkFailedPrompt, checkNudgePrompt, checkPrompt, criteriaNeedCheck, fixupPrompt, mainFixupPrompt, mergeFixupPrompt, milestoneNextPrompt, milestonePrompt, recapPrompt, stuckPrompt } from './prompt.js';
+import { checkFailedPrompt, checkNudgePrompt, checkPrompt, criteriaNeedCheck, fixupPrompt, mainFixupPrompt, mergeFixupPrompt, milestoneNextPrompt, milestonePrompt, milestoneWhere, recapPrompt, stuckPrompt } from './prompt.js';
 import { TaskWatchdog } from './watchdog.js';
 import { PLAN_PR_FAST_MS, PLAN_PR_FOCUS_FRESH_MS, planPrCadence } from './pr-cadence.js';
 import { pace } from '../power-saver.js';
@@ -867,17 +867,22 @@ export class PlanPilot {
       const base = first.bases?.length ? planBranchFor(plan, first.issue.projectId) : first.base;
       // The agent you started it with (BLG-506), else the plan's (BLG-497); none: your default.
       const agent = pick ?? plan.agent;
-      const ws = await this.deps.work.startShared(ids, `${first.issue.key} ${m.milestone.title}`, { quiet: true, ...(base ? { base } : {}), ...(agent ? { agent } : {}) });
-      const fresh = this.deps.plans.setAgent(plan.id, milestoneId, { worktree: ws.id, ...(ws.branch ? { branch: ws.branch } : {}), at: Date.now(), tasks: ordered.map((t) => t.task.id) });
+      const name = `${first.issue.key} ${m.milestone.title}`;
+      const ws = await this.deps.work.startShared(ids, name, { quiet: true, ...(base ? { base } : {}), ...(agent ? { agent } : {}) });
+      // A milestone across repos: a worktree in each of its other repos too, its agent working in all of them.
+      const along = await this.alongside(plan, m.milestone, first.issue.projectId, name, agent);
+      const fresh = this.deps.plans.setAgent(plan.id, milestoneId, { worktree: ws.id, ...(ws.branch ? { branch: ws.branch } : {}), at: Date.now(), tasks: ordered.map((t) => t.task.id), ...(along.length ? { along } : {}) });
       const keys = ordered.map((t) => t.issue!.key);
-      const said = `started one agent for “${m.milestone.title}” (${keys.join(', ')}) in a new worktree${base ? ` from ${base}` : ''}`;
+      const repos = isMultiRepo(plan) ? ` in ${[first.issue.projectId, ...along.map((a) => a.projectId)].map((r) => this.repoName(r)).join(' and ')}` : '';
+      const said = `started one agent for “${m.milestone.title}” (${keys.join(', ')})${repos} in a new worktree${base ? ` from ${base}` : ''}`;
       this.deps.plans.note(plan.id, 'started', said, by);
       const now = this.view(fresh);
       const mv = now.milestones.find((x) => x.milestone.id === milestoneId)!;
       const channel = `ws:${ws.id}`;
       const after = this.after(channel);
       const all = new Map(mv.tasks.map((t) => [t.task.id, t]));
-      this.deps.askClaude(milestonePrompt(now, mv, ordered.map((t) => all.get(t.task.id) ?? t), { only: Boolean(only) || mv.autonomy === 'step', ...(base ? { base } : {}) }), channel, false);
+      const where = milestoneWhere(fresh, mv.milestone, fresh.runs[milestoneId]?.agent, this.deps.store.getState().projects);
+      this.deps.askClaude(milestonePrompt(now, mv, ordered.map((t) => all.get(t.task.id) ?? t), { only: Boolean(only) || mv.autonomy === 'step', ...(base ? { base } : {}), ...(where ? { where } : {}) }), channel, false);
       this.sentOn.set(key, { sig: first.issue.id, ...after, count: 0 });
       this.handed.delete(key);
       return said.charAt(0).toUpperCase() + said.slice(1);
@@ -890,6 +895,32 @@ export class PlanPilot {
       this.launching.delete(key);
       this.schedule();
     }
+  }
+
+  /**
+   * A milestone's worktrees in its other repos (`here` is its tasks'), each from that repo's plan
+   * branch. Ones from before that are still there are kept (a restarted agent goes on with them);
+   * one that can't be made is said, and its agent works without it.
+   */
+  private async alongside(plan: Plan, milestone: PlanMilestone, here: string, name: string, agent: AgentRef | undefined): Promise<MilestoneAlong[]> {
+    const was = plan.runs[milestone.id]?.agent?.along ?? [];
+    const live = (id: string): boolean => this.deps.store.getState().projects.some((p) => p.workspaces.some((w) => w.id === id && !w.archived));
+    const out: MilestoneAlong[] = [];
+    for (const repo of milestoneRepos(plan, milestone).filter((r) => r !== here)) {
+      const kept = was.find((a) => a.projectId === repo && live(a.worktree));
+      if (kept) {
+        out.push(kept);
+        continue;
+      }
+      const base = planBranchFor(plan, repo);
+      try {
+        const ws = await this.deps.work.startAlongside(repo, name, { ...(base ? { base } : {}), ...(agent ? { agent } : {}) });
+        out.push({ projectId: repo, worktree: ws.id, ...(ws.branch ? { branch: ws.branch } : {}) });
+      } catch (err) {
+        this.deps.plans.note(plan.id, 'problem', `couldn’t make “${milestone.title}”’s worktree in ${this.repoName(repo)}: ${err instanceof Error ? err.message : String(err)}; its agent works without it`, { kind: 'beluga' });
+      }
+    }
+    return out;
   }
 
   /** One open milestone: a new round when work came back, its check when it's finished, its pass on autopilot. */
@@ -1417,14 +1448,16 @@ export class PlanPilot {
       }
       tasks = left;
     }
-    const repos = [...new Set(tasks.map((t) => t.issue!.projectId))];
+    // A milestone across repos: its agent's worktrees in the other repos merge into theirs too.
+    const along = tasks.length ? (plan.runs[milestoneId]?.agent?.along ?? []).filter((a) => a.branch && planBranchFor(plan, a.projectId)) : [];
+    const repos = [...new Set([...tasks.map((t) => t.issue!.projectId), ...along.map((a) => a.projectId)])];
     for (const repo of repos) {
       const into = planBranchFor(plan, repo)!;
       const mine = tasks.filter((t) => t.issue!.projectId === repo);
       let res: CombineResult;
       try {
         // A milestone's one Claude: its tasks share one branch per repo, merged once (one already in is skipped).
-        res = await git.mergeInto(repo, into, [...new Set(mine.map((t) => t.issue!.branch!))]);
+        res = await git.mergeInto(repo, into, [...new Set([...mine.map((t) => t.issue!.branch!), ...along.filter((a) => a.projectId === repo).map((a) => a.branch!)])]);
       } catch (err) {
         // Not a conflict (a dirty checkout, no git identity): kept on the milestone (its gate says why), and you pass it again.
         const why = err instanceof Error ? err.message : String(err);
@@ -1458,12 +1491,12 @@ export class PlanPilot {
     for (const t of tasks) this.deps.work.board.planMoved(t.issue!.id, 'in_plan', `merged into ${branch}: “${m.milestone.title}” passed`);
     this.deps.plans.setMerging(planId, milestoneId, undefined);
     for (const repo of repos) {
-      const keys = tasks.filter((t) => t.issue!.projectId === repo).map((t) => t.issue!.key);
-      this.deps.plans.note(planId, 'passed', `merged ${keys.join(', ')} into ${this.branchIn(plan, repo)}`, beluga);
+      const what = [...tasks.filter((t) => t.issue!.projectId === repo).map((t) => t.issue!.key), ...along.filter((a) => a.projectId === repo).map((a) => a.branch!)];
+      this.deps.plans.note(planId, 'passed', `merged ${what.join(', ')} into ${this.branchIn(plan, repo)}`, beluga);
     }
     if (!merge.catchUp) this.passed(planId, milestoneId, merge.by);
     // Cleared away in the background: the next merge (another milestone passed) doesn't wait for archiving.
-    void this.retireAll(plan, tasks);
+    void this.retireAll(plan, tasks, along);
   }
 
   /** A repo's plan branch, said with the repo's name when the plan has several. */
@@ -1473,7 +1506,12 @@ export class PlanPilot {
   }
 
   /** Merged tasks' worktrees archived and branches deleted against their repo's plan branch (a shared one once). */
-  private async retireAll(plan: Plan, tasks: readonly TaskView[]): Promise<void> {
+  private async retireAll(plan: Plan, tasks: readonly TaskView[], along: readonly MilestoneAlong[] = []): Promise<void> {
+    for (const a of along) {
+      await this.deps.git!.retire(a.projectId, a.worktree, a.branch, planBranchFor(plan, a.projectId)!).catch((err: unknown) => {
+        this.deps.plans.note(plan.id, 'problem', `couldn’t clear away the worktree in ${this.repoName(a.projectId)}: ${err instanceof Error ? err.message : String(err)}`, { kind: 'beluga' });
+      });
+    }
     const done = new Set<string>();
     for (const t of tasks) {
       const repo = t.issue!.projectId;

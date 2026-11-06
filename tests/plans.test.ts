@@ -1435,12 +1435,55 @@ describe('soak: a long plan on Autopilot reaches the end by itself, with Claudes
     ],
   } as BodyInput;
 
+  /** The same plan in two repos (BLG-14): B and D in calendar-api, D building on A's C, E spanning both. */
+  const ACROSS: BodyInput = { ...LONG, milestones: LONG.milestones.map((m) => ({ ...m, ...(m.id === 'b' || m.id === 'd' ? { repos: ['cal'] } : m.id === 'e' ? { repos: ['cal', 'api'] } : {}) })) } as BodyInput;
+
+  /** A git where every merge goes in: each step with its repo. */
+  const okGit = () => {
+    const steps: string[] = [];
+    const git: PlanGit = {
+      ensureBranch: async (p, b) => (steps.push(`ensure ${p} ${b}`), { made: true }),
+      mergeInto: async (p, into, branches) => (steps.push(`merge ${p} ${into} ← ${branches.join(' ')}`), { ok: true, branch: into }),
+      inMain: async () => false,
+      retire: async (p, _ws, branch) => void steps.push(`retire ${p} ${branch ?? '-'}`),
+      findPr: async () => undefined,
+      openPr: async () => {
+        throw new Error('no');
+      },
+      push: async () => undefined,
+      mainRef: async () => 'origin/main',
+      mergePr: async () => undefined,
+      mergeLocal: async () => ({ ok: true }),
+    };
+    return { git, steps };
+  };
+
   it('Claudes that stop after one task or never answer, checks without a verdict, and a restart: it still gets there, never left to you', async () => {
+    await soak(LONG);
+  });
+
+  it('across two repos with plan branches: milestones run in their repos, a spanning one in both, and it still gets there', async () => {
+    const g = okGit();
+    const t = await soak(ACROSS, { git: g.git, repos: ['api', 'cal'] });
+    const done = t.plans.need(t.planId);
+    expect(done.branches).toEqual({ api: 'plan/long-run', cal: 'plan/long-run' });
+    const repoOf = (id: string) => t.store.getState().projects.flatMap((p) => p.workspaces).find((w) => w.id === id)?.projectId;
+    expect(['a', 'b', 'c', 'd', 'e'].map((m) => repoOf(done.runs[m]!.agent!.worktree))).toEqual(['api', 'cal', 'api', 'cal', 'cal']);
+    expect(done.runs.e!.agent!.along?.map((a) => a.projectId)).toEqual(['api']);
+    // Each milestone merged into its own repo's branch only; E into both.
+    const merges = g.steps.filter((s) => s.startsWith('merge'));
+    expect(merges.some((s) => s.startsWith('merge cal') && s.includes(t.issue('B one').branch!))).toBe(true);
+    expect(merges.some((s) => s.startsWith('merge api') && s.includes(t.issue('B one').branch!))).toBe(false);
+    expect(merges.some((s) => s.startsWith('merge api') && s.includes(done.runs.e!.agent!.along![0]!.branch!))).toBe(true);
+  });
+
+  async function soak(body: BodyInput, opts: { git?: PlanGit; repos?: readonly string[] } = {}) {
     // A minute passes between looks; a milestone quiet for three is moved along.
     let clock = 1_000_000;
-    const t = setup({ rescueMs: 3 * 60_000, now: () => clock });
-    const plan = t.plans.create({ projectId: 'api', home: 'ws:main', autonomy: 'autopilot' }, t.claude);
-    t.work.forRun('ws:main', 'p-me')!.tools!.write(LONG);
+    const t = setup({ rescueMs: 3 * 60_000, now: () => clock, ...(opts.git ? { git: opts.git } : {}) });
+    if (opts.repos) t.store.dispatch({ type: 'projects', projects: [...t.store.getState().projects, project('cal', 'calendar-api')] });
+    const plan = t.plans.create({ projectId: 'api', ...(opts.repos ? { repos: opts.repos } : {}), home: 'ws:main', autonomy: 'autopilot' }, t.claude);
+    t.work.forRun('ws:main', 'p-me')!.tools!.write(body);
     let work = t.work;
     work.approve(plan.id);
     await tick(5);
@@ -1491,7 +1534,7 @@ describe('soak: a long plan on Autopilot reaches the end by itself, with Claudes
       // A restart partway: everything Beluga kept in memory is gone, the plan and the board stay.
       if (i === 40) {
         work.stop();
-        work = new PlansWork({ store: t.store, plans: t.plans, board: t.boardWork, controller: t.controller, askClaude: (prompt, channel, echo) => `ask-${t.asked.push({ prompt, channel, echo })}`, intend: () => undefined, delayMs: 0, rescueMs: 3 * 60_000, now: () => clock });
+        work = new PlansWork({ store: t.store, plans: t.plans, board: t.boardWork, controller: t.controller, askClaude: (prompt, channel, echo) => `ask-${t.asked.push({ prompt, channel, echo })}`, intend: () => undefined, delayMs: 0, rescueMs: 3 * 60_000, now: () => clock, ...(opts.git ? { git: opts.git } : {}) });
       }
       clock += 60_000;
       work.pilot.tick();
@@ -1507,10 +1550,12 @@ describe('soak: a long plan on Autopilot reaches the end by itself, with Claudes
     expect(Object.values(done.rescue ?? {}).some((r) => r.yours)).toBe(false);
     // Every rung was needed somewhere: sent on, woken, started over, asked again, a fresh checker, the head Claude.
     const said = done.activity.map((a) => a.text).join('\n');
-    for (const rung of ['sent the Claude doing', 'woke BOB-', 'started it again', 'asked for the check of', 'to a fresh checker', 'asked the plan’s Claude to decide']) expect(said).toContain(rung);
+    for (const rung of ['sent the Claude doing', 'woke ', 'started it again', 'asked for the check of', 'to a fresh checker', 'asked the plan’s Claude to decide']) expect(said).toContain(rung);
     // Its epics followed it: every milestone's is In Review (merged into the plan with no branch here, then done once shipped).
     for (const id of Object.values(done.epics!.milestones)) expect(['in_review', 'in_plan', 'done']).toContain(t.board.need(id).status);
-  });
+    const issue = (title: string) => t.store.getState().board.issues.find((i) => i.title === title)!;
+    return { ...t, planId: plan.id, issue };
+  }
 });
 
 describe('a plan across several repos (BLG-10)', () => {

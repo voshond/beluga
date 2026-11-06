@@ -15,7 +15,7 @@ import { type PilotDeps, PlanPilot } from './pilot.js';
 import type { TaskView } from './progress.js';
 import { type PlanGit, planGitOf } from './plan-git.js';
 import { type Plans, UNTITLED } from './plans.js';
-import { type PlanRepoInfo, checkFailedPrompt, checkerBrief, describePlan, handbackPrompt, headBrief, milestoneNote, planningBrief, sizeWords, workerNote } from './prompt.js';
+import { type MilestoneWhere, type PlanRepoInfo, checkFailedPrompt, checkerBrief, describePlan, handbackPrompt, headBrief, milestoneNote, milestoneWhere, planningBrief, sizeWords, workerNote } from './prompt.js';
 
 /**
  * Plans at work: making a plan (its own conversation, in the project's main folder where Claude
@@ -109,8 +109,11 @@ export class PlansWork {
     deps.board.setBriefExtra((issue) => this.workerBrief(issue));
     // A milestone's worktree: its one Claude gets the milestone (its tasks in order, where each stands).
     deps.board.setRunBrief((channel) => this.milestoneBrief(channel));
-    // A plan across repos: its home reads the other repos' main folders too (read-only: it's a main-folder chat).
-    this.offReads = deps.controller?.setReadAlso?.((id) => this.homeReads(id));
+    // A milestone across repos: its agent edits its worktrees in the other repos too (BLG-14).
+    deps.board.setAlsoExtra((id) => this.alongPaths(id));
+    // A plan across repos: its home reads the other repos' main folders too (read-only: it's a main-folder chat),
+    // and a milestone reads the repos of earlier milestones it builds on.
+    this.offReads = deps.controller?.setReadAlso?.((id) => [...this.homeReads(id), ...this.upstreamReads(id)]);
   }
 
   private readonly offReads: (() => void) | undefined;
@@ -531,18 +534,41 @@ export class PlansWork {
   private milestoneBrief(channel: string): { readonly brief: string; readonly current?: Issue } | undefined {
     if (!channel.startsWith(WS)) return undefined;
     const wsId = channel.slice(WS.length);
+    const found = this.milestoneIn(wsId);
+    if (!found) return undefined;
+    const view = this.pilot.view(found.plan);
+    const m = view.milestones.find((x) => x.milestone.id === found.id);
+    if (!m) return undefined;
+    const mine = m.tasks.filter((t) => t.issue?.worktrees.includes(wsId));
+    const current = mine.find((t) => t.state === 'running' || t.state === 'idle' || t.state === 'asking' || t.state === 'stalled') ?? mine.find((t) => t.state === 'ready');
+    return { brief: milestoneNote(view, m, current, this.whereOf(found.plan, found.id)), ...(current?.issue ? { current: current.issue } : {}) };
+  }
+
+  /** The active plan milestone whose agent works in this worktree (its own, not one beside it). */
+  private milestoneIn(workspaceId: string): { readonly plan: Plan; readonly id: string } | undefined {
     for (const plan of this.plans.list()) {
       if (plan.status !== 'active' || !plan.body) continue;
-      const id = Object.keys(plan.runs).find((k) => plan.runs[k]?.agent?.worktree === wsId);
-      if (!id) continue;
-      const view = this.pilot.view(plan);
-      const m = view.milestones.find((x) => x.milestone.id === id);
-      if (!m) return undefined;
-      const mine = m.tasks.filter((t) => t.issue?.worktrees.includes(wsId));
-      const current = mine.find((t) => t.state === 'running' || t.state === 'idle' || t.state === 'asking' || t.state === 'stalled') ?? mine.find((t) => t.state === 'ready');
-      return { brief: milestoneNote(view, m, current), ...(current?.issue ? { current: current.issue } : {}) };
+      const id = Object.keys(plan.runs).find((k) => plan.runs[k]?.agent?.worktree === workspaceId);
+      if (id) return { plan, id };
     }
     return undefined;
+  }
+
+  private whereOf(plan: Plan, milestoneId: string): MilestoneWhere | undefined {
+    const milestone = plan.body?.milestones.find((x) => x.id === milestoneId);
+    return milestone ? milestoneWhere(plan, milestone, plan.runs[milestoneId]?.agent, this.deps.store.getState().projects) : undefined;
+  }
+
+  /** A milestone across repos: its worktrees in the other repos, which its agent edits too. */
+  alongPaths(workspaceId: string): readonly string[] {
+    const found = this.milestoneIn(workspaceId);
+    return found ? (this.whereOf(found.plan, found.id)?.along.map((a) => a.path) ?? []) : [];
+  }
+
+  /** A milestone building on earlier ones in other repos: their main folders, read-only. */
+  upstreamReads(workspaceId: string): readonly string[] {
+    const found = this.milestoneIn(workspaceId);
+    return found ? [...new Set(this.whereOf(found.plan, found.id)?.upstream.map((u) => u.repo.root).filter(Boolean) ?? [])] : [];
   }
 
   /** A task Claude says is an existing board task (its key): that task, adopted into the plan. */

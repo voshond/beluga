@@ -174,6 +174,15 @@ export interface MilestoneAgent {
   readonly at: number;
   /** Plan task ids handed to it so far (more come when a check adds fix tasks). */
   readonly tasks: readonly string[];
+  /** A milestone across repos: its worktrees in the other repos (it edits them too), each merged into its repo's plan branch. */
+  readonly along?: readonly MilestoneAlong[];
+}
+
+/** A milestone agent's worktree in one of its other repos. */
+export interface MilestoneAlong {
+  readonly projectId: string;
+  readonly worktree: string;
+  readonly branch?: string;
 }
 
 /** A task that builds on several unmerged tasks: their branches are being combined into its start. */

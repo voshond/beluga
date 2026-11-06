@@ -1,6 +1,7 @@
 import { type Criterion, criteria, criterionLine } from '../board/criteria.js';
 import { type BoardState, STATUS_INFO, filterIssues } from '../board/model.js';
-import { AUTONOMY_INFO, type Plan, type PlanBody, TESTS_AT_INFO, diffBodies, isMultiRepo, milestoneDeps, planRepos, shownBody } from './model.js';
+import type { Project } from '../../workspaces/types.js';
+import { AUTONOMY_INFO, type MilestoneAgent, type Plan, type PlanBody, type PlanMilestone, TESTS_AT_INFO, diffBodies, isMultiRepo, milestoneDeps, milestoneRepos, planBranchFor, planRepos, shownBody } from './model.js';
 import { type MilestoneView, type PlanView, type TaskView, agentTasks, overlaps } from './progress.js';
 
 /**
@@ -611,7 +612,67 @@ function milestoneHow(plan: Plan, only: boolean): string[] {
 }
 
 /** What a milestone's one Claude is told when it starts: the plan, the milestone, its tasks in order with their briefs, and how to work. */
-export function milestonePrompt(view: PlanView, m: MilestoneView, tasks: readonly TaskView[], opts: { readonly only?: boolean; readonly base?: string } = {}): string {
+/** Where a milestone's agent works in a plan across repos, and what it builds on in the others (BLG-14). */
+export interface MilestoneWhere {
+  /** The repo of its own worktree (its tasks'). */
+  readonly here: PlanRepoInfo;
+  /** Its worktrees in its other repos: it edits them too. */
+  readonly along: ReadonlyArray<{ readonly repo: PlanRepoInfo; readonly path: string; readonly branch?: string }>;
+  /** Milestones it depends on that worked in repos it doesn't: their merged work, read-only. */
+  readonly upstream: ReadonlyArray<{ readonly milestone: string; readonly repo: PlanRepoInfo; readonly branch: string }>;
+}
+
+/** A milestone's place across repos (undefined: a plan of one repo, nothing to say). */
+export function milestoneWhere(plan: Plan, milestone: PlanMilestone, agent: MilestoneAgent | undefined, projects: readonly Project[]): MilestoneWhere | undefined {
+  if (!isMultiRepo(plan)) return undefined;
+  const info = (id: string): PlanRepoInfo => {
+    const p = projects.find((x) => x.id === id);
+    return { id, name: p?.name ?? id, root: p?.root ?? '' };
+  };
+  const mine = milestoneRepos(plan, milestone);
+  const worktree = (id: string) => projects.flatMap((p) => p.workspaces).find((w) => w.id === id && !w.archived);
+  const along = (agent?.along ?? []).flatMap((a) => {
+    const w = worktree(a.worktree);
+    return w ? [{ repo: info(a.projectId), path: w.path, ...(a.branch ? { branch: a.branch } : {}) }] : [];
+  });
+  const body = plan.body;
+  const upstream = body
+    ? milestoneDeps(body, milestone).flatMap((id) => {
+        const dep = body.milestones.find((x) => x.id === id);
+        if (!dep) return [];
+        return milestoneRepos(plan, dep)
+          .filter((r) => !mine.includes(r))
+          .flatMap((r) => {
+            const branch = planBranchFor(plan, r);
+            return branch ? [{ milestone: dep.title, repo: info(r), branch }] : [];
+          });
+      })
+    : [];
+  return { here: info(mine[0]!), along, upstream };
+}
+
+/** What a milestone's agent is told about its repos: where it is, the worktrees it edits too, and what it reads in others. */
+export function whereLines(where: MilestoneWhere | undefined): string[] {
+  if (!where) return [];
+  return [
+    `This worktree is in ${where.here.name}.`,
+    ...(where.along.length
+      ? [
+          'This milestone spans repos: you also work in these worktrees of its other repos (edit them freely, no asking):',
+          ...where.along.map((a) => `- ${a.repo.name}: ${a.path}${a.branch ? ` (branch ${a.branch})` : ''}`),
+          `Commit in each repo you change (git -C <worktree> commit), ${where.here.name} included: each one's branch merges into that repo's plan branch when the milestone passes, and what isn't committed there is lost.`,
+        ]
+      : []),
+    ...(where.upstream.length
+      ? [
+          'It builds on earlier milestones in other repos, merged into their plan branches (read-only: never edit them, change only your own worktrees):',
+          ...where.upstream.map((u) => `- “${u.milestone}” in ${u.repo.name}: ${u.branch}${u.repo.root ? `; read it with git -C ${u.repo.root} show ${u.branch}:<path>, or git -C ${u.repo.root} diff HEAD...${u.branch}` : ''}`),
+        ]
+      : []),
+  ];
+}
+
+export function milestonePrompt(view: PlanView, m: MilestoneView, tasks: readonly TaskView[], opts: { readonly only?: boolean; readonly base?: string; readonly where?: MilestoneWhere } = {}): string {
   const plan = view.plan;
   const mine = new Set(tasks.map((t) => t.task.id));
   const forYou = m.tasks.filter((t) => t.forYou && !FINISHED_WORDS.has(t.state));
@@ -622,6 +683,7 @@ export function milestonePrompt(view: PlanView, m: MilestoneView, tasks: readonl
     ...(view.body?.goal ? [`Plan goal: ${clip(view.body.goal.replace(/\s+/g, ' ').trim(), 600)}`] : []),
     ...(m.milestone.goal ? [`Milestone goal: ${clip(m.milestone.goal.replace(/\s+/g, ' ').trim(), 600)}`] : []),
     ...(m.milestone.criteria.length ? ['The milestone passes when:', ...m.milestone.criteria.map((c) => `- ${c}`)] : []),
+    ...withGap(whereLines(opts.where)),
     ...withGap(requestLines(plan)),
     ...withGap(decisionsLines(view.body)),
     '',
@@ -651,7 +713,7 @@ export function milestoneNextPrompt(view: PlanView, m: MilestoneView, next: read
 const agentTasksLeft = (m: MilestoneView): readonly TaskView[] => agentTasks(m).filter((t) => !FINISHED_WORDS.has(t.state));
 
 /** A milestone worktree's instructions on every run (the first prompt has the briefs): where its tasks stand, and how to work. */
-export function milestoneNote(view: PlanView, m: MilestoneView, current?: TaskView): string {
+export function milestoneNote(view: PlanView, m: MilestoneView, current?: TaskView, where?: MilestoneWhere): string {
   const ordered = agentTasks(m).filter((t) => m.agent && t.issue!.worktrees.includes(m.agent.worktree));
   const forYou = m.tasks.filter((t) => t.forYou && !FINISHED_WORDS.has(t.state));
   return [
@@ -659,6 +721,7 @@ export function milestoneNote(view: PlanView, m: MilestoneView, current?: TaskVi
     '<beluga_milestone>',
     `This worktree is milestone ${m.index + 1} “${m.milestone.title}” of the plan “${view.body?.title ?? ''}”: you are its one agent, and you do its tasks one after another.`,
     m.milestone.criteria.length ? `It passes when: ${m.milestone.criteria.join('; ')}.` : '',
+    ...whereLines(where),
     'Its tasks (keys for the task tools, mcp__beluga_board__*), in order:',
     ...ordered.flatMap((t, i) => taskBlock(t, i, view, t === current)),
     forYou.length ? `For the user, not you: ${forYou.map((t) => `${keyOf(t)} “${t.task.title}”`).join(', ')}.` : '',

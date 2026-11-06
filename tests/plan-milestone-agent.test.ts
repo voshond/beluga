@@ -38,10 +38,14 @@ const BODY: BodyInput = {
 
 function setup(opts: { workers?: 'milestone' | 'task'; git?: PlanGit; delayMs?: number; forYou?: PlansWorkDeps['forYou']; cancel?: PlansWorkDeps['cancel'] } = {}) {
   const store = new Store(initialState('room'));
-  store.dispatch({ type: 'projects', projects: [project('api', 'bob-api', [ws('main', 'api', 'bob-api', 'chat', { askOnly: true } as Partial<Workspace>)])] });
+  // bob-api, and two more repos a plan may cover (BLG-14).
+  store.dispatch({ type: 'projects', projects: [project('api', 'bob-api', [ws('main', 'api', 'bob-api', 'chat', { askOnly: true } as Partial<Workspace>)]), project('cal', 'calendar-api'), project('desk', 'calendar-desktop')] });
   const listeners: Array<(e: WorktreeEvent) => void> = [];
   const asked: Array<{ prompt: string; channel: string; id: string }> = [];
-  const made: Array<{ name: string; base?: string; quiet?: boolean }> = [];
+  const made: Array<{ projectId: string; name: string; base?: string; quiet?: boolean }> = [];
+  /** What the controller is told a worktree's Claude edits and reads too. */
+  let alsoIn: (id: string) => readonly string[] = () => [];
+  let readAlso: (id: string) => readonly string[] = () => [];
   let n = 0;
   const add = (w: Workspace): void => {
     store.dispatch({ type: 'projects', projects: store.getState().projects.map((p) => (p.id === w.projectId ? { ...p, workspaces: [...p.workspaces, w] } : p)) });
@@ -52,14 +56,16 @@ function setup(opts: { workers?: 'milestone' | 'task'; git?: PlanGit; delayMs?: 
       return () => undefined;
     },
     newWorktree: async (projectId: string, name: string, o: { base?: string; quiet?: boolean } = {}) => {
-      made.push({ name, ...o });
-      const w = ws(`w${++n}`, projectId, name);
+      made.push({ projectId, name, ...o });
+      const w = ws(`w${++n}`, projectId, name, 'worktree', { path: `/tmp/${projectId}/${name}` });
       add(w);
       listeners.forEach((l) => l({ kind: 'created', ws: w }));
       return w;
     },
+    setAlsoIn: (fn: typeof alsoIn) => ((alsoIn = fn), () => undefined),
+    setReadAlso: (fn: typeof readAlso) => ((readAlso = fn), () => undefined),
   } as unknown as WorkspaceController;
-  const board = new Board({ store, dir: null, projectName: () => 'bob-api' });
+  const board = new Board({ store, dir: null, projectName: (id) => store.getState().projects.find((p) => p.id === id)?.name });
   const ask = (prompt: string, channel: string): string => {
     const id = `ask-${asked.length + 1}`;
     asked.push({ prompt, channel, id });
@@ -84,12 +90,12 @@ function setup(opts: { workers?: 'milestone' | 'task'; git?: PlanGit; delayMs?: 
   const me = boardWork.me();
   const run = (channel: string, status: 'started' | 'done', id = `r-${Math.random()}`): void => store.dispatch({ type: 'agent_event', owner: 'p-me', requestId: id, requester: 'p-me', event: status, text: '', ts: Date.now(), channel });
   const issue = (title: string) => store.getState().board.issues.find((i) => i.title === title)!;
-  return { store, board, boardWork, plans, work, asked, made, claude, me, run, issue };
+  return { store, board, boardWork, plans, work, asked, made, claude, me, run, issue, alsoIn: (id: string) => alsoIn(id), readAlso: (id: string) => readAlso(id) };
 }
 
-async function running(opts: Parameters<typeof setup>[0] & { autonomy?: 'step' | 'gated' | 'autopilot'; maxParallel?: number; body?: BodyInput } = {}) {
+async function running(opts: Parameters<typeof setup>[0] & { autonomy?: 'step' | 'gated' | 'autopilot'; maxParallel?: number; body?: BodyInput; repos?: readonly string[] } = {}) {
   const t = setup(opts);
-  const plan = t.plans.create({ projectId: 'api', home: 'ws:main', autonomy: opts.autonomy ?? 'gated' }, t.claude);
+  const plan = t.plans.create({ projectId: 'api', ...(opts.repos ? { repos: opts.repos } : {}), home: 'ws:main', autonomy: opts.autonomy ?? 'gated' }, t.claude);
   t.plans.setMaxParallel(plan.id, opts.maxParallel ?? 3, t.me);
   t.work.forRun('ws:main', 'p-me')!.tools!.write(opts.body ?? BODY);
   t.work.approve(plan.id);
@@ -357,5 +363,122 @@ describe('Pass Anyway is instant (BLG-16)', () => {
     for (let n = 0; n < 100 && !t.plans.need(t.plan.id).runs.admin?.passedAt; n++) await tick(5);
     expect(g.merged).toHaveLength(2);
     expect(t.plans.need(t.plan.id).runs.admin?.passedAt).toBeDefined();
+  });
+});
+
+describe('milestone agents per repo, and spanning milestones (BLG-14)', () => {
+  const ACROSS: BodyInput = {
+    title: 'Invites',
+    goal: 'One feature across three repos',
+    milestones: [
+      { id: 'contract', title: 'Invite API', repos: ['cal'], criteria: ['The schema is served'], dependsOn: [], tasks: [{ id: 'schema', title: 'Invite schema' }] },
+      { id: 'hooks', title: 'Transcripts', criteria: ['Hooks fire'], dependsOn: [], tasks: [{ id: 'hook', title: 'Transcript hook' }] },
+      { id: 'sync', title: 'Sync invites', repos: ['desk', 'api'], criteria: ['Invites sync'], dependsOn: ['contract'], tasks: [{ id: 'ui', title: 'Invite UI' }, { id: 'push', title: 'Push invites' }] },
+    ],
+  };
+
+  /** A fake git that says which repo each step ran in. */
+  function repoGit() {
+    const steps: string[] = [];
+    const git: PlanGit = {
+      ensureBranch: async (p, b) => (steps.push(`ensure ${p} ${b}`), { made: true }),
+      mergeInto: async (p, into, branches) => (steps.push(`merge ${p} ${into} ← ${branches.join(' ')}`), { ok: true, branch: into }),
+      inMain: async () => false,
+      retire: async (p, ws, branch) => void steps.push(`retire ${p} ${ws ?? '-'} ${branch ?? '-'}`),
+      findPr: async () => undefined,
+      openPr: async () => {
+        throw new Error('no');
+      },
+      push: async () => undefined,
+      mainRef: async () => 'origin/main',
+      mergePr: async () => undefined,
+      mergeLocal: async () => ({ ok: true }),
+    };
+    return { git, steps };
+  }
+
+  async function across() {
+    const g = repoGit();
+    const t = await running({ git: g.git, body: ACROSS, repos: ['api', 'cal', 'desk'] });
+    for (let n = 0; n < 100 && !(t.agent('contract') && t.agent('hooks')); n++) {
+      t.work.pilot.tick();
+      await tick(5);
+    }
+    const passMilestone = async (id: string, titles: readonly string[]) => {
+      for (const title of titles) t.board.update(t.issue(title).id, { status: 'in_review' }, t.claude);
+      await tick(10);
+      t.work.pass(t.plan.id, id);
+      for (let n = 0; n < 100 && !t.plans.need(t.plan.id).runs[id]?.passedAt; n++) await tick(5);
+    };
+    const worktree = (id: string) => t.store.getState().projects.flatMap((p) => p.workspaces).find((w) => w.id === id)!;
+    return { ...t, ...g, passMilestone, worktree };
+  }
+
+  it('two milestones in different repos with no depends_on run at once, each from its repo’s plan branch', async () => {
+    const t = await across();
+    const contract = t.agent('contract')!;
+    const hooks = t.agent('hooks')!;
+    expect(t.worktree(contract.worktree).projectId).toBe('cal');
+    expect(t.worktree(hooks.worktree).projectId).toBe('api');
+    expect(t.made.map((m) => [m.projectId, m.base])).toEqual([
+      ['cal', 'plan/invites'],
+      ['api', 'plan/invites'],
+    ]);
+    expect(t.agent('sync')).toBeUndefined();
+    // A single-repo milestone works in its worktree only, and is told which repo that is.
+    expect(contract.along).toBeUndefined();
+    expect(t.alsoIn(contract.worktree)).toEqual([]);
+    expect(t.toAgent('contract')[0]!.prompt).toContain('This worktree is in calendar-api.');
+    expect(t.toAgent('contract')[0]!.prompt).not.toContain('spans repos');
+  });
+
+  it('a spanning milestone gets one agent with a worktree in each repo, edits both without asking, is told to commit in each, and reads the repo it builds on', async () => {
+    const t = await across();
+    await t.passMilestone('contract', ['Invite schema']);
+    for (let n = 0; n < 100 && !t.agent('sync'); n++) {
+      t.work.pilot.tick();
+      await tick(5);
+    }
+    const sync = t.agent('sync')!;
+    const own = t.worktree(sync.worktree);
+    expect(own.projectId).toBe('desk');
+    expect(sync.along).toHaveLength(1);
+    const along = t.worktree(sync.along![0]!.worktree);
+    expect(along.projectId).toBe('api');
+    expect(t.made.slice(-2).map((m) => [m.projectId, m.base, m.quiet])).toEqual([
+      ['desk', 'plan/invites', true],
+      ['api', 'plan/invites', true],
+    ]);
+    // One agent: both tasks are in its own worktree, none in the one beside it.
+    for (const title of ['Invite UI', 'Push invites']) expect(t.issue(title).worktrees).toEqual([sync.worktree]);
+    // Its place: the other repo's worktree is alsoEdit (no prompts), the upstream repo's folder read-only.
+    expect(t.alsoIn(sync.worktree)).toEqual([along.path]);
+    expect(t.readAlso(sync.worktree)).toEqual(['/tmp/calendar-api']);
+    expect(t.alsoIn(along.id)).toEqual([]);
+    const prompt = t.toAgent('sync')[0]!.prompt;
+    expect(prompt).toContain('This worktree is in calendar-desktop.');
+    expect(prompt).toContain(`- bob-api: ${along.path} (branch ${along.branch})`);
+    expect(prompt).toContain('Commit in each repo you change (git -C <worktree> commit), calendar-desktop included');
+    // Built on another repo's milestone: that repo's plan branch, and how to read it.
+    expect(prompt).toContain('- “Invite API” in calendar-api: plan/invites; read it with git -C /tmp/calendar-api show plan/invites:<path>');
+    // Its every-run note says the same.
+    expect(t.boardWork.forRun(`ws:${sync.worktree}`, 'p-me')!.brief).toContain(`- bob-api: ${along.path}`);
+  });
+
+  it('passing a spanning milestone merges each repo’s worktree into that repo’s plan branch, then clears both away', async () => {
+    const t = await across();
+    await t.passMilestone('contract', ['Invite schema']);
+    for (let n = 0; n < 100 && !t.agent('sync'); n++) {
+      t.work.pilot.tick();
+      await tick(5);
+    }
+    const sync = t.agent('sync')!;
+    const along = sync.along![0]!;
+    await t.passMilestone('sync', ['Invite UI', 'Push invites']);
+    expect(t.steps).toContain(`merge desk plan/invites ← ${t.issue('Invite UI').branch}`);
+    expect(t.steps).toContain(`merge api plan/invites ← ${along.branch}`);
+    for (let n = 0; n < 50 && !t.steps.some((s) => s.startsWith('retire api')); n++) await tick(5);
+    expect(t.steps).toContain(`retire api ${along.worktree} ${along.branch}`);
+    expect(t.steps).toContain(`retire desk ${sync.worktree} ${t.issue('Invite UI').branch}`);
   });
 });

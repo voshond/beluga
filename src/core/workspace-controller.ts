@@ -630,10 +630,10 @@ export class WorkspaceController {
     };
   }
 
-  /** Other folders a main-folder conversation reads too (set by plans: a plan across repos plans from its primary). */
+  /** Other folders a conversation reads too, never edits (set by plans: a plan across repos plans from its primary; a milestone reads the repos it builds on). */
   private readAlso: (workspaceId: string) => readonly string[] = () => [];
 
-  /** Say which other folders a main-folder conversation may read. → stop. */
+  /** Say which other folders a conversation may read. → stop. */
   setReadAlso(fn: (workspaceId: string) => readonly string[]): () => void {
     this.readAlso = fn;
     return () => {
@@ -656,7 +656,7 @@ export class WorkspaceController {
     const runtime = agent?.runtime ?? this.deps.defaultRuntime?.() ?? SESSION_RUNTIME_DEFAULT;
     // An epic's worktree: its sub-tasks' worktrees in other repos too (BLG-561), still there.
     const also = ws.kind === 'worktree' && !ws.askOnly ? this.alsoIn(ws.id).filter((dir) => existsSync(dir)) : [];
-    const reads = ws.askOnly ? this.readAlso(ws.id).filter((dir) => dir !== ws.path && existsSync(dir)) : [];
+    const reads = ws.askOnly || ws.kind === 'worktree' ? this.readAlso(ws.id).filter((dir) => dir !== ws.path && !also.includes(dir) && existsSync(dir)) : [];
     return {
       cwd: ws.path,
       additionalDirectories: [...also, ...reads],
