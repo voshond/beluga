@@ -59,6 +59,9 @@ export async function askBtw(req: BtwRequest, opts: { claudePath?: string; env?:
         continue;
       }
       if (msg.type !== 'result') continue;
+      // A fork of a live run first flushes its background tasks' notices as a turn of its own, with
+      // no model call and an empty result: the question's own turn comes after it.
+      if (msg.subtype === 'success' && msg.num_turns === 0 && !msg.result) continue;
       if (msg.subtype !== 'success') throw new Error(text ? 'Claude stopped before it finished' : 'Claude couldn’t answer that');
       const answer = msg.result || text || said;
       if (answer.trim()) return answer;

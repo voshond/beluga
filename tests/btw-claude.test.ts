@@ -30,6 +30,16 @@ describe('a side question on Claude Code (/btw)', () => {
     expect(await askBtw(req())).toBe('From the reply');
   });
 
+  it("waits past the empty turn a live run's background task notice makes first", async () => {
+    claude.messages = [
+      { type: 'system', subtype: 'task_notification' },
+      { type: 'result', subtype: 'success', result: '', stop_reason: null, num_turns: 0 },
+      assistant({ type: 'text', text: 'The answer' }),
+      { ...success('The answer'), num_turns: 1 },
+    ];
+    expect(await askBtw(req())).toBe('The answer');
+  });
+
   it('an answer with no words is an error that says what came back (BLG-729)', async () => {
     claude.messages = [assistant({ type: 'thinking', thinking: '' }), success('', 'end_turn')];
     await expect(askBtw(req())).rejects.toThrow('Claude finished without an answer (it sent only thinking, stop: end_turn)');
