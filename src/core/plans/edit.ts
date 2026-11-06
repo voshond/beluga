@@ -59,6 +59,8 @@ export interface MilestoneInput {
   readonly autonomy?: Autonomy;
   /** Earlier milestones it builds on (ids); left out, inferred from its tasks' blockers. */
   readonly dependsOn?: readonly string[];
+  /** The repos it works in (project ids of the plan's); left out, the plan's primary. */
+  readonly repos?: readonly string[];
 }
 
 export interface BodyInput {
@@ -81,7 +83,7 @@ export interface DecisionInput {
 export type PlanOp =
   | { readonly op: 'retitle'; readonly title?: string; readonly goal?: string }
   | { readonly op: 'add_milestone'; readonly milestone: MilestoneInput; readonly after?: string }
-  | { readonly op: 'update_milestone'; readonly id: string; readonly title?: string; readonly goal?: string; readonly criteria?: readonly string[] | string; readonly autonomy?: Autonomy | null; readonly dependsOn?: readonly string[] | null }
+  | { readonly op: 'update_milestone'; readonly id: string; readonly title?: string; readonly goal?: string; readonly criteria?: readonly string[] | string; readonly autonomy?: Autonomy | null; readonly dependsOn?: readonly string[] | null; readonly repos?: readonly string[] | null }
   | { readonly op: 'remove_milestone'; readonly id: string }
   | { readonly op: 'add_task'; readonly milestone: string; readonly task: TaskInput; readonly after?: string }
   | { readonly op: 'update_task'; readonly id: string; readonly patch: Partial<TaskInput> }
@@ -161,6 +163,7 @@ function milestone(input: MilestoneInput, id: string, tasks: readonly PlanTask[]
   const title = oneLine(input.title ?? '', MAX_TITLE);
   if (!title) throw new PlanError('Every milestone needs a title');
   const goal = block(input.goal, MAX_GOAL);
+  const repos = [...new Set((input.repos ?? []).map((r) => r.trim()).filter(Boolean))];
   return {
     id,
     title,
@@ -169,6 +172,7 @@ function milestone(input: MilestoneInput, id: string, tasks: readonly PlanTask[]
     tasks,
     ...(input.autonomy && AUTONOMIES.includes(input.autonomy) ? { autonomy: input.autonomy } : {}),
     ...(input.dependsOn ? { dependsOn: [...new Set(input.dependsOn.map((d) => d.trim()).filter(Boolean))] } : {}),
+    ...(repos.length ? { repos } : {}),
   };
 }
 
@@ -176,7 +180,7 @@ function milestone(input: MilestoneInput, id: string, tasks: readonly PlanTask[]
  * A whole plan from Claude: ids made where missing (from titles), and tasks Claude named before
  * keep the board task they have (`previous`: the plan as it was, approved or drafted).
  */
-export function normalizeBody(input: BodyInput, previous?: readonly (PlanBody | undefined)[]): PlanBody {
+export function normalizeBody(input: BodyInput, previous?: readonly (PlanBody | undefined)[], repos?: readonly string[]): PlanBody {
   const title = oneLine(input.title ?? '', MAX_TITLE);
   if (!title) throw new PlanError('The plan needs a title');
   const known = new Map<string, PlanTask>();
@@ -195,7 +199,7 @@ export function normalizeBody(input: BodyInput, previous?: readonly (PlanBody | 
   const goal = block(input.goal, MAX_GOAL) ?? '';
   const decisions = dedupeDecisions((input.decisions ?? []).map(decisionEntry));
   const openQuestions = questionList(input.openQuestions ?? []).filter((q) => !decisions.some((d) => sameText(d.question, q)));
-  return checkBody({ title, goal, milestones, ...(decisions.length ? { decisions } : {}), ...(openQuestions.length ? { openQuestions } : {}) });
+  return checkBody({ title, goal, milestones, ...(decisions.length ? { decisions } : {}), ...(openQuestions.length ? { openQuestions } : {}) }, repos);
 }
 
 const MAX_DECISIONS = 40;
@@ -235,10 +239,10 @@ function withNotes(body: PlanBody, decisions: readonly PlanDecisionEntry[], open
 }
 
 /** Changes, one after another; the result is checked as a whole. */
-export function applyOps(body: PlanBody, ops: readonly PlanOp[]): PlanBody {
+export function applyOps(body: PlanBody, ops: readonly PlanOp[], repos?: readonly string[]): PlanBody {
   let next = body;
   for (const op of ops) next = applyOp(next, op);
-  return checkBody(prunedDecisions(next));
+  return checkBody(prunedDecisions(next), repos);
 }
 
 /** Decisions only name tasks still in the plan (a task taken out leaves them). */
@@ -307,6 +311,7 @@ function applyOp(body: PlanBody, op: PlanOp): PlanBody {
           criteria: op.criteria ?? m.criteria,
           ...(op.autonomy === null ? {} : (op.autonomy ?? m.autonomy) ? { autonomy: (op.autonomy ?? m.autonomy)! } : {}),
           ...(op.dependsOn === null ? {} : (op.dependsOn ?? m.dependsOn) ? { dependsOn: (op.dependsOn ?? m.dependsOn)! } : {}),
+          ...(op.repos === null ? {} : (op.repos ?? m.repos) ? { repos: (op.repos ?? m.repos)! } : {}),
         },
         m.id,
         m.tasks,
@@ -405,9 +410,10 @@ function descendants(body: PlanBody, id: string): string[] {
   return out;
 }
 
-/** The rules a plan keeps (a clear message for Claude when one is broken). */
-export function checkBody(body: PlanBody): PlanBody {
+/** The rules a plan keeps (a clear message for Claude when one is broken). `repos`: the plan's, its milestones must stay within them. */
+export function checkBody(body: PlanBody, repos?: readonly string[]): PlanBody {
   if (body.milestones.length > MAX_MILESTONES) throw new PlanError(`A plan has at most ${MAX_MILESTONES} milestones`);
+  if (repos) checkMilestoneRepos(body, repos);
   const tasks = allTasks(body);
   if (tasks.length > MAX_PLAN_TASKS) throw new PlanError(`A plan has at most ${MAX_PLAN_TASKS} tasks: split it into two plans, or make tasks bigger`);
   const mids = new Set<string>();
@@ -458,4 +464,13 @@ export function checkBody(body: PlanBody): PlanBody {
     }
   }
   return body;
+}
+
+export function checkMilestoneRepos(body: PlanBody, repos: readonly string[]): void {
+  for (const m of body.milestones) {
+    const outside = (m.repos ?? []).filter((r) => !repos.includes(r));
+    if (!outside.length) continue;
+    const named = outside.map((r) => `"${r}"`).join(', ');
+    throw new PlanError(`Milestone "${m.id}" works in ${named}, which ${outside.length > 1 ? "aren't" : "isn't"} one of this plan's repos (repos: ${repos.join(', ')}): pick from those, or leave repos out for the primary`);
+  }
 }

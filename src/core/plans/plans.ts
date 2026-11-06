@@ -39,6 +39,7 @@ import {
   diffBodies,
   isEmptyDiff,
   planById,
+  planRepos,
 } from './model.js';
 
 /**
@@ -183,7 +184,7 @@ export class Plans {
   /** Claude's whole plan (the draft). Tasks it named before keep their board tasks. */
   writeDraft(id: string, input: BodyInput, by: Actor): Plan {
     const plan = this.need(id);
-    const draft = normalizeBody(input, [plan.draft, plan.body]);
+    const draft = normalizeBody(input, [plan.draft, plan.body], planRepos(plan));
     return this.setDraft(plan, draft, by, plan.body ? 'proposed changes to the plan' : 'wrote the plan');
   }
 
@@ -192,7 +193,7 @@ export class Plans {
     const plan = this.need(id);
     const base = plan.draft ?? plan.body;
     if (!base) throw new PlanError('This plan has nothing in it yet: write it whole first (plan_write)');
-    const draft = applyOps(base, ops);
+    const draft = applyOps(base, ops, planRepos(plan));
     const why = reason?.replace(/\s+/g, ' ').trim().slice(0, 200);
     return this.setDraft(plan, draft, by, why ? `changed the plan — ${why}` : plan.body ? 'proposed changes to the plan' : 'changed the plan');
   }
