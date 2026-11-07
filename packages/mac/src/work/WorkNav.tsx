@@ -4,22 +4,20 @@ import { useActions } from '../lib/actions.js';
 import { useApp } from '../lib/beluga.js';
 import type { View } from '@beluga/core/store.js';
 import { Row } from '../layout/sidebar-parts.js';
-import { PlanSideRows } from '../plans/PlansNav.js';
 import { projectOfView } from '../tasks/use-tasks.js';
 import w from './work.module.css';
 
 /**
- * Work: Tasks, Issues, Actions and Plans behind one sidebar row (BLG-197), so the sidebar stays short.
- * The row opens the one you used last; a switch over each list moves between them. Running plans
- * still show under the row.
+ * Work: Tasks, Issues and Actions behind one sidebar row (BLG-197), so the sidebar stays short.
+ * The row opens the one you used last; a switch over each list moves between them. Plans have a row of their own.
  */
 
-export type WorkPage = 'tasks' | 'issues' | 'actions' | 'plans';
+export type WorkPage = 'tasks' | 'issues' | 'actions';
 
 const KEY = 'beluga.work.last';
 const lastPage = (): WorkPage => {
   const v = typeof localStorage === 'undefined' ? null : localStorage.getItem(KEY);
-  return v === 'issues' || v === 'actions' || v === 'plans' ? v : 'tasks';
+  return v === 'issues' || v === 'actions' ? v : 'tasks';
 };
 const remember = (p: WorkPage): void => {
   try {
@@ -29,12 +27,11 @@ const remember = (p: WorkPage): void => {
   }
 };
 
-/** Which of Work's pages a view belongs to (a task, an issue or a plan counts as its list). */
+/** Which of Work's pages a view belongs to (a task or an issue counts as its list). */
 export function workPageOf(view: View): WorkPage | undefined {
   if (view.kind === 'tasks' || view.kind === 'task') return 'tasks';
   if (view.kind === 'issues' || view.kind === 'gh_issue') return 'issues';
   if (view.kind === 'actions' || view.kind === 'gh_run') return 'actions';
-  if (view.kind === 'plans' || view.kind === 'plan') return 'plans';
   return undefined;
 }
 
@@ -51,38 +48,21 @@ function useOpenWork(): (page: WorkPage) => void {
 export function WorkNav() {
   const open = useOpenWork();
   const board = useApp((s) => s.board.enabled);
-  const plans = useApp((s) => s.plans.enabled);
   const page = useApp((s) => workPageOf(s.view));
-  const running = useApp((s) => s.plans.plans.filter((x) => x.status === 'active').length);
-  if (!board && !plans) return null;
-  const pick = (): WorkPage => {
-    const last = lastPage();
-    return (last === 'plans' ? plans : board) ? last : board ? 'tasks' : 'plans';
-  };
-  return (
-    <>
-      <Row
-        icon={<Icon name="task" size={14} />}
-        label="Work"
-        detail={running ? `Tasks, issues, actions and plans · ${running} plan${running === 1 ? '' : 's'} running` : 'Tasks, issues, actions and plans'}
-        selected={page !== undefined}
-        onClick={() => open(pick())}
-      />
-      {plans ? <PlanSideRows /> : null}
-    </>
-  );
+  if (!board) return null;
+  return <Row icon={<Icon name="task" size={14} />} label="Work" detail="Tasks, issues and actions" selected={page !== undefined} onClick={() => open(lastPage())} />;
 }
 
-/** The switch over Tasks, Issues, Actions and Plans: the lists of Work. */
+/** The switch over Tasks, Issues and Actions: the lists of Work. */
 export function WorkSwitch({ page }: { page: WorkPage }) {
   const open = useOpenWork();
   const board = useApp((s) => s.board.enabled);
-  const plans = useApp((s) => s.plans.enabled);
+  if (!board) return null;
   const options = [
-    ...(board ? [{ value: 'tasks' as const, label: 'Tasks', icon: 'task' as const }, { value: 'issues' as const, label: 'Issues', icon: 'issue' as const }, { value: 'actions' as const, label: 'Actions', icon: 'pulse' as const }] : []),
-    ...(plans ? [{ value: 'plans' as const, label: 'Plans', icon: 'flag' as const }] : []),
+    { value: 'tasks' as const, label: 'Tasks', icon: 'task' as const },
+    { value: 'issues' as const, label: 'Issues', icon: 'issue' as const },
+    { value: 'actions' as const, label: 'Actions', icon: 'pulse' as const },
   ];
-  if (options.length < 2) return null;
   return (
     <div className={w.switch}>
       <Segmented<WorkPage> label="Work" value={page} onChange={open} options={options} />

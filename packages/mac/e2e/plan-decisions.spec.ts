@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { expect, test, type Page } from './fixtures.js';
-import { openWork } from './helpers.js';
+import { openPlansList } from './helpers.js';
 
 /** Clarify-first planning (BLG-8): a plan's decisions in its details pane, and approving that waits on an open question. */
 
@@ -8,7 +8,7 @@ const main = (page: Page) => page.locator('main');
 
 async function openPlans(page: Page): Promise<void> {
   await page.goto('/');
-  await openWork(page, 'Plans');
+  await openPlansList(page);
   if (!(await page.getByRole('button', { name: 'Project: bob-api' }).isVisible())) {
     await page.getByRole('button', { name: /^Project: / }).click();
     await page.getByRole('menuitem', { name: /bob-api/ }).click();

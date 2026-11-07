@@ -126,11 +126,11 @@ function Route() {
     case 'gh_run':
       return <RunPage key={`${view.projectId}#${view.runId}`} projectId={view.projectId} runId={view.runId} />;
     case 'plans':
-      return <WorkFrame page="plans"><PlansView /></WorkFrame>;
+      return <PlansView />;
     case 'plan':
       return <PlanPage key={view.id} id={view.id} task={view.task} />;
     case 'team_plan':
-      return <WorkFrame page="plans"><SharedPlanPage key={`${view.owner}/${view.id}`} owner={view.owner} id={view.id} /></WorkFrame>;
+      return <SharedPlanPage key={`${view.owner}/${view.id}`} owner={view.owner} id={view.id} />;
     // Sentinel is one page (BLG-300): its board is on it, its chat docks beside it; the old views land there.
     case 'sentinel_chat':
       // Asked from a sentinel's own page: that page stays, the chat beside it.

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './fixtures.js';
-import { openWork } from './helpers.js';
+import { openPlansList, openWork } from './helpers.js';
 
 /**
  * Start with any agent (BLG-506): wherever work starts, one main button does it with the usual
@@ -90,7 +90,7 @@ test('the home composer’s Create Worktree ▾ makes the worktree with Codex', 
 test('a draft plan’s Approve ▾: approve it, worked by Codex; then Start ▾', async ({ page }) => {
   test.setTimeout(150_000);
   await page.goto('/');
-  await openWork(page, 'Plans');
+  await openPlansList(page);
   if (!(await page.getByRole('button', { name: 'Project: bob-api' }).isVisible())) {
     await page.getByRole('button', { name: /^Project: / }).click();
     await page.getByRole('menuitem', { name: /bob-api/ }).click();

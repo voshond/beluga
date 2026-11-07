@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './fixtures.js';
-import { openWork } from './helpers.js';
+import { openPlansList, openWork } from './helpers.js';
 
 /** Plans (docs/tasks-and-plans.md): the demo's plan as a graph and an outline, a new plan drafted with Claude and approved onto the board, and the composer's Plan with Tasks. */
 
@@ -8,7 +8,7 @@ const main = (page: Page) => page.locator('main');
 
 async function openPlans(page: Page): Promise<void> {
   await page.goto('/');
-  await openWork(page, 'Plans');
+  await openPlansList(page);
   const project = page.getByRole('button', { name: /^Project: / });
   if (!(await page.getByRole('button', { name: 'Project: bob-api' }).isVisible())) {
     await project.click();
@@ -493,7 +493,7 @@ test('a new plan: Claude drafts it in its own conversation, nothing is on the bo
   await openWork(page, 'Tasks');
   await page.getByRole('tablist', { name: 'Show' }).getByRole('tab', { name: /^All/ }).click();
   await expect(page.getByRole('grid', { name: 'Tasks' })).not.toContainText('Data model and migration');
-  await openWork(page, 'Plans');
+  await openPlansList(page);
   await main(page).getByRole('button', { name: /^Export orders accounting,/ }).click();
   await page.getByRole('button', { name: 'Approve Plan' }).first().click();
   await expect(page.getByRole('button', { name: 'Approve Plan' })).toHaveCount(0);
@@ -550,21 +550,21 @@ test('a running plan sits under Plans in the sidebar: progress, what it waits fo
   await expect(row).toHaveClass(/selected/);
 });
 
-test('Plans opens on the project you’re in, and says so when it has none', async ({ page }) => {
+test('Plans opens on every project’s plans; picking one narrows it, and says so when it has none', async ({ page }) => {
   await page.goto('/');
-  await sidebar(page).getByText('landing', { exact: true }).first().click();
-  await expect(page.getByRole('heading', { level: 1, name: 'landing' })).toBeVisible();
-  await openWork(page, 'Plans');
-  const project = page.getByRole('button', { name: 'Project: landing' });
+  await openPlansList(page);
+  const project = page.getByRole('button', { name: 'Project: All Projects' });
   await expect(project).toBeVisible();
   await expect(project).toHaveAttribute('title', 'Switch Project');
+  await expect(main(page).getByRole('list', { name: 'Running and drafts' }).getByRole('button', { name: /^Card checkout for launch,/ })).toBeVisible();
+  await project.click();
+  await page.getByRole('menuitem', { name: /landing/ }).click();
   await expect(main(page).getByText('No plans in landing yet')).toBeVisible();
   await main(page).getByRole('button', { name: 'Plan in landing' }).click();
   await expect(page.getByRole('dialog', { name: /Plan/ })).toBeVisible();
   await page.keyboard.press('Escape');
-  // Switching shows that project's plans.
-  await project.click();
-  await page.getByRole('menuitem', { name: /bob-api/ }).click();
+  await page.getByRole('button', { name: 'Project: landing' }).click();
+  await page.getByRole('menuitem', { name: 'All Projects' }).click();
   await expect(main(page).getByRole('button', { name: /^Card checkout for launch,/ })).toBeVisible();
 });
 

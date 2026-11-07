@@ -1,5 +1,7 @@
 import type { Plan } from '@beluga/core/plans/model.js';
+import { Icon } from '../components/Icon.js';
 import { cx } from '../components/ui.js';
+import { useActions } from '../lib/actions.js';
 import { useApp } from '../lib/beluga.js';
 import { Row } from '../layout/sidebar-parts.js';
 import { DotMark } from '../layout/signal-marks.js';
@@ -7,8 +9,32 @@ import { nextWords, planStatus, titleOf } from './plans-model.js';
 import { usePlanActions, usePlanView } from './use-plans.js';
 import n from './PlansNav.module.css';
 
+const isPlansView = (kind: string): boolean => kind === 'plans' || kind === 'plan' || kind === 'team_plan';
+
+/** Plans in the sidebar: every plan, across projects, with the running ones under it. */
+export function PlansNav() {
+  const actions = useActions();
+  const enabled = useApp((s) => s.plans.enabled);
+  const selected = useApp((s) => isPlansView(s.view.kind));
+  const running = useApp((s) => s.plans.plans.filter((x) => x.status === 'active').length);
+  if (!enabled) return null;
+  return (
+    <>
+      <Row
+        icon={<Icon name="flag" size={14} />}
+        label="Plans"
+        detail={running ? `Every plan, across projects · ${running} running` : 'Every plan, across projects'}
+        selected={selected}
+        aria-current={selected ? 'page' : undefined}
+        onClick={() => actions.run({ type: 'view', view: { kind: 'plans' } })}
+      />
+      <PlanSideRows />
+    </>
+  );
+}
+
 /**
- * Each running plan as a row under Work (BLG-197): how far it got, a pulse while Claude works on
+ * Each running plan as a row under Plans: how far it got, a pulse while Claude works on
  * its tasks, a dot when it waits for you.
  */
 export function PlanSideRows() {
