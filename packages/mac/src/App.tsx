@@ -22,6 +22,7 @@ import { fromKey, getBindings, isRecording, useMenuKeys } from './lib/shortcuts.
 import { useApp, useBeluga } from './lib/beluga.js';
 import { setPowerSaving } from './lib/power.js';
 import { usePrefs } from './lib/prefs.js';
+import { useWebHistory } from './lib/web-history.js';
 import { joinRoom, runMenuItem, useMenuState, useNative, useNotificationTaps, useTrayStatus, useTraySpout, useWindowFocus } from './lib/native.js';
 import { AddProjectSheet } from './dialogs/AddProjectSheet.js';
 import { UndoToast } from './lib/undo-toast.js';
@@ -205,6 +206,7 @@ export function App() {
   useMenuKeys();
   useWindowFocus(client);
   useNotificationTaps(client, ui, actions);
+  useWebHistory(client, actions);
   useTrayPresence(client);
   useIdleAway(client);
   useRequestNative(client);
