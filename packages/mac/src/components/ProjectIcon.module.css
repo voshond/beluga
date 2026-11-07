@@ -6,7 +6,7 @@
 .round {
   box-sizing: border-box;
   object-fit: cover;
-  border: 1px solid var(--text-3);
+  border: 0.5px solid var(--text-3);
 }
 .tile {
   flex: none;
