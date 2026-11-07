@@ -18,13 +18,20 @@ function hue(name: string): number {
  * stack of repos), an icon filling it over a grey.
  */
 export function ProjectIcon({ id, name, size = 16, round }: { id: string; name: string; size?: number; round?: boolean }) {
-  const icon = useProjectIcon(id);
+  const icon = useProjectIcon(id, round);
   const radius = round ? '50%' : Math.round(size * 0.24);
   if (icon) return <img className={cx(s.image, round && s.round)} src={icon} alt="" width={size} height={size} style={{ borderRadius: radius }} draggable={false} />;
   return (
-    <span className={s.tile} style={{ width: size, height: size, borderRadius: radius, fontSize: size * 0.58, ['--h' as string]: hue(name) }} aria-hidden="true">
+    <span className={s.tile} style={{ width: size, height: size, borderRadius: radius, ['--h' as string]: hue(name) }} aria-hidden="true">
       {/* Before the icon is known, an empty tile (no flash of a letter, then a picture). */}
-      {icon === null ? (name.match(/[a-z0-9]/i)?.[0] ?? '?').toUpperCase() : null}
+      {icon === null ? (
+        // Centred on the letter's own height (half a capital under the middle), not the font's line box.
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          <text x="50%" y="50%" dy="0.35em" textAnchor="middle" fontSize={size * 0.58}>
+            {(name.match(/[a-z0-9]/i)?.[0] ?? '?').toUpperCase()}
+          </text>
+        </svg>
+      ) : null}
     </span>
   );
 }

@@ -58,7 +58,7 @@ export function PlanRow({ plan, indent }: { plan: Plan; indent: number }) {
         aria-label={title}
         data-plan-row={plan.id}
         data-signal-row={signal.level}
-        icon={isMultiRepo(plan) ? <RepoStack repos={planRepos(plan)} size={13} /> : <Icon name="flag" size={14} />}
+        icon={isMultiRepo(plan) ? <RepoStack repos={planRepos(plan)} size={16} /> : <Icon name="flag" size={14} />}
         label={<span className={nameClass(signal)}>{title}</span>}
         detail={tip}
         onClick={() => open(plan.id)}

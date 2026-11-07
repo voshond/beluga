@@ -26,13 +26,59 @@ function load(client: BelugaClient, key: string): Promise<Icon> {
   return p;
 }
 
+/** An icon with its transparent margin cut away (an app icon's padding), so it fills a circle. */
+const trimmed = (url: string): Promise<string> =>
+  new Promise((resolve) => {
+    const img = new Image();
+    img.onerror = () => resolve(url);
+    img.onload = () => {
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!w || !h || !ctx) return resolve(url);
+      canvas.width = w;
+      canvas.height = h;
+      ctx.drawImage(img, 0, 0);
+      const alpha = ctx.getImageData(0, 0, w, h).data;
+      let [left, top, right, bottom] = [w, h, -1, -1];
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++)
+          if (alpha[(y * w + x) * 4 + 3]! > 24) {
+            left = Math.min(left, x);
+            right = Math.max(right, x);
+            top = Math.min(top, y);
+            bottom = Math.max(bottom, y);
+          }
+      if (right < 0 || (left === 0 && top === 0 && right === w - 1 && bottom === h - 1)) return resolve(url);
+      const side = Math.max(right - left, bottom - top) + 1;
+      const out = document.createElement('canvas');
+      out.width = side;
+      out.height = side;
+      out.getContext('2d')?.drawImage(canvas, left - (side - (right - left + 1)) / 2, top - (side - (bottom - top + 1)) / 2, side, side, 0, 0, side, side);
+      resolve(out.toDataURL('image/png'));
+    };
+    img.src = url;
+  });
+
+function loadTrimmed(client: BelugaClient, key: string): Promise<Icon> {
+  let p = cache.get(`trim:${key}`);
+  if (!p) {
+    p = load(client, key).then((icon) => (icon ? trimmed(icon) : null));
+    cache.set(`trim:${key}`, p);
+  }
+  return p;
+}
+
 /** Forget a project's icon so it's read again everywhere it shows. */
 export function reloadProjectIcon(projectId: string): void {
   cache.delete(projectId);
+  cache.delete(`trim:${projectId}`);
   for (const l of [...listeners]) l(projectId);
 }
 
-export function useProjectIcon(projectId: string): Icon | undefined {
+/** `trim`: without the icon's transparent margin (for a round mark). */
+export function useProjectIcon(projectId: string, trim = false): Icon | undefined {
   const { client } = useBeluga();
   const [icon, setIcon] = useState<Icon | undefined>(undefined);
   const [version, setVersion] = useState(0);
@@ -43,11 +89,11 @@ export function useProjectIcon(projectId: string): Icon | undefined {
   }, [projectId]);
   useEffect(() => {
     let alive = true;
-    void load(client, projectId).then((i) => alive && setIcon(i));
+    void (trim ? loadTrimmed : load)(client, projectId).then((i) => alive && setIcon(i));
     return () => {
       alive = false;
     };
-  }, [client, projectId, version]);
+  }, [client, projectId, version, trim]);
   return icon;
 }
 

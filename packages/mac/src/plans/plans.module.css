@@ -2284,7 +2284,7 @@ textarea.goalBox {
   display: inline-flex;
 }
 .repoStackOne + .repoStackOne {
-  margin-left: -4px;
+  margin-left: -5px;
 }
 .repoStackMore {
   margin-left: 3px;
