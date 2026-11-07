@@ -216,6 +216,7 @@ export const HANDLERS = {
   'workspaces.setGroup': (s, projectId, group) => ctl(s)?.setGroup(projectId, group),
   'workspaces.renameGroup': (s, from, to) => ctl(s)?.renameGroup(from, to),
   'workspaces.rename': (s, id, name) => ctl(s)?.rename(id, name),
+  'workspaces.regenerateTitle': (s, id) => ctl(s)?.regenerateTitle(id),
   'workspaces.ungroup': (s, name) => ctl(s)?.ungroup(name),
   'workspaces.arrange': (s, item, place) => ctl(s)?.arrange(item, place ?? {}) ?? false,
   'workspaces.newGroup': (s, name, opts) => ctl(s)?.newGroup(name, opts ?? {}),

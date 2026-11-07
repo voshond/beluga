@@ -854,6 +854,11 @@ export class Session {
     return routeSideCall(this.sideRoute(), (on) => on.titlePlan?.(goal), undefined);
   }
 
+  /** Name a chat from its recent content with a separate side call. */
+  async titleChat(content: string): Promise<string | undefined> {
+    return routeSideCall(this.sideRoute(), (on) => on.titleChat?.(content), undefined);
+  }
+
   /** What a project's setup should be after it failed in a worktree (undefined without an agent to ask). */
   async fixSetup(dir: string, failed: string, output: string): Promise<SetupFix | undefined> {
     return routeSideCall(this.sideRoute(), (on) => on.fixSetup?.(dir, failed, output), undefined);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { openCommand, revealCommand } from '../src/core/os-open.js';
+import { openCommand, revealCommand, spawnOptions } from '../src/core/os-open.js';
 
 describe('opening things with the system', () => {
   it('opens with `open` on the Mac and xdg-open on Linux, as given', () => {
@@ -24,6 +24,12 @@ describe('opening things with the system', () => {
       args: ['/select,"C:\\Users\\me\\my proj\\.beluga\\scratch\\a.png"'],
       verbatim: true,
     });
+  });
+
+  it('never starts Explorer with its window hidden: windowsHide would keep the folder window invisible', () => {
+    expect(spawnOptions(openCommand('C:\\proj', 'win32'))).toEqual({ stdio: 'ignore', detached: true, windowsHide: false });
+    expect(spawnOptions(revealCommand('C:\\proj\\a.png', 'win32'))).toEqual({ stdio: 'ignore', detached: true, windowsHide: false, windowsVerbatimArguments: true });
+    expect(spawnOptions(openCommand('/Users/me/proj', 'darwin')).windowsHide).toBe(false);
   });
 
   it('opens the folder a file is in on Linux', () => {

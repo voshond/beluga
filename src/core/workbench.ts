@@ -250,6 +250,8 @@ export class Workbench {
     return agentName(defaultAgentOf(this.deps.store.getState().self));
   }
   private diskTimer?: NodeJS.Timeout;
+  /** The round of measuring under way: a second ask joins it rather than walking every folder again. */
+  private measuring?: Promise<void>;
   private prTimer?: NodeJS.Timeout;
   private runtimeTimer?: NodeJS.Timeout;
   /** What the runtimes last said about themselves, kept so a new list (a local endpoint answering) doesn't wipe it. */
@@ -1661,13 +1663,18 @@ export class Workbench {
     return true;
   }
 
-  async measureDisk(): Promise<void> {
+  measureDisk(): Promise<void> {
+    return (this.measuring ??= this.measureRound().finally(() => (this.measuring = undefined)));
+  }
+
+  /** Every folder, one at a time, worktrees before main folders (a main folder's node_modules can take the whole time budget); each size shows as soon as it's known. */
+  private async measureRound(): Promise<void> {
     const dirs = this.manager.list
       .flatMap((p) => p.workspaces)
       .filter((w) => !w.archived && (w.kind === 'worktree' || w.kind === 'main' || (w.kind === 'chat' && !w.projectRoot)))
+      .sort((a, b) => Number(a.kind === 'main') - Number(b.kind === 'main'))
       .map((w) => ({ id: w.id, path: w.path }));
-    const sizes = await measureAll(dirs, this.deps.measure);
-    this.deps.store.dispatch({ type: 'disk', sizes });
+    await measureAll(dirs, this.deps.measure, (id, size) => this.deps.store.dispatch({ type: 'disk', sizes: { [id]: size } }));
   }
 
   /** "1.2 GB · 340k tokens" for a workspace. */

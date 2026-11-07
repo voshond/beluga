@@ -522,6 +522,8 @@ export interface AgentBackend {
   nameTask?(prompt: string): Promise<string>;
   /** A short name for a new plan from its goal (a small model names it; undefined when it couldn't). */
   titlePlan?(goal: string): Promise<string | undefined>;
+  /** A title from recent chat content. The call does not use the chat session. */
+  titleChat?(content: string): Promise<string | undefined>;
   /** Answer in a friends' chat from its history (one turn, no tools; core/chat/claude.ts). */
   answerChat?(req: ChatAnswerRequest): Promise<string>;
   /** A side question about a conversation (/btw): a fork of its session, no tools, nothing kept (agent/btw.ts). */

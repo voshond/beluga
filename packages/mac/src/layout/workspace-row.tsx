@@ -23,13 +23,14 @@ import o from './other-worktrees.module.css';
  * What a workspace's right-click menu offers: its toolbar's actions, named and drawn the same
  * (the shortcuts show for the workspace you're in, where they work).
  */
-export function workspaceItems(state: AppState, ws: Workspace, run: ReturnType<typeof useActions>['run'], rename?: () => void): ActionItem[] {
+export function workspaceItems(state: AppState, ws: Workspace, run: ReturnType<typeof useActions>['run'], rename?: () => void, regenerate?: { readonly run: () => void; readonly pending: boolean }): ActionItem[] {
   const { primary, icons, more } = toolbarActions(state, ws);
   const here = state.view.kind === 'workspace' && state.view.id === ws.id;
   const sections = inSections([...(primary ? [primary] : []), ...icons, ...more.flat()]);
   return [
     { label: 'Open', icon: 'chevronRight', onSelect: () => run({ type: 'open_ws', id: ws.id }) },
     ...(renamable(ws) && rename ? [{ label: 'Rename…', icon: 'pencil' as const, onSelect: rename }] : []),
+    ...(ws.kind === 'chat' && regenerate ? [{ label: regenerate.pending ? 'Regenerating title…' : 'Regenerate title', icon: 'refresh' as const, disabled: regenerate.pending, onSelect: regenerate.run }] : []),
     ...sections.flatMap((section) =>
       section.map((a, i) => ({
         label: a.label,
@@ -84,6 +85,7 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold }: { w
   const actions = useActions();
   const { client } = useBeluga();
   const [renaming, setRenaming] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   // Only what the row shows: another conversation streaming doesn't draw it again (KLD-48).
   const { selected, st, signal, where, archiving } = useApp(
     (state) => ({
@@ -97,6 +99,18 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold }: { w
     }),
     sameDeep,
   );
+  const regenerateTitle = async (): Promise<void> => {
+    if (regenerating) return;
+    setRegenerating(true);
+    try {
+      await client.api.workspaces.regenerateTitle(ws.id);
+      toast(client, 'Chat title regenerated', 'success');
+    } catch (err) {
+      toast(client, err instanceof Error ? err.message : 'Cannot regenerate the chat title', 'error');
+    } finally {
+      setRegenerating(false);
+    }
+  };
   const icon: IconName = ws.kind === 'chat' ? 'chat' : ws.kind === 'main' ? 'folder' : 'branch';
   // Being made: its page opens here (the core has nothing to open yet), with nothing to do on it until it's there.
   if (ws.pending) {
@@ -118,7 +132,7 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold }: { w
   // Idle: its git state (uncommitted changes, ready to merge) as before.
   const quiet = st.tone === 'warn' || st.tone === 'info' || st.tone === 'error' ? <DotMark tone={st.tone} /> : null;
   return (
-    <ActionsContext items={() => workspaceItems(client.store.getState(), ws, actions.run, () => setRenaming(true))}>
+    <ActionsContext items={() => workspaceItems(client.store.getState(), ws, actions.run, () => setRenaming(true), { run: () => void regenerateTitle(), pending: regenerating })}>
       <Row
         indent={indent}
         selected={selected}

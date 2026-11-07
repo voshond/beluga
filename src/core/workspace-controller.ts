@@ -5,7 +5,7 @@ import { worktreeOrigin } from '../workspaces/origin.js';
 import os from 'node:os';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { slugify } from '../agent/namer.js';
+import { cleanPlanTitle, slugify } from '../agent/namer.js';
 import { SESSION_RUNTIME_DEFAULT, carrySession, resumeFor } from '../agent/session-carry.js';
 import { sessionBefore } from '../agent/runtime/claude/session-rewind.js';
 import { promptRef, restoreSnapshot, snapshot, snapshotAt } from '../workspaces/snapshots.js';
@@ -55,6 +55,8 @@ export interface ControllerDeps {
    */
   /** `shown`: the message is in the conversation already under this request id (see showAsk). */
   readonly askClaude: (prompt: string, channel: string, opts?: { readonly echo?: boolean | string; readonly shown?: string; readonly terminal?: boolean }) => void;
+  /** Generate a title from recent chat content with a separate side call. */
+  readonly titleChat?: (content: string) => Promise<string | undefined>;
   /** Draw your first message in a conversation that isn't there yet (a worktree being made) → its request id. */
   readonly showAsk?: (prompt: string, channel: string) => string;
   /** Stop your Claude in a conversation, resolving once nothing runs there (editing a message cuts it there). */
@@ -128,6 +130,7 @@ export interface OutsideConversation extends FoundConversation {
 export const workspaceIdOf = (channel: string): string | undefined => (channel.startsWith(WS_PREFIX) ? channel.slice(WS_PREFIX.length) : undefined);
 export { shareNameOf } from '../shared/share-names.js';
 import { shareNameOf } from '../shared/share-names.js';
+import { FILE_MANAGER } from '../shared/assistant.js';
 import { fallbackFor } from '../shared/runtime-fallbacks.js';
 import { SCRATCH_DIR, type ScratchFile, type ScratchTotal, ensureScratch, listScratch, scratchTotal } from '../workspaces/scratch.js';
 import { isUnder } from '../shared/path-inside.js';
@@ -455,8 +458,7 @@ export class WorkspaceController {
     const fresh = this.ensureLoaded(id);
     // A worktree from another tool re-reads its conversation each time (it may have gone on there) until you talk in it here.
     if (fresh && !ws.sessionId && (!fresh.saved || (ws.external && this.onlyImported(`${WS_PREFIX}${id}`)))) void this.importConversation(ws.id, ws.path, `${WS_PREFIX}${id}`);
-    // A chat with a Claude session but nothing saved here (a main folder's conversation that was only Claude Code's): its transcript.
-    else if (fresh && !fresh.saved && ws.kind === 'chat' && ws.sessionId && ws.projectRoot) void this.importConversation(ws.id, ws.path, `${WS_PREFIX}${id}`, ws.sessionId);
+    else if (fresh && !fresh.saved) void this.importSessionTranscript(ws);
     this.deps.intend({ type: 'navigate', view: { kind: 'workspace', id, tab }, ...(req ? { req } : {}) });
     if (tab === 'review') void this.loadReview(id);
   }
@@ -509,6 +511,12 @@ export class WorkspaceController {
       // No transcript to show: the conversation simply starts fresh.
       return false;
     }
+  }
+
+  /** A chat with a Claude session but nothing saved here (a main folder's conversation that was only Claude Code's): its transcript. */
+  private async importSessionTranscript(ws: Workspace): Promise<boolean> {
+    if (ws.kind !== 'chat' || !ws.sessionId || !ws.projectRoot) return false;
+    return this.importConversation(ws.id, ws.path, `${WS_PREFIX}${ws.id}`, ws.sessionId);
   }
 
   /** Nothing said in this conversation yet except what came from Claude Code's transcript. */
@@ -897,6 +905,22 @@ export class WorkspaceController {
     const done = await this.deps.manager.renameByUser(id, name);
     await this.refresh();
     return done;
+  }
+
+  /** Replace a chat title from its recent messages and protect it as a manual name. */
+  async regenerateTitle(id: string): Promise<RenameResult> {
+    const ws = this.deps.manager.find(id);
+    if (!ws || ws.kind !== 'chat') throw new Error('Select a chat to regenerate its title');
+    const channel = `${WS_PREFIX}${id}`;
+    const fresh = this.ensureLoaded(id);
+    // Open runs its transcript fallback only on the first load, so leave that load to it (unless a message came meanwhile: it must still save).
+    if (fresh && !fresh.saved && !(await this.importSessionTranscript(ws)) && this.onlyImported(channel)) this.loaded.delete(channel);
+    const content = recentChatContent(this.deps.store.getState().log, channel);
+    if (!content) throw new Error('This chat has no content for a title');
+    const generated = await this.deps.titleChat?.(content);
+    const title = generated ? cleanPlanTitle(generated) : undefined;
+    if (!title || !/[\p{L}\p{N}]/u.test(title)) throw new Error('Cannot generate a usable chat title. Try again.');
+    return this.rename(id, title);
   }
 
   /** An automatic title follows the plan until the user sets a name. */
@@ -1577,7 +1601,7 @@ export class WorkspaceController {
   openInFinder(id: string): void {
     try {
       this.deps.manager.openInFinder(id);
-      this.deps.toast('Opened in Finder');
+      this.deps.toast(`Opened in ${FILE_MANAGER}`);
     } catch (err) {
       this.deps.toast(errorText(err), 'error');
     }
@@ -1674,4 +1698,19 @@ export class WorkspaceController {
     const id = workspaceIdOf(channel);
     return id !== undefined && this.ahead.making.has(id);
   }
+}
+
+/** Keep at most 40 recent messages and 12,000 characters. Omit tools and system notices. */
+function recentChatContent(log: readonly LogItem[], channel: string): string {
+  const parts: string[] = [];
+  let remaining = 12_000;
+  for (let i = log.length - 1; i >= 0 && remaining > 0 && parts.length < 40; i--) {
+    const item = log[i]!;
+    if (item.channel !== channel || (item.type !== 'chat' && item.type !== 'agent') || !item.text.trim()) continue;
+    const role = item.type === 'agent' || item.byAgent ? 'Assistant' : 'User';
+    const part = `${role}: ${item.text.trim()}`.slice(-remaining);
+    parts.unshift(part);
+    remaining -= part.length + 2;
+  }
+  return parts.join('\n\n');
 }

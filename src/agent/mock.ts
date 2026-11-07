@@ -803,6 +803,11 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
       await new Promise((r) => setTimeout(r, 400 * pace));
       return mockPlanTitle(goal);
     },
+    titleChat: async (content) => {
+      await new Promise((r) => setTimeout(r, 400 * pace));
+      const latest = content.split('\n\n').filter((part) => part.startsWith('User: ')).at(-1);
+      return cleanPlanTitle((latest ?? content).replace(/^User: /, ''));
+    },
     // A side question: a beat of thinking, then the answer word by word, as Claude streams it.
     btw: async (req) => {
       await sleep(900 * pace, req.signal);

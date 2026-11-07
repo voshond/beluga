@@ -1,5 +1,5 @@
 import { answerChat } from './chat-answer.js';
-import { nameTask, titlePlan } from './namer.js';
+import { nameTask, titleChat, titlePlan } from './namer.js';
 import { reviewPr } from './pr-reviewer.js';
 import { describeProject } from './project-describer.js';
 import type { Complete } from './runtime/types.js';
@@ -7,7 +7,7 @@ import { fixRun, fixSetup, workOutScripts } from './setup-fixer.js';
 import { draftTask } from './task-drafter.js';
 import type { AgentBackend } from './types.js';
 
-type SideCalls = Required<Pick<AgentBackend, 'nameTask' | 'titlePlan' | 'answerChat' | 'fixSetup' | 'fixRun' | 'workOutScripts' | 'draftTask' | 'describeProject' | 'reviewPr'>>;
+type SideCalls = Required<Pick<AgentBackend, 'nameTask' | 'titlePlan' | 'titleChat' | 'answerChat' | 'fixSetup' | 'fixRun' | 'workOutScripts' | 'draftTask' | 'describeProject' | 'reviewPr'>>;
 
 /**
  * The one-shot calls a backend makes besides runs (BLG-441): naming worktrees and plans, drafting
@@ -19,6 +19,7 @@ export function sideCalls(complete: Complete, cwd: string, model?: string): Side
   return {
     nameTask: (prompt) => nameTask(prompt, { cwd, complete }),
     titlePlan: (goal) => titlePlan(goal, { cwd, complete }),
+    titleChat: (content) => titleChat(content, { cwd, complete }),
     answerChat: (req) => answerChat(req, { cwd, complete, ...(model ? { model } : {}) }),
     fixSetup: (dir, failed, output) => fixSetup(dir, failed, output, { complete }),
     fixRun: (dir, failed, output) => fixRun(dir, failed, output, { complete }),

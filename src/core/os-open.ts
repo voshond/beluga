@@ -32,8 +32,18 @@ export function revealCommand(file: string, platform: NodeJS.Platform = process.
   return openCommand(path.posix.dirname(file), platform);
 }
 
-function run({ cmd, args, verbatim }: OsCommand): void {
-  spawn(cmd, [...args], { stdio: 'ignore', detached: true, windowsHide: true, ...(verbatim ? { windowsVerbatimArguments: true } : {}) })
+/**
+ * How to start it: detached, nothing to read or write, and never `windowsHide`. That flag starts
+ * the child with its first window hidden, and Explorer honours it: the folder window exists but
+ * is never shown (Open in File Explorer looked like it did nothing). None of these programs has a
+ * console to hide anyway.
+ */
+export function spawnOptions({ verbatim }: OsCommand): { stdio: 'ignore'; detached: true; windowsHide: false; windowsVerbatimArguments?: true } {
+  return { stdio: 'ignore', detached: true, windowsHide: false, ...(verbatim ? { windowsVerbatimArguments: true } : {}) };
+}
+
+function run(command: OsCommand): void {
+  spawn(command.cmd, [...command.args], spawnOptions(command))
     .on('error', () => undefined)
     .unref();
 }
