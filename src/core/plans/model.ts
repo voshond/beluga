@@ -76,6 +76,8 @@ export interface PlanAsk {
   /** The option it recommends (a label of one of them): shown first, marked Recommended. */
   readonly recommended?: string;
   readonly multi?: boolean;
+  /** What it needs you to run (sudo, a deploy, a login on another machine): shown as commands to copy. */
+  readonly run?: PlanRun;
   /** The worktree that asked (workspace id): the answer goes there. */
   readonly worktree: string;
   readonly at: number;
@@ -86,6 +88,37 @@ export interface PlanDecision {
   readonly question: string;
   readonly options: ReadonlyArray<{ readonly label: string; readonly description?: string }>;
   readonly multi?: boolean;
+  /** What you run to do it, when it's a step on a machine (sudo, a deploy): never just "have you done it?". */
+  readonly run?: PlanRun;
+}
+
+/**
+ * Commands you're asked to run yourself: where (the machine, the folder: worktrees move, so it's
+ * always a full path), exactly what to type, and what you see when it worked. The card shows them
+ * as a block to copy, so "done?" is never asked without the how.
+ */
+export interface PlanRun {
+  /** The machine ("i9arch", "the NAS"); left out, this one. */
+  readonly on?: string;
+  /** The folder to run them in (a full path). */
+  readonly cwd?: string;
+  readonly commands: readonly string[];
+  /** What it prints, or what's true, when it worked. */
+  readonly expect?: string;
+}
+
+export const MAX_RUN_COMMANDS = 12;
+
+/** Commands as given: trimmed and capped; none without a command. */
+export function runOf(input: { readonly on?: string; readonly cwd?: string; readonly commands?: readonly string[] | string; readonly expect?: string } | undefined): PlanRun | undefined {
+  if (!input?.commands) return undefined;
+  const raw = typeof input.commands === 'string' ? input.commands.split('\n') : input.commands;
+  const commands = raw.map((c) => c.trimEnd().slice(0, 400)).filter((c) => c.trim()).slice(0, MAX_RUN_COMMANDS);
+  if (!commands.length) return undefined;
+  const on = input.on?.replace(/\s+/g, ' ').trim().slice(0, 80);
+  const cwd = input.cwd?.trim().slice(0, 300);
+  const expect = input.expect?.replace(/\s+/g, ' ').trim().slice(0, 300);
+  return { ...(on ? { on } : {}), ...(cwd ? { cwd } : {}), commands, ...(expect ? { expect } : {}) };
 }
 
 export interface PlanMilestone {

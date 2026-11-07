@@ -1,7 +1,7 @@
 import type { ClaudeAnswer, ClaudeQuestion } from '../../protocol.js';
 import type { Actor, BoardState, Issue } from '../board/model.js';
 import type { Store } from '../store.js';
-import { type Plan, type PlanAsk, planTitle } from './model.js';
+import { type Plan, type PlanAsk, type PlanRun, planTitle } from './model.js';
 import { FINISHED, type PlanView, type TaskState, type TaskView, planView } from './progress.js';
 
 /**
@@ -52,9 +52,33 @@ export function awaitingYou(view: PlanView): readonly TaskView[] {
 
 const clip = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
+/** A card's question holds 1000 characters (the protocol's cap); the commands keep up to this many of them. */
+const MAX_QUESTION = 1000;
+const MAX_RUN_TEXT = 760;
+
+const shellWord = (text: string): string => (/^[\w@%+=:,./~-]+$/.test(text) ? text : `'${text.replace(/'/g, `'\\''`)}'`);
+
+/** What you run, as the card shows it: the machine, the commands in a block to copy (its folder is the cd that starts it), and how you tell it worked. */
+export function runMarkdown(run: PlanRun): string {
+  const commands = [...(run.cwd ? [`cd ${shellWord(run.cwd)}`] : []), ...run.commands];
+  return [`Run${run.on ? ` on **${run.on}**` : ''}:`, '```sh', ...commands, '```', run.expect ? `It worked when: ${run.expect}` : ''].filter(Boolean).join('\n');
+}
+
+/** The question with its commands under it: the words are cut to fit, the commands first of all. */
+function withRun(what: string, run: PlanRun | undefined): string {
+  if (!run) return clip(what, MAX_QUESTION);
+  const commands = clip(runMarkdown(run), MAX_RUN_TEXT);
+  return `${clip(what, MAX_QUESTION - commands.length - 2)}\n\n${commands}`;
+}
+
 /** When the plan said nothing to choose from: it's done, or it isn't needed (your own words always fit too). */
 function fallbackOptions(t: TaskView): Array<{ label: string; description: string }> {
   const done = t.task.acceptance.length ? `Done: ${t.task.acceptance.join('; ')}` : 'Done: the plan carries on';
+  const run = t.task.decision?.run;
+  if (run) return [
+    { label: 'Done', description: clip(run.expect ? `It worked: ${run.expect}` : done, 600) },
+    { label: 'It failed', description: 'Write what it printed (the last lines) instead' },
+  ];
   return [
     { label: 'Done', description: clip(done, 600) },
     { label: 'Not needed', description: 'Skip it: the plan carries on without it' },
@@ -68,7 +92,7 @@ export function decisionQuestion(t: TaskView): Extract<ClaudeQuestion, { kind: '
   const options = d?.options.length ? d.options.map((o) => ({ label: clip(o.label, 200), description: clip(o.description ?? '', 600) })) : fallbackOptions(t);
   return {
     kind: 'question',
-    questions: [{ question: clip(what, 1000), header: clip(t.issue?.key ? `${t.issue.key} · Your call` : 'Your call', 40), options: options.slice(0, 6), multiSelect: Boolean(d?.multi && d.options.length) }],
+    questions: [{ question: withRun(what, d?.run), header: clip(t.issue?.key ? `${t.issue.key} · Your call` : 'Your call', 40), options: options.slice(0, 6), multiSelect: Boolean(d?.multi && d.options.length) }],
   };
 }
 
@@ -90,7 +114,7 @@ export function askQuestion(ask: PlanAsk, key: string, title: string): Extract<C
   const what = [`**${key} “${title}”**: its agent asks`, ask.question, ask.why ?? ''].filter(Boolean).join('\n\n');
   const rec = ask.options.find((o) => o.label === ask.recommended);
   const options = [...(rec ? [rec] : []), ...ask.options.filter((o) => o !== rec)].map((o) => ({ label: clip(o === rec ? `${o.label}${RECOMMENDED}` : o.label, 200), description: clip(o.description ?? '', 600) }));
-  return { kind: 'question', questions: [{ question: clip(what, 1000), header: clip(`${key} · Agent asks`, 40), options: options.slice(0, 6), multiSelect: Boolean(ask.multi) }] };
+  return { kind: 'question', questions: [{ question: withRun(what, ask.run), header: clip(`${key} · Agent asks`, 40), options: options.slice(0, 6), multiSelect: Boolean(ask.multi) }] };
 }
 
 /** The questions tasks' Claudes asked that still wait (their task on the board and not finished), by plan. */
