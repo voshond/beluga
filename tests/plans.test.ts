@@ -1535,6 +1535,26 @@ describe('the plan’s branch: tasks start from it, milestones merge into it, on
         expect(t.said()).toContain('every repo’s work is in main (3 repos)');
       });
 
+      it('Merge All still merges the other repos when the plan’s own repo is in main already', async () => {
+        const t = await shipping();
+        await t.work.openPr(t.plan.id);
+        await t.work.mergePr(t.plan.id, {}, 'api');
+        expect(Object.keys(t.plans.need(t.plan.id).shippedIn ?? {})).toEqual(['api']);
+        await t.work.openPr(t.plan.id);
+        await t.work.mergePr(t.plan.id);
+        expect(t.log.inRepo.filter((l) => l.startsWith('mergepr'))).toEqual(['mergepr api #9', 'mergepr cal #7', 'mergepr desk #8']);
+        expect(t.plans.need(t.plan.id).shipped).toBeDefined();
+        for (const title of ['Invite schema', 'Invite UI', 'Transcript hook']) expect(t.issue(title).status).toBe('done');
+      });
+
+      it('merging here skips the plan’s own repo when it’s in main already', async () => {
+        const t = await shipping();
+        await t.work.mergeLocal(t.plan.id, 'api');
+        await t.work.mergeLocal(t.plan.id);
+        expect(t.log.inRepo.filter((l) => l.startsWith('mergelocal'))).toEqual(['mergelocal api', 'mergelocal cal', 'mergelocal desk']);
+        expect(t.plans.need(t.plan.id).shipped).toMatchObject({ how: 'local' });
+      });
+
       it('Merge When Checks Pass turns auto-merge on one repo at a time, the next once the one before it merges', async () => {
         const t = await shipping();
         await t.work.openPr(t.plan.id);

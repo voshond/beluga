@@ -1650,7 +1650,7 @@ export class PlanPilot {
   }
 
   private async openPrs(planId: string): Promise<Plan> {
-    const { git } = this.shippable(planId);
+    const { git } = this.shippablePlan(planId);
     for (const repo of shipOrder(this.deps.plans.need(planId))) {
       const plan = this.deps.plans.need(planId);
       const branch = planBranchFor(plan, repo);
@@ -1755,8 +1755,8 @@ export class PlanPilot {
   }
 
   private async mergeAll(planId: string, opts: { readonly auto?: boolean }): Promise<Plan> {
-    const { plan } = this.shippable(planId);
-    const left = shipOrder(plan).filter((r) => !shippedIn(plan, r));
+    const { plan } = this.shippablePlan(planId);
+    const left =shipOrder(plan).filter((r) => !shippedIn(plan, r));
     const missing = left.filter((r) => !planPrFor(plan, r));
     if (missing.length) throw new Error(`Open the PRs first: ${missing.map((r) => this.repoName(r)).join(', ')} ${missing.length > 1 ? 'have' : 'has'} no pull request yet`);
     if (opts.auto) {
@@ -1829,7 +1829,7 @@ export class PlanPilot {
   async mergeLocal(planId: string, repo?: string): Promise<Plan> {
     const plan = this.deps.plans.need(planId);
     if (!isMultiRepo(plan) || repo) return this.mergeLocalOne(planId, repo ?? plan.projectId);
-    const { plan: shippable } = this.shippable(planId);
+    const { plan: shippable } = this.shippablePlan(planId);
     for (const r of shipOrder(shippable).filter((x) => !shippedIn(shippable, x))) {
       try {
         await this.mergeLocalOne(planId, r);
@@ -1853,13 +1853,20 @@ export class PlanPilot {
   }
 
   private shippable(planId: string, repo?: string): { readonly git: PlanGit; readonly plan: Plan; readonly branch: string } {
-    const plan = this.deps.plans.need(planId);
+    const { git, plan } = this.shippablePlan(planId);
     const inRepo = repo ?? plan.projectId;
     const branch = planBranchFor(plan, inRepo);
-    if (!this.deps.git || !plan.branch || !branch) throw new Error(inRepo === plan.projectId ? 'This plan has no branch of its own' : `${this.repoName(inRepo)} has no plan branch`);
-    if (plan.shipped) throw new Error('The plan is in main already');
+    if (!branch) throw new Error(inRepo === plan.projectId ? 'This plan has no branch of its own' : `${this.repoName(inRepo)} has no plan branch`);
     if (shippedIn(plan, inRepo)) throw new Error(`${this.repoName(inRepo)}’s work is in main already`);
-    return { git: this.deps.git, plan, branch };
+    return { git, plan, branch };
+  }
+
+  /** The plan as a whole can still ship: across repos, any of them may be in main already (Merge All skips those). */
+  private shippablePlan(planId: string): { readonly git: PlanGit; readonly plan: Plan } {
+    const plan = this.deps.plans.need(planId);
+    if (!this.deps.git || !plan.branch) throw new Error('This plan has no branch of its own');
+    if (plan.shipped) throw new Error('The plan is in main already');
+    return { git: this.deps.git, plan };
   }
 
   /** Look at a plan's started tasks: wake what stopped without finishing, or ask you. */
