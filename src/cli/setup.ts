@@ -131,11 +131,13 @@ async function phoneStep(link: SetupLink, deps: SetupDeps, opts: SetupOptions, i
   // Ctrl+C while waiting for the phone: the pairing closes, and setup stops (as at any question).
   const onCtrlC = (): void => (stopped.abort(), skip.abort());
   process.once('SIGINT', onCtrlC);
-  // Pair? needs the keyboard: Enter stops meaning "skip" once the phone has dialed in.
+  // Pair? needs the keyboard: Enter stops meaning "skip" once the phone has dialed in. The
+  // question catches Ctrl+C itself; ours goes only after, so there's never a moment with none.
   const ask = (q: string): Promise<string> => {
     listening.abort();
+    const asking = deps.prompt.ask(q);
     process.off('SIGINT', onCtrlC);
-    return deps.prompt.ask(q).catch((err: unknown) => {
+    return asking.catch((err: unknown) => {
       stopped.abort();
       throw err;
     });

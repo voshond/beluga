@@ -45,6 +45,18 @@ describe('reading a line without readline (BLG-681)', () => {
     await expect(q).rejects.toBeInstanceOf(Cancelled);
   });
 
+  it('Ctrl+C is caught by the time the question shows: Node never dies of it in silence', async () => {
+    const k = keyboard(true);
+    const before = process.listenerCount('SIGINT');
+    let caught = -1;
+    const output = Object.assign(new PassThrough(), { write: () => ((caught = process.listenerCount('SIGINT')), true) });
+    const q = readLine('Pair? [y/N] ', { input: k.input, output });
+    expect(caught).toBe(before + 1);
+    process.emit('SIGINT');
+    await expect(q).rejects.toBeInstanceOf(Cancelled);
+    expect(process.listenerCount('SIGINT')).toBe(before);
+  });
+
   it('the prompter: defaults on Enter, yes or no loosely', async () => {
     const k = keyboard();
     const p = terminalPrompter(k.input, k.output);

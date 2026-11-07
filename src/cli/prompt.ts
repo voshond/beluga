@@ -41,7 +41,6 @@ export function readLine(question: string, opts: { signal?: AbortSignal; hidden?
   const raw = Boolean(opts.hidden && input.isTTY && input.setRawMode);
   return new Promise((resolve, reject) => {
     if (opts.signal?.aborted) return reject(new Cancelled());
-    output.write(question);
     let typed = ahead;
     ahead = '';
     const finish = (fn: () => void): void => {
@@ -75,7 +74,9 @@ export function readLine(question: string, opts: { signal?: AbortSignal; hidden?
       take();
     };
     opts.signal?.addEventListener('abort', onAbort, { once: true });
+    // Ctrl+C is caught before the question shows: with no listener Node dies of it, saying nothing.
     process.once('SIGINT', onAbort);
+    output.write(question);
     if (raw) input.setRawMode!(true);
     if (take()) return;
     input.on('data', onData);

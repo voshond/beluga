@@ -206,6 +206,23 @@ describe('beluga setup', () => {
     expect(await setup(deps, { yes: false }, io)).toBe(130);
     expect(io.all()).toContain('picks up where you left off');
   });
+
+  it('Ctrl+C right as Pair? shows still stops setup: its handler goes only once the question has one', async () => {
+    const before = process.listenerCount('SIGINT');
+    const prompt = scripted([TOKEN, '', '', '^C']);
+    let atPair = -1;
+    const ask = prompt.ask;
+    prompt.ask = (q, fallback) => {
+      if (q.startsWith('Pair?')) atPair = process.listenerCount('SIGINT');
+      return ask(q, fallback);
+    };
+    const { deps } = world({ prompt, phone: fakePhone() });
+    const io = capture();
+    expect(await setup(deps, { yes: false }, io)).toBe(130);
+    expect(atPair).toBe(before + 1);
+    expect(io.all()).toContain('Setup stopped');
+    expect(process.listenerCount('SIGINT')).toBe(before);
+  });
 });
 
 describe('Claude’s token for the daemon', () => {
