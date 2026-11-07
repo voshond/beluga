@@ -3,6 +3,10 @@
   display: block;
   object-fit: contain;
 }
+.round {
+  object-fit: cover;
+  background: var(--text-3);
+}
 .tile {
   flex: none;
   display: inline-grid;

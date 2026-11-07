@@ -2503,9 +2503,6 @@
 }
 .repoStackItem {
   display: inline-flex;
-  border-radius: calc(var(--repo-size) * 0.3);
-  box-shadow: 0 0 0 1.5px var(--bg);
-  background: var(--bg);
 }
 .repoStackItem + .repoStackItem {
   margin-left: calc(var(--repo-size) * -0.12);

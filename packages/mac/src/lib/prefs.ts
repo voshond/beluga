@@ -6,7 +6,7 @@ import { type TermKeysPref, type TermThemePref, termKeysOf, themeOf } from './te
 import { type ConvoMode, clampBoth, isConvoMode } from './convo-mode.js';
 import { type ShortcutOverrides, keyPlatform, overridesOf } from './shortcuts-model.js';
 import { type ThemeBase, allThemesCss, isSolid, themeFor, themeIdOf, themePatch } from './themes.js';
-import { DEFAULT_LAYOUT, DRAWER_DEFAULT, PANEL_DEFAULT, PANES_DEFAULT, type PanelLayout, type PanelTab, SPLIT_DEFAULT, type TerminalPlace, migratePrefs, normalizeLayout } from './panel-model.js';
+import { DEFAULT_LAYOUT, DRAWER_DEFAULT, PANEL_DEFAULT, PANES_DEFAULT, type PanelLayout, type PanelTab, SIDEBAR_DEFAULT, SPLIT_DEFAULT, type TerminalPlace, migratePrefs, normalizeLayout } from './panel-model.js';
 
 /**
  * How this window looks and behaves: kept on this Mac only (Beluga's shared settings, like the
@@ -160,7 +160,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   bottomOpen: true,
   panelSplit: SPLIT_DEFAULT,
   sidebar: true,
-  sidebarWidth: 248,
+  sidebarWidth: SIDEBAR_DEFAULT,
   folded: [],
   openProjects: [],
   unreadSection: true,

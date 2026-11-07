@@ -192,7 +192,7 @@ export function RepoStack({ repos, size = 14 }: { repos: readonly string[]; size
     <span className={p.repoStack} title={`Across ${repos.map(nameOf).join(', ')}`} role="img" aria-label={`Across ${repos.map(nameOf).join(', ')}`} data-repo-stack={repos.length}>
       {shown.map((id, n) => (
         <span key={id} className={p.repoStackOne} style={{ zIndex: shown.length - n }}>
-          <ProjectIcon id={id} name={nameOf(id)} size={size} />
+          <ProjectIcon id={id} name={nameOf(id)} size={size} round />
         </span>
       ))}
       {rest > 0 ? <span className={p.repoStackMore}>+{rest}</span> : null}

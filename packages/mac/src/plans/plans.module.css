@@ -2282,11 +2282,9 @@ textarea.goalBox {
 .repoStackOne {
   position: relative;
   display: inline-flex;
-  border-radius: 5px;
-  box-shadow: 0 0 0 1.5px var(--bg);
 }
 .repoStackOne + .repoStackOne {
-  margin-left: -6px;
+  margin-left: -4px;
 }
 .repoStackMore {
   margin-left: 3px;

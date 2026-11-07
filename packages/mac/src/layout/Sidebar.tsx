@@ -12,6 +12,8 @@ import { inApp } from '../lib/boot.js';
 import { useApi, useApp, useBeluga } from '../lib/beluga.js';
 import { sameDeep } from '../lib/stable.js';
 import { setPrefs, usePrefs } from '../lib/prefs.js';
+import { SIDEBAR_DEFAULT, clampSidebarWidth } from '../lib/panel-model.js';
+import { ResizeHandle } from './panel/ResizeHandle.js';
 import { RoomStatus } from '../dialogs/native/RoomPopover.js';
 import { PhoneMark } from '../phone/Phone.js';
 import { ActionsDropdown, type ActionItem } from '../components/SpecMenu.js';
@@ -41,6 +43,8 @@ import { AppMenu } from './AppMenu.js';
  * folders friends share under Files (projects they share are in Projects); Activity and Requests show up only while there's something
  * in them. Everything is also in ⌘K and the Go menu (⌘1…7).
  */
+const STEP = 24;
+
 const NAV: ReadonlyArray<{ kind: 'overview' | 'room'; icon: IconName }> = [
   { kind: 'overview', icon: 'grid' },
   { kind: 'room', icon: 'chat' },
@@ -191,7 +195,32 @@ export function Sidebar() {
       <UpdatePill />
       <SidebarFooter />
       <SelfBar />
+      <SidebarEdge />
     </nav>
+  );
+}
+
+/** The sidebar's right edge, dragged to resize it like the panel's left edge: live while you drag, saved when you let go. */
+function SidebarEdge() {
+  const prefs = usePrefs();
+  const drag = useRef<number>(undefined);
+  const resize = (width: number): void => {
+    drag.current = clampSidebarWidth(width);
+    document.documentElement.style.setProperty('--sidebar-w', `${drag.current}px`);
+  };
+  return (
+    <ResizeHandle
+      axis="x"
+      label="Resize the sidebar"
+      className={s.edge}
+      onMove={resize}
+      onEnd={() => {
+        if (drag.current !== undefined) setPrefs({ sidebarWidth: drag.current });
+        drag.current = undefined;
+      }}
+      onReset={() => setPrefs({ sidebarWidth: SIDEBAR_DEFAULT })}
+      onStep={(dir) => setPrefs({ sidebarWidth: clampSidebarWidth(prefs.sidebarWidth - dir * STEP) })}
+    />
   );
 }
 
