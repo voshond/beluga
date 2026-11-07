@@ -23,7 +23,7 @@ export function RepoStack({ repos, names, size = 16 }: { repos: readonly string[
     <span className={t.repoStack} style={{ ['--repo-size' as string]: `${size}px` }}>
       {shown.map((r) => (
         <span key={r} className={t.repoStackItem}>
-          <ProjectIcon id={r} name={names(r) ?? r} size={size} />
+          <ProjectIcon id={r} name={names(r) ?? r} size={size} round />
         </span>
       ))}
     </span>

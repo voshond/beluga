@@ -16,6 +16,7 @@ import { APP_VERSION, webServed } from '../lib/boot.js';
 import { revealInFinder } from '../lib/files.js';
 import { type SettingsPane, useApi, useApp, useBeluga, useUi } from '../lib/beluga.js';
 import { ACCENTS, type Accent, setPrefs, useChosenPrefs, usePrefs } from '../lib/prefs.js';
+import { SIDEBAR_MAX, SIDEBAR_MIN } from '../lib/panel-model.js';
 import { themeFor } from '../lib/themes.js';
 import { useDocTheme } from '../components/markdown/use-doc-theme.js';
 import { ThemeGroups } from './ThemePicker.js';
@@ -268,7 +269,7 @@ function Appearance() {
           <Switch label="Unread in the sidebar" on={prefs.unreadSection} onChange={(v) => setPrefs({ unreadSection: v })} />
         </Row>
         <Row label="Sidebar width">
-          <input className={s.slider} type="range" min={200} max={360} step={4} value={prefs.sidebarWidth} onChange={(e) => setPrefs({ sidebarWidth: Number(e.target.value) })} />
+          <input className={s.slider} type="range" min={SIDEBAR_MIN} max={SIDEBAR_MAX} step={4} value={prefs.sidebarWidth} onChange={(e) => setPrefs({ sidebarWidth: Number(e.target.value) })} />
         </Row>
         <Row label="Reduce motion" {...(savingNote ? { detail: savingNote } : {})}>
           <Switch label="Reduce motion" on={prefs.reduceMotion} onChange={(v) => setPrefs({ reduceMotion: v })} />

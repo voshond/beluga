@@ -74,6 +74,12 @@ export const PANEL_DEFAULT = 384;
 /** The panel never takes more than this share of the window. */
 export const PANEL_MAX_SHARE = 0.6;
 
+export const SIDEBAR_MIN = 200;
+export const SIDEBAR_MAX = 480;
+export const SIDEBAR_DEFAULT = 248;
+
+export const clampSidebarWidth = (width: number): number => Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, width)));
+
 /** How much of the panel's height the top pane takes, by default. */
 export const PANES_DEFAULT = 0.58;
 
