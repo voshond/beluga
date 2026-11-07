@@ -39,6 +39,7 @@
 /* A browser: the menu bar's button (AppMenu) where the traffic lights would be. */
 .appMenu {
   display: inline-flex;
+  gap: 2px;
   padding-left: 10px;
 }
 

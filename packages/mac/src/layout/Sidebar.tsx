@@ -36,6 +36,7 @@ import s from './Sidebar.module.css';
 import { shortcutKeys } from '../lib/shortcuts.js';
 import { CallPill } from '../call/CallLayer.js';
 import { AppMenu } from './AppMenu.js';
+import { WebBack } from './WebBack.js';
 
 /**
  * The sidebar's top: three places, always. The rest are a click away without a row of their
@@ -121,6 +122,7 @@ export function Sidebar() {
         ) : (
           <span className={s.appMenu}>
             <AppMenu />
+            <WebBack />
           </span>
         )}
         <UsageButton />
