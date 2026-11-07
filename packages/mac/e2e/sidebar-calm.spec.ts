@@ -9,15 +9,16 @@ test.beforeEach(async ({ page }) => {
   await expect(sidebar(page)).toBeVisible();
 });
 
-test('the top of the sidebar is Your Mac, Overview, Work (tasks, issues and plans), Sentinel, the chat and Files', async ({ page }) => {
-  // The places themselves: a running plan's row sits under Work (KLD-18, BLG-197) and isn't one of them.
+test('the top of the sidebar is Your Mac, Overview, Work (tasks, issues and actions), Plans, Sentinel, the chat and Files', async ({ page }) => {
+  // The places themselves: a running plan's row sits under Plans (KLD-18) and isn't one of them.
   const top = sidebar(page).locator('section').first().getByRole('button').and(page.locator(':not([data-plan-row])'));
   await expect(top.nth(0)).toHaveAccessibleName(/^Your Mac/);
   await expect(top.nth(1)).toHaveAccessibleName(/^Overview/);
   await expect(top.nth(2)).toHaveAccessibleName(/^Work/);
-  await expect(top.nth(3)).toHaveAccessibleName(/^Sentinel/);
-  await expect(top.nth(4)).toHaveAccessibleName(/^Group chat/);
-  await expect(top.nth(5)).toHaveAccessibleName(/^Files/);
+  await expect(top.nth(3)).toHaveAccessibleName(/^Plans/);
+  await expect(top.nth(4)).toHaveAccessibleName(/^Sentinel/);
+  await expect(top.nth(5)).toHaveAccessibleName(/^Group chat/);
+  await expect(top.nth(6)).toHaveAccessibleName(/^Files/);
   for (const gone of ['Search', 'Usage', 'Terminal']) await expect(sidebar(page).locator('section').first().getByRole('button', { name: gone, exact: true })).toHaveCount(0);
 });
 

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './fixtures.js';
-import { openWork } from './helpers.js';
+import { openPlansList } from './helpers.js';
 
 /**
  * Acceptance criteria that count (KLD-74): one not ticked yet carries its reason ("— deferred: why",
@@ -15,7 +15,7 @@ test.describe.configure({ mode: 'serial' });
 /** bob-api's demo plan, as a list: its task worktrees stay off the sidebar, so their tasks are reached from here. */
 async function openPlan(page: Page): Promise<void> {
   await page.goto('/');
-  await openWork(page, 'Plans');
+  await openPlansList(page);
   if (!(await page.getByRole('button', { name: 'Project: bob-api' }).isVisible())) {
     await page.getByRole('button', { name: /^Project: / }).click();
     await page.getByRole('menuitem', { name: /bob-api/ }).click();

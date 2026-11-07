@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type Locator, type Page } from './fixtures.js';
-import { openWork } from './helpers.js';
+import { openPlansList } from './helpers.js';
 
 /**
  * The plan's chat (KLD-64): every message sent there reaches its Claude, right after the page
@@ -25,7 +25,7 @@ test.describe.configure({ mode: 'serial' });
 /** A new plan of its own (so the demo's plan stays as other specs expect it), its page open. */
 async function newPlan(page: Page, goal: string): Promise<void> {
   await page.goto('/');
-  await openWork(page, 'Plans');
+  await openPlansList(page);
   if (!(await page.getByRole('button', { name: 'Project: bob-api' }).isVisible())) {
     await page.getByRole('button', { name: /^Project: / }).click();
     await page.getByRole('menuitem', { name: /bob-api/ }).click();

@@ -12,9 +12,13 @@ const pageOf = (scope: Scope): Page => ('goto' in scope ? scope : scope.page());
  * One of Work's pages (BLG-197: Tasks, Issues, Actions and Plans are one sidebar row, Work, with a
  * switch over its lists): the Work row, then its tab.
  */
-export async function openWork(page: Page, tab: 'Tasks' | 'Issues' | 'Actions' | 'Plans'): Promise<void> {
+export async function openWork(page: Page, tab: 'Tasks' | 'Issues' | 'Actions'): Promise<void> {
   await page.getByRole('navigation', { name: 'Sidebar' }).getByRole('button', { name: 'Work', exact: true }).click();
   await page.getByRole('tablist', { name: 'Work' }).getByRole('tab', { name: tab }).click();
+}
+
+export async function openPlansList(page: Page): Promise<void> {
+  await page.getByRole('navigation', { name: 'Sidebar' }).getByRole('button', { name: 'Plans', exact: true }).click();
 }
 
 /** A person's row in the sidebar: "bob", or "bob Add bob as a friend" while you aren't friends yet. */

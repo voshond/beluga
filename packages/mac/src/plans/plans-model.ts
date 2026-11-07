@@ -1,6 +1,6 @@
 import type { BoardState } from '../../../../src/core/board/model.js';
 import type { Actor } from '../../../../src/core/board/model.js';
-import { AUTONOMY_INFO, type Autonomy, MAX_PLAN_REPOS, type Plan, type PlanBody, type PlanEvent, type PlanMilestone, type PlanPr, type PlansState, diffBodies, draftRepoPlan, isMultiRepo, milestoneDeps, milestoneRepos, planBranchFor, planTitle, prRef, shownBody } from '../../../../src/core/plans/model.js';
+import { AUTONOMY_INFO, type Autonomy, MAX_PLAN_REPOS, type Plan, type PlanBody, type PlanEvent, type PlanMilestone, type PlanPr, type PlansState, diffBodies, draftRepoPlan, isMultiRepo, milestoneDeps, milestoneRepos, planBranchFor, planRepos, planTitle, prRef, shownBody } from '../../../../src/core/plans/model.js';
 import { type MilestoneState, type MilestoneView, type NextStep, type PlanView, type ShipRepo, type TaskState, type TaskView, agentNowWords } from '../../../../src/core/plans/progress.js';
 import { pulseWords } from '../../../../src/core/plans/watchdog.js';
 
@@ -149,9 +149,18 @@ export function nextWords(next: NextStep): { readonly title: string; readonly de
 }
 
 /** A project's plans: running first, then drafts, then finished; newest first in each. */
+const planRank = (p: Plan): number => (p.status === 'active' ? 0 : p.status === 'draft' ? 1 : 2);
+const byRank = (a: Plan, b: Plan): number => planRank(a) - planRank(b) || b.updatedAt - a.updatedAt;
+
 export function plansOf(state: PlansState, projectId: string | undefined): Plan[] {
-  const rank = (p: Plan): number => (p.status === 'active' ? 0 : p.status === 'draft' ? 1 : 2);
-  return state.plans.filter((p) => p.projectId === projectId).sort((a, b) => rank(a) - rank(b) || b.updatedAt - a.updatedAt);
+  return state.plans.filter((p) => p.projectId === projectId).sort(byRank);
+}
+
+export type PlanSections = { readonly now: readonly Plan[]; readonly finished: readonly Plan[] };
+
+export function planSections(state: PlansState, projectId: string | undefined): PlanSections {
+  const shown = state.plans.filter((p) => !projectId || planRepos(p).includes(projectId)).sort(byRank);
+  return { now: shown.filter((p) => p.status !== 'done'), finished: shown.filter((p) => p.status === 'done') };
 }
 
 export const titleOf = planTitle;

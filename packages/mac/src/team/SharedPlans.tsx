@@ -127,9 +127,9 @@ export function TeamReviews({ planId }: { planId: string }) {
   );
 }
 
-/** "Shared by your team" in Plans: teammates' plans for this project. */
-export function SharedPlansList({ projectId }: { projectId: string }) {
-  const plans = useApp((st) => st.team.plans.filter((x) => x.projectId === projectId), sameDeep);
+/** "Shared by your team" in Plans: teammates' plans for this project, or for every project. */
+export function SharedPlansList({ projectId }: { projectId?: string | undefined }) {
+  const plans = useApp((st) => st.team.plans.filter((x) => !projectId || x.projectId === projectId), sameDeep);
   const actions = useActions();
   if (!plans.length) return null;
   return (

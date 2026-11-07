@@ -3,7 +3,7 @@ import { normalizeBody } from '../src/core/plans/edit.js';
 import type { Plan } from '../src/core/plans/model.js';
 import { planView } from '../src/core/plans/progress.js';
 import { NO_BOARD } from '../src/core/board/model.js';
-import { barColumns, branchFlow, changeMarks, changeWords, feedOf, firstRepos, gateId, graphShape, groupId, headline, milestoneRepoNames, milestoneRows, modeChange, newPlanTitle, nextWords, planStatus, plansOf, prWords, shipAction, shipAllAction, taskHeadline, taskNodeId, withPrimary, withRepo } from '../packages/mac/src/plans/plans-model.js';
+import { barColumns, branchFlow, changeMarks, changeWords, feedOf, firstRepos, gateId, graphShape, groupId, headline, milestoneRepoNames, milestoneRows, modeChange, newPlanTitle, nextWords, planSections, planStatus, plansOf, prWords, shipAction, shipAllAction, taskHeadline, taskNodeId, withPrimary, withRepo } from '../packages/mac/src/plans/plans-model.js';
 import type { PlanPr } from '../src/core/plans/model.js';
 import type { PlanEvent } from '../src/core/plans/model.js';
 import type { PlanView, ShipRepo } from '../src/core/plans/progress.js';
@@ -88,6 +88,16 @@ describe('words for a plan', () => {
   it('a project’s plans: running, then drafts, then done', () => {
     const list = plansOf({ enabled: true, style: '', plans: [plan({ id: 'd', status: 'done', updatedAt: 9 }), plan({ id: 'r', status: 'draft', updatedAt: 5 }), plan({ id: 'a', status: 'active', updatedAt: 1 }), plan({ id: 'o', projectId: 'other' })] }, 'x');
     expect(list.map((p) => p.id)).toEqual(['a', 'r', 'd']);
+  });
+
+  it('every plan, or one repo’s with plans across repos in each of theirs: running and drafts, then finished', () => {
+    const state = { enabled: true, style: '', plans: [plan({ id: 'd', status: 'done', updatedAt: 9 }), plan({ id: 'r', status: 'draft', updatedAt: 5 }), plan({ id: 'a', status: 'active', updatedAt: 1 }), plan({ id: 'o', projectId: 'other', updatedAt: 3 }), plan({ id: 'm', projectId: 'other', repos: ['x'], status: 'done', updatedAt: 2 })] };
+    const all = planSections(state, undefined);
+    expect(all.now.map((p) => p.id)).toEqual(['a', 'r', 'o']);
+    expect(all.finished.map((p) => p.id)).toEqual(['d', 'm']);
+    const x = planSections(state, 'x');
+    expect(x.now.map((p) => p.id)).toEqual(['a', 'r']);
+    expect(x.finished.map((p) => p.id)).toEqual(['d', 'm']);
   });
 });
 

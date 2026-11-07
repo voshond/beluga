@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from './fixtures.js';
-import { openWork } from './helpers.js';
+import { openPlansList } from './helpers.js';
 
 /**
  * A plan while Claude writes it (KLD-28): a name that isn't your message, one placeholder inside
@@ -44,7 +44,7 @@ test('a plan being written: calm, clipped, one status (KLD-28)', async ({ page }
   // The conversation pane is clamp(320px, 30vw, 420px): 380px wide at this window width.
   await page.setViewportSize({ width: 1267, height: 820 });
   await page.goto('/');
-  await openWork(page, 'Plans');
+  await openPlansList(page);
   if (!(await page.getByRole('button', { name: 'Project: bob-api' }).isVisible())) {
     await page.getByRole('button', { name: /^Project: / }).click();
     await page.getByRole('menuitem', { name: /bob-api/ }).click();

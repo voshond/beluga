@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './fixtures.js';
-import { openWork } from './helpers.js';
+import { openPlansList } from './helpers.js';
 
 /** A plan's page is two parts, the plan and its chat (KLD-54): no right panel, a chat toggle in the header (⌥⌘0), a chat as wide as you leave it, and no modes in the plan's own conversation. */
 
@@ -8,7 +8,7 @@ const main = (page: Page) => page.locator('main');
 const chat = (page: Page) => page.getByRole('complementary', { name: 'Conversation' });
 
 async function openPlan(page: Page, name: RegExp): Promise<void> {
-  await openWork(page, 'Plans');
+  await openPlansList(page);
   if (!(await page.getByRole('button', { name: 'Project: bob-api' }).isVisible())) {
     await page.getByRole('button', { name: /^Project: / }).click();
     await page.getByRole('menuitem', { name: /bob-api/ }).click();
