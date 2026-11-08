@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { PendingQuestion } from '@beluga/core/collab-store.js';
 import { runnableQuestion } from '@beluga/core/run-ask.js';
+import { Icon } from '../components/Icon.js';
 import { Button, cx } from '../components/ui.js';
 import f from '../components/form.module.css';
 import { toast, useApi, useApp, useBeluga } from '../lib/beluga.js';
@@ -12,9 +13,36 @@ type RunAskProps = {
   readonly question: string;
 };
 
-const OUTPUT_LINES = 40;
+const OUTPUT_LINES = 200;
 
 const lastLines = (output: string): string => output.split('\n').slice(-OUTPUT_LINES).join('\n');
+
+const latestLine = (output: string): string =>
+  output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .at(-1) ?? '';
+
+type TrailProps = {
+  readonly output: string;
+  readonly open: boolean;
+  readonly onToggle: () => void;
+};
+
+const Trail = ({ output, open, onToggle }: TrailProps) => (
+  <>
+    <button type="button" className={s.toggle} aria-expanded={open} onClick={onToggle}>
+      <Icon name={open ? 'chevronUp' : 'chevronDown'} size={10} />
+      {open ? 'Hide output' : 'Show output'}
+    </button>
+    {open ? (
+      <pre className={cx(a.detail, s.output, 'selectable')} aria-label="What it printed">
+        <span>{lastLines(output) || ' '}</span>
+      </pre>
+    ) : null}
+  </>
+);
 
 export function RunAsk({ q, question }: RunAskProps) {
   const api = useApi();
@@ -23,6 +51,7 @@ export function RunAsk({ q, question }: RunAskProps) {
   const state = useApp((st) => st.runAsks[q.qid]);
   const [reply, setReply] = useState('');
   const [starting, setStarting] = useState(false);
+  const [trailChoice, setTrailChoice] = useState<boolean>();
   const run = runnableQuestion(q, selfId, question);
   if (!run) return null;
 
@@ -46,6 +75,8 @@ export function RunAsk({ q, question }: RunAskProps) {
   };
 
   const where = run.on ?? 'this machine';
+  const trailOpen = trailChoice ?? state?.status === 'failed';
+  const handleToggleTrail = (): void => setTrailChoice(!trailOpen);
 
   if (state?.status !== 'running') {
     return (
@@ -60,7 +91,7 @@ export function RunAsk({ q, question }: RunAskProps) {
         </div>
         {state?.status === 'stopped' ? <div className={a.hint}>You stopped it.</div> : null}
         {state?.error ? <div className={cx(a.hint, s.error)}>{state.error}</div> : null}
-        {state?.output ? <pre className={cx(a.detail, s.output, 'selectable')}>{lastLines(state.output)}</pre> : null}
+        {state?.output ? <Trail output={state.output} open={trailOpen} onToggle={handleToggleTrail} /> : null}
       </div>
     );
   }
@@ -75,9 +106,8 @@ export function RunAsk({ q, question }: RunAskProps) {
           Stop
         </Button>
       </div>
-      <pre className={cx(a.detail, s.output, 'selectable')} aria-label="What it printed">
-        {lastLines(state.output) || ' '}
-      </pre>
+      {!trailOpen && !state.prompt && latestLine(state.output) ? <div className={s.latest}>{latestLine(state.output)}</div> : null}
+      <Trail output={state.output} open={trailOpen} onToggle={handleToggleTrail} />
       {state.prompt ? (
         <form className={s.reply} onSubmit={handleReply}>
           <label className={s.promptText} htmlFor={`run-ask-${q.qid}`}>

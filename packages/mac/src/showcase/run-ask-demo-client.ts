@@ -57,7 +57,11 @@ const SCRIPTS: Record<string, Script> = {
   [chatCard.qid]: {
     before: ['$ ssh nas\n'],
     prompt: '[sudo] password for voshond: ',
-    after: ['\n[+] Pulling 2/2\n', ' ✔ registry Pulled                1.8s\n', ' ✔ registry-ui Pulled             1.2s\n', '[+] Running 2/2\n', ' ✔ Container registry     Started  0.6s\n', ' ✔ Container registry-ui  Started  0.4s\n'],
+    after: [
+      '\n[+] Pulling 2/2\n',
+      ...Array.from({ length: 18 }, (_, i) => ` ✔ ${(0x3f1a2c + i * 7919).toString(16)}e7 Pull complete            ${(0.2 + i * 0.07).toFixed(1)}s\n`),
+      ' ✔ registry Pulled                1.8s\n',
+      ' ✔ registry-ui Pulled             1.2s\n', '[+] Running 2/2\n', ' ✔ Container registry     Started  0.6s\n', ' ✔ Container registry-ui  Started  0.4s\n'],
   },
   [planCard.qid]: {
     before: [],
@@ -79,7 +83,7 @@ export const makeDemoClient = (onAnswer: (answer: DemoAnswer) => void): SocketCl
 
   const stream = async (qid: string, chunks: readonly string[]): Promise<boolean> => {
     for (const chunk of chunks) {
-      await sleep(420);
+      await sleep(chunks.length > 8 ? 140 : 420);
       const now = runOf(qid);
       if (!now || stopped.has(qid)) return false;
       setRun(qid, { ...now, output: now.output + chunk });
@@ -153,7 +157,7 @@ export const makeDemoClient = (onAnswer: (answer: DemoAnswer) => void): SocketCl
       const now = store.getState();
       if (now !== seen || !shown) {
         seen = now;
-        shown = { ...now, view: { kind: 'room' }, tabs: [], away: false, search: { ...now.search, cursor: 0 } } as AppState;
+        shown = { ...now, view: { kind: 'room' }, tabs: [], away: false, search: { ...now.search, cursor: 0 } } as unknown as AppState;
       }
       return shown;
     },
