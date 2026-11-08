@@ -1,0 +1,35 @@
+.run {
+  margin-top: 4px;
+}
+.output {
+  max-height: 14rem;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+.running {
+  flex: 1;
+  color: var(--text-2);
+  font-size: 0.9rem;
+}
+.error {
+  color: var(--error);
+}
+.reply {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.promptText {
+  max-width: 45%;
+  overflow: hidden;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.replyInput {
+  flex: 1;
+  min-width: 0;
+}

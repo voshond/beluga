@@ -28,6 +28,7 @@ import { existsSync } from 'node:fs';
 import { type Attention, type Location, type MyShare, type Prefs, type Store, peerName } from './store.js';
 import { WorkspaceController } from './workspace-controller.js';
 import { QuestionBroker } from './questions.js';
+import type { RunAsks } from './run-asks.js';
 import { isPlanHome } from './plans/model.js';
 import type { Conversation } from '../agent/transcript.js';
 import { slugify } from '../agent/namer.js';
@@ -208,6 +209,7 @@ export class Session {
   /** The room welcomed you at least once (a later outage is "lost", not "can’t reach yet"). */
   private everConnected = false;
   readonly questions: QuestionBroker;
+  readonly runAsks: RunAsks;
   readonly sharing: WorkspaceSharing;
   readonly people: People;
   private readonly replay: ReplayGuard;
@@ -251,6 +253,7 @@ export class Session {
     this.notifier = parts.notifier;
     this.workbench = parts.workbench;
     this.questions = parts.questions;
+    this.runAsks = parts.runAsks;
     this.sharing = parts.sharing;
     this.replay = parts.replay;
     this.people = parts.people;
@@ -383,6 +386,7 @@ export class Session {
     await this.host.abort();
     // The terminal's last words come back to the chat before it's saved.
     this.agentTerms?.closeAll();
+    this.runAsks.stopAll();
     // A run that didn't end in time (or whose end never came back) won't now: not saved as running.
     this.store.dispatch({ type: 'runs_interrupted', owner: this.selfId });
     this.opts.client.close();

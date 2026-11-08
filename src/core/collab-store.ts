@@ -1,4 +1,5 @@
 import type { AgentRef, ClaudeQuestion, GuestCan, WsRole } from '../protocol.js';
+import type { RunAskState } from './run-ask.js';
 
 /** Claude (yours or a friend's) is waiting for an answer from you. */
 export interface PendingQuestion {
@@ -115,6 +116,7 @@ export interface CollabState {
   /** Folders shared only with you. */
   readonly offers: readonly Offer[];
   readonly questions: readonly PendingQuestion[];
+  readonly runAsks: Readonly<Record<string, RunAskState>>;
   /** Whether the room you host takes new people. */
   readonly roomOpen: boolean;
   /** Workspaces others shared with you. */
@@ -135,6 +137,7 @@ export type CollabAction =
   | { type: 'question_add'; question: PendingQuestion }
   | { type: 'question_pick'; qid: string; question: string; answer: string }
   | { type: 'question_remove'; qid: string }
+  | { type: 'run_ask'; qid: string; state: RunAskState }
   | { type: 'room_open'; open: boolean }
   | { type: 'shared_add'; ws: SharedWorkspace }
   | { type: 'shared_remove'; owner: string; id: string }
@@ -153,7 +156,7 @@ export type CollabAction =
   | { type: 'knock'; knock: Knock; show: boolean }
   | { type: 'guest_shell'; id: string; shell?: ShellState };
 
-export const initialCollab: CollabState = { links: [], guests: {}, knocks: [], shells: {}, offers: [], questions: [], roomOpen: true, shared: [], members: {}, roster: {}, planMode: {}, trustPrompts: [], granted: {} };
+export const initialCollab: CollabState = { links: [], guests: {}, knocks: [], shells: {}, offers: [], questions: [], runAsks: {}, roomOpen: true, shared: [], members: {}, roster: {}, planMode: {}, trustPrompts: [], granted: {} };
 
 const MAX_QUESTIONS = 20;
 
@@ -170,7 +173,10 @@ export function reduceCollab(state: CollabState, action: CollabAction): CollabSt
     case 'question_pick':
       return { ...state, questions: state.questions.map((q) => (q.qid === action.qid ? { ...q, picked: { ...q.picked, [action.question]: action.answer } } : q)) };
     case 'question_remove':
-      return { ...state, questions: state.questions.filter((q) => q.qid !== action.qid) };
+      return { ...state, questions: state.questions.filter((q) => q.qid !== action.qid), runAsks: without(state.runAsks, action.qid) };
+    case 'run_ask':
+      if (!state.questions.some((q) => q.qid === action.qid)) return state;
+      return { ...state, runAsks: { ...state.runAsks, [action.qid]: action.state } };
     case 'room_open':
       return { ...state, roomOpen: action.open };
     case 'shared_add':
@@ -189,7 +195,7 @@ export function reduceCollab(state: CollabState, action: CollabAction): CollabSt
     case 'shared_clear': {
       const kept = state.shared.filter((w) => w.via === 'mesh');
       const roster = Object.fromEntries(Object.entries(state.roster).filter(([id]) => kept.some((w) => w.id === id)));
-      return { ...state, shared: kept, roster, questions: [], offers: [], shells: {} };
+      return { ...state, shared: kept, roster, questions: [], runAsks: {}, offers: [], shells: {} };
     }
     case 'offer': {
       const rest = state.offers.filter((o) => !(o.owner === action.offer.owner && o.name === action.offer.name));

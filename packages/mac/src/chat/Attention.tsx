@@ -14,6 +14,7 @@ import { sameDeep, sameFields } from '../lib/stable.js';
 import { hostToBefriend } from '../network/net-model.js';
 import { befriend } from '../network/use-net.js';
 import { Markdown } from './Markdown.js';
+import { RunAsk } from './RunAsk.js';
 import { useNow } from './Items.js';
 import s from './attention.module.css';
 
@@ -180,6 +181,7 @@ function Question({ channel }: { channel?: string }) {
       <div className={`${s.question} selectable`}>
         <Markdown text={current.question} />
       </div>
+      <RunAsk q={q} question={current.question} />
       <div className={s.options}>
         {current.options.map((o, i) => (
           <button key={o.label} type="button" className={`${s.option} ${chosen.has(o.label) ? s.optionOn : ''}`} onClick={() => actions.run({ type: 'answer', qid: q.qid, pick: 'option', label: o.label, question: current.question })}>

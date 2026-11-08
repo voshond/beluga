@@ -177,6 +177,9 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `inbox.clear` | ✓ (all, or × on one) |
 | `questions.answer` | ✓ |
 | `questions.pick` | ✓ |
+| `questions.run` | ✓ Run it on a question card whose commands are in one sh block (your own agent's, Mac only) |
+| `questions.runInput` | ✓ the password or yes/no field under a running card |
+| `questions.runStop` | ✓ Stop on a running card |
 | `people.setTrust` | ✓ |
 | `people.dismissPrompt` | ✓ |
 | `needs.dismiss` | ✓ Dismiss in a waiting item's right-click menu (the bell's Waiting for you); on the phone, Dismiss on a needs-you card |

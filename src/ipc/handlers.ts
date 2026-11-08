@@ -121,6 +121,9 @@ export const HANDLERS = {
 
   'questions.answer': (s, qid, answer) => s.questions.answer(qid, answer),
   'questions.pick': (s, qid, question, answer) => s.store.dispatch({ type: 'question_pick', qid, question, answer }),
+  'questions.run': (s, qid, question) => s.runAsks.start(qid, question),
+  'questions.runInput': (s, qid, text) => s.runAsks.input(qid, text),
+  'questions.runStop': (s, qid) => s.runAsks.stop(qid),
 
   'people.setTrust': (s, peerId, level) => s.people.setTrust(peerId, level),
   'people.dismissPrompt': (s, peerId) => s.people.dismissPrompt(peerId),

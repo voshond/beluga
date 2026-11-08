@@ -24,7 +24,7 @@ const AUTONOMY = z.enum(['step', 'gated', 'autopilot']);
 /** Commands the user runs themselves (sudo, a deploy, a step on another machine): shown on the card to copy. */
 const RUN = z
   .object({
-    on: z.string().max(80).optional().describe('The machine to run them on (its name, like "i9arch" or "the NAS"); left out, this one'),
+    on: z.string().max(80).optional().describe('The machine to run them on: its SSH Host name (like "i9arch" or "nas"), so the user can run them from the card with one click; left out, this one'),
     cwd: z.string().max(300).optional().describe('The folder to run them in, as a full path (a worktree’s, when the work is there)'),
     commands: z.array(z.string().min(1).max(400)).min(1).max(12).describe('Exactly what to type, one command per line, in order, ready to paste (sudo where it needs it)'),
     expect: z.string().max(300).optional().describe('What they see when it worked (a line it prints, a status), so they can tell'),

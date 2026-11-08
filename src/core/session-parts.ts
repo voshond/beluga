@@ -6,6 +6,8 @@ import { WorkspaceController } from './workspace-controller.js';
 import { Notifier } from './notify.js';
 import { Workbench } from './workbench.js';
 import { QuestionBroker } from './questions.js';
+import { RunAsks } from './run-asks.js';
+import { readSshHosts } from './ssh-hosts.js';
 import { WorkspaceSharing } from './workspace-sharing.js';
 import { ReplayGuard } from './replay.js';
 import { People } from './people.js';
@@ -38,6 +40,7 @@ export interface SessionParts {
   readonly notifier: Notifier;
   readonly workbench?: Workbench;
   readonly questions: QuestionBroker;
+  readonly runAsks: RunAsks;
   readonly sharing: WorkspaceSharing;
   readonly replay: ReplayGuard;
   readonly people: People;
@@ -166,6 +169,12 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       send: (body, o) => session.send(body, o),
       timeoutMs: () => session.approvalTimeoutMs,
       toast: (text, level) => session.toast(text, level),
+    });
+    const runAsks = new RunAsks({
+      store: opts.store,
+      selfId: () => session.selfId,
+      sshHosts: readSshHosts,
+      answer: (qid, question, text) => questions.answerPart(qid, question, text),
     });
     const sharing = new WorkspaceSharing({
       store: opts.store,
@@ -305,5 +314,5 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       openLocation: (at) => files.openLocation(at),
       search: (at, mode, query) => diff.search(at, mode, query),
     });
-  return { workspaces, notifier, workbench, questions, sharing, replay, people, files, host, remote, peerRun, invites, shell, diff, env, local, ...(agentTerms ? { agentTerms } : {}) };
+  return { workspaces, notifier, workbench, questions, runAsks, sharing, replay, people, files, host, remote, peerRun, invites, shell, diff, env, local, ...(agentTerms ? { agentTerms } : {}) };
 }

@@ -3,6 +3,7 @@ import type { PendingQuestion } from '@beluga/core/collab-store.js';
 import { isDecisionQid } from '@beluga/core/plans/decisions.js';
 import { answerTyped, currentQuestion } from '@beluga/ui/collab-actions.js';
 import { Markdown } from '../chat/Markdown.js';
+import { RunAsk } from '../chat/RunAsk.js';
 import { useAttachments } from '../chat/use-attachments.js';
 import { Icon } from '../components/Icon.js';
 import { Button, cx } from '../components/ui.js';
@@ -80,6 +81,7 @@ export function PlanAsk({ q }: { q: PendingQuestion }) {
       <div className={cx(a.question, s.question, 'selectable')}>
         <Markdown text={current.question} />
       </div>
+      <RunAsk q={q} question={current.question} />
       {current.options.length ? (
         <div className={a.options} role={current.multiSelect ? 'group' : 'radiogroup'} aria-label={current.multiSelect ? 'Pick any' : 'Pick one'}>
           {current.options.map((o, i) => {
