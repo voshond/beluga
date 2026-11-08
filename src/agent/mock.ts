@@ -367,6 +367,42 @@ async function mockPlanning(input: AgentRunInput, plan: NonNullable<AgentRunInpu
   return `Added **${added}** to the plan. ${result}`;
 }
 
+export type DeviceTarget =
+  | { readonly tool: 'run_on_device'; readonly device: string; readonly command: string }
+  | { readonly tool: 'get_device_file'; readonly device: string; readonly path: string }
+  | { readonly tool: 'device_screenshot'; readonly device: string };
+
+/** "run `uname -a` on device arch" / "get `~/notes.txt` from device arch" / "screenshot of device arch": a client device's tool, and what for. */
+export function deviceTarget(prompt: string): DeviceTarget | undefined {
+  const device = /\b(?:on|from|of) device (\w[\w.-]*)/i.exec(prompt)?.[1];
+  if (!device) return undefined;
+  const quoted = /`([^`]+)`/.exec(prompt)?.[1];
+  if (/\bscreenshot\b/i.test(prompt)) return { tool: 'device_screenshot', device };
+  if (quoted && /\b(get|fetch|send|copy)\b/i.test(prompt)) return { tool: 'get_device_file', device, path: quoted };
+  if (quoted) return { tool: 'run_on_device', device, command: quoted };
+  return undefined;
+}
+
+/** The demo's Claude uses a client device through the real device tools (agent/device-tools.ts), so the person there approves it. */
+async function mockDevice(input: AgentRunInput, bridge: RoomBridge, target: DeviceTarget, pace: number): Promise<string> {
+  await sleep(300 * pace, input.signal);
+  const { createDeviceToolDefs } = await import('./device-tools.js');
+  const tools = createDeviceToolDefs(bridge);
+  const call = async (name: string, args: Record<string, string>): Promise<{ text: string; failed: boolean }> => {
+    input.onEvent('tool', `${name}${MORE}${JSON.stringify(args)}`);
+    const found = tools.find((t) => t.name === name)!;
+    const out = await found.handler(args as never, undefined);
+    return { text: out.content.map((c) => (c.type === 'text' ? c.text : '')).join('\n'), failed: Boolean(out.isError) };
+  };
+  const why = 'you asked me to, from the demo';
+  const args: Record<string, string> = { device: target.device, why };
+  if (target.tool === 'run_on_device') args.command = target.command;
+  if (target.tool === 'get_device_file') args.path = target.path;
+  await call('list_devices', {});
+  const result = await call(target.tool, args);
+  return result.failed ? `${target.device} didn't do it: ${result.text}` : `Done on ${target.device}:\n\n\`\`\`\n${result.text}\n\`\`\``;
+}
+
 /** "run the tests on bob's computer" / "check my machine": whose computer, and which command. */
 export function peerRunTarget(prompt: string, requester: string): { peer: string; command: string } | undefined {
   const named = /\bon (\w[\w.-]*)'s (computer|machine|laptop)\b/i.exec(prompt);
@@ -875,6 +911,8 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
     const asked = /<request>\n([\s\S]*?)\n<\/request>/.exec(input.prompt)?.[1] ?? input.prompt;
     const gwTarget = bridge.gateway?.available() ? gatewayTarget(asked) : undefined;
     if (gwTarget) return mockAsk(input, bridge, gwTarget, pace);
+    const onDevice = bridge.devices ? deviceTarget(input.prompt) : undefined;
+    if (onDevice) return mockDevice(input, bridge, onDevice, pace);
     const remote = peerRunTarget(input.prompt, input.requesterName);
     if (remote && bridge.runOnPeer) return mockPeerRun(input, bridge, remote, pace);
     if (/\b(which|choose|pick)\b/i.test(input.prompt) && input.askUser) {

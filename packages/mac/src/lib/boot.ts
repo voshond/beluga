@@ -7,6 +7,8 @@ import { REQUEST_NOTIFICATION, notificationActions } from '../gateway/request-ac
 import { version } from '../../src-tauri/tauri.conf.json';
 import { unreachableDetail } from './unreachable.js';
 import { bootMode, inShell, native, remoteApp, appInvoke } from './boot-mode.js';
+import { deviceReach } from './device-bridge.js';
+import { uploadFile } from './web-files.js';
 
 export { bootMode, inShell, native, remoteApp, appInvoke };
 
@@ -140,5 +142,6 @@ export const APP_VERSION: string = version;
 /** Attach to Beluga. */
 export async function connect(caps: Capabilities): Promise<SocketClient> {
   const { url, token } = await endpoint();
-  return SocketClient.connect({ url, token, kind: remoteApp() ? 'remote-app' : 'mac', version: APP_VERSION, caps });
+  const device = await deviceReach(uploadFile);
+  return SocketClient.connect({ url, token, kind: remoteApp() ? 'remote-app' : 'mac', version: APP_VERSION, caps, ...(device ? { device } : {}) });
 }

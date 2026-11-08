@@ -78,25 +78,28 @@ test('a message steered in mid-turn lands above Claude’s live part, which stay
   await expect(head).toHaveCount(1);
   await expect(head).toContainText('Still working · continues below');
   await expect(tail.locator('[data-working]')).toBeVisible();
+  // Once Claude reads it (BLG-47: unread, it waits at the bottom), it sits above the live part.
+  await expect.poll(async () => (await rowsInOrder(page)).at(-1)?.part).toBe('tail');
   let rows = await rowsInOrder(page);
-  expect(rows.at(-1)?.part).toBe('tail');
   const steered = rows.findIndex((r) => r.text.includes('also look at the retry logic'));
   expect(steered).toBeGreaterThan(rows.findIndex((r) => r.part === 'head'));
   // The head keeps what was done before you spoke; what Claude does now is below.
   await expect(tail.locator('[data-current="true"]')).toHaveCount(1, { timeout: 5000 });
   await expect(head.locator('[data-current="true"]')).toHaveCount(0);
-  // The moment it split was clean: no row drawn over another, and no copy of the message flying over the live part.
+  // The moment it split was clean: no row drawn over another. (Its send flight lands at the bottom, where an
+  // unread steer waits since BLG-47, so it never crosses the live part.)
   await page.waitForTimeout(600);
-  expect(await frames(page)).toEqual({ overlaps: [], flights: 0 });
+  expect((await frames(page)).overlaps).toEqual([]);
   await page.screenshot({ path: `${OUT}/01-steered-live-at-bottom.png` });
 
   // Again: still below the newest message.
   await composer(page).fill('and the session code too');
   await composer(page).press('Alt+Enter');
   await expect(page.locator('[data-index]', { hasText: 'and the session code too' })).toBeVisible();
-  rows = await rowsInOrder(page);
-  expect(rows.at(-1)?.part).toBe('tail');
-  expect(rows.findIndex((r) => r.text.includes('and the session code too'))).toBeLessThan(rows.length - 1);
+  await expect.poll(async () => {
+    const now = await rowsInOrder(page);
+    return now.at(-1)?.part === 'tail' && now.findIndex((r) => r.text.includes('and the session code too')) < now.length - 1;
+  }).toBe(true);
   // The chat is at its bottom: the working line is in sight.
   await expect(tail.locator('[data-working]')).toBeInViewport();
   await expect(page.locator('[data-send-flight]')).toHaveCount(0);

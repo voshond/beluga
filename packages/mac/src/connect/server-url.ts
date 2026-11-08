@@ -19,10 +19,16 @@ const parse = (raw: string): URL | null => {
   }
 };
 
+/** An address typed without a scheme: http on this computer (an SSH tunnel is plain http), https anywhere else. */
+const defaultScheme = (raw: string): 'http' | 'https' => {
+  const host = parse(`http://${raw}`)?.hostname;
+  return host && isLoopback(host) ? 'http' : 'https';
+};
+
 export const checkServerUrl = (raw: string): UrlCheck => {
   const trimmed = raw.trim();
   if (!trimmed) return fail('Enter your Beluga server’s address.');
-  const full = trimmed.includes('://') ? trimmed : `https://${trimmed}`;
+  const full = trimmed.includes('://') ? trimmed : `${defaultScheme(trimmed)}://${trimmed}`;
   const notUrl = fail('That isn’t a web address. Try https://beluga.example.com');
   const url = parse(full);
   if (!url?.hostname) return notUrl;

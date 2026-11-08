@@ -10,6 +10,12 @@ describe('checkServerUrl', () => {
 
   it('takes plain http only on this computer (an SSH tunnel)', () => {
     expect(checkServerUrl('http://127.0.0.1:7420')).toMatchObject({ ok: true, origin: 'http://127.0.0.1:7420' });
+    expect(checkServerUrl('127.0.0.1:7791')).toMatchObject({ ok: true, origin: 'http://127.0.0.1:7791' });
+    expect(checkServerUrl('localhost:7777')).toMatchObject({ ok: true, origin: 'http://localhost:7777' });
+    expect(checkServerUrl('[::1]:7777')).toMatchObject({ ok: true, origin: 'http://[::1]:7777' });
+    expect(checkServerUrl('127.0.0.1:7791/join#abc')).toMatchObject({ ok: true, url: 'http://127.0.0.1:7791/join#abc' });
+    expect(checkServerUrl('box.example.com:8443')).toMatchObject({ ok: true, origin: 'https://box.example.com:8443' });
+    expect(checkServerUrl('192.168.2.125')).toMatchObject({ ok: true, origin: 'https://192.168.2.125' });
     expect(checkServerUrl('http://localhost:7420').ok).toBe(true);
     expect(checkServerUrl('http://[::1]:7420').ok).toBe(true);
     expect(checkServerUrl('http://i9arch:7420')).toMatchObject({ ok: false, error: expect.stringContaining('https://') });

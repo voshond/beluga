@@ -159,8 +159,19 @@ fn is_loopback(host: &str) -> bool {
         .is_ok_and(|ip| ip.is_loopback())
 }
 
+/// The scheme an address typed without one means: http on this computer (an SSH tunnel's
+/// 127.0.0.1:7777 is plain http), https anywhere else.
+fn default_scheme(raw: &str) -> &'static str {
+    let host = Url::parse(&format!("http://{raw}")).ok().and_then(|u| u.host_str().map(str::to_owned));
+    if host.as_deref().is_some_and(is_loopback) {
+        "http"
+    } else {
+        "https"
+    }
+}
+
 /// An https address, or plain http only on this computer (an SSH tunnel): the rule the web port
-/// itself follows (src/daemon/web-access.ts). Without a scheme, https is meant.
+/// itself follows (src/daemon/web-access.ts). Without a scheme, https is meant (http on this computer).
 pub fn check_url(raw: &str) -> Result<ServerUrl, String> {
     let raw = raw.trim();
     if raw.is_empty() {
@@ -169,7 +180,7 @@ pub fn check_url(raw: &str) -> Result<ServerUrl, String> {
     let full = if raw.contains("://") {
         raw.to_string()
     } else {
-        format!("https://{raw}")
+        format!("{}://{raw}", default_scheme(raw))
     };
     let not_url = || "That isn't a web address. Try https://beluga.example.com".to_string();
     let url = Url::parse(&full).map_err(|_| not_url())?;
@@ -224,8 +235,48 @@ pub fn hostname() -> String {
     }
 }
 
-/// Whether anything answers at the server's address (a TCP connection, five seconds at most).
+/// Why an answer from the server isn't its page, if it isn't: an error status (a proxy with nothing
+/// behind it, a wrong path). Signed out (401) or not let in (403) is still Beluga's page.
+pub fn http_problem(origin: &str, status: u16) -> Option<String> {
+    if status < 400 || status == 401 || status == 403 {
+        return None;
+    }
+    Some(format!(
+        "{origin} answered with HTTP {status}. Is it your Beluga's web port (`beluga web`), and is everything in front of it running?"
+    ))
+}
+
+/// The first load, tried here before the window goes there, so a failure is said instead of a
+/// blank window: a TLS handshake that fails (https to a plain-http tunnel), or an error status.
+pub async fn answers(origin: &str) -> Result<(), String> {
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    }
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let response = client.get(origin).send().await.map_err(|e| {
+        let cause = std::error::Error::source(&e).map(|s| s.to_string()).unwrap_or_else(|| e.to_string());
+        let tunnel = origin.starts_with("https://") && Url::parse(origin).ok().and_then(|u| u.host_str().map(is_loopback)).unwrap_or(false);
+        let hint = if tunnel {
+            " An SSH tunnel is plain http: try http:// instead."
+        } else {
+            ""
+        };
+        format!("{origin} didn't load: {cause}.{hint}")
+    })?;
+    http_problem(origin, response.status().as_u16()).map_or(Ok(()), Err)
+}
+
+/// Whether anything answers at the server's address (a TCP connection, five seconds at most),
+/// and then whether it loads (see `answers`).
 pub async fn reachable(origin: &str) -> Result<(), String> {
+    connects(origin).await?;
+    answers(origin).await
+}
+
+async fn connects(origin: &str) -> Result<(), String> {
     let url = Url::parse(origin).map_err(|e| e.to_string())?;
     let host = url.host_str().unwrap_or_default().to_string();
     let port = url.port_or_known_default().unwrap_or(443);
@@ -460,6 +511,52 @@ mod tests {
         assert!(check_url("https://me:pw@box.example.com").unwrap_err().contains("sign in"));
         assert!(check_url("").unwrap_err().contains("Enter"));
         assert!(check_url("https://").is_err());
+    }
+
+    #[test]
+    fn an_address_without_a_scheme_is_http_on_this_computer_and_https_elsewhere() {
+        assert_eq!(check_url("127.0.0.1:7791").unwrap().origin, "http://127.0.0.1:7791");
+        assert_eq!(check_url("localhost:7777").unwrap().origin, "http://localhost:7777");
+        assert_eq!(check_url("[::1]:7777").unwrap().origin, "http://[::1]:7777");
+        assert_eq!(check_url("127.0.0.1:7791/join#abc").unwrap().url, "http://127.0.0.1:7791/join#abc");
+        assert_eq!(check_url("box.example.com:8443").unwrap().origin, "https://box.example.com:8443");
+        assert_eq!(check_url("192.168.2.125").unwrap().origin, "https://192.168.2.125");
+        assert_eq!(check_url("https://127.0.0.1:7791").unwrap().origin, "https://127.0.0.1:7791");
+    }
+
+    #[test]
+    fn error_statuses_are_not_the_servers_page() {
+        assert!(http_problem("https://b.example.com", 200).is_none());
+        assert!(http_problem("https://b.example.com", 302).is_none());
+        assert!(http_problem("https://b.example.com", 401).is_none());
+        assert!(http_problem("https://b.example.com", 403).is_none());
+        assert!(http_problem("https://b.example.com", 404).unwrap().contains("HTTP 404"));
+        assert!(http_problem("https://b.example.com", 502).unwrap().contains("HTTP 502"));
+    }
+
+    /// A plain-http server on this computer that answers every request with `status`.
+    fn serve(status: u16) -> u16 {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let mut buf = [0u8; 2048];
+                let _ = stream.read(&mut buf);
+                let _ = write!(stream, "HTTP/1.1 {status} X\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            }
+        });
+        port
+    }
+
+    #[tokio::test]
+    async fn the_first_load_is_tried_before_the_window_goes_there() {
+        let page = serve(401);
+        assert!(reachable(&format!("http://127.0.0.1:{page}")).await.is_ok());
+        let proxy = serve(502);
+        assert!(reachable(&format!("http://127.0.0.1:{proxy}")).await.unwrap_err().contains("HTTP 502"));
+        let tls = reachable(&format!("https://127.0.0.1:{page}")).await.unwrap_err();
+        assert!(tls.contains("didn't load") && tls.contains("try http://"), "{tls}");
     }
 
     #[test]

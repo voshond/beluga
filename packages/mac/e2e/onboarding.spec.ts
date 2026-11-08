@@ -159,7 +159,8 @@ test('the tour explains Sentinel: a sentence becomes a sentinel, then real ones 
   await expect(welcome.getByText('When the tests break, your agent fixes them and asks you to merge')).toBeVisible();
   await expect(welcome.getByText(/When the tests fail on GitHub for one of my projects/)).toBeVisible();
   await welcome.getByRole('button', { name: 'Continue', exact: true }).click();
-  await expect(welcome.getByRole('heading', { name: 'Know what every project earns.' })).toBeVisible();
+  // Next comes Archive (the earnings step went with the Stripe integration).
+  await expect(welcome.getByRole('heading', { name: 'Archive without a second thought.' })).toBeVisible();
 });
 
 test('the tour’s table opens in a full window over the welcome, and Continue still goes on after it', async ({ page }) => {

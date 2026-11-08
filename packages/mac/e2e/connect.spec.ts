@@ -1,4 +1,4 @@
-import { type Page, expect, test } from '@playwright/test';
+import { type Page, expect, test } from './fixtures.js';
 
 /** The connect page (BLG-51): Run here or a server on a fresh install, and Retry / Change server when it can't be reached. */
 
@@ -69,4 +69,22 @@ test('an unreachable server offers Retry and Change server', async ({ page }) =>
   await expect(page.getByLabel('Server address')).toHaveValue('https://box.example.com');
   await page.getByRole('button', { name: 'Back' }).click();
   await expect(page.getByRole('button', { name: /Run Beluga here/ })).toBeVisible();
+});
+
+test('a tunnel address typed without http:// is http, and a first load that fails offers Retry and Change server (BLG-74)', async ({ page }) => {
+  await withShell(page, { mode: null, serverUrl: null, reachable: false });
+  await page.getByRole('button', { name: /Connect to a server/ }).click();
+  await page.getByLabel('Server address').fill('127.0.0.1:7791');
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
+
+  await expect(page.getByRole('heading', { name: 'Can’t reach the server' })).toBeVisible();
+  await expect(page.getByText('http://127.0.0.1:7791', { exact: true })).toBeVisible();
+  const uses = async () => (await calls(page)).filter((c) => c.cmd === 'client_use_server');
+  expect((await uses())[0]?.args).toEqual({ url: 'http://127.0.0.1:7791/', deviceName: 'arch' });
+  await page.getByRole('button', { name: 'Retry' }).click();
+  await expect.poll(async () => (await uses()).length).toBe(2);
+  expect((await calls(page)).some((c) => c.cmd === 'client_open')).toBe(false);
+
+  await page.getByRole('button', { name: 'Change server' }).click();
+  await expect(page.getByLabel('Server address')).toBeVisible();
 });
