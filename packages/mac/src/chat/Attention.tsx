@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { PendingQuestion } from '@beluga/core/collab-store.js';
 import { channelOf } from '@beluga/core/store.js';
 import { currentQuestion } from '@beluga/ui/collab-actions.js';
 import { isDecisionQid } from '@beluga/core/plans/decisions.js';
@@ -14,6 +15,7 @@ import { sameDeep, sameFields } from '../lib/stable.js';
 import { hostToBefriend } from '../network/net-model.js';
 import { befriend } from '../network/use-net.js';
 import { Markdown } from './Markdown.js';
+import { RunAsk, useRunStarted } from './RunAsk.js';
 import { useNow } from './Items.js';
 import s from './attention.module.css';
 
@@ -159,8 +161,14 @@ function Question({ channel }: { channel?: string }) {
       </div>
     );
   }
+  return <QuestionCard q={q} agent={agent} />;
+}
+
+function QuestionCard({ q, agent }: { q: PendingQuestion; agent: string }) {
+  const actions = useActions();
+  const runStarted = useRunStarted(q.qid);
   const current = currentQuestion(q);
-  if (!current) return null;
+  if (!current || q.question.kind !== 'question') return null;
   const chosen = new Set((q.picked[`${current.question}#multi`] ?? '').split('\u0000').filter(Boolean));
   const total = q.question.questions.length;
   const index = q.question.questions.indexOf(current);
@@ -171,7 +179,7 @@ function Question({ channel }: { channel?: string }) {
         <span className={s.title}>{current.header || `${agent} asks`}</span>
         {total > 1 ? <span className={s.more}>{index + 1} of {total}</span> : null}
         {/* A decision of yours in a plan waits until you answer it (core/plans/decisions.ts). */}
-        {isDecisionQid(q.qid) ? null : (
+        {isDecisionQid(q.qid) || runStarted ? null : (
           <Button size="small" variant="quiet" onClick={() => actions.run({ type: 'answer', qid: q.qid, pick: 'skip' })}>
             Skip
           </Button>
@@ -180,6 +188,22 @@ function Question({ channel }: { channel?: string }) {
       <div className={`${s.question} selectable`}>
         <Markdown text={current.question} />
       </div>
+      <RunAsk q={q} question={current.question} />
+      {runStarted ? null : <QuestionOptions q={q} current={current} chosen={chosen} />}
+    </div>
+  );
+}
+
+type QuestionOptionsProps = {
+  readonly q: PendingQuestion;
+  readonly current: NonNullable<ReturnType<typeof currentQuestion>>;
+  readonly chosen: ReadonlySet<string>;
+};
+
+function QuestionOptions({ q, current, chosen }: QuestionOptionsProps) {
+  const actions = useActions();
+  return (
+    <>
       <div className={s.options}>
         {current.options.map((o, i) => (
           <button key={o.label} type="button" className={`${s.option} ${chosen.has(o.label) ? s.optionOn : ''}`} onClick={() => actions.run({ type: 'answer', qid: q.qid, pick: 'option', label: o.label, question: current.question })}>
@@ -201,7 +225,7 @@ function Question({ channel }: { channel?: string }) {
       ) : (
         <div className={s.hint}>Pick one, or type your own answer below.</div>
       )}
-    </div>
+    </>
   );
 }
 

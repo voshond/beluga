@@ -1,0 +1,72 @@
+.run {
+  margin-top: 4px;
+}
+.output {
+  display: flex;
+  flex-direction: column-reverse;
+  max-height: 10rem;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  overscroll-behavior: contain;
+}
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+.toggle:hover {
+  color: var(--text-2);
+}
+.toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.latest {
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.running {
+  flex: 1;
+  color: var(--text-2);
+  font-size: 0.9rem;
+}
+.error {
+  color: var(--error);
+}
+.reply {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+}
+.promptText {
+  overflow: hidden;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.replyRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.replyInput {
+  flex: 1;
+  min-width: 0;
+}

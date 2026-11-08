@@ -68,6 +68,9 @@ export const PHONE: Record<Method, Side> = {
   // ---- Claude's questions
   'questions.answer': 'phone',
   'questions.pick': 'phone',
+  'questions.run': 'mac',
+  'questions.runInput': 'mac',
+  'questions.runStop': 'mac',
 
   // ---- people, sharing, invitations, a friend's computer: the Mac's (but answering a knock)
   'people.setTrust': 'mac',

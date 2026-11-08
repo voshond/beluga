@@ -1204,6 +1204,7 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
     case 'question_add':
     case 'question_pick':
     case 'question_remove':
+    case 'run_ask':
     case 'room_open':
     case 'shared_add':
     case 'shared_remove':

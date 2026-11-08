@@ -188,6 +188,9 @@ export const API = {
   // ---- Claude's questions and plans
   'questions.answer': args(id, ClaudeAnswer),
   'questions.pick': args(id, z.string().max(2000), z.string().max(4000)),
+  'questions.run': args(id, z.string().max(2000)),
+  'questions.runInput': args(id, z.string().max(1000)),
+  'questions.runStop': args(id),
 
   // ---- people and trust
   'people.setTrust': args(id, z.enum(TRUST_LEVELS)),

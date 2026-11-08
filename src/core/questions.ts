@@ -125,6 +125,16 @@ export class QuestionBroker {
     else this.deps.send({ kind: 'agent_answer', qid, answer }, { to: q.owner });
   }
 
+  answerPart(qid: string, question: string, text: string): void {
+    const q = this.deps.store.getState().questions.find((x) => x.qid === qid);
+    if (!q || q.question.kind !== 'question') return;
+    const picked = { ...q.picked, [question]: text };
+    this.deps.store.dispatch({ type: 'question_pick', qid, question, answer: text });
+    if (!q.question.questions.every((x) => picked[x.question] !== undefined)) return;
+    const answers = Object.fromEntries(Object.entries(picked).filter(([k]) => !k.endsWith('#multi')));
+    this.answer(qid, { kind: 'answers', answers });
+  }
+
   /** Stop waiting on everything (e.g. Claude was stopped). */
   cancelAll(): void {
     for (const [qid, w] of [...this.waiting]) this.settle(qid, w.peer, SKIP);

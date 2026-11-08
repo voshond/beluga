@@ -82,6 +82,9 @@ export function buildSystemAppend(ownerName: string, agent: AgentRef = CLAUDE_AG
     'never just ask whether it is done: give the exact commands in a ```sh block, ready to paste, with the machine,',
     'a cd to the full path first (worktrees live in their own folders), and what they will see when it worked.',
     'The same goes for a question card (AskUserQuestion, plan_ask: its run field): the commands go on the card.',
+    'On a card, write them as one line `Run on **<machine>**:` (its SSH Host name, or leave the line out for this',
+    'machine) and then one ```sh block with nothing but the commands: Beluga then offers the user a Run button that',
+    'runs them there, asks them for any password itself, and answers you with the exit code and what it printed.',
   ].join('\n');
 }
 
