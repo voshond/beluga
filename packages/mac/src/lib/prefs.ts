@@ -48,6 +48,8 @@ export interface UiPrefs {
   readonly openProjects: readonly string[];
   /** The sidebar's Unread section: conversations that finished or need you, at the top (only while there are some). */
   readonly unreadSection: boolean;
+  /** The sidebar's Friends and Channels sections. Off: they're gone from the sidebar (the network keeps running). */
+  readonly friendsSidebar: boolean;
   /** Enter sends and Shift+Enter makes a new line, or the other way round with ⌘Enter. */
   readonly sendWith: 'enter' | 'cmd-enter';
   /** The main send action during a running turn. */
@@ -168,6 +170,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   folded: [],
   openProjects: [],
   unreadSection: true,
+  friendsSidebar: true,
   sendWith: 'enter',
   sendDuringTurn: 'queue',
   timestamps: true,

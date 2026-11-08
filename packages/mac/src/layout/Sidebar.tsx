@@ -100,6 +100,7 @@ function useFolderDrop(): { ref: React.RefObject<HTMLElement | null>; over: bool
 export function Sidebar() {
   const actions = useActions();
   const drop = useFolderDrop();
+  const { friendsSidebar } = usePrefs();
   // Only what the sidebar itself shows: drawn again when that changes, not on every streamed event (KLD-48).
   const { tabs, liveChats, view, badges } = useApp((state) => {
     const news = overviewNews(state);
@@ -197,8 +198,12 @@ export function Sidebar() {
         {/* What friends shared with you: a section each, "Ata's conversations", apart from your own. */}
         <SharedProjects />
 
-        <FriendsSection />
-        <GroupsSection />
+        {friendsSidebar && (
+          <>
+            <FriendsSection />
+            <GroupsSection />
+          </>
+        )}
       </div>
       </SidebarSearch>
       {/* Below the lists, so the rows being Shift-clicked stay where they are as it opens. */}
