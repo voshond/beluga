@@ -292,6 +292,8 @@ export const HANDLERS = {
 
   'terminals.shell': (s, wsId, size) => started(bench(s)?.shell(wsId, size)),
   'terminals.global': (s, key, dir, size) => started(bench(s)?.globalShell(key, dir, size)),
+  'terminals.sshHosts': async (s) => (await bench(s)?.sshHosts()) ?? [],
+  'terminals.ssh': (s, host, size) => started(bench(s)?.sshShell(host, size)),
   'terminals.close': (s, key) => bench(s)?.closeTerminal(key),
   'terminals.restart': (s, key) => started(bench(s)?.restartTerminal(key)),
   'terminals.rename': (s, key, name) => bench(s)?.renameTerminal(key, name),

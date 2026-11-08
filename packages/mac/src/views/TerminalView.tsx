@@ -10,6 +10,7 @@ import { extraShells, useShellOwners } from '../lib/ws-shells.js';
 import s from './terminal.module.css';
 import { TerminalTab } from './TerminalTab.js';
 import { Xterm } from './Xterm.js';
+import { SshMenu } from './SshMenu.js';
 
 /** A workspace's Terminal tab (its shell, setup and run), or the global Terminal (your own shells). */
 export function TerminalView() {
@@ -99,11 +100,11 @@ export function TerminalView() {
       </div>
       {key ? (
         <>
-          <Xterm key={`${key}:${key in termExits ? 'x' : 'live'}${termEnvStale.includes(key) ? ':old' : ''}`} termKey={key} start={(size) => void api.terminals.global(key, dir, size)} />
+          <Xterm key={`${key}:${key in termExits ? 'x' : 'live'}${termEnvStale.includes(key) ? ':old' : ''}`} termKey={key} start={(size) => shells.start(key, size)} />
           <EnvStale termKey={key} />
           {key in termExits ? (
             <div className={s.restart}>
-              <Button size="small" onClick={() => void api.terminals.global(key, dir)}>
+              <Button size="small" onClick={() => shells.start(key)}>
                 Start it again
               </Button>
             </div>
@@ -124,6 +125,7 @@ export function ShellTabs({ shells }: { shells: GlobalShells }) {
         <TerminalTab key={t.key} termKey={t.key} label={t.label} on={t.key === shells.key} className={s.tab} onClassName={s.tabOn} onPick={() => shells.pick(t.key)} onClose={() => shells.close(t.key)} before={<Dot tone={t.running ? 'ok' : 'muted'} />} />
       ))}
       <IconButton icon="plus" label="New shell" onClick={shells.open} />
+      <SshMenu onOpen={shells.openSsh} />
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { githubId, runId, setupId, shellId, terminalLabel } from '@beluga/shared/terminal-keys.js';
+import { githubId, isOwnShell, runId, setupId, shellId, terminalLabel } from '@beluga/shared/terminal-keys.js';
 import { findWorkspace } from '@beluga/ui/workspace-models.js';
 import { ActionsDropdown, type ActionItem } from '../../components/SpecMenu.js';
 import { Button, Dot, Empty, IconButton } from '../../components/ui.js';
@@ -13,6 +13,7 @@ import { claimShell, extraShells, pruneShells, releaseShell, useShellOwners } fr
 import { EnvStale, NoShells, ShellTabs, useEnvStale } from '../../views/TerminalView.js';
 import { TerminalTab } from '../../views/TerminalTab.js';
 import { Xterm } from '../../views/Xterm.js';
+import { SshMenu } from '../../views/SshMenu.js';
 import t from '../../views/terminal.module.css';
 import s from './panel.module.css';
 
@@ -26,6 +27,7 @@ interface Tabbed {
   readonly restart?: () => void;
   readonly pick: (key: string) => void;
   readonly add: () => void;
+  readonly openSsh?: (host: string) => void;
   readonly close: (key: string) => void;
 }
 
@@ -105,19 +107,37 @@ function useMenuItems(where: 'drawer' | 'panel', wsId: string | undefined): Acti
 
 /** Workspace terminals and your own shells, as one shape. */
 function useTabbed(wsId: string | undefined): Tabbed {
-  const api = useApi();
   const ws = useWorkspaceTerminals(wsId ?? '');
+  const picked = useUi((u) => u.termKey);
   const shells = useGlobalShells();
-  if (wsId) return ws;
-  const key = shells.key;
+  const terminals = useApp((st) => st.terminals);
+  const owners = useShellOwners();
+  const ownTabs = shells.tabs.map((x) => ({ ...x, closable: true, renamable: true }));
+  if (!wsId) {
+    const key = shells.key;
+    return {
+      key,
+      tabs: ownTabs,
+      start: (size) => key && shells.start(key, size),
+      ...(key ? { restart: () => shells.start(key) } : {}),
+      pick: shells.pick,
+      add: shells.open,
+      openSsh: shells.openSsh,
+      close: shells.close,
+    };
+  }
+  const unowned = (k: string): boolean => !(k in owners);
+  const ownKey = shells.key && shells.key === picked && unowned(picked) ? shells.key : undefined;
+  const ownShown = ownTabs.filter((x) => unowned(x.key) && (x.key in terminals || x.key === ownKey));
+  if (!ownKey) return { ...ws, tabs: [...ws.tabs, ...ownShown], openSsh: shells.openSsh, close: (k) => (isOwnShell(k) ? shells.close(k) : ws.close(k)) };
   return {
-    key,
-    tabs: shells.tabs.map((x) => ({ ...x, closable: true, renamable: true })),
-    start: (size) => key && void api.terminals.global(key, shells.dir, size),
-    ...(key ? { restart: () => void api.terminals.global(key, shells.dir) } : {}),
-    pick: shells.pick,
-    add: shells.open,
-    close: shells.close,
+    ...ws,
+    key: ownKey,
+    tabs: [...ws.tabs, ...ownShown],
+    start: (size) => shells.start(ownKey, size),
+    restart: () => shells.start(ownKey),
+    openSsh: shells.openSsh,
+    close: (k) => (isOwnShell(k) ? shells.close(k) : ws.close(k)),
   };
 }
 
@@ -175,6 +195,7 @@ export function TerminalPane({ where, onClose }: { where: 'drawer' | 'panel'; on
             />
           ))}
           <IconButton icon="plus" label="New shell" className={s.termAdd} onClick={tabbed.add} />
+          {tabbed.openSsh ? <SshMenu onOpen={tabbed.openSsh} className={s.termAdd} /> : null}
         </div>
         {wsId ? <WorkspaceScripts wsId={wsId} /> : null}
         <ActionsDropdown items={items}>
