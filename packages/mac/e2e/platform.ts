@@ -23,3 +23,12 @@ export const NAVIGATOR_PLATFORMS: Readonly<Record<E2ePlatform, string>> = { mac:
 
 /** The page's user agent for the run's platform. */
 export const pageUserAgent = (platform: E2ePlatform = e2ePlatform()): string => AGENTS[platform];
+
+/**
+ * Native editing keys in a plain text field follow the host's own browser, not the page's platform:
+ * the end of the text is ⌘↓ on a Mac, Ctrl+End elsewhere.
+ */
+export const TEXT_END = process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End';
+
+/** The page's main modifier for its own shortcuts (⌘ on the Mac page): Playwright's ControlOrMeta follows the host instead. */
+export const MOD = e2ePlatform() === 'mac' ? 'Meta' : 'Control';
