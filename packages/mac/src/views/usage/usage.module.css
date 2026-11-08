@@ -1,12 +1,14 @@
 /*
- * Usage: cards on top (plan, this week, disk), a "free up space" suggestion, then the breakdown.
+ * Usage: your card on top, then chapters with room between them (right now, what you did, your
+ * rhythm, your disk). The whole window: no panel beside it (lib/panel-model.ts).
  * Project colours: eight categorical slots (validated for colour-blind separation, light and
  * dark each picked for their surface), given in sidebar order; text never wears them.
  */
 .page {
   flex: 1;
   overflow: auto;
-  padding: 20px 28px 40px;
+  padding: 28px 40px 72px;
+  container: usage-page / inline-size;
   --card: var(--bg-sunken);
   --card-line: var(--hairline);
   --track: rgba(0, 0, 0, 0.06);
@@ -37,11 +39,63 @@
   --series-chats: #75757c;
 }
 .inner {
-  max-width: 68rem;
+  max-width: 74rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 64px;
+}
+@container usage-page (width < 46rem) {
+  .inner {
+    gap: 44px;
+  }
+}
+/* Where your card goes while your stats come (a moment): its room, so nothing jumps. */
+.heroWait {
+  min-height: 580px;
+  border-radius: 22px;
+  background: var(--card);
+}
+
+/* ------------------------------------------------------------ chapters */
+
+.chapter {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.chapterHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 20px;
+  margin-bottom: 4px;
+}
+.chapterTitles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin-right: auto;
+}
+.chapterTitle {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.chapterSub {
+  margin: 0;
+  max-width: 44rem;
+  color: var(--text-3);
+  font-size: 0.98rem;
+  line-height: 1.45;
+}
+.chapterAside {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .muted {
   color: var(--text-3);
@@ -74,7 +128,7 @@
 .summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
+  gap: 18px;
 }
 @container usage-summary (width >= 39rem) {
   .summary {
@@ -88,8 +142,8 @@
 }
 .card {
   min-width: 0;
-  padding: 14px 16px 16px;
-  border-radius: var(--radius-l);
+  padding: 18px 22px 22px;
+  border-radius: 18px;
   background: var(--card);
   box-shadow: inset 0 0 0 0.5px var(--card-line);
 }
@@ -102,7 +156,7 @@
 }
 .cardTitle {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-2);
 }
@@ -328,6 +382,168 @@
   font-variant-numeric: tabular-nums;
 }
 
+<<<<<<< HEAD
+=======
+/* ------------------------------------------------------------ earnings (Stripe) */
+
+/*
+ * The third summary card: one total in the currency you show earnings in, then each project
+ * with a thin bar for its part of it. When the three cards don't fit side by side it takes the
+ * whole row below (no half-empty row), and lays its total and its projects out next to each other.
+ */
+.earnCard {
+  --money: var(--ok);
+}
+@container usage-summary (39rem <= width < 60rem) {
+  .earnCard {
+    grid-column: 1 / -1;
+  }
+  /*
+   * Which cards there are depends on you (Codex or a local model, friends, plan sessions): an odd
+   * one out before the earnings takes its row, so there's never a hole beside it.
+   */
+  .summary > :nth-last-child(2):nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+/* Three across: the earnings card, last, takes what's left of its row. */
+@container usage-summary (width >= 60rem) {
+  .summary > .earnCard:last-child:nth-child(3n + 1) {
+    grid-column: 1 / -1;
+  }
+  .summary > .earnCard:last-child:nth-child(3n + 2) {
+    grid-column: span 2;
+  }
+}
+/* Below 60rem the card is as wide as the row: room for both from 38rem (36rem inside its padding). */
+@container usage-summary (38rem <= width < 60rem) {
+  .earnBody {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    gap: 32px;
+    align-items: start;
+  }
+  .earnBody .earnList {
+    margin-top: 0;
+    padding: 0 0 0 24px;
+    border-top: 0;
+    border-left: 0.5px solid var(--card-line);
+  }
+}
+
+.earnConnect {
+  margin-top: 12px;
+}
+.earnAdd {
+  margin: -4px -6px -4px 0;
+}
+.earnSummary {
+  min-width: 0;
+}
+.earnTotal {
+  display: inline-block;
+  font-size: 1.95rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: default;
+}
+.earnCaption {
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+.earnNote {
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.earnList {
+  margin: 12px 0 0;
+  padding: 8px 0 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-top: 0.5px solid var(--card-line);
+}
+/* Name and amount on one line, the project's part of the total as a hairline bar under both. */
+.earnRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 5px;
+  width: calc(100% + 12px);
+  margin: 0 -6px;
+  padding: 5px 6px 7px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.earnRow:hover {
+  background: var(--bg-hover);
+}
+.earnRow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.earnCounting {
+  opacity: 0.6;
+}
+.earnName {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.earnLabel {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.earnTest {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 7px;
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+.earnAmount {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.earnShare {
+  grid-column: 1 / -1;
+  display: block;
+  height: 3px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--track);
+}
+.earnShare > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--money) 72%, transparent);
+  transition: width var(--dur) var(--ease-out);
+}
+
+>>>>>>> upstream/main
 /* ------------------------------------------------------------ daily chart */
 
 .chart {
@@ -349,18 +565,31 @@
   justify-content: center;
   cursor: default;
 }
+/* A column is its projects stacked, each in its colour; last week's are paler. */
 .columnBar {
   width: 100%;
   max-width: 22px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 1px;
   border-radius: 3px 3px 1px 1px;
-  background: color-mix(in srgb, var(--claude) 32%, transparent);
-  transition: background var(--dur-fast);
+  overflow: hidden;
+  opacity: 0.42;
+  transition: opacity var(--dur-fast), filter var(--dur-fast);
+}
+.columnEmpty {
+  background: var(--track);
+}
+.columnPart {
+  flex: 1 1 0;
+  min-height: 1px;
 }
 .columnThisWeek .columnBar {
-  background: var(--claude);
+  opacity: 1;
 }
 .columnOn .columnBar {
-  background: color-mix(in srgb, var(--claude) 80%, var(--text));
+  opacity: 1;
+  filter: brightness(1.08) saturate(1.1);
 }
 .axis {
   display: flex;
@@ -377,6 +606,16 @@
 .axisHover strong {
   color: var(--text);
   font-weight: 600;
+}
+.axisPart {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 9px;
+}
+.axisPart .swatch {
+  width: 7px;
+  height: 7px;
 }
 
 /* ------------------------------------------------------------ storage */

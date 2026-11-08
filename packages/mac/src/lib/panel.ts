@@ -268,6 +268,9 @@ export function closeFocus(): void {
   if (back && !getPrefs().inspector) setPrefs({ inspector: true });
 }
 
+/** Whether you have the panel open: while a file or a diff takes the center, what it comes back to. */
+export const panelChosenOpen = (prefs: UiPrefs = getPrefs()): boolean => (runtime.focus && runtime.panelBack !== undefined ? runtime.panelBack : prefs.inspector);
+
 export const focusFor = (wsId: string | undefined): FocusKind | undefined => (wsId && runtime.focus?.wsId === wsId ? runtime.focus.kind : undefined);
 
 // A key press can reach both the window and the menu bar (its item has the same key), in either

@@ -1,5 +1,9 @@
 import { ESTIMATES, PRIORITIES, type Priority } from '../board/model.js';
+<<<<<<< HEAD
 import { AUTONOMIES, type Autonomy, MAX_MILESTONES, MAX_PLAN_REPOS, MAX_PLAN_TASKS, type PlanBody, type PlanDecision, type PlanDecisionEntry, type PlanMilestone, type PlanRepoChange, type PlanTask, allTasks, reposWith, runOf } from './model.js';
+=======
+import { AUTONOMIES, type Autonomy, type PlanBody, type PlanDecision, type PlanMilestone, type PlanTask, allTasks } from './model.js';
+>>>>>>> upstream/main
 
 /**
  * Writing a plan: a whole one (Claude's plan_write), or a change at a time (Claude's plan_update,
@@ -456,12 +460,16 @@ function descendants(body: PlanBody, id: string): string[] {
   return out;
 }
 
+<<<<<<< HEAD
 /** The rules a plan keeps (a clear message for Claude when one is broken). `repos`: the plan's, its milestones must stay within them. */
 export function checkBody(body: PlanBody, repos?: readonly string[]): PlanBody {
   if (body.milestones.length > MAX_MILESTONES) throw new PlanError(`A plan has at most ${MAX_MILESTONES} milestones`);
   if (repos) checkMilestoneRepos(body, repos);
+=======
+/** The rules a plan keeps (a clear message for Claude when one is broken). */
+export function checkBody(body: PlanBody): PlanBody {
+>>>>>>> upstream/main
   const tasks = allTasks(body);
-  if (tasks.length > MAX_PLAN_TASKS) throw new PlanError(`A plan has at most ${MAX_PLAN_TASKS} tasks: split it into two plans, or make tasks bigger`);
   const mids = new Set<string>();
   for (const m of body.milestones) {
     if (mids.has(m.id)) throw new PlanError(`Two milestones are called "${m.id}"`);

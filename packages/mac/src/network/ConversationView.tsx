@@ -168,25 +168,27 @@ const Message = memo(function Message({ m, place, dm, last, resend, me, nameOf, 
       ...(dm ? { remove: () => openNet({ kind: 'delete_message', conversation: m.conversation, id: m.id, mine: m.mine }) } : {}),
     });
   const edited = m.edited ? <span title={`Edited ${fullTime(m.edited)}`}>Edited</span> : null;
-  // Emoji reactions (BLG-702): the chips under it, and the button a hover shows.
+  // Emoji reactions (BLG-702): the chips under it, and the button a hover shows (on the bubble's top corner, `on`).
   const react = useNetReact(m);
   const chips = <ReactionChips reactions={m.reactions} nameOf={nameOf} mine={m.mine && !m.claude} me={me?.peerId} onReact={react} />;
-  const reactButton = <ReactButton reactions={m.reactions} me={me?.peerId} onReact={react} />;
+  const reactButton = (on?: 'start' | 'end') => <ReactButton reactions={m.reactions} me={me?.peerId} onReact={react} {...(on ? { on } : {})} />;
   // Your own words (not your Claude's): your colour, on the right; the time (and Delivered) under the run.
   if (m.mine && !m.claude && !locked)
     return (
       <ActionsContext items={items}>
         <div className={cx(s.row, s.rowMine, r.reactable, !place.first && s.rowCont, m.status === 'waiting' && s.waiting)} data-message={m.id} data-mine="true" style={tintOf(author)}>
-          {editing ? null : reactButton}
           <div className={s.stack} title={fullTime(m.ts)}>
-            {editing ? (
-              <EditBubble m={m} done={() => setEditing(false)} />
-            ) : m.text.trim() ? (
-              <div className={cx(s.bubble, s.bubbleMine, place.last && s.tailMine)}>
-                <Markdown text={m.text} mentions={world} />
-              </div>
-            ) : null}
-            {m.files?.length ? <MessageFiles files={m.files} conversation={m.conversation} mine /> : null}
+            <div className={r.onMessage}>
+              {editing ? (
+                <EditBubble m={m} done={() => setEditing(false)} />
+              ) : m.text.trim() ? (
+                <div className={cx(s.bubble, s.bubbleMine, place.last && s.tailMine)}>
+                  <Markdown text={m.text} mentions={world} />
+                </div>
+              ) : null}
+              {m.files?.length ? <MessageFiles files={m.files} conversation={m.conversation} mine /> : null}
+              {editing ? null : reactButton('start')}
+            </div>
             {chips}
             {askedChip}
             {deliveryState ??
@@ -211,7 +213,6 @@ const Message = memo(function Message({ m, place, dm, last, resend, me, nameOf, 
     return (
       <ActionsContext items={items}>
         <div className={cx(s.row, s.rowTheirs, r.reactable, !place.first && s.rowCont, m.status === 'waiting' && s.waiting)} data-message={m.id} style={tintOf(author)}>
-          {reactButton}
           <div className={s.side}>
             {place.last ? (
               <PersonButton peerId={m.from} name={m.name}>
@@ -228,12 +229,15 @@ const Message = memo(function Message({ m, place, dm, last, resend, me, nameOf, 
                 {prefs.timestamps ? <span className={s.runTime}>{time(m.ts)}</span> : null}
               </div>
             ) : null}
-            {m.text.trim() ? (
-              <div className={cx(s.bubble, s.bubbleTheirs, place.last && s.tailTheirs)}>
-                <Markdown text={m.text} mentions={world} />
-              </div>
-            ) : null}
-            {m.files?.length ? <MessageFiles files={m.files} conversation={m.conversation} mine={false} /> : null}
+            <div className={r.onMessage}>
+              {m.text.trim() ? (
+                <div className={cx(s.bubble, s.bubbleTheirs, place.last && s.tailTheirs)}>
+                  <Markdown text={m.text} mentions={world} />
+                </div>
+              ) : null}
+              {m.files?.length ? <MessageFiles files={m.files} conversation={m.conversation} mine={false} /> : null}
+              {reactButton('end')}
+            </div>
             {chips}
             {edited ? <div className={s.under}>{edited}</div> : null}
             {askedChip}
@@ -245,7 +249,7 @@ const Message = memo(function Message({ m, place, dm, last, resend, me, nameOf, 
   return (
     <ActionsContext items={items}>
       <div className={cx(s.row, s.rowClaude, !locked && r.reactable, !place.first && s.rowCont, m.status === 'waiting' && s.waiting)} data-message={m.id} data-claude={m.claude ? 'true' : undefined}>
-        {locked ? null : reactButton}
+        {locked ? null : reactButton()}
         <div className={s.side}>{place.first ? <Avatar name={m.mine && me ? me.name : m.name} id={author} size={28} claude={Boolean(m.claude)} agent={m.claude?.agent} /> : null}</div>
         <div className={s.claudeBody} title={fullTime(m.ts)}>
           {place.first ? (

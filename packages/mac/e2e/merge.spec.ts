@@ -214,7 +214,7 @@ test('The chat watches the PR’s checks live, and an admin can merge past them'
   }
 });
 
-test('A PR that conflicts says so at the top and offers Resolve with Claude; a merged one offers Archive, Continue After Merge or Delete there', async ({ page }) => {
+test('A PR that conflicts says so at the top and offers Resolve Conflicts; a merged one offers Archive, Continue After Merge or Delete there', async ({ page }) => {
   writeGh({ prs: { 'add-auth': openPr({ mergeable: 'CONFLICTING' }) } });
   try {
     await page.goto('/');
@@ -225,14 +225,14 @@ test('A PR that conflicts says so at the top and offers Resolve with Claude; a m
     await row.click();
     await lookAgain(page);
 
-    // Conflicts: said once, at the top, with Resolve with Claude (asking first); the strip only has the checks.
+    // Conflicts: said once, at the top, with Resolve Conflicts… (asking first); the strip only has the checks.
     const strip = page.locator('[data-pr-strip="OPEN"]');
     await expect(strip).toContainText('#7', { timeout: 20_000 });
     await expect(strip.getByRole('button', { name: 'Merge on GitHub' })).toHaveCount(0);
     await expect(strip).not.toContainText('Conflicts');
     await expect(toolbar(page).locator('[data-branch-state="conflicts"]')).toBeVisible();
     await page.screenshot({ path: test.info().outputPath('pr-strip-conflicts.png') });
-    await toolbar(page).getByRole('button', { name: 'Resolve with Your Agent…' }).click();
+    await toolbar(page).getByRole('button', { name: 'Resolve Conflicts…' }).click();
     const ask = page.getByRole('dialog', { name: 'Ask your agent to resolve the merge conflicts?' }).or(page.getByRole('alertdialog', { name: 'Ask your agent to resolve the merge conflicts?' }));
     await expect(ask).toContainText('merges the latest base');
     await ask.getByRole('button', { name: 'Cancel' }).click();

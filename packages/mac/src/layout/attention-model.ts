@@ -2,6 +2,7 @@ import type { AppState } from '../../../../src/core/store.js';
 import { type Plan, planTitle } from '../../../../src/core/plans/model.js';
 import { isLivePlan, isPlanOwned, planConversations, planOwnerOf } from '../../../../src/core/plans/owner.js';
 import { type Sentinel, sentinelChannels, sentinelOfChannel } from '../../../../src/core/sentinel/model.js';
+import { remindLabel, remindPending } from '../../../../src/shared/remind.js';
 import { activityOf } from '../../../../src/ui/workspace-models.js';
 import type { Project, Workspace } from '../../../../src/workspaces/types.js';
 
@@ -27,6 +28,8 @@ export interface Signal {
   readonly working: boolean;
   /** What a tooltip says ("Claude finished · 2 new messages"); empty when idle. */
   readonly tip: string;
+  /** Remind Me Later: when it reminds you (epoch ms). Till then its news and problems wait; only your agent's asks still show. */
+  readonly remindAt?: number;
 }
 
 export const IDLE_SIGNAL: Signal = { level: 'idle', unread: 0, working: false, tip: '' };
@@ -69,19 +72,42 @@ function newsLead(state: Source, channel: string): string | undefined {
   return undefined;
 }
 
+/** What your agent can be fixing (Fix with Your Agent, Resolve): while it works, it's no problem to show. */
+const FIXABLE: ReadonlySet<Need> = new Set(['checks', 'conflict']);
+
 /** One conversation's signal. `ws`: the id when it's one of your workspaces (not one shared with you). */
 export function signalOf(state: Source, channel: string, ws?: string): Signal {
   const unread = state.unread[channel] ?? 0;
-  const need = needOf(state, channel, ws);
+  const found = needOf(state, channel, ws);
   const working = activityOf(state.log, channel).running || (ws !== undefined && state.claudeCode.sessions.some((x) => !x.own && x.workspaceId === ws && x.status === 'working'));
+  // Failing checks or a conflict while your agent works there: it's on it (BLG-748), so it reads as working. Still there when it stops: red again.
+  const fixing = working && found !== undefined && FIXABLE.has(found) ? found : undefined;
+  const need = fixing ? undefined : found;
   const news = unread ? [newsLead(state, channel), plural(unread, 'message')].filter(Boolean).join(' · ') : '';
   if (need) return { level: 'needs', unread, need, working, tip: [needTip(need), unread ? plural(unread, 'message') : ''].filter(Boolean).join(' · ') };
   if (unread) return { level: 'unread', unread, working, tip: news };
-  if (working) return { level: 'working', unread: 0, working, tip: 'Your agent is working' };
+  if (working) return { level: 'working', unread: 0, working, tip: fixing ? `Your agent is working · ${needTip(fixing)}` : 'Your agent is working' };
   return IDLE_SIGNAL;
 }
 
-export const workspaceSignal = (state: Source, ws: Workspace): Signal => (ws.archived ? IDLE_SIGNAL : signalOf(state, `ws:${ws.id}`, ws.id));
+/** Your agent's asks: Remind Me Later never hides them (it waits on you). */
+const ASKS: ReadonlySet<Need> = new Set(['approval', 'question', 'plan']);
+
+/** A conversation put off till later: what's new and what's wrong wait; your agent at work and its asks still show. */
+function laterSignal(signal: Signal, at: number, label: string): Signal {
+  if (signal.need && ASKS.has(signal.need)) return { ...signal, remindAt: at };
+  return { level: signal.working ? 'working' : 'idle', unread: 0, working: signal.working, tip: signal.working ? `Your agent is working · ${label}` : label, remindAt: at };
+}
+
+export function workspaceSignal(state: Source, ws: Workspace, now = Date.now()): Signal {
+  if (ws.archived) return IDLE_SIGNAL;
+  const signal = signalOf(state, `ws:${ws.id}`, ws.id);
+  return remindPending(ws, now) ? laterSignal(signal, ws.remindAt!, remindLabel(ws, now)) : signal;
+}
+
+/** The channels of conversations you put off till later (`ws:<id>`). */
+export const laterChannels = (state: Pick<AppState, 'projects'>, now = Date.now()): ReadonlySet<string> =>
+  new Set(state.projects.flatMap((p) => p.workspaces.filter((w) => !w.archived && remindPending(w, now)).map((w) => `ws:${w.id}`)));
 
 /** What a project or group adds up to: how many conversations have news, how many need you. */
 export interface Tally {
@@ -319,7 +345,9 @@ export function dockCount(state: ListSource & Pick<AppState, 'inbox' | 'knocks'>
   const inListed = (channel: string | undefined): boolean => channel !== undefined && listed.has(channel);
   const covered = new Set([...state.approvals.filter((a) => inListed(a.channel)).map((a) => a.id), ...state.questions.filter((q) => inListed(q.channel)).map((q) => q.qid)]);
   // A sentinel run's conversation counts only while it needs you (its entry, above): its notices never.
-  const notices = state.inbox.filter((n) => !n.read && !inListed(n.channel) && !isSentinelOwned(state, n.channel) && !(n.ref !== undefined && covered.has(n.ref)));
+  // A conversation put off till later: its notices wait with it.
+  const later = laterChannels(state);
+  const notices = state.inbox.filter((n) => !n.read && !inListed(n.channel) && !(n.channel !== undefined && later.has(n.channel)) && !isSentinelOwned(state, n.channel) && !(n.ref !== undefined && covered.has(n.ref)));
   const noted = new Set(notices.flatMap((n) => (n.ref === undefined ? [] : [n.ref])));
   const waiting = [...state.approvals.map((a) => a.id), ...state.questions.map((q) => q.qid)].filter((id) => !covered.has(id) && !noted.has(id)).length;
   return entries.length + notices.length + waiting + state.knocks.length;

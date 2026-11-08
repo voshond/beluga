@@ -48,6 +48,15 @@ export function DotMark({ tone, live, signal }: { tone: Parameters<typeof Dot>[0
   );
 }
 
+/** Put off till later (Remind Me Later, BLG-748): a quiet clock in the same slot, nothing asking for you. */
+export function LaterMark() {
+  return (
+    <span className={cx(m.mark, m.later)} data-signal="later" aria-hidden="true">
+      <Icon name="clock" size={11} />
+    </span>
+  );
+}
+
 /**
  * A conversation's mark. `fallback`: what an idle row shows instead (its git state, say). `working`:
  * whose loader it shows at work (a worktree's own, teal and orbiting; Claude's otherwise).

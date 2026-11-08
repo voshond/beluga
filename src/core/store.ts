@@ -85,6 +85,8 @@ export type LogItem =
       readonly request?: string;
       /** Sent to steer the turn your Claude is on (⌥↩): sent but not read until Claude reads it (see shared/claude-notices.ts steeredMessages). */
       readonly steer?: true;
+      /** Sent while your agent works in this conversation (↩ queues it): it waits in the queue, not the chat, until its card says otherwise (see shared/claude-notices.ts asSent). */
+      readonly queued?: true;
       /** A turn of a chaired dialogue (core/dialogues): which one, and its number (0: a person's interjection). */
       readonly dialogue?: DialogueMark;
       /** Emoji reactions on it (BLG-702): each person's latest change per emoji (core/chat-reactions.ts draws the chips). */
@@ -305,6 +307,10 @@ export interface Prefs {
   /** Compact a conversation on its own when its context passes `autoCompactAt` percent. */
   readonly autoCompact: boolean;
   readonly autoCompactAt: number;
+  /** After your usage limit resets, the agent that stopped on it continues: off everywhere, in some chats, or this session (shared/auto-continue.ts). */
+  readonly autoContinue: boolean;
+  readonly autoContinueOff: readonly string[];
+  readonly autoContinueSkip: number;
   /** How many conversations your Claude works in at once (see shared/run-slots.ts). */
   readonly parallelRuns: number;
   /** How many chats Your Mac and Sentinel each keep open; 0: no limit (see shared/chat-limit.ts). */
@@ -378,6 +384,8 @@ export type View =
   /** GitHub issues (Mac app): one project's issues (the one you were last in when unset), and one issue's page. */
   | { readonly kind: 'issues'; readonly projectId?: string }
   | { readonly kind: 'gh_issue'; readonly projectId: string; readonly number: number }
+  /** GitHub pull requests (Mac app): one project's open pull requests, anyone's (the one you were last in when unset). */
+  | { readonly kind: 'pulls'; readonly projectId?: string }
   /** GitHub Actions (Mac app): one project's workflow runs, or its workflows drawn as graphs; and one run's page (its jobs and steps, live). */
   | { readonly kind: 'actions'; readonly projectId?: string; readonly page?: 'workflows' }
   | { readonly kind: 'gh_run'; readonly projectId: string; readonly runId: number }
@@ -599,7 +607,7 @@ export type Action =
   | { type: 'hosting'; hosting: Hosting }
   | { type: 'welcome'; self: PeerInfo }
   | { type: 'peers'; peers: readonly PeerInfo[] }
-  | { type: 'chat'; id: string; from: string; text: string; ts: number; byAgent: boolean; channel?: string; request?: string; steer?: true; agent?: AgentRef; dialogue?: DialogueMark }
+  | { type: 'chat'; id: string; from: string; text: string; ts: number; byAgent: boolean; channel?: string; request?: string; steer?: true; queued?: true; agent?: AgentRef; dialogue?: DialogueMark }
   | ChatReactAction
   /** `id`/`ts` are stamped before reducing (see stampAction). */
   | { type: 'system'; text: string; level?: 'info' | 'warn' | 'error'; channel?: string; id?: string; ts?: number; said?: SaidBy; shipped?: ShippedMark; dialogue?: DialogueMark }
@@ -691,6 +699,9 @@ export const DEFAULT_PREFS: Prefs = {
   contextMeter: true,
   autoCompact: false,
   autoCompactAt: AUTO_COMPACT_DEFAULT,
+  autoContinue: true,
+  autoContinueOff: [],
+  autoContinueSkip: 0,
   parallelRuns: PARALLEL_RUNS_DEFAULT,
   chatLimit: CHAT_LIMIT_DEFAULT,
   scratchFolder: true,
@@ -1045,6 +1056,7 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
           ...(action.byAgent && action.agent ? { agent: action.agent } : {}),
           ...(action.request ? { request: action.request } : {}),
           ...(action.steer ? { steer: true as const } : {}),
+          ...(action.queued ? { queued: true as const } : {}),
           ...(action.dialogue ? { dialogue: action.dialogue } : {}),
         }),
       }, action.channel ?? 'room', true);

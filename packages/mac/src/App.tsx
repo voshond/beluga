@@ -18,7 +18,9 @@ import { Main } from './layout/Main.js';
 import { Sidebar } from './layout/Sidebar.js';
 import { useActions } from './lib/actions.js';
 import { SHORTCUTS, TALK_ID, keyPlatform, shortcutFor } from './lib/shortcuts-model.js';
-import { fromKey, getBindings, isRecording, useMenuKeys } from './lib/shortcuts.js';
+import { fromKey, getBindings, isRecording, isShortcut, useMenuKeys } from './lib/shortcuts.js';
+import { dialogOpen, navBack, navForward, useNavHistory } from './lib/nav.js';
+import { pageHasOwnBack } from './tasks/use-swipe-back.js';
 import { useApp, useBeluga } from './lib/beluga.js';
 import { setPowerSaving } from './lib/power.js';
 import { usePrefs } from './lib/prefs.js';
@@ -132,6 +134,13 @@ function useShortcuts() {
       }
       const id = shortcutFor(bindings, e, APP_SHORTCUTS);
       if (!id) return;
+      if (id === 'nav-back' || id === 'nav-forward') {
+        // A page with its own Back on the same key (a task's, back to its list) keeps it; a dialog keeps its keys.
+        if ((id === 'nav-back' && pageHasOwnBack() && isShortcut('page-back', e)) || dialogOpen()) return;
+        e.preventDefault();
+        fromKey(id, () => void (id === 'nav-back' ? navBack() : navForward()));
+        return;
+      }
       e.preventDefault();
       fromKey(id, () => {
         if (id === 'place-next' || id === 'place-prev') actions.run({ type: 'view', view: { kind: stepPlace(state, id === 'place-next' ? 1 : -1) } });
@@ -192,6 +201,8 @@ export function App() {
   const welcome = useOnboarding();
   useOverlays();
   useShortcuts();
+  // Back and Forward between pages (⌘[ ⌘], the toolbar's arrows, the mouse's buttons).
+  useNavHistory(client, actions);
   // Speaking instead of typing: the talk shortcut, ↩ and esc while listening (Settings › Voice).
   useDictationSetup(client);
   useRememberProject();

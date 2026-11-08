@@ -6,6 +6,7 @@ import type { Plans } from './plans.js';
 import type { PlanView, TaskView } from './progress.js';
 import { READS_AFTER_STEP, STOPPING_FOR } from '../../shared/claude-notices.js';
 import { hhmm, span } from '../../shared/clock.js';
+import { LIMIT_MARGIN_MS, LIMIT_UNKNOWN_MS, autoContinueFor } from '../../shared/auto-continue.js';
 import { CONTINUE_PROMPT, CRASH_RETRY_MS, type RunFailure, decodeFailure, failureText, resetWords } from '../../shared/run-failure.js';
 
 /**
@@ -42,10 +43,8 @@ export const STEER_UNREAD_MS = 2 * 60_000;
 /** Deliveries of one steered message after the first, before it's left to you. */
 const STEER_RETRIES = 2;
 
-/** A usage limit with no known reset: try again this long after it stopped. */
-const LIMIT_UNKNOWN_MS = 30 * 60_000;
-/** Resuming a moment after the reset, so the first message isn't refused again. */
-export const LIMIT_MARGIN_MS = 60_000;
+/** Resuming a moment after the reset, so the first message isn't refused again (a usage limit with no known reset: 30 min after it stopped). */
+export { LIMIT_MARGIN_MS };
 
 /** Steps that may take long without anything new: commands, and waiting on other people or Claudes. */
 const LONG_STEP = /^(Bash|BashOutput|Monitor|KillShell|wait_for|ask_agent|ask_person|run_on|run_on_peer|mcp__(?:beluga|klaud)_\w+__wait\w*)\b/;
@@ -399,8 +398,11 @@ export class TaskWatchdog {
       const { stall, woken, limitUntil: until } = assess({ run, asking: t.state === 'asking', ...(alive !== undefined ? { alive } : {}), now, ...(this.noRun.has(channel) ? { seenAt: this.noRun.get(channel)! } : {}), ...(talkedAt !== undefined ? { talkedAt } : {}) });
       if (until !== undefined && run) {
         if (w?.resumed === run.requestId) continue; // resumed already; its run is on its way
-        if (now < until + LIMIT_MARGIN_MS || room <= 0) {
-          if (w?.run !== run.requestId || w.limitUntil !== until) this.deps.plans.setWatch(plan.id, t.task.id, { at: now, reason: stall!, run: run.requestId, limitUntil: until, line: `${t.issue.key} paused: usage limit · resumes at ${resetWords(until, now)}` });
+        // Continuing on its own is off (Settings, this chat, or this session): it waits for you. Its line follows the switch.
+        const off = !this.limitResumes(channel, until);
+        if (off || now < until + LIMIT_MARGIN_MS || room <= 0) {
+          const line = `${t.issue.key} paused: usage limit · ${off ? 'continuing on its own is off' : `resumes at ${resetWords(until, now)}`}`;
+          if (w?.run !== run.requestId || w.limitUntil !== until || w.line !== line) this.deps.plans.setWatch(plan.id, t.task.id, { at: now, reason: stall!, run: run.requestId, limitUntil: until, line });
           continue;
         }
         room--;
@@ -453,12 +455,17 @@ export class TaskWatchdog {
     if (run && !failure && run.status !== 'error') this.homeCrashed.delete(plan.id);
     if (!run || !failure || this.homeResumed.has(run.requestId)) return;
     const retry = failure.kind === 'crash' && now - run.lastAt >= CRASH_RETRY_MS && !this.homeCrashed.has(plan.id);
-    const back = failure.kind === 'usage_limit' && now >= limitUntil(run, failure) + LIMIT_MARGIN_MS;
+    const back = failure.kind === 'usage_limit' && now >= limitUntil(run, failure) + LIMIT_MARGIN_MS && this.limitResumes(plan.home, limitUntil(run, failure));
     if (!retry && !back) return;
     this.homeResumed.add(run.requestId);
     if (retry) this.homeCrashed.add(plan.id);
     this.deps.plans.note(plan.id, 'note', back ? `Usage is back: resumed the plan’s agent at ${hhmm(now)}` : `The plan’s agent crashed (${endedWhy(run)}): retried at ${hhmm(now)}`, { kind: 'beluga' });
     this.deps.askClaude(CONTINUE_PROMPT, plan.home, false);
+  }
+
+  /** Whether a run stopped by your usage limit (reset at `until`) goes on by itself: Settings, the chat and this session say (shared/auto-continue.ts). */
+  private limitResumes(channel: string, until: number): boolean {
+    return autoContinueFor(this.deps.store.getState().prefs, channel, until + LIMIT_MARGIN_MS).kind === 'scheduled';
   }
 
   private wake(plan: Plan, t: TaskView, issue: Issue, channel: string, reason: string, run: RunInfo | undefined, line: string, { counts = true }: { counts?: boolean } = {}): void {

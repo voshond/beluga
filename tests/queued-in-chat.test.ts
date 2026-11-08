@@ -45,6 +45,15 @@ describe('asSent', () => {
     expect(ids(asSent(items, mine))).toEqual(['ask', 'c-a']);
   });
 
+  it('keeps a message sent during a turn out of the chat before its card comes', () => {
+    const waiting = { ...said('next', 3, 'b'), queued: true } as LogItem;
+    const items = [said('ask', 1, 'a'), card('a', 2), waiting];
+    expect(ids(asSent(items, mine))).toEqual(['ask', 'c-a']);
+    // Its card came: queued, it stays in the queue; started, it is drawn as usual.
+    expect(ids(asSent([...items, card('b', 3, { status: 'queued', prompt: 'next' })], mine))).toEqual(['ask', 'c-a']);
+    expect(ids(asSent([...items, card('b', 3)], mine))).toEqual(['ask', 'c-a', 'next', 'c-b']);
+  });
+
   it('leaves what someone else waits for in the chat (it isn’t in your queue)', () => {
     const items = [said('ask', 1), card('x', 3, { status: 'queued', owner: 'bob', ownerName: 'bob', requester: 'bob', requesterName: 'bob' })];
     expect(ids(asSent(items, mine))).toEqual(['ask', 'c-x']);

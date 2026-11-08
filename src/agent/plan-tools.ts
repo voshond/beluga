@@ -58,7 +58,6 @@ const TASK = z.object({
 
 const DEPENDS_ON = z
   .array(z.string().max(40))
-  .max(12)
   .describe('Ids of earlier milestones this one really builds on: it opens once they pass. Leave out to infer it from tasks’ blocked_by; [] runs it alongside from the start');
 
 const REPOS = z
@@ -73,8 +72,12 @@ const MILESTONE = z.object({
   criteria: lines(12).describe('Pass criteria: concrete, checkable'),
   autonomy: AUTONOMY.optional(),
   depends_on: DEPENDS_ON.optional(),
+<<<<<<< HEAD
   repos: REPOS.optional(),
   tasks: z.array(TASK).max(40),
+=======
+  tasks: z.array(TASK),
+>>>>>>> upstream/main
 });
 
 /** One thing settled while planning (BLG-8): the user's answer, or a default you chose without asking. */
@@ -172,6 +175,7 @@ export function createPlanToolDefs(plan: PlanTools) {
     tool(
       'plan_write',
       'Write the whole plan (replaces the draft). Milestones in order, each with pass criteria and its tasks; milestones run side by side unless depends_on (or a task’s blocked_by) ties them to an earlier one. Keep ids you used before. Nothing reaches the board until the user approves.',
+<<<<<<< HEAD
       {
         title: z.string().min(1).max(200),
         goal: z.string().max(4000),
@@ -181,6 +185,10 @@ export function createPlanToolDefs(plan: PlanTools) {
         repo_changes: z.array(REPO_CHANGE).max(8).optional().describe('Repos the plan should cover or drop (applied with approval): before milestones name a repo, it must be in the plan'),
       },
       (a) => guarded(() => plan.write({ title: a.title, goal: a.goal, milestones: a.milestones.map(milestoneInput), ...(a.decisions ? { decisions: a.decisions } : {}), ...(a.open_questions ? { openQuestions: a.open_questions } : {}), ...(a.repo_changes ? { repoEdits: a.repo_changes } : {}) } as BodyInput)),
+=======
+      { title: z.string().min(1).max(200), goal: z.string().max(4000), milestones: z.array(MILESTONE).min(1) },
+      (a) => guarded(() => plan.write({ title: a.title, goal: a.goal, milestones: a.milestones.map(milestoneInput) } as BodyInput)),
+>>>>>>> upstream/main
     ),
     tool(
       'plan_update',

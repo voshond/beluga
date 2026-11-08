@@ -1,0 +1,84 @@
+import { describe, expect, it } from 'vitest';
+import { linkPaths, parsePathHref, pathHref, readPath } from '../src/shared/render/path-refs.js';
+
+const link = (text: string, relative = true): string => linkPaths(text, { relative });
+
+describe('readPath', () => {
+  it('reads files and folders from a root, from home and relative to the worktree', () => {
+    expect(readPath('/Users/me/Desktop/a.txt')).toEqual({ path: '/Users/me/Desktop/a.txt', dir: false, relative: false });
+    expect(readPath('/tmp/')).toEqual({ path: '/tmp/', dir: true, relative: false });
+    expect(readPath('~/notes/')).toEqual({ path: '~/notes/', dir: true, relative: false });
+    expect(readPath('.beluga/scratch/01-login.png')).toEqual({ path: '.beluga/scratch/01-login.png', dir: false, relative: true });
+    expect(readPath('.beluga/scratch/')).toEqual({ path: '.beluga/scratch/', dir: true, relative: true });
+    expect(readPath('.beluga/scratch')).toEqual({ path: '.beluga/scratch', dir: false, relative: true });
+    expect(readPath('src/agent/')).toEqual({ path: 'src/agent/', dir: true, relative: true });
+    expect(readPath('./run.sh')).toEqual({ path: './run.sh', dir: false, relative: true });
+    expect(readPath('../other/x')).toEqual({ path: '../other/x', dir: false, relative: true });
+    expect(readPath('C:\\Users\\me\\a.txt')).toEqual({ path: 'C:\\Users\\me\\a.txt', dir: false, relative: false });
+  });
+
+  it('keeps the line a path points at', () => {
+    expect(readPath('src/app.ts:12')).toEqual({ path: 'src/app.ts', line: 12, dir: false, relative: true });
+    expect(readPath('src/app.ts:12:5')?.line).toBe(12);
+    expect(readPath('src/app.ts#L40-L62')?.line).toBe(40);
+  });
+
+  it('takes spaces only when the whole text is the path, and only from a root or home', () => {
+    expect(readPath('/Users/me/My Files/a.png')).toBeUndefined();
+    expect(readPath('/Users/me/My Files/a.png', { spaces: true })?.path).toBe('/Users/me/My Files/a.png');
+    expect(readPath("~/Kay's Notes/", { spaces: true })?.dir).toBe(true);
+    expect(readPath('npm run dev/test.ts', { spaces: true })).toBeUndefined();
+  });
+
+  it('leaves alone what only looks a bit like a path', () => {
+    for (const not of [
+      'and/or', 'TCP/IP', 'w/o', 'N/A', '1/2', '3/4.5', '2026/11/07', 'e.g./i.e.',
+      '/api/login', '/verify', '/', '~', 'README', 'package.json', 'console.log',
+      'https://example.com/a/b.png', '//cdn.dev/x.js', 'example.com/a.png',
+      '@beluga/shared/os-path.js', 'src/*.ts', 'src/{a,b}.ts', '$HOME/x.txt', 'a//b.ts', '-rf/x.ts',
+    ]) {
+      expect(readPath(not), not).toBeUndefined();
+    }
+  });
+});
+
+describe('path links', () => {
+  it('round-trips a path through its link', () => {
+    for (const ref of [readPath('src/a b.ts:3', { spaces: false }), readPath('.beluga/scratch/x.png:9'), readPath('~/n/'), readPath('/tmp/a#b.txt')]) {
+      if (ref) expect(parsePathHref(pathHref(ref))).toEqual(ref);
+    }
+    expect(parsePathHref('https://x.dev')).toBeUndefined();
+    expect(parsePathHref('beluga-path:%E0%A4%A')).toBeUndefined();
+  });
+});
+
+describe('linkPaths', () => {
+  it('links paths in words, keeping the punctuation after them', () => {
+    expect(link('Saved to .beluga/scratch/01-login.png.')).toBe('Saved to [.beluga/scratch/01-login.png](beluga-path:.beluga%2Fscratch%2F01-login.png).');
+    expect(link('See src/app.ts:12, then ~/notes/')).toBe('See [src/app.ts:12](beluga-path:src%2Fapp.ts#12), then [~/notes/](beluga-path:~%2Fnotes%2F)');
+    expect(link('- **src/a.ts**: changed')).toBe('- **[src/a.ts](beluga-path:src%2Fa.ts)**: changed');
+  });
+
+  it('makes a path in backticks the link, code and all', () => {
+    expect(link('Open `.beluga/scratch/`')).toBe('Open [`.beluga/scratch/`](beluga-path:.beluga%2Fscratch%2F)');
+    expect(link('It is in `/Users/me/My Files/a.png` now')).toBe('It is in [`/Users/me/My Files/a.png`](beluga-path:%2FUsers%2Fme%2FMy%20Files%2Fa.png) now');
+    expect(link('Run `npm test` in src/web/')).toBe('Run `npm test` in [src/web/](beluga-path:src%2Fweb%2F)');
+  });
+
+  it('leaves code blocks, links and web addresses alone', () => {
+    const fenced = '```\nsrc/a.ts\n```';
+    expect(link(fenced)).toBe(fenced);
+    const nested = '````md\n```\nsrc/a.ts\n```\n````';
+    expect(link(nested)).toBe(nested);
+    expect(link('[the file](src/a.ts) and src/b.ts')).toBe('[the file](src/a.ts) and [src/b.ts](beluga-path:src%2Fb.ts)');
+    expect(link('[`src/a.ts`](https://github.com/x/y/blob/main/src/a.ts)')).toBe('[`src/a.ts`](https://github.com/x/y/blob/main/src/a.ts)');
+    expect(link('at https://github.com/x/y/blob/main/src/a.ts')).toBe('at https://github.com/x/y/blob/main/src/a.ts');
+    expect(link('![shot](/tmp/a.png)')).toBe('![shot](/tmp/a.png)');
+    expect(link('POST /api/login and/or GET /verify')).toBe('POST /api/login and/or GET /verify');
+  });
+
+  it('links relative paths only where there is a worktree to open them in', () => {
+    expect(link('see src/a.ts and /tmp/x.log', false)).toBe('see src/a.ts and [/tmp/x.log](beluga-path:%2Ftmp%2Fx.log)');
+    expect(link('`src/a.ts`', false)).toBe('`src/a.ts`');
+  });
+});

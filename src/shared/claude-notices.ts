@@ -15,6 +15,9 @@ export const STOPPING_FOR = 'Your agent stops its current step to read this';
 /** What a queued message's card says when Claude took it in while it worked (see AgentHost.steer). */
 export const STEERED_IN = 'Your agent read this while it worked; the answer above covers it.';
 
+/** What a steered message's card says once you took it back before Claude read it (Cancel: see AgentHost.cancelSteer). */
+export const TAKEN_BACK = 'Taken back before your agent read it';
+
 /**
  * A steered message Claude hasn't read yet (BLG-54): its card is only a note, waiting in the
  * running turn for Claude's next step, or for the step being stopped. Once Claude reads it the
@@ -35,7 +38,8 @@ export interface SteeredMessage {
 
 /**
  * Your steered messages as the chat shows them: those Claude hasn't read yet (by message id),
- * and the note cards that say so (drawn on the message instead, so not drawn themselves).
+ * and the note cards that say so (drawn on the message instead, so not drawn themselves). A
+ * message you took back is gone from the chat with its card (its words went back to the box).
  * Only messages that know their request (`request`, said in a workspace) are linked; others keep
  * their note card.
  */
@@ -54,6 +58,10 @@ export function steeredMessages(items: readonly LogItem[]): { readonly waiting: 
     const how = steerWaiting(l);
     if (how) waiting.set(message, { request: l.requestId, waiting: how });
     if (how || (l.status === 'done' && l.text === STEERED_IN)) notes.add(l.id);
+    if (l.status === 'error' && l.text === TAKEN_BACK) {
+      notes.add(l.id);
+      notes.add(message);
+    }
   }
   // Sent to steer, its card not here yet: not read (so the line under it doesn't appear a moment later).
   for (const l of items) if (l.type === 'chat' && l.steer && l.request && !cards.has(l.request)) waiting.set(l.id, { request: l.request, waiting: 'next_step' });
@@ -86,6 +94,10 @@ function at(item: LogItem, ts: number): LogItem {
 export function asSent(items: readonly LogItem[], inQueue: (card: AgentCard) => boolean): readonly LogItem[] {
   const hidden = new Set<string>();
   const ran = new Map<string, number>();
+  // Sent while the turn ran, its card not here yet: it's on its way to the queue, so it isn't a sent bubble for a moment.
+  const cards = new Set<string>();
+  for (const l of items) if (l.type === 'agent') cards.add(l.requestId);
+  for (const l of items) if (l.type === 'chat' && l.queued && l.request && !cards.has(l.request)) hidden.add(l.request);
   for (const l of items) {
     if (l.type !== 'agent' || !inQueue(l)) continue;
     if ((l.status === 'queued' && !l.slotWait) || (l.status === 'error' && l.queuedUntil !== undefined && NOT_SENT.test(l.text))) hidden.add(l.requestId);

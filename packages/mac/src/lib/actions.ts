@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { Location } from '@beluga/core/store.js';
 import type { LinkTarget } from '@beluga/shared/link-target.js';
 import { ATTACHMENT_SHARE } from '@beluga/core/attachment-share.js';
+import { shareNameOf } from '@beluga/shared/share-names.js';
 import type { UiState } from '@beluga/ui/keymap.js';
 import { type MenuKind, menuSpec } from '@beluga/ui/menus.js';
 import { type MenuContext, runMenu as runSharedMenu } from '@beluga/ui/menu-actions.js';
@@ -64,7 +65,9 @@ export function makeActions(client: SocketClient, ui: UiStore): Actions {
         }
         return;
       }
-      if (view.kind !== 'room' && view.kind !== 'files' && view.kind !== 'workspace' && view.kind !== 'shared') client.store.dispatch({ type: 'view', view: { kind: 'files' } });
+      // A worktree shows only its own files, and a room none: anything else opens in Files.
+      const ownWorktree = view.kind === 'workspace' && at.owner === client.store.getState().selfId && at.share === shareNameOf(view.id);
+      if (view.kind !== 'files' && view.kind !== 'shared' && !ownWorktree) client.store.dispatch({ type: 'view', view: { kind: 'files' } });
       void client.api.files.open(at);
     };
     switch (link.kind) {

@@ -19,7 +19,12 @@ import { SUGGEST_ALL, chooseProjectIcon, readProjectIcon, suggestProjects } from
 import type { Args, Method } from './api.js';
 import { NETWORK_HANDLERS } from './network-handlers.js';
 import { SUPPORT_HANDLERS } from './support-handlers.js';
+<<<<<<< HEAD
 import { AGENT_SETUP_HANDLERS } from './agent-setup-handlers.js';
+=======
+import { STATS_HANDLERS } from './stats-handlers.js';
+import { maybeStatsOf } from '../core/stats/counter.js';
+>>>>>>> upstream/main
 import { WEB_HANDLERS } from './web-handlers.js';
 import { DIAGNOSTICS_HANDLERS } from './diagnostics-handlers.js';
 import { CLAUDE_CODE_HANDLERS } from './claude-code-handlers.js';
@@ -67,7 +72,11 @@ const fetchShared = (s: Session): FetchShared => (at, max) => fetchBytes(at, s.f
 const started = (pty: { id: string } | undefined): string | undefined => pty?.id;
 
 export const HANDLERS = {
-  'session.submit': (s, raw, opts) => s.submit(raw, opts),
+  // Your prompts count for your stats here, where you typed them (core/stats/counter.ts).
+  'session.submit': (s, raw, opts) => {
+    maybeStatsOf(s)?.prompt(opts?.channel, raw);
+    return s.submit(raw, opts);
+  },
   'session.copyInvite': (s) => s.copyInvite(),
   'session.copyLastAnswer': (s) => s.copyLastAnswer(),
   'session.copyText': (s, text, success) => s.copyText(text, success),
@@ -101,9 +110,10 @@ export const HANDLERS = {
   },
 
   'host.answerApproval': (s, answer, id) => s.answerApproval(answer, id),
-  'host.promote': (s, requestId) => s.host.promote(requestId),
+  'host.promote': (s, requestId, opts) => s.host.promote(requestId, opts),
   'host.sendNext': (s, requestId) => s.host.sendNext(requestId),
   'host.steerNow': (s, requestId) => s.host.steerNow(requestId),
+  'host.cancelSteer': (s, requestId) => s.host.cancelSteer(requestId),
   'host.stopRun': (s, channel) => s.host.stopRun(channel),
   'host.cancelQueued': (s, requestId) => s.host.cancelQueued(requestId),
   'host.reorderQueued': (s, requestId, index) => s.host.reorderQueued(requestId, index),
@@ -181,6 +191,7 @@ export const HANDLERS = {
     const { mediaType, bytes } = await s.files.readImageFile(at);
     return { mediaType, data: bytes.toString('base64') };
   },
+  'files.version': (s, at) => s.files.fileVersion(at),
   'files.read': (s, at) => s.files.readFile(at),
 
   'workspaces.open': (s, id, tab, o) => ctl(s)?.open(id, tab, o?.req),
@@ -188,20 +199,20 @@ export const HANDLERS = {
   'workspaces.refresh': (s) => ctl(s)?.refresh(),
   'workspaces.newWorktree': async (s, projectId, name, opts) => (await ctl(s)?.newWorktree(projectId, name, { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.agent ? { agent: opts.agent } : {}) }))?.id,
   'workspaces.newChat': async (s, projectId, title, dir) => (await ctl(s)?.newChat(projectId, title, dir))?.id,
-  'workspaces.startChat': (s, projectId, text, dir, opts) => ctl(s)?.startChat(projectId, text, dir ?? undefined, { ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.plan ? { plan: true } : {}) }),
-  'workspaces.startWorktree': async (s, projectId, text, opts) => (await ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.terminal ? { terminal: true } : {}), nameLater: true }))?.id,
+  'workspaces.startChat': (s, projectId, text, dir, opts) => (maybeStatsOf(s)?.prompt(`new-chat:${projectId}`, text), ctl(s)?.startChat(projectId, text, dir ?? undefined, { ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.plan ? { plan: true } : {}) })),
+  'workspaces.startWorktree': async (s, projectId, text, opts) => (maybeStatsOf(s)?.prompt(`new-worktree:${projectId}`, text, opts?.agent?.runtime), await ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.terminal ? { terminal: true } : {}), nameLater: true }))?.id,
   'workspaces.branches': (s, projectId) => ctl(s)?.branches(projectId),
   'workspaces.fork': async (s, id, name) => (await ctl(s)?.fork(id, name))?.id,
   'workspaces.editPrompt': (s, id, line, text, mode) => ctl(s)?.editPrompt(id, line, text, mode),
   'workspaces.continueInWorktree': async (s, id, opts) =>
     // Claude starts there once whatever runs in the conversation now has finished (its session is complete then).
     (await ctl(s)?.continueInWorktree(id, (prompt) => s.nameTask(prompt), { ...(opts?.task ? { task: opts.task } : {}), ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), after: s.host.idle(`ws:${id}`) }))?.id,
-  'workspaces.archive': (s, id, force) => ctl(s)?.archive(id, force),
+  'workspaces.archive': (s, id, force, opts) => ctl(s)?.archive(id, force, { ...(opts?.quiet ? { quiet: true } : {}) }),
   'workspaces.restore': (s, id) => ctl(s)?.restore(id),
   'workspaces.archivePlan': (s, id) => ctl(s)?.archivePlan(id),
   'workspaces.deletePlan': (s, id) => ctl(s)?.deletePlan(id),
   'workspaces.freeSpace': (s, id) => ctl(s)?.freeSpace(id),
-  'workspaces.remove': (s, id) => ctl(s)?.remove(id),
+  'workspaces.remove': (s, id, opts) => ctl(s)?.remove(id, { ...(opts?.quiet ? { quiet: true } : {}) }),
   'workspaces.commit': (s, id, message) => ctl(s)?.commit(id, message),
   'workspaces.merge': (s, id) => ctl(s)?.merge(id),
   'workspaces.prepareRemoval': (s, id) => ctl(s)?.prepareRemoval(id),
@@ -217,6 +228,7 @@ export const HANDLERS = {
   'workspaces.renameGroup': (s, from, to) => ctl(s)?.renameGroup(from, to),
   'workspaces.rename': (s, id, name) => ctl(s)?.rename(id, name),
   'workspaces.regenerateTitle': (s, id) => ctl(s)?.regenerateTitle(id),
+  'workspaces.remindLater': (s, id, at) => ctl(s)?.remindLater(id, at ?? null),
   'workspaces.ungroup': (s, name) => ctl(s)?.ungroup(name),
   'workspaces.arrange': (s, item, place) => ctl(s)?.arrange(item, place ?? {}) ?? false,
   'workspaces.newGroup': (s, name, opts) => ctl(s)?.newGroup(name, opts ?? {}),
@@ -258,6 +270,8 @@ export const HANDLERS = {
   'workbench.openPr': (s, id) => bench(s)?.openPr(id),
   'workbench.mergePr': (s, id, opts) => bench(s)?.mergePr(id, opts),
   'workbench.prStep': (s, id, step) => bench(s)?.prStep(id, step),
+  'workbench.pushPr': (s, id) => bench(s)?.pushPr(id),
+  'workbench.rerunChecks': (s, id) => bench(s)?.rerunChecks(id),
   'workbench.prConversation': (s, id) => bench(s)?.prConversation(id),
   'workbench.prPost': (s, id, post) => bench(s)?.prPost(id, post),
   'workbench.addressPrComments': (s, id, thread) => bench(s)?.addressPrComments(id, thread),
@@ -404,7 +418,11 @@ export const HANDLERS = {
   'local.statFiles': (_s, paths) => paths.map(pathInfo),
   ...NETWORK_HANDLERS,
   ...SUPPORT_HANDLERS,
+<<<<<<< HEAD
   ...AGENT_SETUP_HANDLERS,
+=======
+  ...STATS_HANDLERS,
+>>>>>>> upstream/main
   ...WEB_HANDLERS,
   ...DIAGNOSTICS_HANDLERS,
   ...CLAUDE_CODE_HANDLERS,

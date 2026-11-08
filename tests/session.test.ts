@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, utimesSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -353,6 +353,27 @@ describe('Session', () => {
     writeFileSync(path.join(bob.root, 'fire.gif'), 'GIF89a-dark');
     await waitFor(() => kay.state().written[fileKey(at)] !== undefined, 5000);
     expect((await kay.session.files.readImageFile(at)).bytes.toString('latin1')).toBe('GIF89a-dark');
+  });
+
+  it('tells which version of a picture is there (size and time, yours or a friend’s) without reading it (BLG-749)', async () => {
+    hub = await startHub({ keys });
+    const kay = peer('kay', { files: { 'shot.png': 'PNG-old' } });
+    const bob = peer('bob', { files: { 'flow.png': 'PNG-bob' } });
+    await room(kay, bob);
+    const mine = { owner: kay.session.selfId, share: 'proj', path: 'shot.png' };
+    const first = await kay.session.files.fileVersion(mine);
+    expect(first.size).toBe(7);
+    // Re-taken under the same name: the version moves, so a picture kept by it is read again.
+    writeFileSync(path.join(kay.root, 'shot.png'), 'PNG-newer');
+    utimesSync(path.join(kay.root, 'shot.png'), new Date(), new Date(first.mtime + 5000));
+    const second = await kay.session.files.fileVersion(mine);
+    expect(second.size).toBe(9);
+    expect(second.mtime).toBeGreaterThan(first.mtime);
+    // A friend's, from a listing of its folder; the same rules as reading it.
+    expect((await kay.session.files.fileVersion({ owner: bob.session.selfId, share: 'proj', path: 'flow.png' })).size).toBe(7);
+    await expect(kay.session.files.fileVersion({ owner: bob.session.selfId, share: 'proj', path: 'missing.png' })).rejects.toThrow(/ENOENT/);
+    await expect(kay.session.files.fileVersion({ ...mine, path: '../outside.png' })).rejects.toThrow(/traversal/);
+    await expect(kay.session.files.fileVersion({ owner: bob.session.selfId, share: 'nope', path: 'flow.png' })).rejects.toThrow(/not shared with you/);
   });
 
   it('reads a PDF for the Mac reader, and a file’s text without opening the viewer', async () => {

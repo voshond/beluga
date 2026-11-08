@@ -18,9 +18,11 @@ export const FAST: Timing = { dialTimeoutMs: 4_000, backoffMinMs: 100, backoffMa
 export const SLOW = process.platform === 'win32' ? 3 : 1;
 
 /**
- * Network tests that, on Windows' runners only, now and then wait for a message that never comes
- * while the rest of their file passes in a second (BLG-728; maybe two links to a friend closing
- * each other when the two Macs dial at once). They run on macOS and Linux until that's found.
+ * Network tests that now and then waited for a message that never came while the rest of their file
+ * passed in a second (BLG-728), on Windows' runners and on Linux CI too (tests/mesh/calls.test.ts).
+ * The cause: two Macs dialing each other at once, one gave up a link the other had just sent on.
+ * The given-up link now hears the other side out first (RETIRE_MS in links.ts,
+ * tests/mesh/links-retire.test.ts). Windows still skips them until its runs show that was all.
  */
 export const LOSES_A_MESSAGE_ON_WINDOWS = process.platform === 'win32';
 

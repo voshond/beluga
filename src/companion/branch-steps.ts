@@ -41,6 +41,11 @@ export async function branchStep(s: Session, topic: string, step: PhoneBranchSte
       const r = await needBench().prStep(id, step === 'mark_ready' ? 'ready' : 'update_branch');
       return { ok: r.ok, message: r.message };
     }
+    case 'push':
+    case 'rerun_checks': {
+      const r = await (step === 'push' ? needBench().pushPr(id) : needBench().rerunChecks(id));
+      return { ok: r.ok, message: r.message };
+    }
     case 'resolve_pr':
       needBench().resolvePrConflicts(id);
       return claude('resolving the conflicts');

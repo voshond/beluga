@@ -35,7 +35,8 @@ import { CODE_FENCE } from '@beluga/shared/code-ref.js';
 import { CodeRefBlock } from '../components/code/CodeRefBlock.js';
 import { PR_COMMENTS_FENCE } from '@beluga/shared/pr-comments-ref.js';
 import { PrCommentsBlock } from '../pr/PrCommentsBlock.js';
-import { goToCode } from '../lib/go-to-code.js';
+import { linkPaths, parsePathHref } from '@beluga/shared/render/path-refs.js';
+import { PathLink } from './PathLink.js';
 import s from './chat.module.css';
 import { thisComputer } from '../lib/os-words.js';
 
@@ -169,22 +170,6 @@ function imagesOnly(node: HastNode | undefined): number {
   return rest.length ? 0 : images;
 }
 
-/** Paths in plain text ("src/app.ts:12", "~/notes/") become links (local ones, when you wrote them). */
-const PATH = /(^|[\s(`'"])((?:~|\.{1,2})?\/[\w@.+-][\w@.+/-]*|[\w@+-][\w@.+-]*\/[\w@.+/-]*\.[A-Za-z][\w-]{0,9})(?::(\d+))?/g;
-
-function linkifyPaths(text: string): string {
-  let fenced = false;
-  return text
-    .split('\n')
-    .map((line) => {
-      if (/^\s*```/.test(line)) fenced = !fenced;
-      // Leave code, existing links and inline code alone.
-      if (fenced || line.includes('](') || line.includes('`')) return line;
-      return line.replace(PATH, (_m, lead: string, p: string, n?: string) => `${lead}[${p}${n ? `:${n}` : ''}](beluga-path:${encodeURIComponent(p)}${n ? `#${n}` : ''})`);
-    })
-    .join('\n');
-}
-
 const keepUrl = (u: string): string => u;
 
 const REMARK = [remarkGfm, remarkMath];
@@ -238,18 +223,19 @@ function boardKeys(issues: readonly { readonly key: string }[]): string {
  */
 export const Markdown = memo(function Markdown({ text, paths = false, localImages = false, mentions, live = false, tasks = false, typed = false }: { text: string; paths?: boolean; localImages?: boolean; mentions?: MentionWorld; live?: boolean; tasks?: boolean; typed?: boolean }) {
   const actions = useActions();
-  const { client } = useBeluga();
   // The board's keys as one string, so a task changing doesn't draw every message again.
   const keys = useApp((st) => (tasks ? boardKeys(st.board.issues) : ''));
+  // Paths relative to a worktree link only where there's one on screen to open them in.
+  const inWorktree = useApp((st) => paths && st.view.kind === 'workspace');
   const source = useMemo(() => {
     // Math first (prices stay words), then set aside so the links below leave it alone.
     const math = guardMath(prepareMath(typed ? keepBlankLines(text) : text));
-    // Tasks last: the other two leave a line with a link in it alone, and this one doesn't.
+    // Mentions, then paths, then task keys: each leaves the links before it alone.
     const withMentions = mentions ? linkMentions(math.text, mentions) : math.text;
-    const withPaths = paths ? linkifyPaths(withMentions) : withMentions;
+    const withPaths = paths ? linkPaths(withMentions, { relative: inWorktree }) : withMentions;
     const known = new Set(keys.split(' '));
     return math.restore(keys ? linkTaskKeys(withPaths, (k) => known.has(k)) : withPaths);
-  }, [text, keys, mentions, paths, typed]);
+  }, [text, keys, mentions, paths, inWorktree, typed]);
   // Every local image in the message, so the lightbox steps from one to the next.
   const images = useMemo(() => (localImages ? messageImages(text) : []), [text, localImages]);
   // The same renderers from one render to the next: a new one would remount what it drew (a graph
@@ -278,28 +264,19 @@ export const Markdown = memo(function Markdown({ text, paths = false, localImage
         const label = /image \d+/.exec(String(children))?.[0] ?? 'image';
         return <ImageChip href={href} label={label} title={`Open ${label}`} onClick={(e) => (e.preventDefault(), openLightbox([{ href, ...image, label }]))} />;
       }
+      // A file or folder named in the words (shared/render/path-refs.ts): opens it, right-click for more.
+      const path = parsePathHref(href);
+      if (path) return <PathLink pathRef={path}>{children}</PathLink>;
       return (
-      <a
-        href={href}
-        onClick={(e) => {
-          e.preventDefault();
-          if (href.startsWith('beluga-path:')) {
-            const [raw, line] = href.slice('beluga-path:'.length).split('#');
-            const p = decodeURIComponent(raw ?? '');
-            // A file of this worktree ("src/auth.ts:42"): straight to it, at that line.
-            const view = client.store.getState().view;
-            if (view.kind === 'workspace' && !p.endsWith('/') && !/^[~/]/.test(p)) {
-              void goToCode(client, view.id, p, line ? Number(line) : undefined);
-              return;
-            }
-            actions.openLink({ kind: 'local', path: p, dir: p.endsWith('/'), ...(line ? { line: Number(line) } : {}) });
-            return;
-          }
-          actions.openLink(targetOf(href));
-        }}
-      >
-        {children}
-      </a>
+        <a
+          href={href}
+          onClick={(e) => {
+            e.preventDefault();
+            actions.openLink(targetOf(href));
+          }}
+        >
+          {children}
+        </a>
       );
     },
     code: ({ className, children }) => {
@@ -336,7 +313,7 @@ export const Markdown = memo(function Markdown({ text, paths = false, localImage
         }
       />
     ),
-  }), [actions, client, localImages]);
+  }), [actions, localImages]);
   return (
     <LiveText.Provider value={live}>
       <MessageImages.Provider value={images}>

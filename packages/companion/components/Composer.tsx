@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { ArrowUp, Clock, ImagePlus, ListPlus, Navigation, Plus, Square, X } from 'lucide-react-native';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Keyboard, Platform, ScrollView, TextInput, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, LinearTransition, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { composerPlan, FIELD_LINE_HEIGHT, FIELD_PAD, fieldHeight, MAX_PHOTOS } from '../lib/composer';
@@ -129,6 +129,7 @@ export function Composer({
   above,
   photos: canAttach,
   tags = [],
+  refill,
 }: {
   readonly placeholder: string;
   /** Send (and, while Claude works, queue) what you wrote, with the photos you attached. */
@@ -147,8 +148,13 @@ export function Composer({
   readonly photos?: boolean;
   /** The room's agent tags (BLG-520): offered as chips while "@…" is being typed. */
   readonly tags?: readonly Tag[];
+  /** Words back in the box (a steered message you took back), ahead of what you're writing; a new `key` each time. */
+  readonly refill?: { readonly text: string; readonly key: number };
 }) {
   const [text, setText] = useState('');
+  useEffect(() => {
+    if (refill?.text) setText((t) => [refill.text, t.trim()].filter(Boolean).join('\n'));
+  }, [refill?.key]);
   const [h, setH] = useState(fieldHeight(0));
   const [pics, setPics] = useState<readonly Photo[]>([]);
   const [menu, setMenu] = useState(false);

@@ -49,7 +49,8 @@ function ShellGroup() {
           value={picked}
           onChange={(v) => {
             setOther(v === OTHER);
-            if (v !== OTHER) void api.session.setPrefs({ shell: v || undefined });
+            // The login shell is "no shell set": null, since JSON drops undefined on the way to the daemon.
+            if (v !== OTHER) void api.session.setPrefs({ shell: v || null });
           }}
           options={[
             { value: '', label: login ? `Login shell (${login.name})` : 'Login shell' },

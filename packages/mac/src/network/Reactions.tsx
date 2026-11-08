@@ -95,11 +95,14 @@ function ReactCard({ reactions, me, onReact, close }: { reactions: readonly Reac
   );
 }
 
-/** The button a hover over a message shows, at the top right of its row (as Slack has it). `me`: your id where reactions are kept. */
-export function ReactButton({ reactions, me, onReact }: { reactions: readonly Reaction[] | undefined; me: string | undefined; onReact: OnReact }) {
+/**
+ * The button a hover over a message shows, at the top right of its row (as Slack has it). `me`: your id where reactions are kept.
+ * `on`: sit on the top corner of the message itself instead (its parent a `r.onMessage`): `end` for one on the left, `start` for yours on the right.
+ */
+export function ReactButton({ reactions, me, onReact, on }: { reactions: readonly Reaction[] | undefined; me: string | undefined; onReact: OnReact; on?: 'start' | 'end' }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className={cx(r.react, open && r.reactOpen)}>
+    <div className={cx(r.react, on === 'end' && r.reactEnd, on === 'start' && r.reactStart, open && r.reactOpen)}>
       <Popover.Root open={open} onOpenChange={setOpen}>
         <Tip label="Add Reaction" side="top">
           <Popover.Trigger asChild>

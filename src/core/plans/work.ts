@@ -512,8 +512,13 @@ export class PlansWork {
 
   // ------------------------------------------------------------------ for Claude
 
+<<<<<<< HEAD
   /** A run in a plan's home conversation (yours): the plan's tools, and how to plan or run it. `said`: what you asked in it (kept as the plan's request until it's approved). */
   forRun(channel: string, from: string, said?: string): { readonly tools?: PlanTools; readonly brief?: string } | undefined {
+=======
+  /** A run in a plan's home conversation (yours): the plan's tools, and how to plan or run it. */
+  forRun(channel: string, from: string): { readonly tools?: PlanTools; readonly brief?: string; readonly checker?: boolean } | undefined {
+>>>>>>> upstream/main
     const me = this.deps.board.me();
     if (me.kind !== 'person' || from !== me.id) return undefined;
     // A milestone's checker: its brief, and only plan_get and plan_gate.
@@ -522,7 +527,11 @@ export class PlansWork {
       if (checking.plan.status !== 'active' || !checking.plan.body) return undefined;
       const view = this.pilot.view(checking.plan);
       const m = view.milestones.find((x) => x.milestone.id === checking.milestone);
+<<<<<<< HEAD
       return m ? { tools: this.checkerTools(checking.plan.id, m.milestone.id), brief: checkerBrief(view, m, this.pilot.repoChecks(checking.plan, m.milestone)) } : undefined;
+=======
+      return m ? { tools: this.checkerTools(checking.plan.id, m.milestone.id), brief: checkerBrief(view, m), checker: true } : undefined;
+>>>>>>> upstream/main
     }
     const found = planForHome(this.plans.state(), channel);
     if (!found) return this.workerOf(channel);

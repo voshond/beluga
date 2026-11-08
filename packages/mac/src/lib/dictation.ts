@@ -58,6 +58,8 @@ export function useDictation(): DictationState {
 interface Target {
   readonly el: () => HTMLTextAreaElement | null;
   readonly send: () => void;
+  /** The conversation (or project page) it writes into, for your stats. */
+  readonly channel: () => string | undefined;
 }
 const targets = new Set<Target>();
 let lastTarget: Target | undefined;
@@ -69,11 +71,13 @@ export const errorIn = (el: HTMLTextAreaElement | null): string | undefined =>
   state.kind === 'off' && state.error && el && (into?.el()?.isConnected ? into.el() === el : pickTarget()?.el() === el) ? state.error : undefined;
 
 /** A composer takes dictated words (and Send right away sends them with its own send). */
-export function useDictationTarget(ref: React.RefObject<HTMLTextAreaElement | null>, send: () => void): void {
+export function useDictationTarget(ref: React.RefObject<HTMLTextAreaElement | null>, send: () => void, channel?: string): void {
   const sendRef = useRef(send);
   sendRef.current = send;
+  const channelRef = useRef(channel);
+  channelRef.current = channel;
   useEffect(() => {
-    const t: Target = { el: () => ref.current, send: () => sendRef.current() };
+    const t: Target = { el: () => ref.current, send: () => sendRef.current(), channel: () => channelRef.current };
     targets.add(t);
     const focused = (): void => void (lastTarget = t);
     const el = ref.current;
@@ -261,6 +265,10 @@ export async function finishDictation(opts: { send?: boolean } = {}): Promise<vo
   if (state.kind === 'writing' && opts.send) return set({ ...state, send: true });
   if (state.kind !== 'listening' || !client) return;
   stopRecording();
+  // How long you spoke, and where, for your stats (the Usage tab): only the time, never the words.
+  const spokeMs = Math.min(3_600_000, Math.round(Date.now() - state.since));
+  const spokeIn = into?.channel();
+  if (spokeMs > 0) void client.api.stats.note({ kind: 'dictation', ms: spokeMs, ...(spokeIn ? { channel: spokeIn } : {}) }).catch(() => undefined);
   const mine = run;
   const target = into;
   const last = cutter?.end();

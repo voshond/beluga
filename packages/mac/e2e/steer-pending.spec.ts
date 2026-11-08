@@ -40,7 +40,7 @@ test('a steered message is sent, not read, until Claude reads it; Send now stops
   await composer(page).press('Alt+Enter');
   const message = page.locator('[data-index]', { hasText: 'look at the webhook retries first' }).first();
   const waiting = message.locator('[data-steer-waiting="next_step"]');
-  await expect(waiting).toContainText('Sent · waiting for Claude to read it');
+  await expect(waiting).toContainText('Sent · Claude reads it after its current step');
   // No note card of its own; the one working line is the chat's last row, below your message.
   await expect(page.getByText('Your agent reads this after its current step')).toHaveCount(0);
   await expect(page.locator('[data-working]')).toHaveCount(1);
@@ -72,6 +72,42 @@ test('a steered message is sent, not read, until Claude reads it; Send now stops
   expect(rows.at(-1)?.text).toContain('Stopped the tests to look at that first');
   expect(below(rows)).toBe(true);
   await page.screenshot({ path: `${OUT}/54-steer-answered.png` });
+});
+
+test('a second steer joins the first without stopping the step; Cancel takes one back into the box', async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.goto('/');
+  await expect(sidebar(page)).toBeVisible();
+  await openWorkspace(page, 'new-hero', 'landing');
+  await composer(page).fill('run the full test suite once more');
+  await composer(page).press('Enter');
+  await expect(page.locator('[data-current="true"]', { hasText: /test:all/ })).toBeVisible({ timeout: 15_000 });
+  // An earlier test may have left an interrupted turn here: none more may come.
+  const interrupted = await page.getByText(/Interrupted/).count();
+  await composer(page).fill('use pnpm');
+  await composer(page).press('Alt+Enter');
+  await composer(page).fill('and skip the e2e part');
+  await composer(page).press('Alt+Enter');
+  const first = page.locator('[data-index]', { hasText: 'use pnpm' }).first();
+  const second = page.locator('[data-index]', { hasText: 'and skip the e2e part' }).first();
+  // Both wait for the next step; the step goes on, nothing was stopped.
+  await expect(first.locator('[data-steer-waiting="next_step"]')).toBeVisible();
+  await expect(second.locator('[data-steer-waiting="next_step"]')).toBeVisible();
+  await expect(page.getByText(/Interrupted/)).toHaveCount(interrupted);
+  await expect(page.locator('[data-current="true"]', { hasText: /test:all/ })).toBeVisible();
+  await page.screenshot({ path: `${OUT}/steer-two-waiting.png` });
+
+  // Cancel the second: it leaves the chat, its words are back in the box; the first still waits.
+  await composer(page).fill('');
+  await second.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('[data-index]', { hasText: 'and skip the e2e part' })).toHaveCount(0, { timeout: 5_000 });
+  await expect(composer(page)).toHaveValue('and skip the e2e part');
+  await expect(first.locator('[data-steer-waiting="next_step"]')).toBeVisible();
+  await page.screenshot({ path: `${OUT}/steer-cancelled.png` });
+  // The step ends on its own: the first is read then, and the turn finishes.
+  await expect(first.locator('[data-steer-waiting]')).toHaveCount(0, { timeout: 45_000 });
+  await expect(page.locator('[data-working]')).toHaveCount(0, { timeout: 45_000 });
+  await composer(page).fill('');
 });
 
 test('⇧⌥↩ sends the newest steered message now', async ({ page }) => {

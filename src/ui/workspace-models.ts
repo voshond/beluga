@@ -8,6 +8,7 @@ import { fallbackFor, runtimeHere } from '../shared/runtime-fallbacks.js';
 import type { Project, Workspace } from '../workspaces/types.js';
 import { worktreeOrigin } from '../workspaces/origin.js';
 import { isRunning } from './format.js';
+import { steerWaiting } from '../shared/claude-notices.js';
 import { type Line, type Seg, formatDuration, lineWidth, pad, plain, truncate } from './text.js';
 import { SPINNER, glyph, theme } from './theme.js';
 import { handoffPeople, worktreeShareRows } from './worktree-share.js';
@@ -168,7 +169,8 @@ function indexActivity(log: readonly LogItem[]): ReadonlyMap<string, Activity> {
   const run = new Map<string, Extract<LogItem, { type: 'agent' }>>();
   for (const item of log) {
     last.set(item.channel, item);
-    if (item.type === 'agent' && isRunning(item.status)) run.set(item.channel, item);
+    // A steered message not read yet is a note in the turn already running: the turn's time and steps stay that turn's.
+    if (item.type === 'agent' && isRunning(item.status) && !(steerWaiting(item) && run.has(item.channel))) run.set(item.channel, item);
   }
   const out = new Map<string, Activity>();
   for (const [channel, latest] of last) out.set(channel, activity(latest, run.get(channel)));

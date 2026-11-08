@@ -44,7 +44,8 @@ export function agentLabel(ref: AgentRef | undefined, owner: string | undefined,
   return opts.capital ? phrase.charAt(0).toUpperCase() + phrase.slice(1) : phrase;
 }
 
-const RUNTIME_NAMES: Readonly<Record<string, string>> = { claude: 'Claude', codex: 'Codex', opencode: 'OpenCode', local: 'Local model' };
+/** What each runtime is called. */
+export const RUNTIME_NAMES: Readonly<Record<string, string>> = { claude: 'Claude', codex: 'Codex', opencode: 'OpenCode', local: 'Local model' };
 
 /**
  * A message's small badge: what runs the agent, when its name doesn't already say it, and the

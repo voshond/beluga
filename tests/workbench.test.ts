@@ -477,6 +477,13 @@ describe('models, usage, space and search', () => {
     expect(kay.state().search.hits.length).toBeGreaterThan(0);
     await kay.session.workspaces!.remove(ws!.id);
     expect(kay.state().log.some((l) => l.channel === `ws:${ws!.id}`)).toBe(false);
+    // What comes back late through the room (the hub's echo of your message, its run's last words),
+    // as it does on a slow computer: it never brings the conversation back.
+    const late = kay.session as unknown as { handle(msg: { id: string; from: string; ts: number; sentAt: number; body: object }): Promise<void> };
+    const self = kay.state().self!.peerId;
+    await late.handle({ id: 'late-1', from: self, ts: Date.now(), sentAt: Date.now(), body: { kind: 'chat', mid: 'm-late', text: 'the Roberto handoff', channel: `ws:${ws!.id}`, byAgent: false } });
+    await late.handle({ id: 'late-2', from: self, ts: Date.now(), sentAt: Date.now(), body: { kind: 'agent_event', requestId: 'r-late', requester: self, event: 'done', text: 'Roberto, done', channel: `ws:${ws!.id}` } });
+    expect(kay.state().log.some((l) => l.channel === `ws:${ws!.id}`)).toBe(false);
     kay.bench.search('roberto');
     expect(kay.state().search.hits).toEqual([]);
     // Words left behind for one that's gone some other way (its project removed): not listed either.

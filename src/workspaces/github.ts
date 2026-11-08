@@ -144,6 +144,18 @@ export function prTargetOf(dir: string, branch = currentBranch(dir)): GitHubRepo
 }
 
 /**
+ * The pull request a branch was checked out from, when it follows one (refs/pull/<n>/head, as a
+ * fork's pull request opened in a worktree does): gh finds such a PR by its number, never by the
+ * branch, which lives on the fork.
+ */
+export function pullOfBranch(dir: string, branch: string): number | undefined {
+  const config = configOf(dir);
+  const merge = config ? configValue(config, 'branch', branch, 'merge') : undefined;
+  const n = merge ? /^refs\/pull\/(\d+)\/head$/.exec(merge)?.[1] : undefined;
+  return n ? Number(n) : undefined;
+}
+
+/**
  * GH_REPO for gh run in `dir`: origin's repository. Without it, gh picks a remote itself, and in a
  * fork that's the original (an `upstream` remote ranks first, and `gh repo fork` saves it as the
  * default), so pull requests would be opened, read and merged there instead of on your fork. Origin

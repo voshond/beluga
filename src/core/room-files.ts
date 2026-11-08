@@ -266,6 +266,20 @@ export class RoomFiles {
     return { mediaType, bytes: await fetchBytes(at, (to, b) => this.request(to, b), max) };
   }
 
+  /**
+   * Which version of a file this is (its size and when it last changed), without reading it, so a
+   * picture kept by its path is read again once it's rewritten (BLG-749). Yours: one stat. A
+   * friend's: from a listing of its folder, the way their Scratch tab sees it.
+   */
+  async fileVersion(at: Location): Promise<{ size: number; mtime: number }> {
+    if (at.owner === this.selfId) return this.deps.shares.stat(at.share, at.path, true);
+    const dir = path.posix.dirname(at.path);
+    const name = path.posix.basename(at.path);
+    const entry = (await this.listFiles({ ...at, path: dir === '.' ? '' : dir }, { times: true })).find((e) => e.name === name && !e.dir);
+    if (!entry) throw new Error(`ENOENT: ${at.path} is not there`);
+    return { size: entry.size, mtime: entry.mtime ?? 0 };
+  }
+
   async listFiles(at: Location, opts: { times?: boolean } = {}): Promise<readonly FsEntry[]> {
     const res = await this.request<BodyOf<'fs_list_result'>>(at.owner, { kind: 'fs_list', reqId: randomUUID(), share: at.share, path: at.path, ...(opts.times ? { times: true } : {}) });
     return res.entries ?? [];

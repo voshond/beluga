@@ -1,5 +1,5 @@
 import type { DomainState } from './store.js';
-import type { PullRequest } from './work-store.js';
+import type { PrCheck, PullRequest } from './work-store.js';
 import type { ForkOf } from '../workspaces/github.js';
 import type { Workspace } from '../workspaces/types.js';
 
@@ -14,6 +14,7 @@ import type { Workspace } from '../workspaces/types.js';
 export type BranchKind =
   | 'merged'
   | 'merge_conflict'
+  | 'not_pushed'
   | 'conflicts'
   | 'checks_failing'
   | 'draft'
@@ -40,8 +41,10 @@ export type BranchStepId =
   | 'update_branch'
   | 'mark_ready'
   | 'open_pr'
+  | 'push'
   | 'resolve_pr'
   | 'fix_checks'
+  | 'rerun_checks'
   | 'merge_claude'
   | 'review_claude'
   | 'commit'
@@ -96,6 +99,40 @@ export function onGitHub(state: Pick<DomainState, 'projects' | 'gh'>, ws: Worksp
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+/** How a finished check ends when it failed (GitHub's conclusions, lower case as parseChecks keeps them). */
+const FAILED = new Set(['failure', 'error', 'cancelled', 'timed_out', 'action_required', 'startup_failure']);
+
+/** A check that finished and failed. */
+export const checkFailed = (c: PrCheck): boolean => c.state === 'completed' && FAILED.has(c.conclusion ?? '');
+
+/**
+ * The GitHub Actions runs behind a PR's failed checks, by the run id in each check's page
+ * (…/actions/runs/<id>/job/<job>): what Re-run Failed Checks runs again. Checks from other
+ * services (a commit status) aren't Actions runs, so they aren't here.
+ */
+export function failedRunIds(pr: Pick<PullRequest, 'checkRuns'>): number[] {
+  const ids = (pr.checkRuns ?? []).filter(checkFailed).map((c) => Number(/\/actions\/runs\/(\d+)/.exec(c.url ?? '')?.[1]));
+  return [...new Set(ids.filter((n) => Number.isSafeInteger(n) && n > 0))];
+}
+
+/**
+ * What an open PR needs before anything else, from what GitHub says and what's only here. `push`:
+ * this worktree has commits on no remote (BLG-617's count), so GitHub's checks and conflicts are
+ * for an older commit and pushing is what runs them again; `resolve_pr`: it conflicts with its
+ * base; `checks_running`: its checks still run, even if one already failed; `fix_checks`: they
+ * failed and nothing runs. Undefined: none of these (or no open PR). GitHub's UNKNOWN mergeability
+ * (still working it out) is never a conflict: only CONFLICTING sets `conflicts` (pr.ts).
+ */
+export type PrBlocker = 'push' | 'resolve_pr' | 'checks_running' | 'fix_checks';
+
+export function prBlocker(pr: PullRequest | undefined, ws: Pick<Workspace, 'status'>): PrBlocker | undefined {
+  if (pr?.state !== 'OPEN') return undefined;
+  if ((ws.status?.unpushed ?? 0) > 0) return 'push';
+  if (pr.conflicts) return 'resolve_pr';
+  if (pr.checks !== 'failing') return undefined;
+  return (pr.checkRuns ?? []).some((c) => c.state !== 'completed') ? 'checks_running' : 'fix_checks';
+}
+
 /** The fork's original, when `pr` was opened there (Create PR on the original) rather than on the fork. */
 export function prOnOriginal(fork: ForkOf | undefined, pr: Pick<PullRequest, 'url'> | undefined): ForkOf | undefined {
   return fork && pr && pr.url.toLowerCase().startsWith(`${fork.url.toLowerCase()}/pull/`) ? fork : undefined;
@@ -144,7 +181,7 @@ export function branchState(state: Pick<DomainState, 'projects' | 'gh' | 'prs' |
   const conflicts = state.conflicts[ws.id] ?? [];
   if (conflicts.length) {
     return at('merge_conflict', 'Merge conflict', 'error', `Merging into ${into} stopped: ${plural(conflicts.length, 'file')} conflict${conflicts.length === 1 ? 's' : ''}`, [
-      { id: 'merge_claude', label: 'Resolve with Your Agent…', hint: 'Your agent finishes the merge: it resolves each conflict and commits', claude: true },
+      { id: 'merge_claude', label: 'Resolve Conflicts…', hint: 'Your agent finishes the merge: it resolves each conflict and commits', claude: true },
     ]);
   }
 
@@ -163,18 +200,35 @@ export function branchState(state: Pick<DomainState, 'projects' | 'gh' | 'prs' |
 
   if (pr?.state === 'OPEN') {
     const n = `PR #${pr.number}`;
-    if (pr.conflicts) {
-      return at('conflicts', 'Conflicts', 'error', `${n} conflicts with ${into}: GitHub can’t merge it until they’re resolved`, [
-        { id: 'resolve_pr', label: 'Resolve with Your Agent…', hint: `Your agent merges ${into} in here, resolves the conflicts and pushes`, claude: true },
+    const blocker = prBlocker(pr, ws);
+    const fixChecks: BranchStep = { id: 'fix_checks', label: 'Fix Checks…', hint: 'Your agent reads the failing logs, fixes them and pushes', claude: true };
+    // Fixes made here and not pushed yet: what GitHub says (failing, conflicts) is about an older commit.
+    if (blocker === 'push') {
+      const was = pr.conflicts ? `says it conflicts with ${into}` : pr.checks === 'failing' ? 'says its checks failed' : pr.checks === 'pending' ? 'is running checks' : 'shows';
+      return at('not_pushed', 'Not pushed', 'info', `${plural(unpushed, 'commit')} here ${unpushed === 1 ? 'isn’t' : 'aren’t'} on ${n} yet, so what GitHub ${was} is for an older commit: push to run its checks again`, [
+        { id: 'push', label: `Push ${plural(unpushed, 'Commit')}`, hint: `Pushes ${ws.branch} to ${n}: GitHub runs its checks again and looks for conflicts with ${into}${changed ? ` (the ${plural(changed, 'uncommitted change')} stay here)` : ''}` },
+        commit,
         openPr,
       ]);
     }
-    if (pr.checks === 'failing') {
-      return at('checks_failing', 'Checks failed', 'error', `${n}’s checks are failing`, [
-        { id: 'fix_checks', label: 'Fix with Your Agent…', hint: 'Your agent reads the failing logs, fixes them and pushes', claude: true },
+    if (blocker === 'resolve_pr') {
+      return at('conflicts', `Conflicts with ${into}`, 'error', `${n} conflicts with ${into}, which moved on since: GitHub can’t merge it until they’re resolved`, [
+        { id: 'resolve_pr', label: 'Resolve Conflicts…', hint: `Your agent merges the latest ${into} in here, resolves the conflicts and pushes`, claude: true },
         openPr,
-        admin,
       ]);
+    }
+    const runs = pr.checkRuns ?? [];
+    // One already failed while others still run: calm until they're done (a red Fix now would be early).
+    if (blocker === 'checks_running') {
+      const failed = runs.filter(checkFailed).length;
+      const running = runs.filter((c) => c.state !== 'completed').length;
+      return at('checks_running', 'Checks running', 'wait', `${n}’s checks are running: ${plural(running, 'check')} still going, ${failed} failed so far`, [openPr, fixChecks, admin, commit]);
+    }
+    if (blocker === 'fix_checks') {
+      // Nothing changed here since they ran: a flaky test may just need another go.
+      const rerun: BranchStep | false = failedRunIds(pr).length > 0 && { id: 'rerun_checks', label: 'Re-run Failed Checks', hint: `GitHub runs ${n}’s failed jobs again on the same commit: for a flaky test, nothing to fix` };
+      const failed = runs.filter(checkFailed).map((c) => c.name);
+      return at('checks_failing', 'Checks failed', 'error', `${n}’s checks failed on its latest commit${failed.length ? ` (${failed.slice(0, 3).join(', ')}${failed.length > 3 ? '…' : ''})` : ''}`, [fixChecks, rerun, openPr, admin]);
     }
     if (pr.draft) {
       return at('draft', 'Draft', 'muted', `${n} is a draft: mark it ready for review to merge it`, [{ id: 'mark_ready', label: 'Mark Ready for Review', hint: `${n} leaves draft on GitHub` }, openPr, commit]);

@@ -14,6 +14,27 @@
   pointer-events: none;
   transition: opacity var(--dur-fast) var(--ease-out);
 }
+/* In friends' chats it sits on the message's top corner, on the side with room: the right of theirs, the left of yours. */
+.onMessage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: inherit;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+.reactEnd,
+.reactStart {
+  top: -12px;
+}
+.reactEnd {
+  right: -12px;
+}
+.reactStart {
+  right: auto;
+  left: -12px;
+}
 .reactable:hover .react,
 .reactable:focus-within .react,
 .reactOpen {

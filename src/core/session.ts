@@ -579,16 +579,17 @@ export class Session {
 
   /**
    * `request`: the request to your Claude the message is (kept on it here, so its card's state can
-   * show on it); `steer`: it steers the turn your Claude is on (shown as not read yet from the start).
+   * show on it); `steer`: it steers the turn your Claude is on (shown as not read yet from the start);
+   * `queued`: it waits behind that turn (in the queue from the start, never a sent bubble for a moment).
    */
-  sendChat(text: string, byAgent: boolean, channel = 'room', request?: string, steer = false): void {
+  sendChat(text: string, byAgent: boolean, channel = 'room', request?: string, steer = false, queued = false): void {
     const agent = byAgent ? { agent: this.agentRef } : {};
     // Its own id, the same in every copy, so reactions can name it (BLG-702).
     const mid = randomUUID();
     if (channel !== 'room') {
       // Workspace conversations stay on this computer, plus the people you invited into them.
       const id = chatMessageId(this.selfId, mid, '');
-      this.store.dispatch({ type: 'chat', id, from: this.selfId, text: text.slice(0, MAX_TEXT), ts: Date.now(), byAgent, channel, ...agent, ...(request ? { request } : {}), ...(steer ? { steer: true as const } : {}) });
+      this.store.dispatch({ type: 'chat', id, from: this.selfId, text: text.slice(0, MAX_TEXT), ts: Date.now(), byAgent, channel, ...agent, ...(request ? { request } : {}), ...(steer ? { steer: true as const } : {}), ...(queued ? { queued: true as const } : {}) });
       for (const to of this.sharing.recipients(channel)) this.send({ kind: 'chat', text: text.slice(0, MAX_TEXT), byAgent, channel, mid, ...agent }, { to });
       return;
     }
@@ -642,8 +643,9 @@ export class Session {
     const requestId = shown ?? randomUUID();
     // How a worktree is as you send this, so editing the message later can go back to it (BLG-385).
     if (!shared && (echo || shown)) void this.workspaces?.snapshotPrompt(channel, requestId);
-    // Steering your own Claude at work here: the message says it isn't read yet from the moment it's drawn.
-    if (echo && !shown) this.sendChat(typeof echo === 'string' ? echo : prompt, false, channel, requestId, urgent && !shared && this.host.runningIn(channel));
+    // Your own Claude at work here: a steer says it isn't read yet from the moment it's drawn, and anything else waits in the queue from then.
+    const running = !shared && this.host.runningIn(channel);
+    if (echo && !shown) this.sendChat(typeof echo === 'string' ? echo : prompt, false, channel, requestId, urgent && running, !urgent && running);
     return this.requestAgent(shared ? shared.owner : this.selfId, prompt, false, channel, urgent, undefined, requestId);
   }
 
@@ -1268,6 +1270,9 @@ export class Session {
       case 'chat': {
         // Workspace chats only reach people in that workspace, and only contributors may post.
         if (body.channel !== 'room' && !this.sharing.canPost(from, body.channel)) return;
+        // A worktree deleted here: a message that comes back late (the hub's echo of yours, its run's
+        // last words) would bring its conversation back; its log was cleared, so no repeat is noticed.
+        if (body.channel && this.workspaces?.deletedChannel(body.channel)) return;
         if (body.channel?.startsWith('ws:')) this.workspaces?.ensureLoaded(body.channel.slice(3));
         const chatId = chatMessageId(from, body.mid, id);
         // The same message again (sent once more after a lost acknowledgement): it's here already.

@@ -1,6 +1,7 @@
 import type { NotifySettings } from './settings.js';
 import { type DomainState, type LogItem, type Store, isRunning } from './store.js';
 import { dndActive } from '../shared/quiet.js';
+import { remindPending } from '../shared/remind.js';
 import { isSentinelChat } from './sentinel/model.js';
 import { loudestKind, type SoundChoice, type SoundPrefs, soundFor, volumeOf } from '../shared/notify-sound.js';
 import { type Issue, issueForWorkspace } from './board/model.js';
@@ -77,6 +78,16 @@ const isNetworkMessage = (e: NoticeEvent): boolean => e.kind === 'mentions' && e
 export function presenceQuiet(state: Pick<DomainState, 'network'>): boolean {
   const self = state.network.self;
   return Boolean(self && (self.appearOffline || self.presence.state === 'dnd'));
+}
+
+/**
+ * About a conversation you put off (Remind Me Later, BLG-748), and not something your agent asks
+ * you: it goes into the inbox already read, with no sound or banner; the reminder brings it back.
+ */
+export function remindLaterNotice(state: Pick<DomainState, 'projects'>, e: Pick<NoticeEvent, 'kind' | 'channel'>, now = Date.now()): boolean {
+  if (e.kind === 'needsYou' || !e.channel?.startsWith('ws:')) return false;
+  const id = e.channel.slice(3);
+  return state.projects.some((p) => p.workspaces.some((w) => w.id === id && remindPending(w, now)));
 }
 
 /** Where what waits for you lives (companion/needs-you.ts reads these). */
@@ -567,8 +578,10 @@ export class Notifier {
       }
       const { kind, tag, ref, title, body, channel, plan, planTask, need, key } = e;
       // A plan's task speaking quietly: it's in the inbox under the plan, already read.
-      const read = Boolean(e.quiet && plan);
+      const hushed = remindLaterNotice(state, e, this.now());
+      const read = Boolean(e.quiet && plan) || hushed;
       this.deps.store.dispatch({ type: 'notice_add', notice: { kind, ...(tag ? { tag } : {}), ...(ref ? { ref } : {}), title, body, channel, ...(plan ? { plan } : {}), ...(planTask ? { planTask } : {}), ...(need ? { need } : {}), ...(key ? { key } : {}) }, ...(read ? { read } : {}) });
+      if (hushed) continue;
       // You're in Beluga, looking at another conversation: a friend's message shows in the window.
       if (state.attention.front && isNetworkMessage(e) && !e.quiet && !dndActive(prefs, this.now())) this.banners.push(e);
       else if (desktop && !e.quiet) this.queue.push(e);

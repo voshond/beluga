@@ -1,0 +1,246 @@
+/*
+ * Your recap (Recap.tsx): one calm background whose tint drifts slowly to each slide's colour,
+ * soft solid shapes moving and changing shape behind (motion), one big number at a time. No glow,
+ * no neon; reduced motion keeps everything still.
+ */
+.recap {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: color-mix(in srgb, var(--c) 15%, var(--bg));
+  color: var(--text);
+  outline: none;
+  transition: background-color 1.8s var(--ease-out);
+}
+:global([data-theme='dark']) .recap {
+  background-color: color-mix(in srgb, var(--c) 12%, var(--bg));
+}
+.shapes {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* Placed and shaped by Recap.tsx (motion) from the top left; only their size and colour live here. */
+.shape {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 46vmax;
+  height: 46vmax;
+  background-color: color-mix(in srgb, var(--c) 28%, transparent);
+  transition: background-color 1.8s var(--ease-out);
+  will-change: transform;
+}
+.shape:nth-child(2) {
+  width: 34vmax;
+  height: 34vmax;
+  background-color: color-mix(in srgb, var(--c) 20%, transparent);
+}
+.shape:nth-child(3) {
+  width: 26vmax;
+  height: 26vmax;
+  background-color: color-mix(in srgb, var(--c) 34%, transparent);
+}
+.top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 24px 0 96px;
+}
+.progress {
+  flex: 1;
+  display: flex;
+  gap: 5px;
+}
+.segment {
+  flex: 1;
+  height: 16px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.segment > span {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+  overflow: hidden;
+  position: relative;
+}
+.segmentFill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  background: var(--text);
+  opacity: 0.75;
+  transform: scaleX(0);
+  transform-origin: left;
+}
+.segmentDone::after {
+  transform: scaleX(1);
+}
+.segmentNow::after {
+  animation: fill linear forwards;
+  animation-duration: inherit;
+}
+.segmentNow {
+  animation-duration: inherit;
+}
+.segmentHeld::after {
+  animation-play-state: paused;
+}
+@keyframes fill {
+  to {
+    transform: scaleX(1);
+  }
+}
+.stage {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8vw 6vh;
+  cursor: pointer;
+  user-select: none;
+}
+.slide {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  width: min(54rem, 100%);
+}
+.iconLogo {
+  width: auto !important;
+  height: auto !important;
+  background: none !important;
+}
+.icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--c) 34%, var(--bg));
+  color: color-mix(in srgb, var(--c) 70%, var(--text));
+}
+.lead {
+  margin: 8px 0 0;
+  font-size: clamp(1.3rem, 2.4vw, 1.9rem);
+  font-weight: 600;
+  color: var(--text-2);
+}
+.big {
+  margin: 0;
+  font-size: clamp(3.4rem, 9vw, 7.5rem);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.after {
+  margin-left: 0.18em;
+  font-size: 0.42em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-2);
+}
+.note {
+  margin: 6px 0 0;
+  max-width: 40rem;
+  font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(36rem, 100%);
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.bars > li {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+.barName {
+  font-size: 1.05rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+}
+.barTrack {
+  height: 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  overflow: hidden;
+}
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--b);
+}
+.barValue {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.92rem;
+}
+/* The last slide: your pass, swinging at the right. */
+.pass {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 38vw;
+  cursor: grab;
+}
+/* Room for the pass: the words keep to the left. */
+.stageWithPass {
+  justify-content: flex-start;
+  padding-right: 64vw;
+}
+.stageWithPass .big {
+  font-size: clamp(2.6rem, 5.4vw, 5.2rem);
+}
+@media (max-width: 900px) {
+  .pass {
+    display: none;
+  }
+  .stageWithPass {
+    justify-content: center;
+    padding-right: 8vw;
+  }
+}
+.end {
+  position: absolute;
+  right: 32px;
+  bottom: 28px;
+  z-index: 2;
+  display: flex;
+  gap: 10px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .recap,
+  .shape {
+    transition: none;
+  }
+}

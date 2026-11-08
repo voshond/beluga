@@ -146,8 +146,27 @@ export async function removeWorktree(repo: string, path: string, force = false):
   await git(repo, ['worktree', 'remove', ...(force ? ['--force'] : []), path]);
 }
 
+/**
+ * Where the head of a fork's pull request a branch follows is kept (BLG-746): GitHub has those
+ * commits, though no remote-tracking branch shows them. Outside refs/remotes, so `fetch --prune`
+ * never drops it.
+ */
+export const PULL_HEADS = 'refs/beluga/pulls';
+export const pullHeadRef = (n: number): string => `${PULL_HEADS}/${n}`;
+
+/** The pull request a branch follows by GitHub's pull ref (a fork's: refs/pull/<n>/head), and from which remote. */
+async function followedPull(repo: string, branch: string): Promise<{ remote: string; number: number } | undefined> {
+  const merge = (await tryGit(repo, ['config', '--get', `branch.${branch}.merge`]))?.trim();
+  const n = /^refs\/pull\/(\d+)\/head$/.exec(merge ?? '')?.[1];
+  if (!n) return undefined;
+  const remote = (await tryGit(repo, ['config', '--get', `branch.${branch}.remote`]))?.trim() || 'origin';
+  return { remote, number: Number(n) };
+}
+
 export async function deleteBranch(repo: string, branch: string): Promise<void> {
+  const pull = await followedPull(repo, branch);
   await git(repo, ['branch', '-D', branch]);
+  if (pull) await tryGit(repo, ['update-ref', '-d', pullHeadRef(pull.number)]);
 }
 
 /**
@@ -205,9 +224,12 @@ async function hasLanded(dir: string, base: string, tip = 'HEAD'): Promise<boole
   return false;
 }
 
-/** Commits on `tip` that are on neither `base` nor any remote-tracking branch: only this branch has them. */
+/** What a remote already has: every remote-tracking branch, and the fork pull requests' heads kept here. */
+const ON_A_REMOTE = ['--remotes', `--glob=${PULL_HEADS}/*`] as const;
+
+/** Commits on `tip` that are on neither `base` nor any remote: only this branch has them. */
 async function countUnpushed(dir: string, tip: string, base: string): Promise<number> {
-  const out = await tryGit(dir, ['rev-list', '--count', tip, '--not', base, '--remotes']);
+  const out = await tryGit(dir, ['rev-list', '--count', tip, '--not', base, ...ON_A_REMOTE]);
   return Number(out?.trim() ?? 0) || 0;
 }
 
@@ -226,8 +248,29 @@ export async function unpushedCommits(repo: string, branch: string, base: string
   if (!branch || branch.startsWith('-') || !(await tryGit(repo, ['rev-parse', '--verify', '--quiet', `${tip}^{commit}`]))) return { count: 0, subjects: [] };
   const count = await countUnpushed(repo, tip, base);
   if (!count || (await hasLanded(repo, base, tip))) return { count: 0, subjects: [] };
-  const log = await tryGit(repo, ['log', '--format=%s', '-n', '5', tip, '--not', base, '--remotes']);
+  const log = await tryGit(repo, ['log', '--format=%s', '-n', '5', tip, '--not', base, ...ON_A_REMOTE]);
   return { count, subjects: log?.split('\n').filter(Boolean) ?? [] };
+}
+
+/** A delete check's fetch waits at most this long: offline, it answers from what's here. */
+export const CATCH_UP_MS = 8_000;
+
+/**
+ * Fetch what `unpushedCommits` compares a branch with (BLG-746): the remote branch `base` is or
+ * tracks (a pull request merged on GitHub since the last fetch is in it now) and, for a branch
+ * that follows a fork's pull request, that pull request's head. Best effort and bounded.
+ */
+export async function catchUpForDelete(repo: string, branch: string, base: string, timeoutMs = CATCH_UP_MS): Promise<void> {
+  const remotes = (await tryGit(repo, ['remote']))?.split('\n').map((r) => r.trim()).filter(Boolean) ?? [];
+  if (!remotes.length || base.startsWith('-')) return;
+  const tracked = (await isCommit(repo, `refs/remotes/${base}`)) ? base : (await tryGit(repo, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', `${base}@{upstream}`]))?.trim();
+  const baseRemote = tracked && remotes.filter((r) => tracked.startsWith(`${r}/`)).sort((a, b) => b.length - a.length)[0];
+  const specs = new Map<string, string[]>();
+  const add = (remote: string, spec: string): void => void specs.set(remote, [...(specs.get(remote) ?? []), spec]);
+  if (tracked && baseRemote) add(baseRemote, `+refs/heads/${tracked.slice(baseRemote.length + 1)}:refs/remotes/${tracked}`);
+  const pull = await followedPull(repo, branch);
+  if (pull && remotes.includes(pull.remote)) add(pull.remote, `+refs/pull/${pull.number}/head:${pullHeadRef(pull.number)}`);
+  await Promise.all([...specs].map(([remote, refspecs]) => git(repo, ['fetch', '--quiet', '--no-tags', remote, ...refspecs], timeoutMs).catch(() => undefined)));
 }
 
 /** Status reads run a few at a time (each is one or two git processes): a refresh of many worktrees never forks dozens at once. */

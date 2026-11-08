@@ -25,6 +25,8 @@ import { type Conversation, isImportedItem } from '../agent/transcript.js';
 import type { Intent } from './intents.js';
 import { type OtherTools, OtherWorktrees } from './other-worktrees.js';
 import { MainSync } from './main-sync.js';
+import { Reminders, reminderNotice } from './reminders.js';
+import type { NoticeEvent } from './notify.js';
 import { agentWorktreesFrom, cleanupText, removeAgentWorktrees } from './agent-worktree-cleanup.js';
 import { claudeHome } from './claude-code/launch.js';
 import { HistorySaver } from './history-saver.js';
@@ -46,6 +48,8 @@ export interface ControllerDeps {
   readonly shares: ShareService;
   readonly selfId: () => string;
   readonly toast: (text: string, level?: 'info' | 'success' | 'warn' | 'error') => void;
+  /** Remind Me Later's time came: the reminder (a notification). */
+  readonly remind?: (notice: NoticeEvent) => void;
   /** Ask the screen to go somewhere, open a dialog or close a tab (see core/intents.ts). */
   readonly intend: (intent: Intent) => void;
   /**
@@ -175,6 +179,16 @@ export class WorkspaceController {
   readonly others: OtherWorktrees;
   /** Keeping main folders current: fetching, Update main, and Claude's sync runs. */
   readonly mainSync: MainSync;
+  /** Remind Me Later: shows each conversation again when its time comes, and reminds you of it. */
+  private readonly reminders = new Reminders({
+    projects: () => this.deps.manager.list,
+    due: (list) => {
+      for (const ws of list) this.deps.manager.setRemindAt(ws.id, undefined);
+      this.publish();
+      const state = this.deps.store.getState();
+      for (const ws of list) this.deps.remind?.(reminderNotice(state, ws));
+    },
+  });
   /** Conversations whose next run may sync git in the main folder ("Let Claude handle it"), by workspace id. */
   private readonly syncRuns = new Map<string, { branch: string; upstream: string }>();
   /** Main-folder conversations that may edit one hidden worktree (a plan's Claude fixing a conflict there), by workspace id. */
@@ -285,6 +299,7 @@ export class WorkspaceController {
 
   stop(): void {
     if (this.envTimer) clearTimeout(this.envTimer);
+    this.reminders.stop();
     this.unsubscribe();
     this.mainSync.stop();
     this.saver.stop();
@@ -304,7 +319,17 @@ export class WorkspaceController {
       }
     }
     this.publish();
+    this.reminders.arm();
     this.checkEnvSoon();
+  }
+
+  /** Remind Me Later: quiet until then (epoch ms), and a reminder then; null shows it again now, with no reminder. */
+  remindLater(id: string, at: number | null): void {
+    if (!this.deps.manager.find(id)) throw new Error('That conversation isn’t there anymore');
+    if (at !== null && at <= Date.now()) throw new Error('Pick a time that’s still ahead');
+    this.deps.manager.setRemindAt(id, at ?? undefined);
+    this.publish();
+    this.reminders.arm();
   }
 
   private envCheckedAt = 0;

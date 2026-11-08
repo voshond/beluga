@@ -64,6 +64,8 @@ describe('the right panel’s tabs', () => {
   it('the Tasks board, a task’s page and the plans have the whole window', () => {
     expect(panelFits({ kind: 'task', id: 't1' })).toBe(false);
     expect(panelFits({ kind: 'plans' })).toBe(false);
+    // Usage is a page of its own to look at: the whole window (BLG-759).
+    expect(panelFits({ kind: 'usage' })).toBe(false);
     expect(panelTabsFor({ kind: 'task', id: 't1' })).toEqual([]);
     expect(panelFits({ kind: 'tasks' })).toBe(false);
     expect(panelTabsFor({ kind: 'tasks' })).toEqual([]);

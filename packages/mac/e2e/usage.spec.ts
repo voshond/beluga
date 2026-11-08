@@ -42,7 +42,7 @@ test('shows your plan, this week, and disk space by project', async ({ page }) =
   await expect(friends.getByRole('meter', { name: /^bob’s Claude: 5-hour/ })).toBeVisible();
   await expect(friends.getByRole('meter', { name: /^mia’s Codex: 5-hour/ })).toBeVisible();
   // A bar a day, this week's tokens and cost on top.
-  await expect(page.getByRole('list', { name: 'Agent tokens per day' }).getByRole('listitem')).toHaveCount(14);
+  await expect(page.getByRole('list', { name: 'Agent tokens per day, by project' }).getByRole('listitem')).toHaveCount(14);
   // Disk by project: a segment per project, and its legend jumps to the project's rows.
   const stack = page.getByRole('group', { name: 'Disk space by project' });
   await expect(stack.getByRole('button', { name: /^bob-api: / })).toBeVisible();
@@ -124,4 +124,124 @@ test('Free up space lists what is safe to put away, and cleans it up after askin
   await page.getByRole('alertdialog').getByRole('button', { name: /^(Remove|Clean Up|Archive)$/ }).click();
   await expect(page.getByText(/Removed \d+ finished agent worktree/)).toBeVisible();
   await expect(card).toBeHidden({ timeout: 15_000 });
+});
+
+test('your stats: a number per thing, the year, and each project or agent ranked', async ({ page }) => {
+  await openUsage(page);
+  const stats = page.getByRole('region', { name: 'Your stats' });
+  const strip = stats.getByRole('tablist', { name: 'What to show' });
+  await expect(strip.getByRole('tab')).toHaveCount(8);
+  await expect(strip.getByRole('tab', { name: /Agent time/ })).toHaveAttribute('aria-selected', 'true');
+  // A square a day for the last year, coloured by the picked number.
+  await expect(stats.getByRole('grid', { name: 'Agent time per day, the last year' }).getByRole('gridcell')).toHaveCount(53 * 7);
+  // Pressing another number moves the calendar and the ranking to it.
+  await strip.getByRole('tab', { name: /PRs merged/ }).click();
+  await expect(stats.getByRole('grid', { name: 'PRs merged per day, the last year' })).toBeVisible();
+  const byProject = stats.getByRole('list', { name: 'PRs merged by project' });
+  await expect(byProject.getByRole('listitem').first()).toBeVisible();
+  // By agent: Claude, Codex and a local model each get a bar.
+  await stats.getByRole('tab', { name: 'Agents' }).click();
+  const byAgent = stats.getByRole('list', { name: 'PRs merged by agent' });
+  await expect(byAgent.getByText('Claude', { exact: true })).toBeVisible();
+  await expect(byAgent.getByText('Codex', { exact: true })).toBeVisible();
+  // When you work, and a few highlights.
+  await expect(stats.getByRole('grid', { name: 'Prompts by weekday and hour' }).getByRole('gridcell')).toHaveCount(168);
+  await expect(stats.getByRole('list', { name: 'Highlights' }).getByText('Longest streak')).toBeVisible();
+});
+
+test('the trend: a band per agent, pointing shows the step, a name hides its band', async ({ page }) => {
+  await openUsage(page);
+  const stats = page.getByRole('region', { name: 'Your stats' });
+  await stats.getByRole('tab', { name: 'Agents' }).click();
+  const chart = stats.getByRole('img', { name: /over time: .*Claude/ });
+  await expect(chart).toBeVisible();
+  // Pointing at a step shows its numbers.
+  await chart.scrollIntoViewIfNeeded();
+  const box = (await chart.boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height / 2);
+  await expect(chart.getByText('Claude')).toBeVisible();
+  // A name below the chart leaves its band out, and brings it back.
+  const legend = stats.getByRole('group', { name: 'Show or hide' });
+  await legend.getByRole('button', { name: /^Codex/ }).click();
+  await expect(legend.getByRole('button', { name: /^Codex/ })).toHaveAttribute('aria-pressed', 'false');
+  await expect(chart).not.toHaveAttribute('aria-label', /Codex/);
+  await legend.getByRole('button', { name: /^Codex/ }).click();
+  await expect(chart).toHaveAttribute('aria-label', /Codex/);
+  // Share: each step as parts of 100%.
+  await stats.getByRole('tab', { name: 'Share' }).click();
+  await expect(stats.getByText('100%').first()).toBeVisible();
+});
+
+test('sessions: how much of each 5-hour session and each week you used', async ({ page }) => {
+  await openUsage(page);
+  const sessions = page.getByRole('region', { name: 'Plan sessions' });
+  await expect(sessions.getByText(/of each session used, on average/)).toBeVisible();
+  const blocks = sessions.getByRole('list', { name: '5-hour sessions, the last 7 days' }).getByRole('listitem');
+  await expect(blocks.first()).toBeVisible();
+  await blocks.first().hover();
+  await expect(sessions.getByText(/% used/)).toBeVisible();
+  await sessions.getByRole('tab', { name: 'Weekly' }).click();
+  await expect(sessions.getByRole('list', { name: 'Weeks, the last six' }).getByRole('listitem')).toHaveCount(6);
+  // Codex here has 5-hour sessions only: nothing to switch between, so no switch.
+  await sessions.getByRole('tab', { name: 'Codex' }).click();
+  await expect(sessions.getByRole('tab', { name: '5-hour' })).toHaveCount(0);
+  await expect(sessions.getByText(/of each session used/)).toBeVisible();
+});
+
+test('your card: a title earned from your stats, and the others to wear', async ({ page }) => {
+  await openUsage(page);
+  // The whole window: no panel beside Usage.
+  await expect(page.locator('aside[aria-label="Panel"]')).toHaveAttribute('aria-hidden', 'true');
+  const card = page.getByRole('region', { name: 'Your card' });
+  const title = card.getByRole('heading', { level: 1 });
+  await expect(title).toBeVisible();
+  await expect(card.getByText(/^Because: /)).toBeVisible();
+  // The 3D pass hangs on its lanyard.
+  await expect(card.locator('canvas')).toBeVisible();
+  // Wear another title, and go back.
+  const first = await title.textContent();
+  const chip = card.getByRole('button', { name: 'Code God' });
+  await chip.click();
+  await expect(title).toHaveText('Code God');
+  await card.getByRole('button', { name: `Back to ${first}` }).click();
+  await expect(title).toHaveText(first!);
+});
+
+test('your recap: a slide at a time, keys and clicks, your title at the end', async ({ page }) => {
+  await openUsage(page);
+  await page.getByRole('button', { name: 'Play Your Recap' }).click();
+  const recap = page.getByRole('dialog', { name: 'Your recap' });
+  await expect(recap.getByText('Your Beluga, so far')).toBeVisible();
+  await page.keyboard.press('ArrowRight');
+  await expect(recap.getByText('Your agents worked for')).toBeVisible();
+  await page.keyboard.press('ArrowLeft');
+  await expect(recap.getByText('Your Beluga, so far')).toBeVisible();
+  // The last bar: your title, and the way out.
+  const bars = recap.getByRole('tablist', { name: 'Slides' }).getByRole('tab');
+  await bars.last().click();
+  await expect(recap.getByText('All of which makes you')).toBeVisible();
+  await recap.getByRole('button', { name: 'Back to Your Stats' }).click();
+  await expect(recap).toHaveCount(0);
+  // Esc leaves too.
+  await page.getByRole('button', { name: 'Play Your Recap' }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Your recap' })).toHaveCount(0);
+});
+
+test('share your stats: a picture to save or copy, from your card and from the recap', async ({ page }) => {
+  await openUsage(page);
+  const card = page.getByRole('region', { name: 'Your card' });
+  await card.getByRole('button', { name: 'Share…' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Share Your Stats' });
+  await expect(sheet.getByRole('img', { name: /the picture you'll share/ })).toBeVisible();
+  await expect(sheet.getByRole('button', { name: 'Save Image…' })).toBeEnabled();
+  await expect(sheet.getByRole('button', { name: 'Copy Image' })).toBeEnabled();
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveCount(0);
+  // The recap's last slide shares too.
+  await card.getByRole('button', { name: 'Play Your Recap' }).click();
+  const recap = page.getByRole('dialog', { name: 'Your recap' });
+  await recap.getByRole('tablist', { name: 'Slides' }).getByRole('tab').last().click();
+  await recap.getByRole('button', { name: 'Share…' }).click();
+  await expect(page.getByRole('dialog', { name: 'Share Your Stats' })).toBeVisible();
 });

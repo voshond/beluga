@@ -841,6 +841,8 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
     if (/^\/compact/.test(input.prompt.trim())) return context.compact(input, (ms) => sleep(ms * pace, input.signal));
     // Claude Code's sign-in ran out mid-run (BLG-589): the failed card offers Sign In's choices.
     if (/^sign-in expired$/i.test(input.prompt.trim())) throw new RunFailedError(classifyRun({ result: 'Failed to authenticate: Auth session expired and could not be refreshed', apiError: 'authentication_failed' }));
+    // Your plan's usage limit (BLG-757): the card says when Beluga continues it, two hours from now.
+    if (/^usage limit$/i.test(input.prompt.trim())) throw new RunFailedError({ kind: 'usage_limit', resetsAt: Date.now() + 2 * 60 * 60_000, detail: 'You’ve hit your limit' });
     // Updating main (the one thing a main-folder run may change): what real Claude would report.
     if (input.place?.syncMain) return mockSyncMain(input, input.place.syncMain, pace);
     // A sentinel's run (core/sentinel): its brief, before the main folder's "move it to a worktree".
@@ -898,6 +900,7 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
     }
     // What you said meanwhile: read at the next step, folded into this turn (its answer covers it).
     // Sent now (Steer.force): the step it's on stops and your message is the next turn, its own.
+    // Cancelled (Steer.cancel) before that: never read.
     const said: FollowUp[] = [];
     let forced: { followUp: FollowUp; note: string } | undefined;
     let wake: (() => void) | undefined;
@@ -914,7 +917,14 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
       wake?.();
       return true;
     };
-    if (script.steerable) input.onSteer?.(Object.assign((followUp: FollowUp) => (said.push(followUp), true), { force }));
+    // Taken back (Steer.cancel): out of what it reads at its next step.
+    const cancel = async (followUp: FollowUp): Promise<boolean> => {
+      const i = said.indexOf(followUp);
+      if (i < 0) return false;
+      said.splice(i, 1);
+      return true;
+    };
+    if (script.steerable) input.onSteer?.(Object.assign((followUp: FollowUp) => (said.push(followUp), true), { force, cancel }));
     let last: string | undefined;
     try {
       for (const step of script.steps) {

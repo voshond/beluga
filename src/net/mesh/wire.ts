@@ -32,8 +32,14 @@ export const LinkMessage = z.discriminatedUnion('t', [
     app: z.string().max(64).optional(),
     can: z.array(z.string().max(40)).max(64).optional(),
     avatar: hex64.optional(),
+    /** When that status was set (the sender's clock, see `pat` on presence). */
+    pat: z.number().int().min(0).optional(),
   }),
-  z.object({ t: z.literal('presence'), presence: PresenceSchema }),
+  /**
+   * `pat`: when it was set, so an older status that comes in later on another link (two links to one
+   * friend while they settle which to keep, BLG-728) never replaces it. A Mac from before it leaves it out.
+   */
+  z.object({ t: z.literal('presence'), presence: PresenceSchema, pat: z.number().int().min(0).optional() }),
   /** A direct message (end-to-end: the link is a Noise channel between the two of you). */
   z.object({ t: z.literal('dm'), id: msgId, text: z.string().max(8_000), ts: z.number().int().min(0), x: z.unknown().optional() }),
   /** Someone's Claude started (or stopped) answering in a conversation: `g` a group's id, or none for your direct messages; `agent`: which of theirs (BLG-498; an older Mac leaves it out). */

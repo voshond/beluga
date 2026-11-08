@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { workerCount } from './scripts/test-lock.mjs';
 
@@ -5,6 +6,8 @@ export default defineConfig({
   // The tests load a few of the phone app's files (packages/companion, an Expo app): read them with
   // this tsconfig, not theirs, which extends expo/tsconfig.base (not installed where only the root is).
   tsconfig: 'tsconfig.json',
+  // The Mac app's alias for the core (packages/mac/vite.config.ts), so a test can load its models.
+  resolve: { alias: [{ find: /^@beluga\//, replacement: `${fileURLToPath(new URL('./src/', import.meta.url))}` }] },
   test: {
     include: ['tests/**/*.test.ts'],
     setupFiles: ['tests/setup.ts'],

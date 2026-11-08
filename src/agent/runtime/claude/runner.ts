@@ -440,7 +440,23 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
         if (turns.between) interrupting = undefined;
         return true;
       };
-      input.onSteer?.(Object.assign(steerIn, { status, interrupt, force }) satisfies Steer);
+      /**
+       * Take back (see Steer.cancel): not handed to Claude Code yet, it never goes; in its queue,
+       * cancel_async_message drops it there. Being read (folded in, or Send now's): too late.
+       */
+      const cancel = async (followUp: FollowUp): Promise<boolean> => {
+        const uuid = steered.get(followUp);
+        if (!uuid || prompts.closed || forced?.uuid === uuid) return false;
+        if (!prompts.remove(uuid)) {
+          const drop = (q as unknown as { cancelAsyncMessage?: (uuid: string) => Promise<boolean> }).cancelAsyncMessage;
+          if (!drop) throw new Error('this Claude Code can’t take a message back');
+          if (!(await drop.call(q, uuid))) return false;
+        }
+        steered.delete(followUp);
+        turns.drop(uuid);
+        return true;
+      };
+      input.onSteer?.(Object.assign(steerIn, { status, interrupt, force, cancel }) satisfies Steer);
 
       const ends = () => ({ stderr, ...(rejectedUntil !== undefined ? { rejectedUntil } : {}), ...(apiError ? { apiError } : {}) });
       const q = query({ prompt: prompts, options });

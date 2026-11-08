@@ -106,7 +106,11 @@ export class Mesh extends EventEmitter<MeshEvents> {
   private readonly pairing: PairingHost;
   private readonly timing: Timing;
   private presence: Presence;
+  /** When this Mac's status last changed (only ever forward): sent with it, so friends keep the newest. */
+  private presenceAt = Date.now();
   private readonly theirPresence = new Map<string, Presence>();
+  /** When each friend's status we have was set, by their clock (none: a Mac that doesn't say). */
+  private readonly theirPresenceAt = new Map<string, number>();
   private readonly helloNames = new Map<string, string>();
   private readonly avatars: AvatarBook;
   /** The picture asked of each person on this link (asked again on their next link if it didn't come). */
@@ -177,6 +181,7 @@ export class Mesh extends EventEmitter<MeshEvents> {
       onLink: (link) => this.linkUp(link),
       onUnlink: (peerId) => {
         this.theirPresence.delete(peerId);
+        this.theirPresenceAt.delete(peerId);
         this.avatarAsked.delete(peerId);
         this.emit('change');
       },
@@ -599,6 +604,7 @@ export class Mesh extends EventEmitter<MeshEvents> {
 
   setPresence(next: Presence): Presence {
     this.presence = savePresence(this.file('presence.json'), next);
+    this.presenceChanged();
     this.broadcastPresence();
     this.scheduleUntil();
     this.emit('change');
@@ -808,7 +814,7 @@ export class Mesh extends EventEmitter<MeshEvents> {
   }
 
   private sendHello(link: MeshLink): void {
-    link.send({ t: 'hello', proto: PROTO, name: this.opts.name, presence: shown(this.presence), app: this.opts.app ?? 'unknown', can: [...new Set([...MESH_FEATURES, ...this.offered])], ...(this.avatars.mine ? { avatar: this.avatars.mine } : {}) });
+    link.send({ t: 'hello', proto: PROTO, name: this.opts.name, presence: shown(this.presence), pat: this.presenceAt, app: this.opts.app ?? 'unknown', can: [...new Set([...MESH_FEATURES, ...this.offered])], ...(this.avatars.mine ? { avatar: this.avatars.mine } : {}) });
   }
 
   private linkUp(link: MeshLink): void {
@@ -839,7 +845,7 @@ export class Mesh extends EventEmitter<MeshEvents> {
         else this.theirBeluga.delete(from);
         // The name they go by now (shown for people in your groups; friends keep the name you know them by).
         this.helloNames.set(from, msg.name);
-        this.theirPresence.set(from, msg.presence);
+        this.takePresence(from, msg.presence, msg.pat);
         this.avatars.announce(from, msg.avatar);
         if (msg.avatar && !this.avatars.has(msg.avatar) && this.avatarAsked.get(from) !== msg.avatar) {
           this.avatarAsked.set(from, msg.avatar);
@@ -857,8 +863,7 @@ export class Mesh extends EventEmitter<MeshEvents> {
         if (this.avatars.receive(from, msg.sha, Buffer.from(msg.d, 'base64'))) this.emit('change');
         return;
       case 'presence':
-        this.theirPresence.set(from, msg.presence);
-        this.emit('change');
+        if (this.takePresence(from, msg.presence, msg.pat)) this.emit('change');
         return;
       case 'dm': {
         if (!this.friends.has(from)) return;
@@ -937,7 +942,26 @@ export class Mesh extends EventEmitter<MeshEvents> {
 
   private broadcastPresence(): void {
     const presence = shown(this.presence);
-    for (const link of this.links.linked()) link.send({ t: 'presence', presence });
+    for (const link of this.links.linked()) link.send({ t: 'presence', presence, pat: this.presenceAt });
+  }
+
+  /** This Mac's status changed: later than anything said before (two changes in one millisecond too). */
+  private presenceChanged(): void {
+    this.presenceAt = Math.max(Date.now(), this.presenceAt + 1);
+  }
+
+  /**
+   * A friend's status, unless it's older than the one we have: two links to them carry no order
+   * between them, so a hello sent on one before they changed it can arrive after the change did
+   * on the other, and would leave the old status showing (BLG-728). → whether it was taken.
+   */
+  private takePresence(from: string, presence: Presence, at: number | undefined): boolean {
+    const had = this.theirPresenceAt.get(from);
+    if (at !== undefined && had !== undefined && at < had) return false;
+    this.theirPresence.set(from, presence);
+    if (at === undefined) this.theirPresenceAt.delete(from);
+    else this.theirPresenceAt.set(from, at);
+    return true;
   }
 
   /** A status with an end time goes back to online by itself. */
@@ -948,6 +972,7 @@ export class Mesh extends EventEmitter<MeshEvents> {
     this.untilTimer = setTimeout(() => {
       if (this.presence.until !== until) return;
       this.presence = savePresence(this.file('presence.json'), ONLINE);
+      this.presenceChanged();
       this.broadcastPresence();
       this.emit('change');
     }, Math.max(0, until - Date.now()));

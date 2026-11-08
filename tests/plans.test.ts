@@ -19,6 +19,8 @@ import type { Project, Workspace } from '../src/workspaces/types.js';
 import { isPlanOwned, planOf } from '../src/core/plans/owner.js';
 import { PLAN_TOOL_NAMES, createPlanToolDefs, milestoneInput, toOps } from '../src/agent/plan-tools.js';
 import { decideTool } from '../src/agent/policy.js';
+import { PlanBodySchema } from '../src/core/team/protocol.js';
+import { PlanOpSchema } from '../src/ipc/plans-api.js';
 import { createMockBackend } from '../src/agent/mock.js';
 
 /** Plans: drafts that stay off the board, approving onto it, and the scheduler running them. */
@@ -192,6 +194,24 @@ describe('writing a plan', () => {
     expect(tasks.find((t) => t.id === 'auth')!.title).toBe('Auth everywhere');
     body = applyOps(body, [{ op: 'move_task', id: 'auth', milestone: 'refunds', before: 'refund-api' }]);
     expect(body.milestones[1]!.tasks.map((t) => t.id)).toEqual(['auth', 'sub', 'refund-api', 'keys']);
+  });
+
+  it('has no limit on milestones, or on how many earlier ones a milestone builds on', () => {
+    const milestones = Array.from({ length: 20 }, (_, i) => ({ id: `m${i}`, title: `Step ${i}`, tasks: [{ id: `t${i}`, title: `Task ${i}` }] }));
+    const last = { ...milestones[19]!, dependsOn: milestones.slice(0, 15).map((m) => m.id) };
+    const body = normalizeBody({ title: 'Big', goal: '', milestones: [...milestones.slice(0, 19), last] });
+    expect(body.milestones).toHaveLength(20);
+    expect(body.milestones[19]!.dependsOn).toHaveLength(15);
+    expect(PlanBodySchema.safeParse(body).success).toBe(true);
+    expect(PlanOpSchema.safeParse({ op: 'update_milestone', id: 'm19', dependsOn: last.dependsOn }).success).toBe(true);
+  });
+
+  it('has no limit on tasks, in the plan or in one milestone', () => {
+    const tasks = (m: number, n: number) => Array.from({ length: n }, (_, i) => ({ id: `m${m}-t${i}`, title: `Task ${m}.${i}` }));
+    const body = normalizeBody({ title: 'Big', goal: '', milestones: [{ id: 'm0', title: 'Wide', tasks: tasks(0, 50) }, { id: 'm1', title: 'Wider', tasks: tasks(1, 50) }] });
+    expect(body.milestones.flatMap((m) => m.tasks)).toHaveLength(100);
+    expect(PlanBodySchema.safeParse({ ...body, milestones: [{ ...body.milestones[0]!, tasks: [...body.milestones[0]!.tasks, ...body.milestones[1]!.tasks] }] }).success).toBe(true);
+    expect(PlanOpSchema.safeParse({ op: 'add_milestone', milestone: { title: 'Wide', tasks: tasks(2, 50).map(({ title }) => ({ title })) } }).success).toBe(true);
   });
 
   it('waves are what can run side by side', () => {
@@ -414,6 +434,7 @@ describe('running a plan', () => {
     expect(planView(t.plans.need(t.plan.id), t.store.getState().board).next.kind).toBe('checking');
     // The checker reads the plan and records its verdict: nothing else.
     const run = t.work.forRun(`ws:${checker}`, 'p-me')!;
+    expect(run.checker).toBe(true);
     expect(run.tools!.only).toEqual(['plan_get', 'plan_gate']);
     expect(createPlanToolDefs(run.tools!).map((d) => d.name)).toEqual(['plan_get', 'plan_gate']);
     expect(() => run.tools!.update([], 'no')).toThrow(/only plan_get and plan_gate/);

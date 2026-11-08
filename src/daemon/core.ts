@@ -20,12 +20,14 @@ import { leaveNetwork, networkSwitch } from '../core/network.js';
 import { launchBoard } from '../core/board/launch.js';
 import { launchDialogues } from '../core/dialogues/launch.js';
 import { launchSentinel } from '../core/sentinel/launch.js';
+import { AutoContinue } from '../core/auto-continue.js';
 import { launchAssistant } from '../core/assistant/launch.js';
 import { launchChat } from '../core/chat/launch.js';
 import { launchCalls } from '../core/calls/launch.js';
 import { launchGateway } from '../core/gateway/launch.js';
 import { launchFriendShares } from '../core/friend-share/launch.js';
 import { launchSupport } from '../core/merge-counter.js';
+import { launchStats } from '../core/stats/counter.js';
 import { claudeHome, launchClaudeCode } from '../core/claude-code/launch.js';
 import { launchCompanion } from '../companion/launch.js';
 import { Store, initialState, prefsFrom } from '../core/store.js';
@@ -349,6 +351,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
 
   let stopNetwork = async (): Promise<void> => undefined;
   let stopSupport = (): void => undefined;
+  let stopStats = (): void => undefined;
   let stopClaudeCode = (): void => undefined;
   let stopGateway = (): void => undefined;
   let stopChat = (): void => undefined;
@@ -357,6 +360,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
   let stopBoard = (): void => undefined;
   let stopDialogues = (): void => undefined;
   let stopSentinel = (): void => undefined;
+  let stopAutoContinue = (): void => undefined;
   let stopAssistant = (): void => undefined;
   let stopCompanion = async (): Promise<void> => undefined;
   const start = (): void => {
@@ -366,6 +370,9 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     if (opts.network) stopNetwork = networkSwitch({ session, store, identity, name: config.name, dir: belugaHome(), demo: Boolean(demo), warn: (text) => session.system(text, 'warn') }, saved).stop;
     // Merged work made in Beluga, counted once per branch: the first and fifth merge ask for a star and a coffee.
     if (opts.network) stopSupport = launchSupport({ session, store, demo: Boolean(demo), asks: belugaEnv('DEMO_ASKS') });
+    // Your stats for the Usage tab: prompts, agent time, worktrees, pull requests, by project and agent.
+    // BELUGA_DEMO_STATS=sparse: someone with only Claude, a plan without a 5-hour limit, no GitHub CLI, never dictating.
+    if (opts.network) stopStats = launchStats({ session, store, demo: Boolean(demo), sparse: belugaEnv('DEMO_STATS') === 'sparse' });
     // Claude Code sessions running outside Beluga (Conductor, a terminal): the Mac app shows them live, read-only.
     // Tasks between Claudes (the gateway): over this room now, and over the network whenever it's on.
     if (opts.network) stopGateway = launchGateway({ session, store, demo: Boolean(demo) });
@@ -381,6 +388,11 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     if (opts.network) stopDialogues = launchDialogues({ session, store, demo: Boolean(demo) });
     // Sentinel: watchers that run on a schedule or by hand, do a few steps and leave a report (docs/sentinel.md).
     if (opts.network) stopSentinel = launchSentinel({ session, store, demo: Boolean(demo) });
+    // A run that stopped on your usage limit is told to continue once the limit resets (shared/auto-continue.ts).
+    if (opts.network) {
+      const auto = new AutoContinue({ store, ask: (prompt, channel) => session.askOwnClaude(prompt, channel, true), warn: (text) => console.warn(text) });
+      stopAutoContinue = () => auto.stop();
+    }
     // "Your Mac": one conversation with your Claude for the whole Mac, from the phone and the sidebar (core/assistant).
     if (opts.network) stopAssistant = launchAssistant({ session, store, demo: Boolean(demo) });
     if (opts.network) stopClaudeCode = launchClaudeCode({ session, store, demo: Boolean(demo), notify: (e) => session.notifier.notify(e) });
@@ -394,6 +406,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     session.system('Demo mode: bob, mia and every Claude are simulated. Nothing leaves your computer.');
     seedDemoContext(store);
     setTimeout(() => {
+      if (belugaEnv('DEMO_STATS') === 'sparse') return void session.updateUsage({ plan: 'pro', week: { pct: 38 } });
       session.updateUsage({ plan: 'max', fiveHour: { pct: 12 }, week: { pct: 38 } });
       // A second and a third provider, so the Usage tab shows a card for each shape (BLG-458).
       session.updateUsage({ plan: 'plus', windows: [{ label: 'Weekly', pct: 24 }] }, { runtime: 'codex', model: 'gpt-5', label: 'Codex' });
@@ -425,11 +438,13 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     stopFriendShares();
     stopAssistant();
     stopSentinel();
+    stopAutoContinue();
     stopBoard();
     stopDialogues();
     await stopCompanion();
     await stopNetwork();
     stopSupport();
+    stopStats();
     stopClaudeCode();
     await session.stop();
     terminals.closeAll();

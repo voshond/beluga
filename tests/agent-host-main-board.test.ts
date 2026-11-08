@@ -11,14 +11,15 @@ import { waitFor } from './helpers.js';
 
 /**
  * BLG-626: a project's main folder is read-only for files, but its chat may still write to the
- * task board (Beluga's own state, not a file there). Syncing main and a plan's own conversation
- * stay without it; a friend's run never gets it.
+ * task board (Beluga's own state, not a file there). A plan's own conversation may too. Syncing
+ * main and a milestone's checker stay without it; a friend's run never gets it.
  */
 
 const ME = 'me';
 const MAIN = 'ws:main';
 const SYNC = 'ws:sync';
 const HOME = 'ws:home';
+const CHECKER = 'ws:checker';
 const TREE = 'ws:tree';
 
 function setup() {
@@ -55,7 +56,7 @@ function setup() {
     refreshUsage: async () => undefined,
     workspaces: { place, refreshWorkspace: async () => undefined, manager: { list: [] } } as never,
     board: (channel, from) => (from === ME ? { tools: { channel } as never, brief: `board for ${channel}` } : undefined),
-    plans: (channel) => (channel === HOME ? { tools: {} as never, brief: 'head' } : undefined),
+    plans: (channel) => (channel === HOME ? { tools: {} as never, brief: 'head' } : channel === CHECKER ? { tools: {} as never, brief: 'check', checker: true } : undefined),
   });
   const ask = async (channel: string, from = ME): Promise<AgentRunInput> => {
     const before = runs.length;
@@ -80,9 +81,18 @@ describe('the task board in a main folder’s chat', () => {
     expect((await setup().ask(TREE)).board).toBeDefined();
   });
 
-  it('not while syncing main, nor in a plan’s own conversation', async () => {
+  it('a plan’s own conversation gets it, beside the plan’s tools', async () => {
+    const run = await setup().ask(HOME);
+    expect(run.board).toBeDefined();
+    expect(run.planTools).toBeDefined();
+    expect(run.planTask).toBeUndefined();
+  });
+
+  it('not while syncing main, nor in a milestone’s checker', async () => {
     const t = setup();
     expect((await t.ask(SYNC)).board).toBeUndefined();
-    expect((await t.ask(HOME)).board).toBeUndefined();
+    const check = await t.ask(CHECKER);
+    expect(check.board).toBeUndefined();
+    expect(check.planTools).toBeDefined();
   });
 });

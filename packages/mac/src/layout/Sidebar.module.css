@@ -125,6 +125,99 @@
 .selected .rowIcon {
   color: var(--accent);
 }
+/*
+ * Chats picked with Shift-click: rows that touch read as one box, a dashed line between each
+ * (chat-selection-view.tsx marks which sides of a row the box goes on past, in data-chat-join).
+ * Its fill, outline, corners and lines ease in and out.
+ */
+@property --chat-separator {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+.row[data-chat-id] {
+  --chat-separator: transparent;
+  background-image: repeating-linear-gradient(to right, var(--chat-separator) 0 3px, transparent 3px 6px);
+  background-position: 10px 100%;
+  background-size: calc(100% - 20px) 1px;
+  background-repeat: no-repeat;
+  transition:
+    background-color var(--dur) var(--ease-out),
+    border-radius var(--dur) var(--ease-out),
+    --chat-separator var(--dur) var(--ease-out);
+}
+.row[data-chat-id]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--dur) var(--ease-out),
+    border-width var(--dur) var(--ease-out);
+}
+.chatSelected,
+.chatSelected:hover {
+  background-color: var(--bg-selected);
+}
+.chatSelected::before {
+  opacity: 1;
+}
+.chatSelected[data-chat-join~='up'] {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.chatSelected[data-chat-join~='up']::before {
+  border-top-width: 0;
+}
+.chatSelected[data-chat-join~='down'] {
+  --chat-separator: var(--hairline-strong);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.chatSelected[data-chat-join~='down']::before {
+  border-bottom-width: 0;
+}
+/* The count under the lists, in the selection's own colours: it unfolds as a selection starts and folds away as it ends. */
+.chatSelection {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows var(--dur) var(--ease-out),
+    opacity var(--dur) var(--ease-out),
+    visibility 0s;
+}
+.chatSelection[data-open='false'] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--dur) var(--ease-out),
+    opacity var(--dur) var(--ease-out),
+    visibility 0s var(--dur);
+}
+.chatSelectionFold {
+  min-height: 0;
+  overflow: hidden;
+}
+.chatSelectionBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 6px 8px 4px;
+  padding: 6px 6px 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 8px;
+  background: var(--bg-selected);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.chatSelectionBar button {
+  color: var(--accent);
+}
 .rowLabel {
   flex: 1;
   min-width: 0;

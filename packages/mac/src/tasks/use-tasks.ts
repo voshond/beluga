@@ -48,7 +48,7 @@ export function projectOfView(state: AppState): string | undefined {
           : view.projectId
         : view.kind === 'task'
           ? state.board.issues.find((i) => i.id === view.id)?.projectId
-          : view.kind === 'tasks' || view.kind === 'plans' || view.kind === 'issues' || view.kind === 'gh_issue' || view.kind === 'actions' || view.kind === 'gh_run'
+          : view.kind === 'tasks' || view.kind === 'plans' || view.kind === 'issues' || view.kind === 'gh_issue' || view.kind === 'pulls' || view.kind === 'actions' || view.kind === 'gh_run'
             ? view.projectId
             : view.kind === 'plan'
               ? state.plans.plans.find((p) => p.id === view.id)?.projectId
@@ -78,7 +78,7 @@ export function useRememberProject(): void {
 let cameFrom: View | undefined;
 
 /** Places a task's Back returns to; anything else (a dialog-like view, a draft) goes to the Tasks list. */
-const RETURNABLE: ReadonlySet<View['kind']> = new Set(['tasks', 'plans', 'plan', 'workspace', 'overview', 'project', 'requests', 'issues', 'gh_issue', 'actions', 'gh_run', 'sentinel', 'sentinel_page', 'sentinel_run', 'dashboard', 'sentinel_chat']);
+const RETURNABLE: ReadonlySet<View['kind']> = new Set(['tasks', 'plans', 'plan', 'workspace', 'overview', 'project', 'requests', 'issues', 'gh_issue', 'pulls', 'actions', 'gh_run', 'sentinel', 'sentinel_page', 'sentinel_run', 'dashboard', 'sentinel_chat']);
 
 /** Where you were before the GitHub issue you're on (Issues, a project's home, a task, a conversation). */
 let issueCameFrom: View | undefined;

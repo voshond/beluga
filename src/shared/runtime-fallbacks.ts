@@ -41,11 +41,11 @@ export const RUNTIME_FALLBACKS: Readonly<Record<string, Readonly<Partial<Record<
  * `terminal`: the agent's own terminal app on a conversation (Claude Code's TUI; a local model
  * runs in it). docs/parity.md names each as `missing:<id>` in the runtime's column.
  */
-export type FeatureId = 'btw' | 'terminal';
+export type FeatureId = 'btw' | 'terminal' | 'steer';
 
 export const RUNTIME_MISSING: Readonly<Record<string, readonly FeatureId[]>> = {
   codex: ['btw', 'terminal'],
-  opencode: ['terminal'],
+  opencode: ['terminal', 'steer'],
 };
 
 /** Whether `feature` is there on `runtime` (unset: Claude's, which has them all). */

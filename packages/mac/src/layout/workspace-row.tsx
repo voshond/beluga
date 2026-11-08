@@ -1,6 +1,7 @@
 import type { AppState } from '@beluga/core/store.js';
 import type { Workspace } from '@beluga/workspaces/types.js';
 import { stateOf } from '@beluga/ui/workspace-models.js';
+import { REMIND_CHOICES, remindLabel, remindPending, remindTime } from '@beluga/shared/remind.js';
 import { Icon, type IconName } from '../components/Icon.js';
 import { ActionsContext, type ActionItem } from '../components/SpecMenu.js';
 import { cx } from '../components/ui.js';
@@ -9,12 +10,13 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { toast, useApp, useBeluga } from '../lib/beluga.js';
 import { sameDeep } from '../lib/stable.js';
 import { workspaceSignal } from './attention-model.js';
-import { DotMark, SignalMark, nameClass, signalClass } from './signal-marks.js';
+import { DotMark, LaterMark, SignalMark, nameClass, signalClass } from './signal-marks.js';
 import { inSections, isPrStep, toolbarActions } from './toolbar-actions.js';
 import { askBeforeWork } from '../lib/work-confirm.js';
 import { isPlanAction, runPlanAction } from '../lib/plan-task.js';
 import { Row } from './sidebar-parts.js';
 import { outsideLocation } from './outside-model.js';
+import { useChatSelection } from './chat-selection-view.js';
 import { isAgentWorktree } from '../claude-code/subagents-model.js';
 import s from './Sidebar.module.css';
 import o from './other-worktrees.module.css';
@@ -23,7 +25,7 @@ import o from './other-worktrees.module.css';
  * What a workspace's right-click menu offers: its toolbar's actions, named and drawn the same
  * (the shortcuts show for the workspace you're in, where they work).
  */
-export function workspaceItems(state: AppState, ws: Workspace, run: ReturnType<typeof useActions>['run'], rename?: () => void, regenerate?: { readonly run: () => void; readonly pending: boolean }): ActionItem[] {
+export function workspaceItems(state: AppState, ws: Workspace, run: ReturnType<typeof useActions>['run'], rename?: () => void, regenerate?: { readonly run: () => void; readonly pending: boolean }, remindLater?: (at: number | null) => void): ActionItem[] {
   const { primary, icons, more } = toolbarActions(state, ws);
   const here = state.view.kind === 'workspace' && state.view.id === ws.id;
   const sections = inSections([...(primary ? [primary] : []), ...icons, ...more.flat()]);
@@ -31,6 +33,7 @@ export function workspaceItems(state: AppState, ws: Workspace, run: ReturnType<t
     { label: 'Open', icon: 'chevronRight', onSelect: () => run({ type: 'open_ws', id: ws.id }) },
     ...(renamable(ws) && rename ? [{ label: 'Rename…', icon: 'pencil' as const, onSelect: rename }] : []),
     ...(ws.kind === 'chat' && regenerate ? [{ label: regenerate.pending ? 'Regenerating title…' : 'Regenerate title', icon: 'refresh' as const, disabled: regenerate.pending, onSelect: regenerate.run }] : []),
+    ...(remindLater && ws.kind !== 'main' && !ws.archived ? [laterItem(ws, remindLater)] : []),
     ...sections.flatMap((section) =>
       section.map((a, i) => ({
         label: a.label,
@@ -43,6 +46,17 @@ export function workspaceItems(state: AppState, ws: Workspace, run: ReturnType<t
       })),
     ),
   ];
+}
+
+/** Remind Me Later ▸ when (BLG-748), or Show Again Now while it waits. */
+function laterItem(ws: Workspace, remindLater: (at: number | null) => void): ActionItem {
+  if (remindPending(ws)) return { label: 'Show Again Now', icon: 'clock', hint: remindLabel(ws), onSelect: () => remindLater(null) };
+  return { label: 'Remind Me Later', icon: 'clock', onSelect: () => {}, submenu: REMIND_CHOICES.map((c) => ({ label: c.label, onSelect: () => remindLater(remindTime(c.value)) })) };
+}
+
+/** Put it off till then (or show it again now), saying so when it can't. */
+function remindWorkspaceLater(client: ReturnType<typeof useBeluga>['client'], ws: Workspace, at: number | null): void {
+  client.api.workspaces.remindLater(ws.id, at).catch((err: unknown) => toast(client, err instanceof Error ? err.message : 'Cannot set the reminder', 'error'));
 }
 
 /** Chats, and worktrees of yours (a sub-agent's is Claude's): a worktree's branch takes the new name too. */
@@ -86,6 +100,8 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold }: { w
   const { client } = useBeluga();
   const [renaming, setRenaming] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const selection = useChatSelection();
+  const inSelection = ws.kind === 'chat' && Boolean(selection?.ids.includes(ws.id));
   // Only what the row shows: another conversation streaming doesn't draw it again (KLD-48).
   const { selected, st, signal, where, archiving } = useApp(
     (state) => ({
@@ -130,13 +146,17 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold }: { w
     );
   }
   // Idle: its git state (uncommitted changes, ready to merge) as before.
-  const quiet = st.tone === 'warn' || st.tone === 'info' || st.tone === 'error' ? <DotMark tone={st.tone} /> : null;
+  // Put off till later: a quiet clock instead (what waits there shows when it reminds you).
+  const quiet = signal.remindAt ? <LaterMark /> : st.tone === 'warn' || st.tone === 'info' || st.tone === 'error' ? <DotMark tone={st.tone} /> : null;
   return (
-    <ActionsContext items={() => workspaceItems(client.store.getState(), ws, actions.run, () => setRenaming(true), { run: () => void regenerateTitle(), pending: regenerating })}>
+    <ActionsContext items={() => inSelection && selection ? selection.items() : workspaceItems(client.store.getState(), ws, actions.run, () => setRenaming(true), { run: () => void regenerateTitle(), pending: regenerating }, (at) => remindWorkspaceLater(client, ws, at))}>
       <Row
         indent={indent}
-        selected={selected}
-        className={signalClass(signal, selected)}
+        selected={inSelection || selected}
+        className={cx(signalClass(signal, selected), inSelection && s.chatSelected)}
+        data-chat-id={ws.kind === 'chat' ? ws.id : undefined}
+        data-chat-selected={inSelection || undefined}
+        aria-pressed={ws.kind === 'chat' ? inSelection : undefined}
         data-signal-row={signal.level}
         data-kind={ws.kind}
         // Named for itself alone (so it's found by name whatever it waits on); the tooltip says the rest.
@@ -186,7 +206,13 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold }: { w
           )
         }
         detail={archiving ? `${ws.name}: ${ARCHIVING[archiving]}` : `${ws.name}: ${signal.tip || st.label}${fold ? ` · ${fold.summary}` : ''}${where ? `\n${where.path}` : ''}`}
-        onClick={() => actions.run({ type: 'open_ws', id: ws.id })}
+        onClick={(event) => {
+          if (ws.kind === 'chat' && selection?.click(ws.id, event.shiftKey)) {
+            event.preventDefault();
+            return;
+          }
+          actions.run({ type: 'open_ws', id: ws.id });
+        }}
         trailing={
           archiving ? (
             <span className={s.archiving} data-archiving={archiving}>Archiving…</span>

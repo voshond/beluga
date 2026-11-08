@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Store, initialState } from '../src/core/store.js';
+import { PrefsPatch } from '../src/ipc/api.js';
 import { cleanTerminalName, terminalLabel } from '../src/shared/terminal-keys.js';
 import { isPosixShell, joinArgs, shellArgs, shellName, splitArgs } from '../src/shared/shells.js';
 import { listShells, readShellsFile, scriptShell } from '../src/terminal/shells.js';
@@ -63,6 +64,19 @@ describe('picking the shell', () => {
     expect(menu.options[3]!.hint).toMatch(/^Off/);
     expect(menu.options[4]!.hint).toMatch(/^--private/);
     expect(settingsMenu(appOf(store.getState()), 'workspaces').options.find((o) => o.id === 'sec:terminal')?.hint).toBe('fish · not a login shell · --private');
+  });
+
+  // Picking "Login shell" in the Mac app's settings unsets the shell. The change goes over the socket as
+  // JSON, which drops an undefined, so "unset" travels as null: the API accepts it and the store clears it.
+  it('goes back to the login shell when the settings screen sends null', () => {
+    expect(PrefsPatch.parse({ shell: null })).toEqual({ shell: null });
+    expect(PrefsPatch.parse({ shell: '/bin/bash' })).toEqual({ shell: '/bin/bash' });
+    expect(PrefsPatch.parse(JSON.parse(JSON.stringify({ shell: undefined })))).toEqual({}); // what undefined would have become
+    const store = new Store(initialState('t'));
+    store.dispatch({ type: 'prefs', prefs: { shell: '/bin/bash' } });
+    expect(store.getState().prefs.shell).toBe('/bin/bash');
+    store.dispatch({ type: 'prefs', prefs: { shell: null } });
+    expect(store.getState().prefs.shell).toBeUndefined();
   });
 });
 

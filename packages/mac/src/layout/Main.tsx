@@ -33,6 +33,7 @@ const TaskPage = lazy(() => import('../tasks/TaskPage.js').then((m) => ({ defaul
 const IssuesView = lazy(() => import('../issues/IssuesView.js').then((m) => ({ default: m.IssuesView })));
 const IssuePage = lazy(() => import('../issues/IssuePage.js').then((m) => ({ default: m.IssuePage })));
 const ActionsView = lazy(() => import('../ci/ActionsView.js').then((m) => ({ default: m.ActionsView })));
+const PullsView = lazy(() => import('../issues/PullsView.js').then((m) => ({ default: m.PullsView })));
 const RunPage = lazy(() => import('../ci/RunPage.js').then((m) => ({ default: m.RunPage })));
 const PlansView = lazy(() => import('../plans/PlansView.js').then((m) => ({ default: m.PlansView })));
 const PlanPage = lazy(() => import('../plans/PlanPage.js').then((m) => ({ default: m.PlanPage })));
@@ -121,6 +122,8 @@ function Route() {
       return <WorkFrame page="issues"><IssuesView /></WorkFrame>;
     case 'gh_issue':
       return <IssuePage key={`${view.projectId}#${view.number}`} projectId={view.projectId} number={view.number} />;
+    case 'pulls':
+      return <WorkFrame page="pulls"><PullsView /></WorkFrame>;
     case 'actions':
       return <WorkFrame page="actions"><ActionsView /></WorkFrame>;
     case 'gh_run':

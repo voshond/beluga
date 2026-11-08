@@ -127,9 +127,13 @@ function tabsOfView(view: View, wsKind?: WsKind): PanelTab[] {
 
 /**
  * The right panel shows beside this view: not on a plan's page (its right side is its chat), nor
- * on the Tasks board, a task's page, the plans or Sentinel's pages: nothing in it is about them, so they get the whole window.
+ * on the Tasks board, a task's page, the plans, Usage or Sentinel's pages: nothing in it is about them, so they get the whole window.
  */
+<<<<<<< HEAD
 const WHOLE_WINDOW: ReadonlySet<View['kind']> = new Set(['plan', 'plans', 'tasks', 'task', 'gh_issue', 'gh_run', 'notifications']);
+=======
+const WHOLE_WINDOW: ReadonlySet<View['kind']> = new Set(['plan', 'plans', 'tasks', 'task', 'gh_issue', 'gh_run', 'usage']);
+>>>>>>> upstream/main
 export const panelFits = (view: View): boolean => !WHOLE_WINDOW.has(view.kind) && !isSentinelView(view.kind);
 
 /** Where a view's last tab is remembered: per workspace, one for everything else. */

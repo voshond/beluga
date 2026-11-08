@@ -77,6 +77,19 @@ describe('PromptQueue', () => {
     expect(seen).toEqual(['a', 'b']);
     expect(q.push('c')).toBe(false);
   });
+
+  it('a prompt taken back before Claude Code got it never goes (Cancel on a steered message)', async () => {
+    const q = new PromptQueue();
+    q.push('a', { uuid: 'u-a' });
+    q.push('b', { uuid: 'u-b', steer: true });
+    expect(q.remove('u-b')).toBe(true);
+    expect(q.remove('u-b')).toBe(false);
+    q.close();
+    const seen: string[] = [];
+    for await (const m of q) seen.push(m.message.content as string);
+    expect(seen).toEqual(['a']);
+    expect(q.remove('u-a')).toBe(false);
+  });
 });
 
 describe('BackgroundAgents', () => {

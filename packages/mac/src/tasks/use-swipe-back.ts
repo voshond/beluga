@@ -53,6 +53,12 @@ function busyElsewhere(e: KeyboardEvent): boolean {
   return Boolean(document.querySelector('[role="dialog"], [role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]'));
 }
 
+/** Pages showing with a Back of their own (to their list). */
+let ownBacks = 0;
+
+/** A page with its own Back is showing: ⌘[ is that Back's, not the window's (lib/nav.ts). */
+export const pageHasOwnBack = (): boolean => ownBacks > 0;
+
 /**
  * Go back with a two-finger swipe right over `area`, ⌘[ or Esc. → how far a swipe is (0 to 1),
  * for the edge's arrow (SwipeBackEdge).
@@ -64,6 +70,8 @@ export function useSwipeBack(area: RefObject<HTMLElement | null>, back: () => vo
   useEffect(() => {
     const el = area.current;
     if (!el) return;
+    // Counted only once its ⌘[ is listened for (below), so ⌘[ is never left to nobody.
+    ownBacks += 1;
     let swipe = NO_SWIPE;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let frame = 0;
@@ -103,6 +111,7 @@ export function useSwipeBack(area: RefObject<HTMLElement | null>, back: () => vo
     el.addEventListener('wheel', onWheel, { passive: true });
     window.addEventListener('keydown', onKey);
     return () => {
+      ownBacks -= 1;
       el.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKey);
       if (timer) clearTimeout(timer);
