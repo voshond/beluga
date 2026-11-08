@@ -16,6 +16,7 @@ mod popup;
 #[cfg(target_os = "macos")]
 mod power;
 mod privacy;
+mod remote;
 mod rename;
 mod requests;
 mod sounds;
@@ -46,6 +47,7 @@ pub struct AppState {
 
 #[tauri::command]
 async fn daemon_endpoint(app: tauri::AppHandle) -> Result<daemon::Endpoint, String> {
+    remote::require_local(&app)?;
     daemon::ensure(&app, &[]).await
 }
 
@@ -56,6 +58,7 @@ async fn restart_daemon(
     app: tauri::AppHandle,
     args: Vec<String>,
 ) -> Result<daemon::Endpoint, String> {
+    remote::require_local(&app)?;
     daemon::restart(&app, &args).await
 }
 
@@ -254,6 +257,16 @@ pub fn run() {
             w.visible = false;
         }
     }
+    // Run here or connect to a server: anything but Run here opens the connect page first.
+    let client = remote::ClientState::new(remote::config_dir(&context.config().identifier));
+    let run_here = client.starting_mode() == Some(remote::Mode::Local);
+    if !run_here {
+        for w in &mut context.config_mut().app.windows {
+            if w.label == "main" {
+                w.url = tauri::WebviewUrl::App(remote::PAGE.into());
+            }
+        }
+    }
     let window_state = if background {
         tauri_plugin_window_state::StateFlags::all()
             - tauri_plugin_window_state::StateFlags::VISIBLE
@@ -287,6 +300,7 @@ pub fn run() {
         .manage(popup::PopupState::default())
         .manage(call_float::CallFloatState::default())
         .manage(call_overlay::CallOverlayState::default())
+        .manage(client)
         .manage(AppState {
             lock: tokio::sync::Mutex::new(()),
             child: Mutex::new(None),
@@ -320,6 +334,10 @@ pub fn run() {
             system_idle_seconds,
             take_pending_links,
             focus_window,
+            remote::client_config,
+            remote::client_use_server,
+            remote::client_open,
+            remote::client_use_local,
             export::save_export,
             sounds::sound_install,
             sounds::sound_prune,
@@ -341,7 +359,7 @@ pub fn run() {
             "check-updates" => updater::check_from_menu(app),
             id => menu::on_event(app, id),
         })
-        .setup(|app| {
+        .setup(move |app| {
             let handle = app.handle().clone();
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
@@ -401,10 +419,12 @@ pub fn run() {
                     daemon::locked(&state.pending_links).extend(urls.iter().map(|u| u.to_string()));
                 }
             }
-            // Start Beluga's daemon right away, so the window has something to show.
-            tauri::async_runtime::spawn(async move {
-                let _ = daemon::ensure(&handle, &[]).await;
-            });
+            // Start Beluga's daemon right away, so the window has something to show (never in server mode).
+            if run_here {
+                tauri::async_runtime::spawn(async move {
+                    let _ = daemon::ensure(&handle, &[]).await;
+                });
+            }
             updater::start(app.handle());
             Ok(())
         })
