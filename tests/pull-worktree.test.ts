@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { ShareService } from '../src/core/shares.js';
 import { Store, initialState } from '../src/core/store.js';
 import { WorkspaceController } from '../src/core/workspace-controller.js';
+import { pullOfBranch } from '../src/workspaces/github.js';
 import { WorkspaceManager, pullName } from '../src/workspaces/manager.js';
 import { WorkspaceStore } from '../src/workspaces/store.js';
 import { screenOver } from './helpers.js';
@@ -104,6 +105,8 @@ describe('a pull request in a worktree', () => {
     expect(ws).toMatchObject({ branch: 'their-fork-branch', name: 'pr-7-from-a-fork' });
     expect(readFileSync(path.join(ws!.path, 'fork.ts'), 'utf8')).toBe('from a fork\n');
     expect(git(repo, 'config', 'branch.their-fork-branch.merge').trim()).toBe('refs/pull/7/head');
+    // So its PR is looked up by number: gh finds no fork's PR by the branch's name alone.
+    expect(pullOfBranch(ws!.path, ws!.branch!)).toBe(7);
     // The fork pushes again: git pull brings it.
     writeFileSync(path.join(mate, 'fork.ts'), 'more\n');
     git(mate, 'commit', '-q', '-am', 'more');
@@ -113,6 +116,27 @@ describe('a pull request in a worktree', () => {
     expect(said(ws!.id).join(' ')).toMatch(/from a fork, so pushing here doesn’t change it/);
     // Opening it again finds that worktree.
     expect((await ctl.openPull(pid(), { number: 7, branch: 'their-fork-branch', fork: true }))!.id).toBe(ws!.id);
+  });
+
+  it('a fork’s commits are on GitHub, so deleting it loses none of them; yours on top it warns about (BLG-746)', async () => {
+    const ws = await ctl.openPull(pid(), { number: 7, branch: 'their-fork-branch', title: 'From a fork', fork: true });
+    expect(await mgr.deletePlan(ws!.id)).toBeUndefined();
+    await mgr.refresh();
+    expect(mgr.find(ws!.id)?.status).toMatchObject({ ahead: 1 });
+    expect(mgr.find(ws!.id)?.status?.unpushed).toBeUndefined();
+    writeFileSync(path.join(ws!.path, 'mine.ts'), 'mine\n');
+    git(ws!.path, 'add', '.');
+    git(ws!.path, 'commit', '-q', '-m', 'mine');
+    expect(await mgr.deletePlan(ws!.id)).toMatchObject({ unpushed: 1, subjects: ['mine'] });
+    await mgr.remove(ws!.id);
+    expect(git(repo, 'for-each-ref', 'refs/beluga/pulls').trim()).toBe('');
+  });
+
+  it('a fork’s worktree made before its head was kept fetches it before warning', async () => {
+    const ws = await ctl.openPull(pid(), { number: 7, branch: 'their-fork-branch', fork: true });
+    git(repo, 'update-ref', '-d', 'refs/beluga/pulls/7');
+    expect(await mgr.deletePlan(ws!.id)).toBeUndefined();
+    expect(git(repo, 'rev-parse', 'refs/beluga/pulls/7').trim()).toBe(git(repo, 'rev-parse', 'their-fork-branch').trim());
   });
 
   it('puts a fork’s on pr-<n> when its branch’s name is taken here', async () => {

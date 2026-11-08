@@ -5,11 +5,16 @@ import { BRANCH_PREFIX_RE, EFFORTS, KEEP_AWAKE, LOW_POWER, NotifySettings, THEME
 import { AUTO_COMPACT_MAX, AUTO_COMPACT_MIN } from '../shared/context-usage.js';
 import { PARALLEL_RUNS_MAX, PARALLEL_RUNS_MIN } from '../shared/run-slots.js';
 import { CHAT_LIMIT_MAX } from '../shared/chat-limit.js';
+<<<<<<< HEAD
 import { MACHINE_NOTE_MAX } from '../shared/agent-setup.js';
+=======
+import { AUTO_CONTINUE_OFF_MAX } from '../shared/auto-continue.js';
+>>>>>>> upstream/main
 import { ENV_KEY, MAX_ENV_VALUE, MAX_ENV_VARS } from '../shared/env-vars.js';
 import { type ArgsRuntime, MAX_AGENT_ARGS, MAX_AGENT_ARG_LENGTH, agentArgsProblem } from '../shared/agent-args.js';
 import { NETWORK_API } from './network-api.js';
 import { SUPPORT_API } from './support-api.js';
+import { STATS_API } from './stats-api.js';
 import { WEB_API } from './web-api.js';
 import { DIAGNOSTICS_API } from './diagnostics-api.js';
 import { CLAUDE_CODE_API } from './claude-code-api.js';
@@ -92,6 +97,9 @@ export const PrefsPatch = z
     contextMeter: bool,
     autoCompact: bool,
     autoCompactAt: z.number().int().min(AUTO_COMPACT_MIN).max(AUTO_COMPACT_MAX),
+    autoContinue: bool,
+    autoContinueOff: z.array(z.string().max(200)).max(AUTO_CONTINUE_OFF_MAX),
+    autoContinueSkip: z.number().int().min(0),
     parallelRuns: z.number().int().min(PARALLEL_RUNS_MIN).max(PARALLEL_RUNS_MAX),
     chatLimit: z.number().int().min(0).max(CHAT_LIMIT_MAX),
     scratchFolder: bool,
@@ -102,7 +110,8 @@ export const PrefsPatch = z
     friendWorktrees: z.enum(['ask', 'off']),
     chatClaude: z.enum(['everyone', 'trusted', 'off']),
     shareUsage: z.enum(['trusted', 'everyone', 'off']),
-    shell: z.string().max(200).optional(),
+    // null: back to the login shell (JSON can't carry undefined, so "unset" travels as null).
+    shell: z.string().max(200).nullable().optional(),
     shellLogin: bool,
     shellArgs: z.array(z.string().max(200)).max(20),
     claudeArgs: agentArgs('claude'),
@@ -160,11 +169,14 @@ export const API = {
 
   // ---- your Claude's queue and approvals
   'host.answerApproval': args(Answer, id),
-  'host.promote': args(id),
+  // Steer a waiting message now: read at the agent's next step. `interrupt` (a plan's Steer Now): a long command or a stuck turn is stopped for it.
+  'host.promote': args(id, opt(z.object({ interrupt: opt(bool) }))),
   // Send a waiting message next, never interrupting (Send Now).
   'host.sendNext': args(id),
   // Send now a message steered into the running turn that Claude hasn't read yet: its step stops, your message is next (BLG-54).
   'host.steerNow': args(id),
+  // Cancel a message steered into the running turn that Claude hasn't read yet: → { cancelled, prompt: its words, for the box }.
+  'host.cancelSteer': args(id),
   // Stop your Claude in one conversation: → { stopped, returned: your queued prompts, in order }.
   'host.stopRun': args(channel),
   'host.cancelQueued': args(id),
@@ -242,6 +254,8 @@ export const API = {
   'files.readImage': args(),
   // An image a document points at (Markdown's ![](diagram.png)), a PDF or a video (the reader plays it), read the way files.open reads one: → { mediaType, data (base64) }.
   'files.readImageFile': args(Location),
+  // Which version of a file this is, without reading it: → { size, mtime (ms) }. A picture kept by its path is read again once either changes (BLG-749).
+  'files.version': args(Location),
   // A file's text without opening it in the viewer (the Mac Changes tab shows a changed file as itself): → { content, truncated }.
   'files.read': args(Location),
 
@@ -255,6 +269,8 @@ export const API = {
   'workspaces.rename': args(id, z.string().trim().min(1).max(200)),
   // Generate a title from recent chat content. The chat session stays unchanged.
   'workspaces.regenerateTitle': args(id),
+  // Remind Me Later: a chat or worktree stays quiet (its news, failing checks, conflicts) until then (epoch ms), then you're reminded once. Null or left out: show it again now.
+  'workspaces.remindLater': args(id, z.number().int().positive().nullish()),
   'workspaces.newWorktree': args(id, z.string().max(200), opt(z.object({ base: opt(z.string().min(1).max(250)), agent: opt(AgentRef) }))),
   'workspaces.newChat': args(id, z.string().max(200), opt(path)),
   // `terminal`: you see it as its agent's terminal, so that opens on the message (BLG-553).
@@ -269,7 +285,8 @@ export const API = {
   // Carry a conversation (an ask chat in a main folder, or any chat) into a new worktree and go on there → the new workspace's id.
   // `agent` (BLG-506): who goes on there; unset: the conversation's own. One that can't resume the conversation starts fresh, handed it.
   'workspaces.continueInWorktree': args(id, opt(z.object({ task: opt(str), base: opt(z.string().min(1).max(250)), name: opt(z.string().max(200)), agent: opt(AgentRef) }).strict())),
-  'workspaces.archive': args(id, opt(bool)),
+  // `quiet`: no success toast; a batch says it once for all its chats (the sidebar's chat selection).
+  'workspaces.archive': args(id, opt(bool), opt(z.object({ quiet: opt(bool) }).strict())),
   'workspaces.restore': args(id),
   // What archiving (or freeing space) would throw away and keep → ArchivePreview (none: not a worktree that's there).
   'workspaces.archivePlan': args(id),
@@ -277,7 +294,8 @@ export const API = {
   'workspaces.deletePlan': args(id),
   // Throw away a worktree's dependencies, builds and caches → bytes freed.
   'workspaces.freeSpace': args(id),
-  'workspaces.remove': args(id),
+  // `quiet`: as for archive.
+  'workspaces.remove': args(id, opt(z.object({ quiet: opt(bool) }).strict())),
   'workspaces.commit': args(id, opt(z.string().max(2000))),
   'workspaces.merge': args(id),
   'workspaces.prepareRemoval': args(id),
@@ -357,6 +375,10 @@ export const API = {
   'workbench.mergePr': args(id, z.object({ method: z.enum(['squash', 'merge', 'rebase']), auto: opt(bool), deleteBranch: opt(bool), admin: opt(bool) }).strict()),
   // A PR's one-click step on GitHub: bring its base in ('update_branch') or mark a draft ready ('ready') → { ok, message }.
   'workbench.prStep': args(id, z.enum(['update_branch', 'ready'])),
+  // Push a worktree's commits to its open PR (GitHub's checks and conflicts were for an older commit) → { ok, message, trouble? }.
+  'workbench.pushPr': args(id),
+  // Re-run a PR's failed GitHub Actions jobs on the same commit (gh run rerun --failed) → { ok, message, trouble? }.
+  'workbench.rerunChecks': args(id),
   // A worktree's PR conversation: comments, reviews and threads on lines (BLG-514).
   'workbench.prConversation': args(id),
   'workbench.prPost': args(id, z.discriminatedUnion('kind', [z.object({ kind: z.literal('comment'), body: z.string().min(1).max(60_000) }).strict(), z.object({ kind: z.literal('reply'), thread: z.string().min(1).max(200), body: z.string().min(1).max(60_000) }).strict(), z.object({ kind: z.enum(['resolve', 'unresolve']), thread: z.string().min(1).max(200) }).strict()])),
@@ -456,6 +478,8 @@ export const API = {
 
   // ---- supporting Beluga: the star and coffee asks merges bring (support-api.ts)
   ...SUPPORT_API,
+  // ---- your stats in the Usage tab: counted by the daemon, pastes and dictation from the Mac (stats-api.ts)
+  ...STATS_API,
   // ---- problem reports: the daemon's black box in one redacted file (diagnostics-api.ts)
   ...DIAGNOSTICS_API,
   ...CLAUDE_CODE_API,

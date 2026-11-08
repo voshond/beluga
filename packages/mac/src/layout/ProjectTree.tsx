@@ -29,7 +29,12 @@ import { type Tally, groupTally, groupWorking, projectPlans, projectTally, proje
 import { TallyMark } from './signal-marks.js';
 import { Row } from './sidebar-parts.js';
 import { WorkspaceRow } from './workspace-row.js';
+<<<<<<< HEAD
 import { GroupPlans, PlanRow } from './plan-row.js';
+=======
+import { PlanRow } from './plan-row.js';
+import { LaterRows, laterOf, notLater } from './later-rows.js';
+>>>>>>> upstream/main
 import { useGitHubMenuItems } from '../views/project/GitHubRow.js';
 import { TeamBadge, useTeamMenuItems } from '../team/Team.js';
 import side from './Sidebar.module.css';
@@ -176,7 +181,9 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
   // A plan you asked to show its tasks' chats: they sit under its row (its home is the plan's page).
   const showTasks = usePrefs().planTaskChats;
   const taskChats = (planId: string) => (showTasks.includes(planId) ? live.filter((w) => !planHomes.has(`ws:${w.id}`) && planConversations(state, planId).includes(w.id)) : []);
-  const mine = live.filter((w) => w.kind !== 'main' && worktreeOrigin(w) === 'beluga' && !isPlanOwned(state, w.id) && (!planHomes.has(`ws:${w.id}`) || w.id === here));
+  const mine = live.filter((w) => w.kind !== 'main' && worktreeOrigin(w) === 'beluga' && !isPlanOwned(state, w.id) && (!planHomes.has(`ws:${w.id}`) || w.id === here) && notLater(w));
+  // Put off till later (Remind Me Later): folded at the bottom, back in place once it reminds you.
+  const later = laterOf(live.filter((w) => w.kind !== 'main' && !isPlanOwned(state, w.id) && !planHomes.has(`ws:${w.id}`)));
   const inPlan = planOfPlace(plansState, board, view);
   // You're in this project: on its home page, in one of its worktrees or chats, or in one of its plans.
   const current = onHome || (here !== undefined && p.workspaces.some((w) => w.id === here)) || plans.some((x) => x.id === inPlan);
@@ -209,7 +216,7 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
   const origins = useAgentOrigins();
   const foldable = useMemo(() => plans.length > 0 || hasRowsInside(p, sessions, origins), [plans.length, p, sessions, origins]);
   return (
-    <>
+    <div data-chats-folded={fold.folded || undefined}>
       <SpecContext menu={{ kind: 'project', id: p.id }} extra={extra} hide={ownWay}>
         <Row
           data-drag={`project:${p.id}`}
@@ -300,9 +307,10 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
           <OutsideWorktrees p={p} indent={kids} />
           {/* Sub-agents the main folder's conversations started (Claude's helpers, none of your worktrees or chats): behind one row. */}
           {main ? <ProjectAgents p={p} ws={main} indent={kids} /> : null}
+          <LaterRows list={later} indent={kids} foldKey={`later:${p.id}`} />
         </>
       )}
-    </>
+    </div>
   );
 });
 

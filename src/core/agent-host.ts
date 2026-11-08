@@ -20,7 +20,7 @@ import { isImportedItem } from '../agent/transcript.js';
 import { PHONE_LOOK_TOOLS } from '../agent/phone-tools.js';
 import { buildMachineAppend } from '../agent/prompt.js';
 import type { StepPage, StepRecord } from '../shared/steps.js';
-import { READS_AFTER_STEP, STEERED_IN, STOPPING_FOR } from '../shared/claude-notices.js';
+import { READS_AFTER_STEP, STEERED_IN, STOPPING_FOR, TAKEN_BACK } from '../shared/claude-notices.js';
 import { span } from '../shared/clock.js';
 import { TERM_BUSY } from '../shared/terminal-keys.js';
 import { RunFailedError, decodeFailure } from '../shared/run-failure.js';
@@ -79,8 +79,13 @@ export interface AgentHostDeps {
   readonly confirmTool?: (toolName: string, input: Record<string, unknown>) => { readonly title: string; readonly detail: string } | undefined;
   /** Sentinels (your own runs): their tools, and a sentinel run's brief in its Claude step's conversation (core/sentinel). */
   readonly sentinel?: (channel: string, from: string) => { readonly tools: import('../agent/types.js').SentinelTools; readonly dashboard?: import('../agent/types.js').DashboardTools; readonly brief: string; readonly inRun: boolean } | undefined;
+<<<<<<< HEAD
   /** A plan's home conversation (your own runs): its plan tools and what Claude is told about the plan (core/plans); `said` is what this run was asked. */
   readonly plans?: (channel: string, from: string, said?: string) => { readonly tools?: import('../agent/types.js').PlanTools; readonly brief?: string } | undefined;
+=======
+  /** A plan's home conversation (your own runs): its plan tools and what Claude is told about the plan (core/plans). */
+  readonly plans?: (channel: string, from: string) => { readonly tools?: import('../agent/types.js').PlanTools; readonly brief?: string; readonly checker?: boolean } | undefined;
+>>>>>>> upstream/main
   /** "Your Mac" (core/assistant), your own runs in its conversation: where it runs, its tools, what Claude is told. */
   readonly assistant?: (channel: string, from: string) => { readonly place: AgentPlace; readonly tools: MacTools; readonly brief: string } | undefined;
   /** Your phone (core/phone, BLG-150), your own runs: tools to act on it, saving screenshots in `scratchDir`. `env` lets Bash use adb/scrcpy (BLG-174). */
@@ -179,8 +184,8 @@ interface Lane {
   steer?: Steer;
   /** Set while a steer interrupts the current run: the next steer waits for it (see rush). */
   interrupting?: Promise<void>;
-  /** Your messages steered into the running turn that Claude hasn't read yet, by request (Send now: see steerNow). */
-  steered?: Map<string, FollowUp>;
+  /** Your messages steered into the running turn that Claude hasn't read yet, by request (Send now: see steerNow; Cancel: see cancelSteer). */
+  steered?: Map<string, { readonly followUp: FollowUp; readonly item: Waiting }>;
   /**
    * The last run failed (a usage limit, a crash): what waits here stays waiting, in order, until
    * you go on (Continue, or any message of yours) or Beluga resumes it (see shared/run-failure.ts).
@@ -636,8 +641,9 @@ export class AgentHost {
   /**
    * Send one of your waiting requests now (Steer): it always does something you can see (see
    * rush). False, with a toast saying why, when it isn't yours or isn't waiting any more.
+   * `interrupt`: Beluga's own urgent messages (a plan's head) stop a long step to be read; yours never do.
    */
-  promote(requestId: string): boolean {
+  promote(requestId: string, { interrupt = false }: { interrupt?: boolean } = {}): boolean {
     for (const lane of this.lanes.values()) {
       const i = lane.waiting.findIndex((w) => w.body.requestId === requestId);
       if (i < 0) continue;
@@ -648,7 +654,7 @@ export class AgentHost {
       const [item] = lane.waiting.splice(i, 1);
       // Your go-ahead: a queue held after a failed run goes on (see Lane.held).
       lane.held = undefined;
-      this.rush(lane, item!);
+      this.rush(lane, item!, interrupt);
       return true;
     }
     this.toast('That message isn’t waiting any more', 'warn');
@@ -688,16 +694,19 @@ export class AgentHost {
   }
 
   /**
-   * Your message, now (a queued one you steer, or one sent with ⌥↩). Claude about to be at its
-   * next step: it goes into the running turn. A tool running long or Claude gone quiet: the turn
-   * is interrupted and the message answered next, at once. No run to steer, or a dead one: the
-   * message goes first in line and the current run stops, so a fresh turn starts with it. The
-   * card says which; nothing is lost when a step fails (it goes back in line).
+   * Your message, now (a queued one you steer, or one sent with ⌥↩): into the running turn, read
+   * at Claude's next step, however long the step it's on runs. It never stops the turn by itself
+   * (Send now on the message does, and Cancel takes it back), so steering again while one waits
+   * just adds to it. `interrupt` (Beluga's own urgent messages): a tool running long or Claude
+   * gone quiet has its turn interrupted, the message answered next. An agent that can't take a
+   * message mid-turn has its turn stopped for it. No run to steer, or a dead one: the message
+   * goes first in line and the current run stops, so a fresh turn starts with it. The card says
+   * which; nothing is lost when a step fails (it goes back in line).
    */
-  private rush(lane: Lane, item: Waiting): void {
+  private rush(lane: Lane, item: Waiting, interrupt = false): void {
     // Another steer is interrupting the run: this one goes after it, so they're answered in the order you sent them.
     if (lane.interrupting) {
-      void lane.interrupting.then(() => this.rush(lane, item));
+      void lane.interrupting.then(() => this.rush(lane, item, interrupt));
       return;
     }
     const { from, body } = item;
@@ -705,9 +714,10 @@ export class AgentHost {
     const steer = live && lane.steer && lane.runFrom === from && !body.plan && !body.project && !item.compact ? lane.steer : undefined;
     const plan = steer ? planSteer(steer.status?.(), Date.now()) : undefined;
     const emit = (event: BodyOf<'agent_event'>['event'], text = ''): void => this.emitAgent(body.requestId, from, event, text, body.channel);
-    if (steer && plan?.kind === 'steer' && this.steerIn(lane, item, steer)) return;
+    const into = plan?.kind === 'steer' || (plan?.kind === 'interrupt' && !interrupt);
+    if (steer && into && this.steerIn(lane, item, steer)) return;
     // An agent that can't take a message into its running turn (OpenCode: one prompt at a time) stops the turn for it instead.
-    const note = plan?.kind === 'interrupt' ? plan.note : plan?.kind === 'steer' && steer?.interrupt && !steer.status?.().between ? STOPPED_TO_READ : undefined;
+    const note = plan?.kind === 'interrupt' && interrupt ? plan.note : into && steer?.interrupt && !steer.status?.().between ? STOPPED_TO_READ : undefined;
     if (steer?.interrupt && note) {
       const run = lane.current;
       const followUp = this.followUp(lane, item);
@@ -973,7 +983,7 @@ export class AgentHost {
   private steerIn(lane: Lane, item: Waiting, steer: Steer): boolean {
     const followUp = this.followUp(lane, item);
     if (!steer(followUp)) return false;
-    (lane.steered ??= new Map()).set(item.body.requestId, followUp);
+    (lane.steered ??= new Map()).set(item.body.requestId, { followUp, item });
     this.emitAgent(item.body.requestId, item.from, 'text', READS_AFTER_STEP, item.body.channel);
     return true;
   }
@@ -987,7 +997,7 @@ export class AgentHost {
    */
   async steerNow(requestId: string): Promise<boolean> {
     const lane = [...this.lanes.values()].find((l) => l.steered?.has(requestId));
-    const followUp = lane?.steered?.get(requestId);
+    const followUp = lane?.steered?.get(requestId)?.followUp;
     if (!lane || !followUp) {
       this.toast('Your agent has read that message already', 'info');
       return false;
@@ -1012,6 +1022,39 @@ export class AgentHost {
     this.emitAgent(requestId, this.selfId, 'text', READS_AFTER_STEP, lane.channel);
     this.toast('Your agent couldn’t be stopped: it reads your message at its next step', 'warn');
     return false;
+  }
+
+  /**
+   * Cancel a message of yours steered into the running turn that Claude hasn't read yet: it's
+   * taken back (never read nor answered) and its card says so. → its words, for the screen to put
+   * back in the box. Not cancelled, with a toast saying why, when Claude read it already or its
+   * agent can't take a message back.
+   */
+  async cancelSteer(requestId: string): Promise<{ cancelled: boolean; prompt?: string }> {
+    const lane = [...this.lanes.values()].find((l) => l.steered?.has(requestId));
+    const entry = lane?.steered?.get(requestId);
+    const cancel = lane?.steer?.cancel;
+    if (!lane || !entry) {
+      this.toast('Your agent has read that message already', 'info');
+      return { cancelled: false };
+    }
+    if (!cancel) {
+      this.toast('This agent can’t take a message back once it’s sent', 'warn');
+      return { cancelled: false };
+    }
+    const taken = await cancel(entry.followUp).catch((err: unknown) => {
+      this.toast(`Couldn’t take it back: ${errorText(err)}`, 'warn');
+      return undefined;
+    });
+    if (taken === undefined) return { cancelled: false };
+    if (!taken || !lane.steered?.has(requestId)) {
+      this.toast('Your agent is reading that message already', 'info');
+      return { cancelled: false };
+    }
+    lane.steered.delete(requestId);
+    const { from, body } = entry.item;
+    this.emitAgent(requestId, from, 'error', TAKEN_BACK, body.channel);
+    return { cancelled: true, prompt: body.prompt };
   }
 
   private async pump(lane: Lane): Promise<void> {
@@ -1199,11 +1242,12 @@ export class AgentHost {
       const plans = from !== this.selfId || place?.syncMain ? undefined : this.deps.plans?.(body.channel, from, body.requestId.startsWith('compact-') ? undefined : body.prompt);
       // Your own runs get the board: a run doing a task gets it, and the tools to keep it true. A main
       // folder's chat too (BLG-626): the board is Beluga's, not a file there, so the folder stays read-only.
-      // Not while syncing main, nor in a plan's conversation there (planning is the plan's: no single task to define).
+      // A plan's own conversation too, for tasks outside the plan. Not while syncing main, nor in a
+      // milestone's checker (it has only plan_get and plan_gate).
       const planFirst = body.plan && !plans?.tools;
       // Sentinels (your own runs): a sentinel run's Claude step gets its brief, and the task tools (it makes tasks).
       const sentinel = from === this.selfId && !place?.syncMain ? this.deps.sentinel?.(body.channel, from) : undefined;
-      const noBoard = place?.syncMain || (place?.askOnly && plans?.tools && !sentinel?.inRun);
+      const noBoard = place?.syncMain || (place?.askOnly && plans?.checker && !sentinel?.inRun);
       // A friend's run gets its repo's board too, as their trust allows (BLG-701; see boardAccess).
       const friendBoard = from === this.selfId ? undefined : this.boardAccess(from);
       const board = noBoard || (from !== this.selfId && !friendBoard) ? undefined : this.deps.board?.(body.channel, from, { plan: planFirst && from === this.selfId, ...(friendBoard ? { friend: { id: from, name: requesterName } } : {}) });

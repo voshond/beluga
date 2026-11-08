@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ATTACHMENT_SCHEME } from '@beluga/core/attachment-share.js';
 import type { LinkedImage } from '@beluga/shared/attachment-links.js';
+import type { Location } from '@beluga/core/store.js';
 import type { SocketClient } from '@beluga/ipc/socket-client.js';
 
 /**
@@ -98,40 +99,75 @@ export type ChatImage = LinkedImage & {
 
 type Loadable = Pick<ChatImage, 'href' | 'owner' | 'file' | 'local'>;
 
-function load(api: Api, image: Loadable, size: ImageSize): Entry {
-  const hit = entry(size, image.href);
+/** Where a file on this Mac is, as Beluga reads it (asked once per path). */
+const located = new Map<string, Promise<Location>>();
+
+function locate(api: Api, local: string): Promise<Location> {
+  const hit = located.get(local);
+  if (hit) return hit;
+  const at = api.session.localLocation(local, false);
+  located.set(local, at);
+  at.catch(() => located.get(local) === at && located.delete(local));
+  return at;
+}
+
+/**
+ * What a picture is kept under. A file on this Mac also says which version it is (its size and when
+ * it last changed, a stat, not a read), so one rewritten under the same name is read again (BLG-749);
+ * when that can't be told (it's gone), its path alone.
+ */
+async function keyOf(api: Api, image: Loadable): Promise<{ key: string; at?: Location }> {
+  if (!image.local) return { key: image.href };
+  const at = await locate(api, image.local);
+  try {
+    const { size, mtime } = await api.files.version(at);
+    return { key: `${image.href}\0${mtime}:${size}`, at };
+  } catch {
+    // Where it is is asked again next time (its folder may have been shared since).
+    located.delete(image.local);
+    return { key: image.href, at };
+  }
+}
+
+function load(api: Api, image: Loadable, size: ImageSize, key: string, at?: Location): Entry {
+  const hit = entry(size, key);
   if (hit) return hit;
   const read: Promise<Blob> = image.local
-    ? api.session
-        .localLocation(image.local, false)
-        .then((at) => api.files.readImageFile(at))
-        .then((r) => toBlob(r.data, r.mediaType))
+    ? (at ? Promise.resolve(at) : locate(api, image.local)).then((loc) => api.files.readImageFile(loc)).then((r) => toBlob(r.data, r.mediaType))
     : api.attachments.read(image.owner, image.file).then((r) => toBlob(r.data, r.mime));
   const url = (size === 'thumb' ? read.then((b) => shrink(b)) : read).then((b) => URL.createObjectURL(b));
   const e: Entry = { url, users: 0 };
-  caches[size].set(image.href, e);
+  caches[size].set(key, e);
   // A failure isn't kept: the next time it shows, it tries again (the friend may be back).
-  url.catch(() => caches[size].get(image.href) === e && caches[size].delete(image.href));
+  url.catch(() => caches[size].get(key) === e && caches[size].delete(key));
   trim(size);
   return e;
 }
 
 /** The image as a URL this window can show (fetched on first use, then kept a while): `thumb` for a message, `full` for the lightbox. */
 export function loadImage(api: Api, image: Loadable, size: ImageSize = 'full'): Promise<string> {
-  return load(api, image, size).url;
+  return keyOf(api, image).then(({ key, at }) => load(api, image, size, key, at).url);
 }
 
 /** The image, kept until `release` (while it's on screen). */
 export function holdImage(api: Api, image: Loadable, size: ImageSize): { url: Promise<string>; release: () => void } {
-  const e = load(api, image, size);
-  e.users++;
-  let held = true;
+  let held: Entry | undefined;
+  let released = false;
+  const url = keyOf(api, image).then(({ key, at }) => {
+    const e = load(api, image, size, key, at);
+    if (!released) {
+      e.users++;
+      held = e;
+    }
+    return e.url;
+  });
   return {
-    url: e.url,
+    url,
     release: () => {
+      if (released) return;
+      released = true;
       if (!held) return;
-      held = false;
-      e.users--;
+      held.users--;
       trim(size);
     },
   };

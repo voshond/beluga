@@ -231,7 +231,7 @@ async function running() {
   };
   const task = () => planView(plans.need(plan.id), store.getState().board, liveFrom(store.getState())).milestones[0]!.tasks[0]!;
   const wakes = () => asked.filter((a) => a.channel === channel && a.prompt.startsWith('You stopped before handing off'));
-  return { plans, plan, channel, event, newRun: () => `r${++seq}`, later, task, wakes, asked, now: () => now };
+  return { store, plans, plan, channel, event, newRun: () => `r${++seq}`, later, task, wakes, asked, now: () => now };
 }
 
 describe('a usage limit pauses the plan, and it goes on by itself when usage is back', () => {
@@ -265,6 +265,36 @@ describe('a usage limit pauses the plan, and it goes on by itself when usage is 
     await t.later(MIN);
     expect(t.wakes()).toHaveLength(1);
     expect(t.asked.filter((a) => a.prompt === CONTINUE_PROMPT)).toHaveLength(1);
+  });
+});
+
+describe('continuing on its own turned off (BLG-757): the plan waits for you', () => {
+  it('off everywhere: neither the task nor the head Claude goes on after the reset', async () => {
+    const t = await running();
+    t.store.dispatch({ type: 'prefs', prefs: { autoContinue: false } });
+    const resetsAt = at(15, 0, t.now());
+    const limit = encodeFailure(classifyRun({ rejectedUntil: resetsAt, error: 'Claude Code process exited with code 1' }), t.now());
+    const r = t.newRun();
+    t.event(r, 'started');
+    t.event(r, 'error', limit);
+    t.event('h1', 'started', '', 'ws:main');
+    t.event('h1', 'error', limit, 'ws:main');
+    await t.later(MIN);
+    expect(t.task().watch?.line).toContain('continuing on its own is off');
+    // The line follows the switch while it waits.
+    t.store.dispatch({ type: 'prefs', prefs: { autoContinue: true } });
+    await t.later(MIN);
+    expect(t.task().watch?.line).toContain('resumes at 15:00');
+    t.store.dispatch({ type: 'prefs', prefs: { autoContinue: false } });
+    await t.later(resetsAt - t.now() + LIMIT_MARGIN_MS + MIN);
+    expect(t.wakes()).toHaveLength(0);
+    expect(t.asked.filter((a) => a.prompt === CONTINUE_PROMPT)).toHaveLength(0);
+    expect(t.task().watch?.line).toContain('continuing on its own is off');
+    // Off in just the task's chat: the head Claude goes on, the task still waits.
+    t.store.dispatch({ type: 'prefs', prefs: { autoContinue: true, autoContinueOff: [t.channel] } });
+    await t.later(MIN);
+    expect(t.asked.filter((a) => a.channel === 'ws:main' && a.prompt === CONTINUE_PROMPT)).toHaveLength(1);
+    expect(t.wakes()).toHaveLength(0);
   });
 });
 

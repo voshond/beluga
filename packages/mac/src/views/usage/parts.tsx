@@ -21,6 +21,22 @@ export function Card({ title, aside, className, children, label }: { title?: Rea
   );
 }
 
+/** A chapter of the Usage tab: a heading with a line under it, its controls at the right, then what it holds, with room around it. */
+export function Chapter({ title, sub, aside, label, children }: { title: ReactNode; sub?: ReactNode; aside?: ReactNode; label?: string; children: ReactNode }) {
+  return (
+    <section className={s.chapter} aria-label={label}>
+      <header className={s.chapterHead}>
+        <div className={s.chapterTitles}>
+          <h2 className={s.chapterTitle}>{title}</h2>
+          {sub ? <p className={s.chapterSub}>{sub}</p> : null}
+        </div>
+        {aside ? <div className={s.chapterAside}>{aside}</div> : null}
+      </header>
+      {children}
+    </section>
+  );
+}
+
 /** A thin horizontal bar: `value` of `max`, in `color`, on a faint track. */
 export function Bar({ value, max, color, label }: { value: number; max: number; color: string; label?: string }) {
   const pct = max > 0 ? Math.max(value > 0 ? 2 : 0, (value / max) * 100) : 0;

@@ -47,7 +47,7 @@ const unsent = new Map<string, { message: PlanMessage; error: string }>();
  * plans and runs it there), and a box to say what to change. The plan updates as Claude writes.
  * The box takes pasted, dropped and path-named images and files as every message box does. This
  * is where you run the whole plan from, so the box never waits: what you send while Claude works
- * reaches it now (at its next step, or a long command is interrupted for it; ⌥↩ queues it
+ * reaches it at its next step, without stopping what it's on (⌥↩ queues it
  * instead), Stop ends its turn, and what it asks you (a decision of yours in the plan, its
  * question) is answered right here. A send that fails says so here, with Retry.
  */
@@ -387,7 +387,7 @@ export function PlanChat({
           <Tip
             label={
               busy
-                ? `Send now: your agent reads it at its next step (a long command is interrupted for it) · ${chordLabel("Alt+Enter")} queues it instead`
+                ? `Send now: your agent reads it at its next step, without stopping · ${chordLabel("Alt+Enter")} queues it instead`
                 : "Send"
             }
             keys="↩"

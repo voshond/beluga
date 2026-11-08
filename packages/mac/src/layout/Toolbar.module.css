@@ -20,6 +20,23 @@
   gap: 2px;
   margin-left: -6px;
 }
+/* Back and forward, side by side before the title (as in Finder and Safari). */
+.nav {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  margin-left: -6px;
+}
+.lead + .nav {
+  margin-left: -8px;
+}
+/* Nowhere to go: the arrow is there, quieter, and doesn't light up. */
+.nav button:disabled {
+  opacity: 0.35;
+  background: none;
+  color: var(--text-2);
+  cursor: default;
+}
 /* A browser has no traffic lights either (and the menu-bar button sits in .lead). */
 :global(html:not([data-app])) .noSidebar {
   padding-left: 18px;

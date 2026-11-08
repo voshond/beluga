@@ -26,6 +26,7 @@ import { shortVersion } from '../net/mesh/features.js';
 import type { MessageView, PersonView } from '../net/mesh/views.js';
 import { type Reaction, quickReactions } from '../shared/reactions.js';
 import { chatReactions, reactableChannel } from '../core/chat-reactions.js';
+import { resumeOf } from '../core/auto-continue.js';
 import { chatPeople, claudePill, offlineNote, waitingIn, waitingLabel } from '../core/chat-people.js';
 import { type AgentRef, CLAUDE_AGENT, type Profile, defaultAgentOf } from '../protocol.js';
 import { providerCards } from '../ui/usage-cards.js';
@@ -72,7 +73,11 @@ import { chatTopic, clip, convTopic, dashboardTopic, myId, nameOf, needsYou, pla
 export { chatTopic, convTopic, dashboardTopic, planTopic, sentinelTopic, taskTopic } from './needs-you.js';
 export { needsYou };
 import { ASSISTANT_CHANNEL, ASSISTANT_TITLE, activeAssistantChannel, assistantChatTitle, isAssistant } from '../shared/assistant.js';
+<<<<<<< HEAD
 import { STEERED_IN, type SteeredMessage, asRead, asSent, steeredMessages, steerWaiting } from '../shared/claude-notices.js';
+=======
+import { STEERED_IN, TAKEN_BACK, type SteeredMessage, asSent, steeredMessages, steerWaiting } from '../shared/claude-notices.js';
+>>>>>>> upstream/main
 import { slotWaitDetail } from '../shared/run-slots.js';
 import type { DocKey } from './files.js';
 
@@ -561,7 +566,7 @@ function summaryOf(state: DomainState, conv: Conversation, waiting: ReadonlySet<
   const running = agents.filter((a) => isRunning(a.status));
   const lastAgent = agents.at(-1);
   // A note about a steered message ("reads this after its current step") isn't the last thing said.
-  const last = [...items].reverse().find((l) => (l.type === 'chat' || (l.type === 'agent' && !steerWaiting(l) && l.text !== STEERED_IN)) && (l.type === 'chat' ? l.text : l.text || l.prompt));
+  const last = [...items].reverse().find((l) => (l.type === 'chat' || (l.type === 'agent' && !steerWaiting(l) && l.text !== STEERED_IN && l.text !== TAKEN_BACK)) && (l.type === 'chat' ? l.text : l.text || l.prompt));
   const lastText = last?.type === 'chat' ? last.text : last?.type === 'agent' ? last.text || last.prompt || '' : '';
   const status: ConvSummary['status'] = waiting.has(topic) ? 'waiting' : running.length ? 'working' : lastAgent && (lastAgent.status === 'error' || lastAgent.status === 'denied') ? 'failed' : 'idle';
   const lastAt = Math.max(0, ...items.map((l) => (l.type === 'agent' ? (l.lastAt ?? l.endTs ?? l.ts) : l.ts)));
@@ -667,7 +672,10 @@ export function convTurns(state: DomainState, ctx: ViewContext, named: string, o
   const outputs = task ? [] : outputsOf(ctx, conv);
   const cc = ccAgents(state, channel);
   const pictures = (p: ProseView) => withPictures(p, ctx.refs, 'cwd' in conv ? conv.cwd : undefined);
-  const all = task ? taskTurns(state, ctx, task) : withLateOutputs(withSteers(state, itemsOf(state, channel)).flatMap(({ item, steer }) => (turnOf(state, item, outputs, cc, steer, pictures) ?? [])), outputs);
+  const turned = task ? taskTurns(state, ctx, task) : withLateOutputs(withSteers(state, itemsOf(state, channel)).flatMap(({ item, steer }) => (turnOf(state, item, outputs, cc, steer, pictures) ?? [])), outputs);
+  // A run stopped by your usage limit: when it continues on its own (1.42).
+  const resume = task ? undefined : resumeOf(state, channel, Date.now());
+  const all = resume ? turned.map((t) => (t.id === resume.id ? { ...t, resumesAt: resume.at } : t)) : turned;
   const end = opts.before ? all.findIndex((t) => t.id === opts.before) : all.length;
   const upto = end < 0 ? all.length : end;
   const limit = opts.limit ?? VIEW_TURNS;

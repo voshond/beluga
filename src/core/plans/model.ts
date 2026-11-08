@@ -458,10 +458,13 @@ export interface PlansSlice {
 }
 
 export const KEEP_PLAN_ACTIVITY = 200;
+<<<<<<< HEAD
 /** How much of what you asked for a plan keeps (your first words, then what you added while planning). */
 export const MAX_REQUEST = 8000;
 export const MAX_MILESTONES = 12;
 export const MAX_PLAN_TASKS = 80;
+=======
+>>>>>>> upstream/main
 export const DEFAULT_PARALLEL = 3;
 export const MAX_PARALLEL = 8;
 export const MAX_PLAN_REPOS = 8;

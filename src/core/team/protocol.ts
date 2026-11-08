@@ -105,7 +105,7 @@ const PlanTaskSchema = z
 export const PlanBodySchema = z.object({
   title: words(200),
   goal: words(8000),
-  milestones: z.array(z.object({ id: z.string().max(60), title: words(200), goal: words(4000).optional(), criteria: z.array(words(400)).max(40), tasks: z.array(PlanTaskSchema).max(80), dependsOn: z.array(z.string().max(60)).max(12).optional() }).passthrough()).max(12),
+  milestones: z.array(z.object({ id: z.string().max(60), title: words(200), goal: words(4000).optional(), criteria: z.array(words(400)).max(40), tasks: z.array(PlanTaskSchema), dependsOn: z.array(z.string().max(60)).optional() }).passthrough()),
 });
 export const ReviewSchema = z.object({
   id: z.string().regex(/^[\w-]{8,40}$/),

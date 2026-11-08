@@ -123,6 +123,9 @@ const MAC_SHORTCUTS: readonly ShortcutDef[] = [
   def('go-dashboard', 'Dashboard', 'Go', []),
   { id: 'place-next', label: 'Next Place', section: 'Go', keys: ['Ctrl+Tab'], scope: 'app' },
   { id: 'place-prev', label: 'Previous Place', section: 'Go', keys: ['Ctrl+Shift+Tab'], scope: 'app' },
+  // Back and Forward between pages (lib/nav.ts), with what was open on each. Window keys only (no menu-bar key): a page with its own Back keeps ⌘[ for it.
+  { id: 'nav-back', label: 'Back', section: 'Go', keys: ['Cmd+['], scope: 'app', hint: 'The page you were on, with its panels as you left them' },
+  { id: 'nav-forward', label: 'Forward', section: 'Go', keys: ['Cmd+]'], scope: 'app', hint: 'The page you came back from' },
   def('ws-prev', 'Previous Workspace', 'Go', ['Alt+Cmd+Up']),
   def('ws-next', 'Next Workspace', 'Go', ['Alt+Cmd+Down']),
 
@@ -145,11 +148,11 @@ const MAC_SHORTCUTS: readonly ShortcutDef[] = [
   def('ws-fork', 'Fork…', 'Workspace', []),
   def('ws-archive', 'Archive…', 'Workspace', ['Ctrl+Cmd+A']),
 
-  { id: 'composer-steer', label: 'Steer', section: 'Message box', keys: ['Alt+Enter'], scope: 'composer', hint: 'The agent reads it at its next step' },
+  { id: 'composer-steer', label: 'Steer', section: 'Message box', keys: ['Alt+Enter'], scope: 'composer', hint: 'The agent reads it at its next step. With Steer as your default it queues instead (Settings › General › Writing)' },
   { id: 'composer-send-now', label: 'Send Now', section: 'Message box', keys: ['Alt+Shift+Enter'], scope: 'composer', hint: 'Your steered message goes now; its step stops' },
   { id: 'composer-mode', label: 'Switch Acting and Planning', section: 'Message box', keys: ['Shift+Tab'], scope: 'composer' },
 
-  { id: 'page-back', label: 'Back', section: 'Pages', keys: ['Cmd+['], scope: 'page', hint: 'From a task, an issue, a run or a sentinel' },
+  { id: 'page-back', label: 'Back', section: 'Pages', keys: ['Cmd+['], scope: 'page', hint: 'From a task, an issue, a run or a sentinel', over: ['nav-back'] },
   { id: 'page-new', label: 'New Here', section: 'Pages', keys: ['Cmd+N', 'C'], scope: 'page', hint: 'A task in Tasks, a plan in Plans, a sentinel in Sentinel', bare: true, over: ['new-chat'] },
   { id: 'page-filter', label: 'Filter', section: 'Pages', keys: ['Cmd+F'], scope: 'page', hint: 'In Tasks and Sentinel', over: ['conv-find'] },
 

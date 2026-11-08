@@ -136,9 +136,9 @@ describe('remoteRef', () => {
 });
 
 /** A Workbench over fake worktrees, a fake gh and a hand-moved clock. */
-function bench(worktrees: Array<{ id: string; branch: string; project?: string; ahead?: number }>) {
+function bench(worktrees: Array<{ id: string; branch: string; project?: string; ahead?: number; path?: string }>) {
   const store = new Store(initialState('t', 'ask'));
-  const workspaces = worktrees.map((w) => ({ id: w.id, name: w.id, kind: 'worktree', branch: w.branch, path: `/code/${w.id}`, projectId: w.project ?? 'p1', status: { changed: 0, ahead: w.ahead ?? 1, behind: 0 } }));
+  const workspaces = worktrees.map((w) => ({ id: w.id, name: w.id, kind: 'worktree', branch: w.branch, path: w.path ?? `/code/${w.id}`, projectId: w.project ?? 'p1', status: { changed: 0, ahead: w.ahead ?? 1, behind: 0 } }));
   const projects = [...new Set(workspaces.map((w) => w.projectId))];
   const manager = { list: projects.map((id) => ({ id, workspaces: workspaces.filter((w) => w.projectId === id) })), find: (id: string) => workspaces.find((w) => w.id === id) };
   const remote: Record<string, string | undefined> = {};
@@ -191,6 +191,23 @@ describe('PR polling', () => {
     expect(b.prs().a?.number).toBe(1);
     expect(b.prs().b).toBeUndefined();
     expect(b.prs().c?.number).toBe(3);
+  });
+
+  it("asks about a fork's PR checked out here by its number, by itself: origin's list has it under the fork's branch", async () => {
+    const dir = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'klaud-pull-')));
+    execFileSync('git', ['init', '-q', '-b', 'main', dir]);
+    execFileSync('git', ['config', 'branch.pr-7.remote', 'origin'], { cwd: dir });
+    execFileSync('git', ['config', 'branch.pr-7.merge', 'refs/pull/7/head'], { cwd: dir });
+    const b = bench([
+      { id: 'a', branch: 'klaud/a' },
+      { id: 'b', branch: 'klaud/b' },
+      { id: 'fork', branch: 'pr-7', path: dir },
+    ]);
+    b.gh.set('pr-7', pr(7));
+    await b.wb.refreshPrs();
+    expect(b.calls.filter((c) => c.startsWith('list'))).toEqual(['list /code/a']);
+    expect(b.calls.filter((c) => c.startsWith('view'))).toEqual(['view pr-7']);
+    expect(b.prs().fork?.number).toBe(7);
   });
 
   it('looks at pending PRs every 15s, open ones every 60s, merged ones never', async () => {

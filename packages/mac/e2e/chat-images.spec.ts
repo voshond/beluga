@@ -1,7 +1,8 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { decodeImage } from '../../../src/image/decode.js';
+import { encodeImage } from '../../../src/image/shrink.js';
 import { expect, test, type Page } from './fixtures.js';
 import { openPlansList } from './helpers.js';
 
@@ -54,6 +55,33 @@ test('a message’s local screenshots show as thumbnails that open full size', a
   await expect(box).toContainText('second.png');
   await page.keyboard.press('Escape');
   await expect(box).toBeHidden();
+});
+
+test('a screenshot re-taken under the same name shows the new picture in the next answer (BLG-749)', async ({ page }) => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'beluga e2e retake-'));
+  const shot = path.join(dir, 'home.png');
+  writeFileSync(shot, PNG);
+  await page.goto('/');
+  await expect(sidebar(page)).toBeVisible();
+  await sidebar(page).getByRole('button', { name: 'Group chat' }).click();
+  await composer(page).fill(`Before:\n\n![Retaken shot](<${shot}>)`);
+  await composer(page).press('Enter');
+  const thumbs = page.getByRole('button', { name: 'Open Retaken shot' }).locator('img');
+  await expect(thumbs).toHaveCount(1);
+  await expect(thumbs.first()).toHaveJSProperty('naturalWidth', 2);
+
+  // The e2e run takes it again: a bigger, blue picture under the same name.
+  const blue = new Uint8Array(4 * 4 * 4).map((_, i) => [40, 90, 230, 255][i % 4]!);
+  writeFileSync(shot, encodeImage({ width: 4, height: 4, data: blue }, 'png'));
+  const later = new Date(statSync(shot).mtimeMs + 5000);
+  utimesSync(shot, later, later);
+  await composer(page).fill(`After:\n\n![Retaken shot](<${shot}>)`);
+  await composer(page).press('Enter');
+  await expect(thumbs).toHaveCount(2);
+  await expect(thumbs.nth(1)).toHaveJSProperty('naturalWidth', 4);
+  // The earlier answer still draws a picture (its own or the new one), never a broken one.
+  await expect(thumbs.nth(0)).toHaveJSProperty('complete', true);
+  expect(await thumbs.nth(0).evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
 });
 
 // 24×24, pink then blue, looping (an animation Claude made, shown the way it shows a screenshot: BLG-182).

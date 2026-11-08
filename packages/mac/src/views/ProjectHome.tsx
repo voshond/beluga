@@ -47,6 +47,7 @@ import { DictationStrip, MicButton } from "../chat/Dictation.js";
 import { useDictationTarget } from "../lib/dictation.js";
 import { HomeHistory } from "./history/HomeHistory.js";
 import { GitHubRow } from "./project/GitHubRow.js";
+import { GitHubMark } from "../components/GitHubMark.js";
 import { PullRow, usePullList } from "./project/PullRow.js";
 import { RunRow } from "../ci/parts.js";
 import { useArrivals, useLateArrival } from "../lib/last-seen.js";
@@ -370,7 +371,7 @@ function HomeComposer({ project }: { project: Project }) {
     }
   };
   // Speaking instead of typing (Settings › Voice), as in every chat's box.
-  useDictationTarget(ref, () => void send());
+  useDictationTarget(ref, () => void send(), `new-chat:${project.id}`);
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (box.onKey(e)) return;
@@ -669,13 +670,27 @@ function HomePulls({ projectId }: { projectId: string }) {
       count={list.total}
       hint="Open on GitHub"
       action={
-        <Button
-          size="small"
-          variant="quiet"
-          onClick={() => actions.openLink({ kind: "url", url: `${repo.url}/pulls` })}
-        >
-          Show All on GitHub
-        </Button>
+        <>
+          {/* GitHub's mark in place of its name: the button stays short beside See All. */}
+          <Button
+            size="small"
+            variant="quiet"
+            aria-label="See all on GitHub"
+            onClick={() => actions.openLink({ kind: "url", url: `${repo.url}/pulls` })}
+          >
+            <span className={s.onGitHub}>
+              See All on <GitHubMark />
+            </span>
+          </Button>
+          <Button
+            size="small"
+            variant="quiet"
+            aria-label="See all pull requests"
+            onClick={() => actions.run({ type: "view", view: { kind: "pulls", projectId } })}
+          >
+            See All
+          </Button>
+        </>
       }
     >
       {shown.map((pull) => (

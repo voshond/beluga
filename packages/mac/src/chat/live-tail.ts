@@ -1,7 +1,7 @@
 // Relative paths (not @beluga/…) so the unit tests at the repo root can load this model too.
 import type { LogItem, SubAgent } from '../../../../src/core/store.js';
 import type { StepSummary } from '../../../../src/shared/steps.js';
-import { READS_AFTER_STEP, STEERED_IN, STOPPING_FOR, backgroundWait } from '../../../../src/shared/claude-notices.js';
+import { READS_AFTER_STEP, STEERED_IN, STOPPING_FOR, TAKEN_BACK, backgroundWait } from '../../../../src/shared/claude-notices.js';
 import { HIDDEN_STEPS, isRunning } from '../../../../src/ui/format.js';
 
 /**
@@ -51,9 +51,9 @@ export interface Shown<R extends RowLike> {
 
 const isAgent = (r: RowLike): r is RowLike & AgentItem => r.type === 'agent';
 
-/** A card that's a note about a message (queued, read mid-turn, about to be read), not a turn of its own. */
+/** A card that's a note about a message (queued, read mid-turn, about to be read, taken back), not a turn of its own. */
 export function isTurnNote(card: Pick<AgentItem, 'status' | 'text'>): boolean {
-  return card.status === 'queued' || card.text === STEERED_IN || card.text === READS_AFTER_STEP || card.text === STOPPING_FOR;
+  return card.status === 'queued' || card.text === STEERED_IN || card.text === READS_AFTER_STEP || card.text === STOPPING_FOR || card.text === TAKEN_BACK;
 }
 
 /** A turn Claude is working on now (not waiting in the queue, not a note). */

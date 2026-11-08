@@ -2,8 +2,8 @@ import { useState } from 'react';
 import type { AppState } from '@beluga/core/store.js';
 import { type DayTotal, dailyTotals, tokensOf } from '@beluga/workspaces/usage-days.js';
 import { cx } from '../../components/ui.js';
-import { Card } from './parts.js';
-import { compact, formatCost } from './usage-model.js';
+import { Card, slotColor } from './parts.js';
+import { compact, formatCost, slotOf } from './usage-model.js';
 import s from './usage.module.css';
 
 /** Two weeks of days: this week stands out against the one before. */
@@ -21,13 +21,28 @@ function delta(now: number, before: number): string | undefined {
   return `${pct > 0 ? '↑' : '↓'} ${Math.abs(pct)}% vs the week before`;
 }
 
-function DayChart({ days }: { days: readonly DayTotal[] }) {
+/** A project's tokens each day, in its colour: a column is the projects stacked, biggest at the bottom. */
+interface Stack {
+  readonly key: string;
+  readonly name: string;
+  readonly color: string;
+  readonly days: readonly DayTotal[];
+}
+
+function DayChart({ days, stacks }: { days: readonly DayTotal[]; stacks: readonly Stack[] }) {
   const [hover, setHover] = useState<number | undefined>(undefined);
   const max = Math.max(1, ...days.map((d) => d.tokens));
   const shown = hover !== undefined ? days[hover] : undefined;
+  const parts =
+    hover !== undefined
+      ? stacks
+          .map((st) => ({ st, tokens: st.days[hover]!.tokens }))
+          .filter((x) => x.tokens > 0)
+          .sort((a, b) => b.tokens - a.tokens)
+      : [];
   return (
     <div className={s.chart} onMouseLeave={() => setHover(undefined)}>
-      <div className={s.columns} role="list" aria-label="Agent tokens per day">
+      <div className={s.columns} role="list" aria-label="Agent tokens per day, by project">
         {days.map((d, i) => {
           const today = i === days.length - 1;
           return (
@@ -38,7 +53,12 @@ function DayChart({ days }: { days: readonly DayTotal[] }) {
               className={cx(s.column, i >= days.length - WEEK && s.columnThisWeek, hover === i && s.columnOn)}
               onMouseEnter={() => setHover(i)}
             >
-              <span className={s.columnBar} style={{ height: d.tokens ? `${Math.max(4, (d.tokens / max) * 100)}%` : 2 }} />
+              <span className={cx(s.columnBar, !d.tokens && s.columnEmpty)} style={{ height: d.tokens ? `${Math.max(4, (d.tokens / max) * 100)}%` : 2 }}>
+                {stacks.map((st) => {
+                  const t = st.days[i]!.tokens;
+                  return t ? <span key={st.key} className={s.columnPart} style={{ flexGrow: t, background: st.color }} /> : null;
+                })}
+              </span>
             </div>
           );
         })}
@@ -47,6 +67,12 @@ function DayChart({ days }: { days: readonly DayTotal[] }) {
         {shown ? (
           <span className={s.axisHover}>
             <strong>{dayName(shown, shown === days.at(-1))}</strong> · {shown.tokens ? `${compact(shown.tokens)} tokens · ${formatCost(shown.cost)}` : 'no runs'}
+            {parts.slice(0, 3).map(({ st, tokens }) => (
+              <span key={st.key} className={s.axisPart}>
+                <span className={s.swatch} style={{ background: st.color }} />
+                {st.name} {compact(tokens)}
+              </span>
+            ))}
           </span>
         ) : (
           <>
@@ -64,6 +90,20 @@ function DayChart({ days }: { days: readonly DayTotal[] }) {
 export function ActivityCard({ state, now }: { state: AppState; now: number }) {
   const usages = state.projects.flatMap((p) => p.workspaces.map((w) => w.usage));
   const days = dailyTotals(usages, now, DAYS);
+  // Biggest project first: it sits at the bottom of each column.
+  const stacks: Stack[] = state.projects
+    .map((p) => ({
+      key: p.id,
+      name: p.root ? p.name : 'Chats',
+      color: slotColor(slotOf(state.projects, p)),
+      days: dailyTotals(
+        p.workspaces.map((w) => w.usage),
+        now,
+        DAYS,
+      ),
+    }))
+    .filter((st) => st.days.some((d) => d.tokens))
+    .sort((a, b) => sum(b.days, 'tokens') - sum(a.days, 'tokens'));
   const week = days.slice(-WEEK);
   const before = days.slice(0, DAYS - WEEK);
   const today = days.at(-1)!;
@@ -97,7 +137,7 @@ export function ActivityCard({ state, now }: { state: AppState; now: number }) {
             </span>
             {change ? <span>{change}</span> : null}
           </div>
-          <DayChart days={days} />
+          <DayChart days={days} stacks={stacks} />
         </>
       )}
     </Card>

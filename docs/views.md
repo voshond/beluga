@@ -55,6 +55,8 @@ Small ones sit inside a sentence. The agent writes them as inline code, and the 
 | `` `time:2026-10-23T14:00:00Z` `` | "2 hours ago" (hover for the date) |
 | `` `task:BLG-12` `` | a board task: its status ring, key and title, live; click to open it (a key the board doesn't have says "not found") |
 
+A file or folder the agent names, in its words or in inline code (`` `.beluga/scratch/01-login.png` ``, `src/auth.ts:42`, `~/notes/`, `/Users/me/Desktop/a.txt`), is a link with a file or folder icon: a file opens (a worktree's own across the center, at its line), a folder opens in Files. Right-click for Show in Finder and Copy Path. Paths relative to the worktree link only in that worktree's conversation; a "/…" path links only from a folder a computer really starts at (/Users, /tmp…), so a route like `/api/login` stays words (`src/shared/render/path-refs.ts`).
+
 Several tasks are a fenced `beluga-tasks` block, one key per line (or a JSON array of keys): a stack of cards with each task's key, title, status and priority, read live from the board. Click one to open it.
 
 None of these are required. The agent uses them when they say something faster than words, the way it uses a table or a graph.

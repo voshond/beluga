@@ -119,6 +119,12 @@ export interface WorkspaceRecord {
    */
   readonly mergeWhenReady?: MergeWait;
   /**
+   * Remind Me Later (BLG-748): when to remind you (epoch ms). Until then its news, failing checks and
+   * conflicts stay quiet in the sidebar, the Unread section, the Dock and on the desktop (your
+   * agent's own asks still show); then Beluga reminds you once, and this clears.
+   */
+  readonly remindAt?: number;
+  /**
    * A project's main checkout only: the chat its conversation from before became (BLG-70). The main
    * checkout is no conversation of its own; opening it opens that chat, or the project's home.
    */

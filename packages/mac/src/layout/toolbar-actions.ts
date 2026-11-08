@@ -1,4 +1,4 @@
-import { type BranchState, branchState, onGitHub } from '@beluga/core/branch-state.js';
+import { type BranchState, branchState, onGitHub, prBlocker } from '@beluga/core/branch-state.js';
 import type { AppState } from '@beluga/core/store.js';
 import { type PlanOwner, planOwnerOf } from '@beluga/core/plans/owner.js';
 import { planTitle } from '@beluga/core/plans/model.js';
@@ -37,7 +37,8 @@ export interface ToolAction {
   readonly action: WorkspaceAction | PrStep | PlanAction;
 }
 
-const SHORT: Partial<Record<ToolAction['action'], string>> = { merge_claude: 'Solve', resolve_pr: 'Resolve', fix_checks: 'Fix', pr: 'PR', open_plan: 'Plan', open_task: 'Task', stop_run: 'Stop', merge_anyway: 'Merge', review_claude: 'Review', continue_after_merge: 'Continue' };
+// Never a bare "Resolve" or "Fix": next to a PR's number they read as its review comments (BLG-753).
+const SHORT: Partial<Record<ToolAction['action'], string>> = { merge_claude: 'Solve Conflict', resolve_pr: 'Resolve Conflicts', fix_checks: 'Fix Checks', pr: 'PR', open_plan: 'Plan', open_task: 'Task', stop_run: 'Stop', merge_anyway: 'Merge', review_claude: 'Review', continue_after_merge: 'Continue' };
 
 /** An action in one word, for the folded toolbar ("PR", "Fix", "Merge"): its icon alone didn't say enough. */
 export const shortOf = (a: ToolAction): string => (a.label.startsWith('PR #') ? a.label : SHORT[a.action] ?? a.label.replace(/…$/, '').split(' ')[0]!);
@@ -148,19 +149,24 @@ const toAction = (b: WorkspaceButton, pr: boolean): ToolAction => ({
   ...(b.action === 'archive' || b.action === 'delete' ? { danger: true } : {}),
 });
 
-/** What this workspace needs next, in the order it matters. */
-function pickPrimary(state: AppState, ws: Workspace, all: readonly ToolAction[]): ToolAction | undefined {
+/** What this workspace needs next, in the order it matters (when its branch has no steps of its own; exported for tests). */
+export function pickPrimary(state: AppState, ws: Workspace, all: readonly ToolAction[]): ToolAction | undefined {
   const by = (a: WorkspaceAction): ToolAction | undefined => all.find((x) => x.action === a && !x.disabled);
   const pr = state.prs[ws.id];
   if (ws.archived) return by('restore');
   const solve = by('merge_claude');
   if (solve) return { ...solve, tone: 'error' };
+  // The PR's own blocker, as the branch control reads it (core/branch-state.ts prBlocker). Commits
+  // here it doesn't have yet (`push`, the branch control's Push) make GitHub's conflicts and failed
+  // checks old news: no Resolve or Fix from them.
+  const blocker = pr ? prBlocker(pr, ws) : undefined;
   // GitHub can't merge a PR that conflicts with its base: resolving that comes first.
-  if (pr?.state === 'OPEN' && pr.conflicts) {
-    return { id: 'resolve_pr', label: 'Resolve Merge Conflicts…', hint: `PR #${pr.number} conflicts with ${mergeTargetOf(state, ws)}: your agent merges it in here, resolves the conflicts and pushes`, icon: 'merge', action: 'resolve_pr', tone: 'error' };
+  if (pr && blocker === 'resolve_pr') {
+    return { id: 'resolve_pr', label: 'Resolve Conflicts…', hint: `PR #${pr.number} conflicts with ${mergeTargetOf(state, ws)}: your agent merges it in here, resolves the conflicts and pushes`, icon: 'merge', action: 'resolve_pr', tone: 'error' };
   }
-  if (pr?.state === 'OPEN' && pr.checks === 'failing') {
-    return { id: 'fix_checks', label: 'Fix Checks…', hint: `PR #${pr.number}'s checks are failing: your agent reads the logs and fixes them`, icon: 'wand', action: 'fix_checks', tone: 'error' };
+  // Still running (even with one failed already) isn't a red Fix yet: PR #n below says where it stands.
+  if (pr && blocker === 'fix_checks') {
+    return { id: 'fix_checks', label: 'Fix Checks…', hint: `PR #${pr.number}'s checks failed: your agent reads the logs and fixes them`, icon: 'wand', action: 'fix_checks', tone: 'error' };
   }
   // On GitHub, a branch's next step is its pull request (Claude commits anything left as it opens it):
   // there its checks run live and it merges into origin. Merge Locally stays under ⋯.

@@ -24,7 +24,7 @@ vi.mock('node:child_process', async (orig) => {
   };
 });
 
-const { ghRepoEnv, originRepo, prTargetOf, remoteUrlIn } = await import('../src/workspaces/github.js');
+const { ghRepoEnv, originRepo, prTargetOf, pullOfBranch, remoteUrlIn } = await import('../src/workspaces/github.js');
 const { createPr, findPr, forgetGh, listPrs, mergePr, prHead, runGh, setPrTarget } = await import('../src/workspaces/pr.js');
 
 const git = (cwd: string, ...args: string[]): void => void execFileSync('git', args, { cwd, stdio: 'ignore' });
@@ -114,5 +114,21 @@ describe('a pull request on the original (BLG-727)', () => {
     // Origin's list stays origin's, even run from this worktree.
     await listPrs(worktree);
     expect(exec.calls.at(-1)?.env?.GH_REPO).toBe('github.com/kayraucklnc/kestral-app');
+  });
+});
+
+describe("a fork's pull request checked out here", () => {
+  it('is found by its number, which the branch follows (gh finds no fork PR by a bare branch name)', async () => {
+    const { worktree } = forkClone('https://github.com/kayraucklnc/kestral-app.git');
+    git(worktree, 'config', 'branch.their-branch.remote', 'origin');
+    git(worktree, 'config', 'branch.their-branch.merge', 'refs/pull/366/head');
+    expect(pullOfBranch(worktree, 'their-branch')).toBe(366);
+    expect(pullOfBranch(worktree, 'beluga/fix')).toBeUndefined();
+    forgetGh();
+    exec.calls.length = 0;
+    await findPr(worktree, 'their-branch');
+    expect(exec.calls.at(-1)?.args.slice(0, 3)).toEqual(['pr', 'view', '366']);
+    await findPr(worktree, 'beluga/fix');
+    expect(exec.calls.at(-1)?.args.slice(0, 3)).toEqual(['pr', 'view', 'beluga/fix']);
   });
 });

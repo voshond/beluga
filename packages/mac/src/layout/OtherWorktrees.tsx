@@ -6,6 +6,7 @@ import { useOtherActivity } from '../views/worktree-info-state.js';
 import { orderOutside, outsideActivity, outsideOf, visibleOutside } from './outside-model.js';
 import { Row } from './sidebar-parts.js';
 import { WorkspaceWithAgents } from './SubAgents.js';
+import { notLater } from './later-rows.js';
 import { isAgentWorktree } from '../claude-code/subagents-model.js';
 import o from './other-worktrees.module.css';
 
@@ -20,8 +21,8 @@ export function OutsideWorktrees({ p, indent }: { p: Project; indent: number }) 
   const here = useApp((st) => (st.view.kind === 'workspace' ? st.view.id : undefined));
   const key = `outside-more:${p.id}`;
   const expanded = useUi((u) => u.collapsed.includes(key));
-  // Sub-agents' own worktrees aren't yours: they show as the agent (see SubAgents.tsx).
-  const list = outsideOf(p).filter((w) => !isAgentWorktree(w));
+  // Sub-agents' own worktrees aren't yours: they show as the agent (see SubAgents.tsx). Ones put off till later are under Later.
+  const list = outsideOf(p).filter((w) => !isAgentWorktree(w) && notLater(w));
   const activity = useOtherActivity(
     p.id,
     list.map((w) => w.id),

@@ -268,6 +268,8 @@ export async function createDemoWorkspaces(): Promise<WorkspaceManager> {
     writeTree(auth.path, { 'src/server.ts': DEMO_SERVER_WITH_AUTH });
     gitIn(auth.path, 'add', '.');
     gitIn(auth.path, 'commit', '-m', 'Protect payments routes');
+    // On GitHub already, as a branch with a pull request is: its PR's checks are for what's here.
+    gitIn(auth.path, 'push', '-q', 'origin', 'HEAD');
     const tests = await mgr.createWorktree(api.id, 'webhook-retries');
     writeTree(tests.path, { 'src/webhooks.ts': '// retry with backoff\nexport const MAX_RETRIES = 5;\n' });
     // The demo plan's two tasks in progress, each in its own worktree (the sidebar shows the plan instead).

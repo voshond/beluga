@@ -11,7 +11,7 @@ import type { Session } from '../../src/core/session.js';
 import { HANDLERS } from '../../src/ipc/handlers.js';
 import { parseArgs } from '../../src/ipc/api.js';
 import type { MessageView } from '../../src/net/mesh/views.js';
-import { FAST, settle } from './helpers.js';
+import { FAST, LOSES_A_MESSAGE_ON_WINDOWS, settle } from './helpers.js';
 
 let testnet: Testnet;
 const services: NetworkService[] = [];
@@ -43,7 +43,9 @@ const call = async (session: Session, method: keyof typeof HANDLERS, ...args: un
 };
 
 describe('the network as a core service', () => {
-  it('mirrors friends, presence, groups and messages into the shared state, through the API', async () => {
+  // Windows' runners now and then never see the two come online (a link lost while both dial, BLG-728): skipped
+  // there like the other network tests that wait on it (tests/mesh/helpers.ts); macOS and Linux still run it.
+  it.skipIf(LOSES_A_MESSAGE_ON_WINDOWS)('mirrors friends, presence, groups and messages into the shared state, through the API', async () => {
     const ann = await person('ann');
     const bob = await person('bob');
     expect(await call(ann.session, 'network.status')).toMatchObject({ enabled: true, peerId: ann.service.mesh.peerId });

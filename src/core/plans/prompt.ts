@@ -266,7 +266,9 @@ export function planningBrief(plan: Plan, board: BoardState, style: string, repo
     '<beluga_plan_mode>',
     `This conversation is planning in Beluga's Plans: ${plan.body ? 'an approved plan (changes you make are proposed; the user approves them)' : 'a new plan, a draft only you and the user see'}.`,
     'Write the plan with the plan tools (mcp__beluga_plan__*): plan_write for the whole plan, plan_update for changes,',
-    'plan_get to see it. Nothing reaches the task board until the user approves the plan; you can\'t approve it yourself.',
+    'plan_get to see it. Nothing of the plan reaches the task board until the user approves the plan; you can\'t approve it yourself.',
+    'The board tools (mcp__beluga_board__*) are for work outside this plan. Use them to read the board, or when the user asks for a separate task.',
+    'Put work that belongs to this plan in the plan. Do not open tasks unasked here.',
     plan.body && plan.autonomy === 'autopilot' ? 'This plan runs on autopilot: changes you make to it now apply at once and can start work, so change only what the plan needs.' : '',
     'This conversation is the plan\'s own: don\'t move it to a worktree.',
     plan.body

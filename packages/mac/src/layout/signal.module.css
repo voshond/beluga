@@ -77,6 +77,9 @@
 .markProblem {
   color: var(--error);
 }
+.later {
+  color: var(--text-3);
+}
 .count {
   display: inline-flex;
   margin-left: 2px;

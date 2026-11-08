@@ -333,6 +333,16 @@
   display: flex;
   margin-top: 6px;
 }
+/* Under a usage limit: when Beluga sends Continue on its own, and Don't Send beside it. */
+.limitResume {
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.limitResumeText {
+  min-width: 0;
+}
 /* A failed turn: what happened in one line, the raw error behind Show details. */
 .failure {
   display: flex;
@@ -551,6 +561,20 @@
 /* An image someone sent, in the words: the message box's chip (ImageChip.tsx), not an underlined link. */
 .markdown a[data-image-chip] {
   border-bottom: 0;
+}
+
+/* A file or folder named in the words (PathLink.tsx): its icon in front, a click opens it. */
+.markdown a.pathLink {
+  overflow-wrap: anywhere;
+}
+.markdown a.pathLink > svg {
+  display: inline-block;
+  margin-right: 3px;
+  vertical-align: -1px;
+  color: var(--text-2);
+}
+.markdown a.pathLink:hover > svg {
+  color: var(--accent);
 }
 
 /* A Markdown image that can't show here (a web one, someone else's local path). */

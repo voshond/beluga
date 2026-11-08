@@ -86,6 +86,7 @@ export function paletteCommands(ctx: Ctx): PaletteCommand[] {
           { id: 'plans:open', label: 'Go to Plans', icon: 'flag' as const, hint: 'Every plan, across projects: running, drafts and finished', keywords: ['plans', 'milestones', 'roadmap'], run: () => ctx.actions.run({ type: 'view', view: { kind: 'plans' } }) },
           { id: 'tasks:open', label: 'Go to Tasks', icon: 'task' as const, hint: 'Every project’s board', keywords: ['tasks', 'board', 'issues', 'backlog', 'kanban'], run: () => ctx.actions.run({ type: 'view', view: { kind: 'tasks' } }) },
           { id: 'issues:open', label: 'Go to Issues', icon: 'issue' as const, hint: 'A project’s GitHub issues: your agent investigates, fixes, or writes them up as tasks', keywords: ['issues', 'github', 'bugs', 'triage', 'investigate', 'fix'], run: () => ctx.actions.run({ type: 'view', view: { kind: 'issues' } }) },
+          { id: 'pulls:open', label: 'Go to Pull Requests', icon: 'pr' as const, hint: 'A project’s open pull requests on GitHub, anyone’s: open one in a worktree', keywords: ['pull requests', 'prs', 'pulls', 'github', 'review', 'merge'], run: () => ctx.actions.run({ type: 'view', view: { kind: 'pulls' } }) },
           { id: 'actions:open', label: 'Go to Actions', icon: 'pulse' as const, hint: 'A project’s GitHub Actions: runs as they go, and each workflow as a graph', keywords: ['actions', 'github', 'ci', 'workflows', 'runs', 'builds', 'checks', 'pipeline'], run: () => ctx.actions.run({ type: 'view', view: { kind: 'actions' } }) },
         ]
       : []),

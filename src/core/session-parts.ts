@@ -71,6 +71,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
   if (opts.runtime) local.start();
   // Database views find the project's connection string (its variables, its .env).
   useViewEnv({ database: (dir) => env.viewEnv(dir), commands: (dir) => env.envFor({ dir }) });
+    const notifier = new Notifier({ store: opts.store, desktop: (n) => opts.desktopNotify?.(n), toast: (text, level) => session.toast(text, level) });
     if (opts.workspaces) {
       workspaces = new WorkspaceController({
         manager: opts.workspaces,
@@ -81,6 +82,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
         defaultRuntime: () => opts.runtime?.agent ?? 'claude',
         defaultAgent: (project) => session.agentFor(project),
         toast: (text, level) => session.toast(text, level),
+        remind: (notice) => notifier.notify(notice),
         intend: (intent) => session.intend(intent),
         askClaude: (prompt, channel, o) => (o?.terminal ? session.startInTerminal(prompt, channel, o.shown) : session.askOwnClaude(prompt, channel, false, o?.echo ?? true, o?.shown)),
         showAsk: (prompt, channel) => session.showAsk(prompt, channel),
@@ -108,7 +110,6 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
         runningIn: (channel) => host.runningIn(channel),
       });
     }
-    const notifier = new Notifier({ store: opts.store, desktop: (n) => opts.desktopNotify?.(n), toast: (text, level) => session.toast(text, level) });
     if (workspaces) {
       workbench = new Workbench({
         store: opts.store,

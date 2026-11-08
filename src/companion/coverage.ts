@@ -55,6 +55,7 @@ export const PHONE: Record<Method, Side> = {
   'host.sendNext': 'phone',
   // Your steered message Claude hasn't read yet, answered now: like Stop, phone-sized.
   'host.steerNow': 'phone',
+  'host.cancelSteer': 'phone',
   'host.stopRun': 'phone',
   'host.cancelQueued': 'phone',
   'host.reorderQueued': 'mac',
@@ -111,6 +112,7 @@ export const PHONE: Record<Method, Side> = {
   'files.closeViewer': 'mac',
   'files.readImage': 'mac',
   'files.readImageFile': 'mac',
+  'files.version': 'mac',
   'files.read': 'mac',
 
   // ---- projects and workspaces: a new chat in a project, and loading a conversation to read it
@@ -147,6 +149,7 @@ export const PHONE: Record<Method, Side> = {
   'workspaces.renameGroup': 'mac',
   'workspaces.rename': 'mac',
   'workspaces.regenerateTitle': 'mac',
+  'workspaces.remindLater': 'mac',
   'workspaces.ungroup': 'mac',
   'workspaces.arrange': 'mac',
   'workspaces.newGroup': 'mac',
@@ -190,6 +193,9 @@ export const PHONE: Record<Method, Side> = {
   'workbench.openPr': 'mac',
   'workbench.mergePr': 'mac',
   'workbench.prStep': 'mac',
+  // The phone pushes and re-runs through companion.branchStep (push, rerun_checks).
+  'workbench.pushPr': 'mac',
+  'workbench.rerunChecks': 'mac',
   'workbench.prConversation': 'mac',
   'workbench.prPost': 'mac',
   'workbench.addressPrComments': 'mac',
@@ -301,6 +307,10 @@ export const PHONE: Record<Method, Side> = {
 
   // ---- supporting Beluga: the star and coffee asks are the Mac's (they open web pages there)
   'support.answer': 'mac',
+  // ---- your stats: the Usage tab's charts and what the composer saw (the phone keeps its plan meters)
+  'stats.get': 'mac',
+  'stats.note': 'mac',
+  'stats.saveImage': 'mac',
   'diagnostics.report': 'mac',
 
   // ---- browsers on the web port (BLG-650): let in and revoked from the Mac's Settings or `beluga web`

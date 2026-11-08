@@ -954,7 +954,8 @@ export class WorkspaceManager {
     } else {
       const named = pull.branch && !pull.branch.startsWith('-') && !(await g.isCommit(root, `refs/heads/${pull.branch}`));
       branch = named ? pull.branch : await this.freeBranch(root, `pr-${pull.number}`);
-      await g.git(root, ['fetch', 'origin', `+refs/pull/${pull.number}/head:refs/heads/${branch}`]).catch((err: unknown) => {
+      // Its head is kept too (BLG-746): GitHub has these commits, so they never read as pushed nowhere.
+      await g.git(root, ['fetch', 'origin', `+refs/pull/${pull.number}/head:refs/heads/${branch}`, `+refs/pull/${pull.number}/head:${g.pullHeadRef(pull.number)}`]).catch((err: unknown) => {
         throw new WorkspaceError(`Couldn’t fetch pull request #${pull.number} from origin: ${err instanceof Error ? err.message : String(err)}`);
       });
       await g.git(root, ['worktree', 'add', dir, branch]);
@@ -1194,7 +1195,12 @@ export class WorkspaceManager {
     // Another tool's worktree keeps its branch when deleted (see remove): nothing of it is lost.
     if (ws.kind !== 'worktree' || !ws.branch || ws.external || !real(ws.path).startsWith(real(this.store.workspacesDir) + path.sep)) return undefined;
     const into = ws.base ?? (await this.baseOf(ws.projectRoot));
-    const lost = await g.unpushedCommits(ws.projectRoot, ws.branch, into);
+    let lost = await g.unpushedCommits(ws.projectRoot, ws.branch, into);
+    // Checked against the remote before warning (BLG-746): merged on GitHub a minute ago reads as merged.
+    if (lost.count) {
+      await g.catchUpForDelete(ws.projectRoot, ws.branch, into);
+      lost = await g.unpushedCommits(ws.projectRoot, ws.branch, into);
+    }
     return lost.count ? { branch: ws.branch, into, unpushed: lost.count, subjects: lost.subjects } : undefined;
   }
 
@@ -1342,6 +1348,12 @@ export class WorkspaceManager {
   setMergeWait(id: string, wait: MergeWait | undefined): void {
     this.require(id);
     this.patchRecord(id, { mergeWhenReady: wait });
+  }
+
+  /** Remind you of a conversation then (epoch ms), quiet till then; undefined: not anymore. */
+  setRemindAt(id: string, at: number | undefined): void {
+    this.require(id);
+    this.patchRecord(id, { remindAt: at });
   }
 
   setModel(id: string, model: string | undefined): void {

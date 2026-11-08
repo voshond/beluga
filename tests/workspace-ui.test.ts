@@ -4,6 +4,7 @@ import { channelOf, type AppState } from '../src/core/store.js';
 import { initialAppState as initialState, reduceApp as reduce } from '../src/client/screen.js';
 import { activityOf, contextMeter, isCompacting, isProjectOpen, overviewModel, projectsModel, reviewModel, stateOf, tabsModel, toggleProject, workspaceHeaderModel } from '../src/ui/workspace-models.js';
 import { agentsMenu, confirmMenu, projectMenu } from '../src/ui/menus.js';
+import { READS_AFTER_STEP } from '../src/shared/claude-notices.js';
 import type { Project, Workspace } from '../src/workspaces/types.js';
 
 const text = (lines: readonly (readonly { text: string }[])[]) => lines.map((l) => l.map((s) => s.text).join(''));
@@ -96,6 +97,17 @@ describe('store: channels, views and sub-agents', () => {
     const done = s.log[0];
     expect(done?.type === 'agent' && done.subagents[0]?.status).toBe('done');
     expect(activityOf(s.log, 'ws:w1')).toMatchObject({ running: false, last: 'all good' });
+  });
+
+  it('keeps the running turn’s start time when a message is steered into it', () => {
+    let s = base();
+    const at = (requestId: string, event: 'started' | 'text', text: string, ts: number) => reduce(s, { type: 'agent_event', owner: 'me', requestId, requester: 'me', event, text, ts, channel: 'ws:w1' });
+    s = at('turn', 'started', '', 1_000);
+    s = at('steer', 'text', READS_AFTER_STEP, 12_000);
+    expect(activityOf(s.log, 'ws:w1')).toMatchObject({ running: true, startedAt: 1_000 });
+    // Its own turn once it is one.
+    s = at('steer', 'started', '', 13_000);
+    expect(activityOf(s.log, 'ws:w1').startedAt).toBe(12_000);
   });
 });
 

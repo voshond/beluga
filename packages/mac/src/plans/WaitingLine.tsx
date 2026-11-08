@@ -37,7 +37,7 @@ function SendOrSteer({ requestId }: { requestId: string }) {
           className={p.steerNow}
           onClick={(e) => {
             e.stopPropagation();
-            run(api.host.promote(requestId));
+            run(api.host.promote(requestId, { interrupt: true }));
           }}
         >
           Steer Now

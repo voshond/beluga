@@ -36,6 +36,14 @@ export class PromptQueue implements AsyncIterable<SDKUserMessage> {
     return uuid;
   }
 
+  /** Out of the queue before Claude Code got it (see PromptQueue.push): false once it went. */
+  remove(uuid: string): boolean {
+    const at = this.items.findIndex((item) => item.uuid === uuid);
+    if (at === -1) return false;
+    this.items.splice(at, 1);
+    return true;
+  }
+
   close(): void {
     this.ended = true;
     this.wake?.();

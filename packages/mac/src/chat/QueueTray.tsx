@@ -9,6 +9,9 @@ import { toast, useApi, useApp, useBeluga } from '../lib/beluga.js';
 import { useFlightLanding } from './flight.js';
 import s from './queue.module.css';
 import { shortcutKeys } from '../lib/shortcuts.js';
+import { usePrefs } from '../lib/prefs.js';
+import { otherKeySteers } from './send-action.js';
+import { useSteerBlock } from './use-steer.js';
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
@@ -30,10 +33,10 @@ const STEERING_MS = 8_000;
  * does; the row says "Steering…" until the message leaves the queue for the chat. `blocked`: why
  * it can't (someone else's message), shown in its tooltip and said when clicked.
  */
-function SteerButton({ steering, blocked, onSteer }: { steering: boolean; blocked?: string; onSteer: () => void }) {
+function SteerButton({ steering, blocked, steerKey, onSteer }: { steering: boolean; blocked?: string; steerKey?: string; onSteer: () => void }) {
   const { client } = useBeluga();
   return (
-    <Tip label={blocked ?? (steering ? 'Steering: sending it to your agent now' : 'Steer: your agent reads this now (a long command is interrupted for it)')} keys={blocked ? undefined : shortcutKeys('composer-steer')}>
+    <Tip label={blocked ?? (steering ? 'Steering: sending it to your agent now' : 'Steer: your agent reads this after its current step, without stopping it')} keys={blocked ? undefined : steerKey}>
       <button
         type="button"
         className={cx(s.now, (blocked || steering) && s.nowOff, steering && s.steering)}
@@ -68,6 +71,10 @@ export function QueueTray({ queue, selfName, onEdit, channel: given }: { queue: 
   const onScreen = useApp((st) => channelOf(st.view));
   const channel = given ?? onScreen;
   const [steering, setSteering] = useState<ReadonlySet<string>>(new Set());
+  // ⌥↩ is shown on Steer only when it steers what you type (with Steer as the default, or in Plan First, it queues).
+  const prefs = usePrefs();
+  const steerBlock = useSteerBlock(channel);
+  const steerKey = otherKeySteers(prefs.sendDuringTurn, !steerBlock) ? shortcutKeys('composer-steer') : undefined;
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   if (!queue.length) return null;
@@ -133,7 +140,7 @@ export function QueueTray({ queue, selfName, onEdit, channel: given }: { queue: 
                     }
                   />
                   <Act icon="x" label="Remove from the queue" onClick={() => call(api.host.cancelQueued(q.requestId))} />
-                  <SteerButton steering={steering.has(q.requestId)} onSteer={() => steer(q.requestId)} />
+                  <SteerButton steering={steering.has(q.requestId)} steerKey={steerKey} onSteer={() => steer(q.requestId)} />
                 </span>
               ) : (
                 <span className={s.acts}>

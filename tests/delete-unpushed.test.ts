@@ -8,6 +8,7 @@ import { WorkspaceManager } from '../src/workspaces/manager.js';
 import { WorkspaceStore } from '../src/workspaces/store.js';
 import { branchState } from '../src/core/branch-state.js';
 import type { Workspace } from '../src/workspaces/types.js';
+import { deletesSettled } from '../src/workspaces/others.js';
 
 const sh = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=T', ...args], { cwd, stdio: 'pipe' }).toString();
 const commitIn = (dir: string, file: string, msg: string) => {
@@ -37,7 +38,11 @@ beforeEach(async () => {
   await mgr.refresh();
 });
 
-afterEach(() => rmSync(base, { recursive: true, force: true }));
+// Archiving deletes the folder it set aside in the background: let that finish first, or the two deletes race.
+afterEach(async () => {
+  await deletesSettled();
+  rmSync(base, { recursive: true, force: true });
+});
 
 const project = () => mgr.list.find((p) => p.root)!;
 
@@ -72,6 +77,29 @@ describe('deleting a worktree with commits pushed nowhere (BLG-617)', () => {
     sh(repo, 'fetch', 'origin');
     expect(await unpushedCommits(repo, 'beluga/squashed', 'origin/main')).toEqual({ count: 0, subjects: [] });
     expect(await mgr.deletePlan(ws.id)).toBeUndefined();
+  });
+
+  it('none once it was squash-merged on the remote since the last fetch: it checks there before warning (BLG-746)', async () => {
+    const ws = await mgr.createWorktree(project().id, 'merged-on-github');
+    commitIn(ws.path, 'a.txt', 'one');
+    commitIn(ws.path, 'b.txt', 'two');
+    // Merged in the browser: the same change lands on origin's main, and nothing here has fetched it.
+    const other = path.join(base, 'other');
+    execFileSync('git', ['clone', '-q', path.join(base, 'app.git'), other], { stdio: 'pipe' });
+    writeFileSync(path.join(other, 'a.txt'), 'one\n');
+    writeFileSync(path.join(other, 'b.txt'), 'two\n');
+    sh(other, 'add', '.');
+    sh(other, 'commit', '-m', 'one and two (#1)');
+    sh(other, 'push', 'origin', 'main');
+    expect(await unpushedCommits(repo, 'beluga/merged-on-github', 'origin/main')).toMatchObject({ count: 2 });
+    expect(await mgr.deletePlan(ws.id)).toBeUndefined();
+  });
+
+  it('offline, it warns from what it has', async () => {
+    const ws = await mgr.createWorktree(project().id, 'offline');
+    commitIn(ws.path, 'a.txt', 'only here');
+    sh(repo, 'remote', 'set-url', 'origin', path.join(base, 'gone.git'));
+    expect(await mgr.deletePlan(ws.id)).toMatchObject({ unpushed: 1, subjects: ['only here'] });
   });
 
   it('still warns for an archived worktree: its branch is all that is left', async () => {

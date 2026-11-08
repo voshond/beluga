@@ -5,7 +5,7 @@ import type { PrCheck, PullRequest } from '../core/work-store.js';
 import { belugaHome } from './store.js';
 import { belugaEnv } from '../core/beluga-env.js';
 import { type GitSetup, httpsRemoteOf } from '../shared/git-trouble.js';
-import { type GitHubRepo, PR_TARGET_KEY, ghRepoEnv, gitCommonDir, originRepo, originRepoEnv, prTargetOf, repoSlug } from './github.js';
+import { type GitHubRepo, PR_TARGET_KEY, ghRepoEnv, gitCommonDir, originRepo, originRepoEnv, prTargetOf, pullOfBranch, repoSlug } from './github.js';
 export { describePr } from '../shared/format.js';
 
 /**
@@ -441,7 +441,7 @@ export class PushError extends Error {
 
 /** The head commit of the branch's last pull request, if it was merged (gh's newest PR for the branch). */
 async function mergedHead(dir: string, head: string): Promise<string | undefined> {
-  const out = await runGh(['pr', 'view', prHead(dir, head), '--json', 'state,headRefOid'], dir, 20_000).catch(() => undefined);
+  const out = await runGh(['pr', 'view', prOfBranch(dir, head), '--json', 'state,headRefOid'], dir, 20_000).catch(() => undefined);
   if (!out) return undefined;
   try {
     const pr = JSON.parse(out) as { state?: string; headRefOid?: string };
@@ -472,6 +472,11 @@ export function prHead(dir: string, branch: string): string {
   return origin ? `${origin.owner}:${branch}` : branch;
 }
 
+/** What `gh pr view` is given for a branch's pull request: its number when the branch follows one (a fork's), else prHead. */
+function prOfBranch(dir: string, branch: string): string {
+  return String(pullOfBranch(dir, branch) ?? prHead(dir, branch));
+}
+
 /**
  * Send the branch's pull request to `to` (a fork's original) from now on, or back to origin
  * (undefined): kept in the branch's git config, where every gh call about it looks (ghRepoEnv).
@@ -486,7 +491,7 @@ export async function setPrTarget(dir: string, branch: string, to: Pick<GitHubRe
 export async function findPr(dir: string, branch: string): Promise<PullRequest | undefined> {
   if (!(await hasGh())) return undefined;
   try {
-    return parsePr(await runGh(['pr', 'view', prHead(dir, branch), '--json', PR_FIELDS], dir, 20_000));
+    return parsePr(await runGh(['pr', 'view', prOfBranch(dir, branch), '--json', PR_FIELDS], dir, 20_000));
   } catch (err) {
     if (err instanceof Error && /no pull requests? found/i.test(err.message)) return undefined;
     throw err;
@@ -559,6 +564,11 @@ export async function disableAutoMerge(dir: string, number: number): Promise<voi
 }
 
 /** A PR's one-click steps on GitHub: merge its base in (`gh pr update-branch`), or mark a draft ready for review. */
+/** Run a workflow run's failed jobs again on the same commit (`gh run rerun <id> --failed`, see branch-state's failedRunIds). Throws gh's error. */
+export async function rerunFailed(dir: string, runId: number): Promise<void> {
+  await runGh(['run', 'rerun', String(runId), '--failed'], dir, 30_000);
+}
+
 export type PrStepKind = 'update_branch' | 'ready';
 
 /** Take one of those steps. Throws gh's error. */

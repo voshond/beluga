@@ -21,6 +21,7 @@ import { isPlanAction, runPlanAction } from '../lib/plan-task.js';
 import { askBeforeWork } from '../lib/work-confirm.js';
 import { getPrefs, setPrefs, usePrefs } from '../lib/prefs.js';
 import { togglePanel } from '../lib/panel.js';
+import { navBack, navForward, useNavAbility } from '../lib/nav.js';
 import { panelFits } from '../lib/panel-model.js';
 import { mod } from '../lib/system.js';
 import { NotificationBell } from './NotificationCenter.js';
@@ -40,6 +41,8 @@ import { WebBack } from './WebBack.js';
 /** Room the title keeps, and the window buttons on the right (search, bell, panel). */
 const TITLE_MIN = 210;
 const RIGHT_FIXED = 3 * 30 + 16;
+/** Back and forward, before the title. */
+const NAV_W = 2 * 30;
 const FOLDS: BranchFold[] = ['none', 'pill', 'all'];
 
 const TITLES: Partial<Record<string, string>> = { overview: 'Overview', search: 'Search', usage: 'Usage', terminal: 'Terminal', files: 'Files', draft: 'New chat', draft_worktree: 'New worktree', claude_code: 'Activity', requests: 'Requests', notifications: 'Notifications', tasks: 'Tasks', worktrees: 'Worktrees' };
@@ -65,6 +68,17 @@ function SearchButton() {
   return <IconButton icon="search" label="Search" keys={shortcutKeys('find')} active={on} onClick={() => actions.run({ type: 'view', view: { kind: 'search' } })} />;
 }
 
+/** Back and forward between pages, with what was open on each (⌘[ ⌘]; off with nowhere to go). */
+function NavButtons() {
+  const can = useNavAbility();
+  return (
+    <span className={s.nav} role="group" aria-label="Back and forward">
+      <IconButton icon="back" label="Go back" keys={shortcutKeys('nav-back')} disabled={!can.back} onClick={() => void navBack()} />
+      <IconButton icon="forward" label="Go forward" keys={shortcutKeys('nav-forward')} disabled={!can.forward} onClick={() => void navForward()} />
+    </span>
+  );
+}
+
 function Shell({ title, subtitle, center, right, headerRef }: { title: ReactNode; subtitle?: ReactNode; center?: ReactNode; right?: ReactNode; headerRef: React.RefObject<HTMLElement | null> }) {
   const prefs = usePrefs();
   const view = useApp((st) => st.view);
@@ -83,6 +97,7 @@ function Shell({ title, subtitle, center, right, headerRef }: { title: ReactNode
           <IconButton icon="sidebar" label="Show sidebar" keys={shortcutKeys('toggle-sidebar')} onClick={() => setPrefs({ sidebar: true })} />
         </span>
       )}
+      <NavButtons />
       <div className={s.titles} data-tauri-drag-region>
         <div className={s.title}>{title}</div>
         {subtitle ? <div className={s.subtitle}>{subtitle}</div> : null}
@@ -182,7 +197,7 @@ export function Toolbar() {
     const primaryW = (fold: BranchFold): number => (primary ? (fold === 'all' ? shortOf(primary).length * 7.4 + 48 : primary.label.length * 7.4 + 48) : 0);
     // The Chat · Terminal · Both switch (BLG-534): with its words while there's room, then its icons.
     const switchW = getPrefs().termView && terminalCapable(client.store.getState(), ws.id) ? (width >= 1180 ? SWITCH_W : SWITCH_ICONS_W) : 0;
-    const fixedAt = (fold: BranchFold): number => TITLE_MIN + RIGHT_FIXED + switchW + pillW(fold) + stepW(fold) + primaryW(fold) + 34;
+    const fixedAt = (fold: BranchFold): number => TITLE_MIN + NAV_W + RIGHT_FIXED + switchW + pillW(fold) + stepW(fold) + primaryW(fold) + 34;
     const fold = FOLDS.find((f) => fixedAt(f) <= width) ?? 'all';
     const fit = Math.max(0, Math.min(icons.length, Math.floor((width - fixedAt(fold)) / 30)));
     // Icons that don't fit lead ⋯ as a section of their own.
@@ -371,6 +386,8 @@ export function Toolbar() {
   if (view.kind === 'plans') return <Shell headerRef={headerRef} title={<span className={s.name}>Plans</span>} />;
 
   if (view.kind === 'issues') return <Shell headerRef={headerRef} title={<span className={s.name}>Issues</span>} subtitle={<span className={s.meta}>From GitHub · your agent investigates, fixes, or writes them up as tasks</span>} />;
+
+  if (view.kind === 'pulls') return <Shell headerRef={headerRef} title={<span className={s.name}>Pull Requests</span>} subtitle={<span className={s.meta}>From GitHub · anyone’s open pull requests, each one a worktree away</span>} />;
 
   if (view.kind === 'actions') return <Shell headerRef={headerRef} title={<span className={s.name}>Actions</span>} subtitle={<span className={s.meta}>From GitHub · runs as they go, and each workflow as a graph</span>} />;
 

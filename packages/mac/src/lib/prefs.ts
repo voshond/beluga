@@ -6,7 +6,12 @@ import { type TermKeysPref, type TermThemePref, termKeysOf, themeOf } from './te
 import { type ConvoMode, clampBoth, isConvoMode } from './convo-mode.js';
 import { type ShortcutOverrides, keyPlatform, overridesOf } from './shortcuts-model.js';
 import { type ThemeBase, allThemesCss, isSolid, themeFor, themeIdOf, themePatch } from './themes.js';
+<<<<<<< HEAD
 import { DEFAULT_LAYOUT, DRAWER_DEFAULT, PANEL_DEFAULT, PANES_DEFAULT, type PanelLayout, type PanelTab, SIDEBAR_DEFAULT, SPLIT_DEFAULT, type TerminalPlace, migratePrefs, normalizeLayout } from './panel-model.js';
+=======
+import { DEFAULT_LAYOUT, DRAWER_DEFAULT, PANEL_DEFAULT, PANES_DEFAULT, type PanelLayout, type PanelTab, SPLIT_DEFAULT, type TerminalPlace, migratePrefs, normalizeLayout } from './panel-model.js';
+import type { DuringTurnAction } from '../chat/send-action.js';
+>>>>>>> upstream/main
 
 /**
  * How this window looks and behaves: kept on this Mac only (Beluga's shared settings, like the
@@ -49,6 +54,8 @@ export interface UiPrefs {
   readonly unreadSection: boolean;
   /** Enter sends and Shift+Enter makes a new line, or the other way round with ⌘Enter. */
   readonly sendWith: 'enter' | 'cmd-enter';
+  /** The main send action during a running turn. */
+  readonly sendDuringTurn: DuringTurnAction;
   readonly timestamps: boolean;
   /** A finished answer's steps: folded away once Claude answers (one click shows them), or left showing. */
   readonly doneSteps: 'fold' | 'show';
@@ -165,6 +172,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   openProjects: [],
   unreadSection: true,
   sendWith: 'enter',
+  sendDuringTurn: 'queue',
   timestamps: true,
   doneSteps: 'fold',
   reduceMotion: false,
@@ -221,7 +229,7 @@ function load(): UiPrefs {
   try {
     // Older versions docked the terminal beside or under the chat: see migratePrefs.
     const saved = { ...DEFAULT_PREFS, ...(migratePrefs(JSON.parse(localStorage.getItem(KEY) ?? '{}') as Record<string, unknown>) as Partial<UiPrefs>) };
-    return { ...saved, panelLayout: normalizeLayout(saved.panelLayout), maxFire: fireLookOf(saved.maxFire), menuBar: menuBarLookOf(saved.menuBar), termTheme: themeOf(saved.termTheme), shortcuts: overridesOf(saved.shortcuts), convoModes: saved.convoModes && typeof saved.convoModes === 'object' ? saved.convoModes : {}, chatWidth: chatWidthOf(saved), convoDefault: saved.convoDefaultPicked === true && isConvoMode(saved.convoDefault) ? saved.convoDefault : 'terminal', bothChat: clampBoth(saved.bothChat), termKeys: termKeysOf(saved.termKeys), termKeysFirst: saved.termKeysFirst !== false, termView: saved.termView === true, lightTheme: themeIdOf(saved.lightTheme, 'light'), darkTheme: themeIdOf(saved.darkTheme, 'dark'), accent: saved.accent in ACCENTS ? saved.accent : 'system' };
+    return { ...saved, sendDuringTurn: saved.sendDuringTurn === 'steer' ? 'steer' : 'queue', panelLayout: normalizeLayout(saved.panelLayout), maxFire: fireLookOf(saved.maxFire), menuBar: menuBarLookOf(saved.menuBar), termTheme: themeOf(saved.termTheme), shortcuts: overridesOf(saved.shortcuts), convoModes: saved.convoModes && typeof saved.convoModes === 'object' ? saved.convoModes : {}, chatWidth: chatWidthOf(saved), convoDefault: saved.convoDefaultPicked === true && isConvoMode(saved.convoDefault) ? saved.convoDefault : 'terminal', bothChat: clampBoth(saved.bothChat), termKeys: termKeysOf(saved.termKeys), termKeysFirst: saved.termKeysFirst !== false, termView: saved.termView === true, lightTheme: themeIdOf(saved.lightTheme, 'light'), darkTheme: themeIdOf(saved.darkTheme, 'dark'), accent: saved.accent in ACCENTS ? saved.accent : 'system' };
   } catch {
     return DEFAULT_PREFS;
   }

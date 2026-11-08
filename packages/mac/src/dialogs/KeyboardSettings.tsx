@@ -4,6 +4,7 @@ import { Button, cx } from '../components/ui.js';
 import { useBeluga } from '../lib/beluga.js';
 import { DEFAULT_SHORTCUT } from '../lib/dictation-model.js';
 import { getPrefs, setPrefs, usePrefs } from '../lib/prefs.js';
+import { otherKeyShortcut } from '../chat/send-action.js';
 import { setRecording, useBindings } from '../lib/shortcuts.js';
 import {
   type AssignMode,
@@ -227,7 +228,9 @@ export function KeyboardSettings() {
   const builtIn = keyQuery ? builtInFor(keyQuery) : undefined;
   const builtInRows = BUILT_IN.filter(([chord, label]) => (keyQuery ? chord === keyQuery : !query.trim() || `${label} ${chordLabel(chord)}`.toLowerCase().includes(query.trim().toLowerCase())));
 
-  const row = (d: ShortcutDef) => {
+  const row = (def: ShortcutDef) => {
+    // ⌥↩ is named for what it does with your default during a turn: Steer, or Queue.
+    const d = def.id === 'composer-steer' ? { ...def, ...otherKeyShortcut(prefs.sendDuringTurn) } : def;
     const keys = bindings[d.id] ?? [];
     const recording = rec?.id === d.id;
     const bad = problem?.id === d.id ? problem.text : undefined;

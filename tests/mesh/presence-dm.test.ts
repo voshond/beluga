@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { dmConversation } from '../../src/net/mesh/views.js';
+import { PROTO } from '../../src/net/mesh/wire.js';
 import { type Crowd, befriend, crowd, settle } from './helpers.js';
 
 let net: Crowd;
@@ -21,6 +22,20 @@ describe('presence', () => {
     await settle(() => bob.friend(ann.identity.peerId)?.presence.state === 'away');
     expect(bob.friend(ann.identity.peerId)).toMatchObject({ online: true, presence: { state: 'away', note: 'lunch' } });
 
+    ann.mesh.setPresence({ state: 'dnd' });
+    await settle(() => bob.friend(ann.identity.peerId)?.presence.state === 'dnd');
+
+    // Two links to one friend carry no order between them (BLG-728): a hello ann sent before the
+    // change, coming in after it on the other link, doesn't bring the old status back.
+    const inner = bob.mesh as unknown as { links: { get(peerId: string): unknown }; onMessage(link: unknown, msg: object): void };
+    const link = inner.links.get(ann.identity.peerId);
+    inner.onMessage(link, { t: 'hello', proto: PROTO, name: 'ann', presence: { state: 'away', note: 'lunch' }, pat: 1 });
+    expect(bob.friend(ann.identity.peerId)?.presence).toEqual({ state: 'dnd' });
+    inner.onMessage(link, { t: 'presence', presence: { state: 'online' }, pat: 1 });
+    expect(bob.friend(ann.identity.peerId)?.presence).toEqual({ state: 'dnd' });
+    // A Mac from before the stamp is taken at its word.
+    inner.onMessage(link, { t: 'presence', presence: { state: 'away' } });
+    expect(bob.friend(ann.identity.peerId)?.presence.state).toBe('away');
     ann.mesh.setPresence({ state: 'dnd' });
     await settle(() => bob.friend(ann.identity.peerId)?.presence.state === 'dnd');
 

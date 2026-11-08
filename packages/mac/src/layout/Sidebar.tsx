@@ -20,6 +20,7 @@ import { ActionsDropdown, type ActionItem } from '../components/SpecMenu.js';
 import { Projects, ProjectsAddMenu, showArchivedOf } from './ProjectTree.js';
 import { SharedProjects } from './SharedProjects.js';
 import { WorkspaceRow } from './workspace-row.js';
+import { ChatSelectionCount, SidebarChatSelection } from './chat-selection-view.js';
 import { UnreadSection } from './UnreadSection.js';
 import { Row, Section } from './sidebar-parts.js';
 import { ActivityRow } from '../claude-code/Live.js';
@@ -29,6 +30,7 @@ import { WorkNav } from '../work/WorkNav.js';
 import { PlansNav } from '../plans/PlansNav.js';
 import { SentinelNav } from '../sentinel/SentinelNav.js';
 import { AssistantNav } from './AssistantNav.js';
+import { LaterRows, laterOf, notLater } from './later-rows.js';
 import { footerStatus } from '../views/room/connection-model.js';
 import { WorktreesNav } from '../views/worktrees/WorktreesNav.js';
 import { SelfBar } from '../network/StatusMenu.js';
@@ -115,6 +117,7 @@ export function Sidebar() {
   }, sameDeep);
   const files = tabs.find((t) => t.kind === 'files');
   return (
+    <SidebarChatSelection>
     <nav ref={drop.ref} className={cx(s.sidebar, drop.over && s.dropping)} aria-label="Sidebar">
       <div className={s.titlebar} data-tauri-drag-region>
         {/* The traffic lights' place; in a browser, which has no menu bar, the menu bar's button (Settings and the rest). */}
@@ -175,9 +178,11 @@ export function Sidebar() {
             </>
           }
         >
-          {liveChats.map((w) => (
+          {liveChats.filter((w) => notLater(w)).map((w) => (
             <WorkspaceRow key={w.id} ws={w} indent={0} />
           ))}
+          {/* Put off till later (Remind Me Later): folded at the bottom. */}
+          <LaterRows list={laterOf(liveChats)} indent={0} foldKey="later:chats" />
           {liveChats.length ? null : <Row className={s.hintRow} icon={<Icon name="plus" size={13} />} label="Talk to your agent about anything" onClick={() => actions.run({ type: 'new_chat', projectId: 'chats' })} />}
         </Section>
 
@@ -193,6 +198,8 @@ export function Sidebar() {
         <FriendsSection />
         <GroupsSection />
       </div>
+      {/* Below the lists, so the rows being Shift-clicked stay where they are as it opens. */}
+      <ChatSelectionCount />
       {/* The call you're in, while you look at something else (BLG-706). */}
       <CallPill />
       <UpdatePill />
@@ -200,6 +207,7 @@ export function Sidebar() {
       <SelfBar />
       <SidebarEdge />
     </nav>
+    </SidebarChatSelection>
   );
 }
 

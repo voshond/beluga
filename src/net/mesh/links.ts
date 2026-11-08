@@ -30,6 +30,12 @@ export interface Timing {
 /** Two connections opened within this long of each other count as a simultaneous dial. */
 const SIMULTANEOUS_MS = 3_000;
 
+/**
+ * How long a link that lost to another one still hears the other side out before it closes: they may
+ * send on it until they see which one is kept, and what they sent then isn't lost (BLG-728).
+ */
+export const RETIRE_MS = SIMULTANEOUS_MS;
+
 export const DEFAULT_TIMING: Timing = { dialTimeoutMs: 15_000, backoffMinMs: 1_000, backoffMaxMs: 60_000, pingMs: 10_000, syncMs: 30_000, pairTimeoutMs: 20_000 };
 
 /** Who your Mac knows on the network (friends, people in your groups, groups you're joining). */
@@ -73,6 +79,8 @@ interface DialState {
 export class LinkManager {
   private readonly links = new Map<string, MeshLink>();
   private readonly dials = new Map<string, DialState>();
+  /** Links that lost to another one to the same person, each until it closes (see RETIRE_MS). */
+  private readonly retiring = new Map<MeshLink, NodeJS.Timeout>();
   private readonly tunnels: Tunnels;
   private server: Server | undefined;
   private closed = false;
@@ -121,6 +129,7 @@ export class LinkManager {
     if (this.closed) return;
     const wanted = new Set(this.opts.contacts.wanted());
     for (const [peerId, link] of this.links) if (!this.opts.contacts.allows(peerId)) link.close(CLOSE.notAllowed, 'not known');
+    for (const link of this.retiring.keys()) if (!this.opts.contacts.allows(link.peerId)) link.close(CLOSE.notAllowed, 'not known');
     for (const [peerId, st] of this.dials) {
       if (wanted.has(peerId)) continue;
       clearTimeout(st.timer);
@@ -152,6 +161,11 @@ export class LinkManager {
     for (const st of this.dials.values()) clearTimeout(st.timer);
     this.tunnels.close();
     for (const link of this.links.values()) link.close(CLOSE.quiet, 'bye');
+    for (const [link, timer] of this.retiring) {
+      clearTimeout(timer);
+      link.close(CLOSE.quiet, 'bye');
+    }
+    this.retiring.clear();
     await this.server?.close().catch(() => undefined);
   }
 
@@ -248,15 +262,8 @@ export class LinkManager {
     if (this.closed || !this.opts.contacts.allows(peerId)) return false;
     const wants = this.opts.wantsFiles;
     const link = new MeshLink(peerId, socket, outgoing, via, this.opts.timing.pingMs, wants ? () => wants(peerId) : undefined);
-    const existing = this.get(peerId);
-    if (existing && this.preferred(link, existing) === existing) {
-      link.close(CLOSE.duplicate, 'duplicate');
-      return true;
-    }
-    this.links.set(peerId, link);
-    if (existing) existing.close(CLOSE.duplicate, 'duplicate');
     link.on('message', (msg) => {
-      if (this.links.get(peerId) !== link) return;
+      if (this.links.get(peerId) !== link && !this.retiring.has(link)) return;
       try {
         if (!this.tunnels.handle(link, msg)) this.opts.onMessage(link, msg);
       } catch {
@@ -264,6 +271,13 @@ export class LinkManager {
       }
     });
     link.on('close', () => this.lost(peerId, link));
+    const existing = this.get(peerId);
+    if (existing && this.preferred(link, existing) === existing) {
+      this.retire(link);
+      return true;
+    }
+    this.links.set(peerId, link);
+    if (existing) this.retire(existing);
     const st = this.state(peerId);
     clearTimeout(st.timer);
     st.timer = undefined;
@@ -272,8 +286,29 @@ export class LinkManager {
     return true;
   }
 
+  /** Nothing more goes out on it; what comes in is still heard until it closes. */
+  private retire(link: MeshLink): void {
+    const timer = setTimeout(() => {
+      this.retiring.delete(link);
+      link.close(CLOSE.duplicate, 'duplicate');
+    }, RETIRE_MS);
+    timer.unref();
+    this.retiring.set(link, timer);
+  }
+
   private lost(peerId: string, link: MeshLink): void {
+    clearTimeout(this.retiring.get(link));
+    this.retiring.delete(link);
     if (this.links.get(peerId) !== link) return;
+    // The other side kept the one this side was retiring (each side decides by its own clock): go on with that.
+    const spare = this.closed ? undefined : [...this.retiring.keys()].find((l) => l.peerId === peerId && l.isOpen);
+    if (spare) {
+      clearTimeout(this.retiring.get(spare));
+      this.retiring.delete(spare);
+      this.links.set(peerId, spare);
+      this.opts.onLink(spare);
+      return;
+    }
     this.links.delete(peerId);
     this.tunnels.dropPeer(peerId);
     this.opts.onUnlink(peerId);

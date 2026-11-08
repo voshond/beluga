@@ -307,6 +307,13 @@ export class ShareService {
     }
   }
 
+  /** A file's size and when it last changed (ms), without reading it: a picture's cache asks whether it was rewritten. */
+  async stat(shareName: string, relPath: string, owner = false): Promise<{ size: number; mtime: number }> {
+    const stat = await fs.stat(resolveInShare(this.find(shareName), relPath, owner));
+    if (stat.isDirectory()) throw new ShareError('That is a folder; pick a file');
+    return { size: stat.size, mtime: Math.round(stat.mtimeMs) };
+  }
+
   /** Read one chunk of any file (binary-safe) for downloads. */
   async readChunk(shareName: string, relPath: string, offset: number, length: number, owner = false): Promise<{ data: Buffer; total: number }> {
     const file = resolveInShare(this.find(shareName), relPath, owner);

@@ -439,6 +439,9 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
       },
     },
     onPaste: (e) => {
+      // For your stats (the Usage tab): how much text you pasted, never what.
+      const chars = e.clipboardData.getData('text/plain').length;
+      if (chars) void api.stats.note({ kind: 'paste', chars: Math.min(chars, 10_000_000), channel }).catch(() => undefined);
       const pasted = imagesOf(e.clipboardData.items);
       if (!pasted.length) return void pastePaths(e);
       e.preventDefault();

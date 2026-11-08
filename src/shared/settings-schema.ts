@@ -3,7 +3,11 @@ import { AgentRef } from '../protocol.js';
 import { AUTO_COMPACT_DEFAULT, AUTO_COMPACT_MAX, AUTO_COMPACT_MIN } from './context-usage.js';
 import { PARALLEL_RUNS_DEFAULT, PARALLEL_RUNS_MAX, PARALLEL_RUNS_MIN } from './run-slots.js';
 import { CHAT_LIMIT_DEFAULT, CHAT_LIMIT_MAX } from './chat-limit.js';
+<<<<<<< HEAD
 import { MACHINE_NOTE_MAX } from './agent-setup.js';
+=======
+import { AUTO_CONTINUE_OFF_MAX } from './auto-continue.js';
+>>>>>>> upstream/main
 import { MAX_AGENT_ARGS, MAX_AGENT_ARG_LENGTH } from './agent-args.js';
 import { coercePerKind, coerceSound, DEFAULT_SOUND, DEFAULT_VOLUME, PerKindSounds, SoundChoice } from './notify-sound.js';
 
@@ -115,6 +119,12 @@ export const Settings = z.object({
   autoCompactChosen: z.boolean().optional(),
   /** How full (percent) a conversation gets before it's compacted. */
   autoCompactAt: z.number().int().min(AUTO_COMPACT_MIN).max(AUTO_COMPACT_MAX).catch(AUTO_COMPACT_DEFAULT),
+  /** After your usage limit resets, tell the agent that stopped on it to continue (shared/auto-continue.ts). On until you turn it off. */
+  autoContinue: z.boolean().default(true),
+  /** Chats it's off in (the limit card's "Not in this chat"). */
+  autoContinueOff: z.array(z.string().max(200)).max(AUTO_CONTINUE_OFF_MAX).catch([]).default([]),
+  /** "Not this session": limit resumes due at or before this time (epoch ms) aren't sent; 0: none. */
+  autoContinueSkip: z.number().int().min(0).catch(0).default(0),
   /** How many conversations your Claude works in at once; a message past it waits for one to finish (and says so). */
   parallelRuns: z.number().int().min(PARALLEL_RUNS_MIN).max(PARALLEL_RUNS_MAX).catch(PARALLEL_RUNS_DEFAULT),
   /** How many chats Your Mac and Sentinel each keep open (shared/chat-limit.ts); 0: no limit. */

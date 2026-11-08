@@ -1,4 +1,4 @@
-import { type HTMLAttributes, type ReactNode, forwardRef } from 'react';
+import { type HTMLAttributes, type KeyboardEvent, type MouseEvent, type ReactNode, forwardRef } from 'react';
 import { Icon } from '../components/Icon.js';
 import { cx } from '../components/ui.js';
 import { setPrefs, usePrefs } from '../lib/prefs.js';
@@ -27,7 +27,7 @@ export type RowProps = Omit<HTMLAttributes<HTMLDivElement>, 'onClick'> & {
   icon?: ReactNode;
   label: ReactNode;
   selected?: boolean;
-  onClick?: () => void;
+  onClick?: (event: MouseEvent<HTMLDivElement> | KeyboardEvent<HTMLDivElement>) => void;
   onDoubleClick?: () => void;
   trailing?: ReactNode;
   detail?: string;
@@ -56,7 +56,7 @@ export const Row = forwardRef<HTMLDivElement, RowProps>(function Row({ icon, lab
         // Only the row itself: Enter on a button inside it presses that button.
         if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
-          onClick?.();
+          onClick?.(e);
         }
       }}
       title={detail}

@@ -160,23 +160,39 @@ export function sendSteerNow(client: SocketClient, request: string): void {
   client.api.host.steerNow(request).catch((err: unknown) => client.store.dispatch({ type: 'toast', text: err instanceof Error ? err.message : String(err), level: 'error' }));
 }
 
+/** Your messages back into the box (ahead of anything you're typing), so nothing you wrote is lost. */
+function backInTheBox({ client, ui }: Pick<CommandCtx, 'client' | 'ui'>, channel: string, prompts: readonly string[]): void {
+  if (!prompts.length) return;
+  const state = client.store.getState();
+  // In a group room only a mention reaches your Claude.
+  const toClaude = (p: string): string => (channel === 'room' && state.peers.length > 1 && !p.startsWith('@') ? `@claude ${p}` : p);
+  const current = ui.get().buffer.trim();
+  const buffer = [...prompts.map(toClaude), current].filter(Boolean).join('\n');
+  ui.patch({ buffer, cursor: buffer.length });
+  document.dispatchEvent(new CustomEvent('beluga:focus-composer'));
+}
+
+/**
+ * Cancel a message you steered in that Claude hasn't read yet: it's taken back (never read) and
+ * its words come back into the box, to change or send again. The message's Cancel.
+ */
+export function cancelSteer(ctx: Pick<CommandCtx, 'client' | 'ui'>, request: string, channel: string): void {
+  ctx.client.api.host.cancelSteer(request).then(
+    ({ cancelled, prompt }) => {
+      if (cancelled && prompt) backInTheBox(ctx, channel, [prompt]);
+    },
+    (err: unknown) => ctx.client.store.dispatch({ type: 'toast', text: `Couldn't take it back: ${errorText(err)}`, level: 'error' }),
+  );
+}
+
 /**
  * Stop your Claude in one conversation. Your messages that were waiting there come back into
  * the box (ahead of anything you're typing), so nothing you wrote is lost.
  */
-export function stopClaude({ client, ui }: CommandCtx, channel: string): void {
-  client.api.host.stopRun(channel).then(
-    ({ returned }) => {
-      if (!returned.length) return;
-      const state = client.store.getState();
-      // In a group room only a mention reaches your Claude.
-      const toClaude = (p: string): string => (channel === 'room' && state.peers.length > 1 && !p.startsWith('@') ? `@claude ${p}` : p);
-      const current = ui.get().buffer.trim();
-      const buffer = [...returned.map(toClaude), current].filter(Boolean).join('\n');
-      ui.patch({ buffer, cursor: buffer.length });
-      document.dispatchEvent(new CustomEvent('beluga:focus-composer'));
-    },
-    (err: unknown) => client.store.dispatch({ type: 'toast', text: `Couldn't stop the agent: ${errorText(err)}`, level: 'error' }),
+export function stopClaude(ctx: CommandCtx, channel: string): void {
+  ctx.client.api.host.stopRun(channel).then(
+    ({ returned }) => backInTheBox(ctx, channel, returned),
+    (err: unknown) => ctx.client.store.dispatch({ type: 'toast', text: `Couldn't stop the agent: ${errorText(err)}`, level: 'error' }),
   );
 }
 

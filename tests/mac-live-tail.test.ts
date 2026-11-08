@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LogItem, SubAgent } from '../src/core/store.js';
 import type { StepSummary } from '../src/shared/steps.js';
-import { READS_AFTER_STEP, STEERED_IN, STOPPING_FOR, steeredMessages } from '../src/shared/claude-notices.js';
+import { READS_AFTER_STEP, STEERED_IN, STOPPING_FOR, TAKEN_BACK, steeredMessages } from '../src/shared/claude-notices.js';
 import { Store, initialState } from '../src/core/store.js';
 import { inHead, isLiveTurn, subInHead, withLiveTails, wordsOf, workingPhase } from '../packages/mac/src/chat/live-tail.js';
 import { marksOf } from '../src/core/store.js';
@@ -160,6 +160,13 @@ describe('a steered message: sent, then read (BLG-54)', () => {
     expect(steeredMessages([sent]).waiting.get('m')).toEqual({ request: 'r2', waiting: 'next_step' });
     // It got a turn of its own at once (no run to steer after all): nothing waits.
     expect(steeredMessages([sent, turn('n', 5, { requestId: 'r2', status: 'started' })]).waiting.size).toBe(0);
+  });
+
+  it('taken back (Cancel): the message and its card are gone from the chat, and it isn’t a turn', () => {
+    const gone = steeredMessages([chat('ask', 1), said('m', 5, 'r2'), turn('n', 5, { requestId: 'r2', status: 'error', text: TAKEN_BACK })]);
+    expect(gone.waiting.size).toBe(0);
+    expect([...gone.notes].sort()).toEqual(['m', 'n']);
+    expect(isLiveTurn({ status: 'error', text: TAKEN_BACK })).toBe(false);
   });
 
   it('a message that doesn’t know its request keeps its note card', () => {
