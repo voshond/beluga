@@ -6,7 +6,7 @@ import { createRoot } from 'react-dom/client';
 import type { SocketClient } from '@beluga/ipc/socket-client.js';
 import { App } from './App.js';
 import { brandText } from './lib/brand.js';
-import { capabilities, connect, inApp } from './lib/boot.js';
+import { capabilities, connect, inApp, Unreachable } from './lib/boot.js';
 import { BelugaProvider } from './lib/beluga.js';
 import { apply, zoom } from './lib/prefs.js';
 import { watchWindow } from './lib/window-active.js';
@@ -43,6 +43,7 @@ if (!inApp()) {
 function Root() {
   const [client, setClient] = useState<SocketClient>();
   const [error, setError] = useState<string>();
+  const [unreachable, setUnreachable] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const failures = useRef(0);
   useEffect(() => {
@@ -66,6 +67,7 @@ function Root() {
       })
       .catch((err: unknown) => {
         if (!alive) return;
+        setUnreachable(err instanceof Unreachable);
         setError(err instanceof Error ? err.message : String(err));
         retry();
       });
@@ -78,7 +80,7 @@ function Root() {
       <div className={s.connecting} data-tauri-drag-region>
         <UpdateLayer connected={false} />
         <div className={s.connectBox}>
-          <strong>{error ? 'Beluga isn’t running yet' : 'Starting Beluga…'}</strong>
+          <strong>{!error ? 'Starting Beluga…' : unreachable ? 'Can’t reach Beluga' : 'Beluga isn’t running yet'}</strong>
           {error ? <span>{brandText(error)}</span> : null}
           {error ? <Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button> : null}
         </div>
