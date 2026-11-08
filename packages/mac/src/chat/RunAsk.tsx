@@ -15,6 +15,12 @@ type RunAskProps = {
 
 const OUTPUT_LINES = 200;
 
+export const useRunStarted = (qid: string): boolean =>
+  useApp((st) => {
+    const status = st.runAsks[qid]?.status;
+    return status === 'running' || status === 'done';
+  });
+
 const lastLines = (output: string): string => output.split('\n').slice(-OUTPUT_LINES).join('\n');
 
 const latestLine = (output: string): string =>
@@ -113,20 +119,23 @@ export function RunAsk({ q, question }: RunAskProps) {
           <label className={s.promptText} htmlFor={`run-ask-${q.qid}`}>
             {state.prompt.text}
           </label>
-          <input
-            id={`run-ask-${q.qid}`}
-            className={cx(f.input, s.replyInput)}
-            type={state.prompt.secret ? 'password' : 'text'}
-            autoComplete="off"
-            spellCheck={false}
-            autoFocus
-            aria-label={state.prompt.secret ? 'Password, sent only to the command' : 'Your reply to the command'}
-            value={reply}
-            onChange={(e) => setReply(e.target.value)}
-          />
-          <Button size="small" variant="primary" type="submit">
-            Send
-          </Button>
+          <div className={s.replyRow}>
+            <input
+              id={`run-ask-${q.qid}`}
+              className={cx(f.input, s.replyInput)}
+              type={state.prompt.secret ? 'password' : 'text'}
+              autoComplete="off"
+              spellCheck={false}
+              autoFocus
+              placeholder={state.prompt.secret ? 'Password' : 'Your reply'}
+              aria-label={state.prompt.secret ? 'Password, sent only to the command' : 'Your reply to the command'}
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+            />
+            <Button variant="primary" type="submit">
+              {state.prompt.secret ? 'Unlock' : 'Send'}
+            </Button>
+          </div>
         </form>
       ) : null}
     </div>

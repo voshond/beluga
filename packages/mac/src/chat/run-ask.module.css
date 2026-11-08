@@ -49,19 +49,22 @@
   color: var(--error);
 }
 .reply {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+}
+.promptText {
+  overflow: hidden;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.replyRow {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 8px;
-}
-.promptText {
-  max-width: 45%;
-  overflow: hidden;
-  color: var(--text-2);
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 .replyInput {
   flex: 1;

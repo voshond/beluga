@@ -4,6 +4,7 @@ import type { PendingQuestion } from './collab-store.js';
 export type RunAsk = {
   readonly on?: string;
   readonly commands: readonly string[];
+  readonly expect?: string;
 };
 
 export type RunAskPrompt = {
@@ -29,6 +30,7 @@ export const RUN_ASK_TIMEOUT_MS = 10 * 60_000;
 
 const RUNNABLE_FENCE = /^(`{3,}|~{3,})[ \t]*(sh|bash|zsh|shell)[ \t]*\n([\s\S]*?)^\1[ \t]*$/gm;
 const RUN_ON = /(?:^|\n)[^\n]*\bRun on \*\*([^*\n]{1,80})\*\*/;
+const WORKED_WHEN = /^\s*It worked when:\s*(.{1,300}?)\s*$/im;
 const SECRET_PROMPT = /(password|passphrase|passcode|verification code|one-time code|otp|\bpin)\b[^\n]{0,80}[:?]\s*$/i;
 const CONFIRM_PROMPT = /(\(yes\/no(\/\[fingerprint\])?\)\?|\[y\/n\]:?|\(y\/n\)\??)\s*$/i;
 
@@ -39,7 +41,8 @@ export const runAskIn = (markdown: string): RunAsk | undefined => {
   const commands = block[3]!.split('\n').map((line) => line.trimEnd()).filter((line) => line.trim());
   if (!commands.length) return undefined;
   const on = RUN_ON.exec(markdown.slice(0, block.index))?.[1]?.trim();
-  return { ...(on ? { on } : {}), commands };
+  const expect = WORKED_WHEN.exec(markdown.slice(block.index + block[0].length))?.[1];
+  return { ...(on ? { on } : {}), commands, ...(expect ? { expect } : {}) };
 };
 
 export const runnableQuestion = (q: PendingQuestion, selfId: string, question: string): RunAsk | undefined => {
@@ -87,10 +90,11 @@ export const runTarget = (on: string | undefined, hostname: string, sshHosts: re
   return host ? { kind: 'ssh', host, where: host } : undefined;
 };
 
-export const runAnswer = (state: RunAskState): string => {
+export const runAnswer = (state: RunAskState, expect?: string): string => {
   const output = tail(state.output.trim(), RUN_ASK_ANSWER_OUTPUT);
   const how = state.error ? `it failed: ${state.error}` : `exit code ${state.exit ?? 'unknown'}`;
-  const head = `I ran it through Beluga on ${state.where}: ${how}.`;
+  const check = expect ? `Check the output against what success looks like (${expect}) and decide whether it worked.` : 'Check the output and decide whether it worked.';
+  const head = `I ran it through Beluga on ${state.where}: ${how}. ${check}`;
   if (!output) return `${head} It printed nothing.`;
   return `${head} Output${output.length < state.output.trim().length ? ' (last lines)' : ''}:\n\`\`\`text\n${output}\n\`\`\``;
 };

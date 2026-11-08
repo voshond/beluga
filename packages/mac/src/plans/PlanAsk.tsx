@@ -3,7 +3,7 @@ import type { PendingQuestion } from '@beluga/core/collab-store.js';
 import { isDecisionQid } from '@beluga/core/plans/decisions.js';
 import { answerTyped, currentQuestion } from '@beluga/ui/collab-actions.js';
 import { Markdown } from '../chat/Markdown.js';
-import { RunAsk } from '../chat/RunAsk.js';
+import { RunAsk, useRunStarted } from '../chat/RunAsk.js';
 import { useAttachments } from '../chat/use-attachments.js';
 import { Icon } from '../components/Icon.js';
 import { Button, cx } from '../components/ui.js';
@@ -40,6 +40,7 @@ export function PlanAsk({ q }: { q: PendingQuestion }) {
     },
     finderDrops: false,
   });
+  const runStarted = useRunStarted(q.qid);
   const current = currentQuestion(q);
   if (!current) return null;
   const decision = isDecisionQid(q.qid);
@@ -72,7 +73,7 @@ export function PlanAsk({ q }: { q: PendingQuestion }) {
           </span>
         ) : null}
         {/* A decision of yours waits until you answer it; Claude's question can be skipped. */}
-        {decision ? null : (
+        {decision || runStarted ? null : (
           <Button size="small" variant="quiet" onClick={() => actions.run({ type: 'answer', qid: q.qid, pick: 'skip' })}>
             Skip
           </Button>
@@ -82,7 +83,7 @@ export function PlanAsk({ q }: { q: PendingQuestion }) {
         <Markdown text={current.question} />
       </div>
       <RunAsk q={q} question={current.question} />
-      {current.options.length ? (
+      {!runStarted && current.options.length ? (
         <div className={a.options} role={current.multiSelect ? 'group' : 'radiogroup'} aria-label={current.multiSelect ? 'Pick any' : 'Pick one'}>
           {current.options.map((o, i) => {
             const on = chosen.has(o.label);
@@ -105,42 +106,44 @@ export function PlanAsk({ q }: { q: PendingQuestion }) {
           })}
         </div>
       ) : null}
-      {att.waiting}
-      <form
-        className={s.own}
-        {...att.dropProps}
-        onSubmit={(e) => {
-          e.preventDefault();
-          write();
-        }}
-      >
-        <textarea
-          ref={box}
-          rows={1}
-          className={cx(s.ownInput, 'selectable')}
-          value={own}
-          placeholder={current.options.length ? 'Or write your own…' : 'Your answer…'}
-          aria-label="Write your own answer"
-          onChange={(e) => setOwn(e.target.value)}
-          onPaste={att.onPaste}
-          onKeyDown={(e) => {
-            if (att.onRefKey(e)) return;
-            if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
+      {runStarted ? null : att.waiting}
+      {runStarted ? null : (
+        <form
+          className={s.own}
+          {...att.dropProps}
+          onSubmit={(e) => {
             e.preventDefault();
             write();
           }}
-        />
-        {writing ? (
-          <Button size="small" variant="primary" type="submit">
-            Answer
-          </Button>
-        ) : current.multiSelect ? (
-          <Button size="small" variant="primary" disabled={!chosen.size} onClick={() => actions.run({ type: 'answer', qid: q.qid, pick: 'done', question: current.question })}>
-            Done{chosen.size ? ` (${chosen.size})` : ''}
-          </Button>
-        ) : null}
-      </form>
-      {decision ? <div className={a.hint}>Your answer goes on the task, and the plan carries on with what waited on it.</div> : null}
+        >
+          <textarea
+            ref={box}
+            rows={1}
+            className={cx(s.ownInput, 'selectable')}
+            value={own}
+            placeholder={current.options.length ? 'Or write your own…' : 'Your answer…'}
+            aria-label="Write your own answer"
+            onChange={(e) => setOwn(e.target.value)}
+            onPaste={att.onPaste}
+            onKeyDown={(e) => {
+              if (att.onRefKey(e)) return;
+              if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
+              e.preventDefault();
+              write();
+            }}
+          />
+          {writing ? (
+            <Button size="small" variant="primary" type="submit">
+              Answer
+            </Button>
+          ) : current.multiSelect ? (
+            <Button size="small" variant="primary" disabled={!chosen.size} onClick={() => actions.run({ type: 'answer', qid: q.qid, pick: 'done', question: current.question })}>
+              Done{chosen.size ? ` (${chosen.size})` : ''}
+            </Button>
+          ) : null}
+        </form>
+      )}
+      {decision && !runStarted ? <div className={a.hint}>Your answer goes on the task, and the plan carries on with what waited on it.</div> : null}
     </div>
   );
 }

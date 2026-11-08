@@ -21,6 +21,7 @@ export type RunAsksDeps = {
 type Running = {
   readonly pty: IPty;
   readonly question: string;
+  readonly expect?: string;
   readonly secrets: string[];
   readonly timer: NodeJS.Timeout;
   readonly intro: string;
@@ -64,7 +65,7 @@ export class RunAsks {
     const target = runTarget(run.on, hostname, run.on ? await this.deps.sshHosts() : []);
     if (!target) throw new Error(`Beluga can’t reach “${run.on}” from here: give it a Host in your SSH config, or copy the commands instead`);
     if (this.running.has(qid)) return;
-    this.launch(qid, question, target, scriptOf(run.commands));
+    this.launch(qid, question, target, scriptOf(run.commands), run.expect);
   }
 
   input(qid: string, text: string): void {
@@ -86,7 +87,7 @@ export class RunAsks {
     for (const qid of [...this.running.keys()]) this.stop(qid);
   }
 
-  private launch(qid: string, question: string, target: RunTarget, script: string): void {
+  private launch(qid: string, question: string, target: RunTarget, script: string, expect?: string): void {
     const spawn = this.deps.spawn ?? defaultSpawn;
     const [file, args] = target.kind === 'local' ? [localShell(), ['-lc', script]] : ['ssh', ['-t', target.host, script]];
     const startedAt = this.deps.now?.() ?? Date.now();
@@ -106,7 +107,7 @@ export class RunAsks {
       run.pty.kill();
     }, this.deps.timeoutMs ?? RUN_ASK_TIMEOUT_MS);
     timer.unref();
-    const run: Running = { pty, question, secrets: [], timer, intro, raw: '', state, ended: false };
+    const run: Running = { pty, question, ...(expect ? { expect } : {}), secrets: [], timer, intro, raw: '', state, ended: false };
     this.running.set(qid, run);
     this.deps.store.dispatch({ type: 'run_ask', qid, state });
     pty.onData((data) => this.onData(qid, run, data));
@@ -154,6 +155,6 @@ export class RunAsks {
     if (!answer || !this.deps.store.getState().questions.some((q) => q.qid === qid)) return;
     this.deps.store.dispatch({ type: 'run_ask', qid, state });
     if (state.status === 'stopped') return;
-    this.deps.answer(qid, run.question, runAnswer(state));
+    this.deps.answer(qid, run.question, runAnswer(state, run.expect));
   }
 }

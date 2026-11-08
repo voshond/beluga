@@ -66,7 +66,7 @@ const setup = (question: string, owner = SELF) => {
 
 describe('runAskIn', () => {
   it('reads the machine and the commands of the one sh block', () => {
-    expect(runAskIn('Restart it.\n\nRun on **nas**:\n```sh\ncd /volume1/docker\nsudo docker compose up -d\n```\nIt worked when: up')).toEqual({ on: 'nas', commands: ['cd /volume1/docker', 'sudo docker compose up -d'] });
+    expect(runAskIn('Restart it.\n\nRun on **nas**:\n```sh\ncd /volume1/docker\nsudo docker compose up -d\n```\nIt worked when: up')).toEqual({ on: 'nas', commands: ['cd /volume1/docker', 'sudo docker compose up -d'], expect: 'up' });
   });
 
   it('runs here without a machine line', () => {
@@ -75,6 +75,7 @@ describe('runAskIn', () => {
 
   it('round-trips what a plan card shows', () => {
     expect(runAskIn(runMarkdown({ on: 'arch', cwd: '/home/me/repo', commands: ['npm ci'] }))).toEqual({ on: 'arch', commands: ['cd /home/me/repo', 'npm ci'] });
+    expect(runAskIn(runMarkdown({ on: 'arch', commands: ['npm ci'], expect: 'added 120 packages' }))?.expect).toBe('added 120 packages');
   });
 
   it('runs nothing that is ambiguous, untagged, a console transcript or cut off', () => {
@@ -122,7 +123,8 @@ describe('output', () => {
   });
 
   it('answers with the exit code and the output', () => {
-    expect(runAnswer({ status: 'done', where: 'nas', output: 'ok\n', startedAt: 0, exit: 0 })).toBe('I ran it through Beluga on nas: exit code 0. Output:\n```text\nok\n```');
+    expect(runAnswer({ status: 'done', where: 'nas', output: 'ok\n', startedAt: 0, exit: 0 })).toBe('I ran it through Beluga on nas: exit code 0. Check the output and decide whether it worked. Output:\n```text\nok\n```');
+    expect(runAnswer({ status: 'failed', where: 'nas', output: '', startedAt: 0, exit: 1 }, 'both containers say Started')).toBe('I ran it through Beluga on nas: exit code 1. Check the output against what success looks like (both containers say Started) and decide whether it worked. It printed nothing.');
   });
 });
 

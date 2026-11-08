@@ -113,8 +113,8 @@ export const makeDemoClient = (onAnswer: (answer: DemoAnswer) => void): SocketCl
     const done: RunAskState = { ...last, status: 'done', exit: 0 };
     setRun(qid, done);
     await sleep(1600);
-    store.dispatch({ type: 'question_pick', qid, question, answer: runAnswer(done) });
-    answer(qid, { kind: 'answers', answers: { [question]: runAnswer(done) } });
+    store.dispatch({ type: 'question_pick', qid, question, answer: runAnswer(done, target.expect) });
+    answer(qid, { kind: 'answers', answers: { [question]: runAnswer(done, target.expect) } });
   };
 
   const api = {
