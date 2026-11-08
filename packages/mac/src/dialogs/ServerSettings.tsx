@@ -1,13 +1,33 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../components/ui.js';
-import { appInvoke, remoteApp } from '../lib/boot.js';
+import { appInvoke, inApp, remoteApp } from '../lib/boot.js';
 import { Group, Row } from './settings-controls.js';
 import s from './settings.module.css';
 
 type ClientView = { readonly deviceName: string };
 
+const handleChangeServer = () => void appInvoke('client_change_server').catch(() => undefined);
+
+/** Running Beluga here: the way to point this app at a Beluga server instead (BLG-65). */
+function ConnectToServerGroup() {
+  return (
+    <Group title="Server">
+      <Row label="Connect to a server" detail="Use a Beluga that runs on another computer. This one stops running its own.">
+        <Button size="small" onClick={handleChangeServer}>
+          Connect to a Server…
+        </Button>
+      </Row>
+    </Group>
+  );
+}
+
 /** The app as a client of a Beluga server (BLG-53): which server, this device's name, and the way back to Run here. */
 export function ServerSettingsGroup() {
+  if (inApp()) return <ConnectToServerGroup />;
+  return <ClientServerGroup />;
+}
+
+function ClientServerGroup() {
   const [deviceName, setDeviceName] = useState('');
   const [saved, setSaved] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +55,6 @@ export function ServerSettingsGroup() {
       .catch((err: Error | string) => setError(typeof err === 'string' ? err : err.message));
   };
 
-  const handleChangeServer = () => void appInvoke('client_change_server').catch(() => undefined);
   const handleRunHere = () => void appInvoke('client_use_local').catch(() => undefined);
 
   return (

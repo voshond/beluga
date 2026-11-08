@@ -42,10 +42,10 @@ test('a fresh install offers Run Beluga here and Connect to a server', async ({ 
   await expect(page.getByRole('alert')).toContainText('Use an https:// address');
   expect((await calls(page)).some((c) => c.cmd === 'client_use_server')).toBe(false);
 
-  await address.fill('i9arch.tail1234.ts.net/join/abc');
+  await address.fill('beluga.example.com/join/abc');
   await page.getByLabel('This device’s name').fill('m1arch');
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
-  await expect.poll(async () => (await calls(page)).find((c) => c.cmd === 'client_use_server')?.args).toEqual({ url: 'https://i9arch.tail1234.ts.net/join/abc', deviceName: 'm1arch' });
+  await expect.poll(async () => (await calls(page)).find((c) => c.cmd === 'client_use_server')?.args).toEqual({ url: 'https://beluga.example.com/join/abc', deviceName: 'm1arch' });
 });
 
 test('Run Beluga here asks the shell to run it here', async ({ page }) => {

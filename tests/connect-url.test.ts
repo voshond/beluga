@@ -4,7 +4,7 @@ import { checkDeviceName, checkServerUrl } from '../packages/mac/src/connect/ser
 /** The connect page's address rule (BLG-51), the same one src-tauri/src/remote.rs enforces. */
 describe('checkServerUrl', () => {
   it('takes https, with or without the scheme, and keeps a join link whole', () => {
-    expect(checkServerUrl(' i9arch.tail1234.ts.net ')).toEqual({ ok: true, origin: 'https://i9arch.tail1234.ts.net', url: 'https://i9arch.tail1234.ts.net/' });
+    expect(checkServerUrl(' beluga.example.com ')).toEqual({ ok: true, origin: 'https://beluga.example.com', url: 'https://beluga.example.com/' });
     expect(checkServerUrl('https://box.example.com/join/abc')).toMatchObject({ ok: true, origin: 'https://box.example.com', url: 'https://box.example.com/join/abc' });
   });
 

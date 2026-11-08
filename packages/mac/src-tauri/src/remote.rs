@@ -171,7 +171,7 @@ pub fn check_url(raw: &str) -> Result<ServerUrl, String> {
     } else {
         format!("https://{raw}")
     };
-    let not_url = || "That isn't a web address. Try https://your-server.your-tailnet.ts.net".to_string();
+    let not_url = || "That isn't a web address. Try https://beluga.example.com".to_string();
     let url = Url::parse(&full).map_err(|_| not_url())?;
     let host = url.host_str().filter(|h| !h.is_empty()).ok_or_else(not_url)?;
     if !url.username().is_empty() || url.password().is_some() {
@@ -231,7 +231,7 @@ pub async fn reachable(origin: &str) -> Result<(), String> {
     let port = url.port_or_known_default().unwrap_or(443);
     tauri::async_runtime::spawn_blocking(move || {
         let addrs = (host.as_str(), port).to_socket_addrs().map_err(|_| {
-            format!("{host} can't be found. Check the address, and that this computer is on the server's network (Tailscale, VPN).")
+            format!("{host} can't be found. Check the address, and that this computer can reach the server's network.")
         })?;
         for addr in addrs {
             if TcpStream::connect_timeout(&addr, Duration::from_secs(5)).is_ok() {
@@ -384,7 +384,11 @@ pub async fn client_use_server(
         config.server_url = Some(server.origin.clone());
         config.device_name = Some(name);
     })?;
-    open(&app, &server.url)
+    open(&app, &server.url)?;
+    // Switched from Run here: the Beluga this app started stops (one started elsewhere is left alone).
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || crate::daemon::stop(&handle));
+    Ok(())
 }
 
 /// Open the saved server, or say why it can't be reached.
@@ -442,8 +446,8 @@ mod tests {
 
     #[test]
     fn https_and_tunnels_pass_and_plain_http_elsewhere_does_not() {
-        let ok = check_url(" i9arch.tail1234.ts.net ").unwrap();
-        assert_eq!(ok.origin, "https://i9arch.tail1234.ts.net");
+        let ok = check_url(" beluga.example.com ").unwrap();
+        assert_eq!(ok.origin, "https://beluga.example.com");
         let join = check_url("https://box.example.com/join/abc").unwrap();
         assert_eq!(join.origin, "https://box.example.com");
         assert_eq!(join.url, "https://box.example.com/join/abc");

@@ -124,7 +124,7 @@ export const Connect = () => {
         <form className="connect-form" onSubmit={handleConnect} noValidate>
           <label>
             Server address
-            <input type="url" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="https://my-server.my-tailnet.ts.net" autoFocus spellCheck={false} autoCapitalize="off" />
+            <input type="url" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="https://beluga.example.com" autoFocus spellCheck={false} autoCapitalize="off" />
           </label>
           <span className="connect-hint">The address of its web port, or a join link. http:// only works for 127.0.0.1 (an SSH tunnel).</span>
           <label>
@@ -157,7 +157,7 @@ export const Connect = () => {
         </button>
         <button type="button" className="connect-choice" onClick={handleChangeServer} disabled={busy}>
           <strong>Connect to a server</strong>
-          <span>Use a Beluga that runs on another computer, over Tailscale, an SSH tunnel or your own domain.</span>
+          <span>Use a Beluga that runs on another computer, at its https address or through an SSH tunnel.</span>
         </button>
       </div>
       {alert}

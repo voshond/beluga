@@ -23,7 +23,7 @@ export const checkServerUrl = (raw: string): UrlCheck => {
   const trimmed = raw.trim();
   if (!trimmed) return fail('Enter your Beluga server’s address.');
   const full = trimmed.includes('://') ? trimmed : `https://${trimmed}`;
-  const notUrl = fail('That isn’t a web address. Try https://your-server.your-tailnet.ts.net');
+  const notUrl = fail('That isn’t a web address. Try https://beluga.example.com');
   const url = parse(full);
   if (!url?.hostname) return notUrl;
   if (url.username || url.password) return fail('Leave the user name and password out of the address: you sign in on the server’s page.');
