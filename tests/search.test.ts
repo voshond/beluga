@@ -51,13 +51,28 @@ describe('searchConversations', () => {
 
   it("labels agent replies as the owner's Claude and skips empty agent text", () => {
     const sources = [source([agent('1', 'bob', 'found the bug', 1), agent('2', 'bob', '', 2)])];
-    expect(searchConversations("bob's", sources)).toEqual([{ channel: 'main', place: 'Chat', who: "bob's Claude", text: 'found the bug', at: 0, ts: 1 }]);
+    expect(searchConversations("bob's", sources)).toEqual([{ channel: 'main', place: 'Chat', who: "bob's Claude", text: 'found the bug', at: 0, ts: 1, id: '1' }]);
     expect(searchConversations('claude', sources)).toHaveLength(1);
   });
 
   it('includes system lines with no speaker', () => {
     const hits = searchConversations('joined', [source([system('1', 'bob joined', 5)])]);
-    expect(hits).toEqual([{ channel: 'main', place: 'Chat', who: '', text: 'bob joined', at: 4, ts: 5 }]);
+    expect(hits).toEqual([{ channel: 'main', place: 'Chat', who: '', text: 'bob joined', at: 4, ts: 5, id: '1' }]);
+  });
+
+  it('dates an earlier message of a shared chat by when it was said, as the chat draws it', () => {
+    const said = { from: 'bob', name: 'bob', text: 'the old note', byAgent: false, ts: 3 };
+    const earlier: LogItem = { id: '1', type: 'system', channel: 'c', text: 'bob: the old note', ts: 9, level: 'info', said };
+    const hits = searchConversations('note', [source([earlier, system('2', 'note without a speaker', 8)])]);
+    expect(hits.map((h) => h.ts)).toEqual([8, 3]);
+  });
+
+  it('gives the item id with every other field of the hit', () => {
+    expect(searchConversations('hello', [source([chat('i9', 'bob', 'hello there', 7)], { archived: true })])).toEqual([{ channel: 'main', place: 'Chat', who: 'bob', text: 'hello there', at: 0, ts: 7, id: 'i9', archived: true }]);
+  });
+
+  it('leaves the id out for an item without one', () => {
+    expect(searchConversations('hello', [source([chat('', 'bob', 'hello there', 7)])])[0]).not.toHaveProperty('id');
   });
 
   it('records where the first word starts (case-insensitive)', () => {

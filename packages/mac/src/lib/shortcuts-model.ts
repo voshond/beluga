@@ -98,6 +98,7 @@ const MAC_SHORTCUTS: readonly ShortcutDef[] = [
   def('add-project', 'Add Project…', 'General', ['Cmd+O']),
   def('invite', 'Invite…', 'General', ['Shift+Cmd+I']),
   def('find', 'Search Conversations', 'General', ['Shift+Cmd+F']),
+  def('sidebar-search', 'Search in the Sidebar', 'General', ['Alt+Cmd+F']),
   def('inbox', 'Inbox', 'General', ['Shift+Cmd+B']),
   def('paste-plain', 'Paste as Plain Text', 'General', ['Shift+Cmd+V']),
   { id: TALK_ID, label: 'Talk', section: 'General', keys: ['Alt+Space'], scope: 'app', hint: 'Hold it and speak (Settings › Voice)' },

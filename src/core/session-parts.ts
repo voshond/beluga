@@ -122,6 +122,8 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
         toast: (text, level) => session.toast(text, level),
         intend: (intent) => session.intend(intent),
         askClaude: (prompt, channel) => session.askOwnClaude(prompt, channel),
+        savedChats: (loaded) => assistantOf(session)?.savedChats(loaded) ?? [],
+        loadSavedChat: (id) => assistantOf(session)?.loadSaved(id),
         setPrefs: (prefs) => session.setPrefs(prefs),
         confirm: (title, detail) => session.ask('request', title, detail),
         open: opts.open,

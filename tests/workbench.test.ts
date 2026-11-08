@@ -4,8 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AgentBackend, AgentRunInput } from '../src/agent/types.js';
+import { MacAssistant } from '../src/core/assistant/assistant.js';
+import { attachAssistant } from '../src/core/assistant/registry.js';
+import { pretendSystem } from '../src/core/gateway/demo-system.js';
 import { Session } from '../src/core/session.js';
 import { ShareService } from '../src/core/shares.js';
+import { sentinelChatChannel } from '../src/core/sentinel/model.js';
 import { Store, initialState } from '../src/core/store.js';
 import type { PullRequest } from '../src/core/work-store.js';
 import { deriveKeys, generateSecret } from '../src/net/crypto.js';
@@ -15,6 +19,7 @@ import { TerminalManager } from '../src/terminal/index.js';
 import { WorkspaceManager } from '../src/workspaces/manager.js';
 import { WorkspaceStore } from '../src/workspaces/store.js';
 import { runId, setupId } from '../src/core/workbench.js';
+import { ASSISTANT_TITLE, assistantChannel } from '../src/shared/assistant.js';
 import { attach, waitFor } from './helpers.js';
 import { posixSh } from '../src/terminal/pty.js';
 
@@ -383,7 +388,7 @@ describe('pull requests', () => {
     const main = projectOf(kay.workspaces).workspaces.find((w) => w.kind === 'main')!;
     kay.bench.createPr(main.id);
     expect(kay.screen.getState().toast?.text).toContain('Pull requests are for worktrees');
-    kay.session.store.dispatch({ type: 'gh', ok: false });
+    kay.store.dispatch({ type: 'gh', ok: false });
     const ws = await kay.session.workspaces!.newWorktree(projectOf(kay.workspaces).id, 'x');
     kay.bench.createPr(ws!.id);
     expect(kay.screen.getState().toast?.text).toContain('Install the GitHub CLI');
@@ -525,6 +530,74 @@ describe('models, usage, space and search', () => {
         expect(kay.state().log.some((l) => l.channel === `ws:${ws!.id}`)).toBe(false);
       }
     }
+  });
+
+  it('finds a word that only a Your Mac chat not in memory has, and opens that chat', async () => {
+    hub = await startHub({ keys });
+    const kay = await solo(repo());
+    const dir = path.join(base, 'assistant');
+    const mac = new MacAssistant({ store: kay.store, dir, selfId: () => 'me', system: pretendSystem() });
+    attachAssistant(kay.session, mac);
+    const chat = mac.newChat();
+    const channel = assistantChannel(chat);
+    const said = (id: string, text: string, ts: number) => ({ id, type: 'chat', channel, from: 'me', name: 'kay', text, ts, byAgent: false });
+    writeFileSync(path.join(dir, 'chats', chat, 'history.json'), JSON.stringify([said('1', 'plan my trip', 5), said('2', 'the kumquat invoice', 6)]));
+    expect(kay.state().log.some((l) => l.channel === channel)).toBe(false);
+
+    kay.bench.search('kumquat');
+    expect(kay.state().search.hits).toEqual([{ channel, place: `${ASSISTANT_TITLE} › plan my trip`, who: 'kay', text: 'the kumquat invoice', at: 4, ts: 6, id: '2' }]);
+    kay.bench.openHit(0);
+    expect(kay.screen.getState().view).toEqual({ kind: 'assistant', chat });
+    expect(kay.state().log.filter((l) => l.channel === channel).map((l) => l.id)).toEqual(['1', '2']);
+    mac.stop();
+  });
+
+  it('names a Your Mac chat in memory by its title and opens it, once per chat', async () => {
+    hub = await startHub({ keys });
+    const kay = await solo(repo());
+    const dir = path.join(base, 'assistant');
+    const mac = new MacAssistant({ store: kay.store, dir, selfId: () => 'me', system: pretendSystem() });
+    attachAssistant(kay.session, mac);
+    const chat = mac.newChat();
+    const channel = assistantChannel(chat);
+    kay.store.dispatch({ type: 'chat', id: 'a', from: 'me', text: 'the loaded quince', ts: 7, byAgent: false, channel });
+    writeFileSync(path.join(dir, 'chats', chat, 'history.json'), JSON.stringify([{ id: 'a', type: 'chat', channel, from: 'me', name: 'kay', text: 'the loaded quince', ts: 7, byAgent: false }]));
+
+    kay.bench.search('quince');
+    expect(kay.state().search.hits.map((h) => [h.channel, h.place])).toEqual([[channel, `${ASSISTANT_TITLE} › the loaded quince`]]);
+    kay.bench.openHit(0);
+    expect(kay.screen.getState().view).toEqual({ kind: 'assistant', chat });
+    mac.stop();
+  });
+
+  it('routes a hit in a Sentinel chat, and leaves the view alone for a channel it cannot open', async () => {
+    hub = await startHub({ keys });
+    const kay = await solo(repo());
+    const say = (id: string, channel: string, text: string): void => kay.store.dispatch({ type: 'chat', id, from: 'me', text, ts: 8, byAgent: false, channel });
+    say('s', sentinelChatChannel('c1'), 'a damson alert');
+    kay.bench.search('damson');
+    kay.bench.openHit(0);
+    expect(kay.screen.getState().view).toEqual({ kind: 'sentinel_chat', chat: 'c1' });
+
+    say('x', 'somewhere:else', 'a medlar note');
+    kay.bench.search('medlar');
+    kay.bench.openHit(0);
+    expect(kay.screen.getState().view).toEqual({ kind: 'sentinel_chat', chat: 'c1' });
+  });
+
+  it('opens a hit in a chat with a friend or a group as that conversation, as the sidebar does', async () => {
+    hub = await startHub({ keys });
+    const kay = await solo(repo());
+    const say = (id: string, channel: string, text: string): void => kay.store.dispatch({ type: 'chat', id, from: 'me', text, ts: 8, byAgent: false, channel });
+    say('d', 'dm:peer123', 'a quince recipe');
+    kay.bench.search('quince');
+    kay.bench.openHit(0);
+    expect(kay.screen.getState().view).toEqual({ kind: 'conversation', id: 'dm:peer123' });
+
+    say('g', 'group:g7', 'a loquat tree');
+    kay.bench.search('loquat');
+    kay.bench.openHit(0);
+    expect(kay.screen.getState().view).toEqual({ kind: 'conversation', id: 'group:g7' });
   });
 
   it('saves your own templates', async () => {

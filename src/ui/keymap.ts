@@ -10,8 +10,19 @@ export interface MenuState {
   readonly selected: number;
 }
 
+/** A message to show: the conversation scrolls to it and marks it for a moment (a search hit; `at`: when you asked). */
+export interface ChatJump {
+  readonly channel: string;
+  /** Its item (a row can draw at another time than it was said: one that waited in the queue); without one, `ts`. */
+  readonly id?: string;
+  readonly ts: number;
+  readonly at: number;
+}
+
 export interface UiState {
   readonly focus: Focus;
+  /** Where the next conversation to show goes (the Mac's chat log reads it). */
+  readonly chatJump?: ChatJump;
   readonly buffer: string;
   readonly cursor: number;
   readonly chatScroll: number;

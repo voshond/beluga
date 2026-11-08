@@ -106,6 +106,12 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
                 "Search Conversations",
                 Some("CmdOrCtrl+Shift+F"),
             )?,
+            &item(
+                app,
+                "sidebar-search",
+                "Search in the Sidebar",
+                Some("Alt+CmdOrCtrl+F"),
+            )?,
         ],
     )?;
     let appearance = Submenu::with_items(
