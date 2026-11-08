@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { type KeyboardEvent, useEffect, useState } from 'react';
+import { useClock } from '../lib/window-active.js';
 import { type DevicePromptView, actionLabel, askedBy, headline, secondsLeft, sizeText } from './prompt-model.js';
 
 /**
@@ -41,15 +42,13 @@ const Details = ({ prompt }: { readonly prompt: DevicePromptView }) => {
 
 export const DevicePrompt = () => {
   const [prompt, setPrompt] = useState<DevicePromptView | null | undefined>(undefined);
-  const [now, setNow] = useState(() => Date.now());
+  const now = useClock(true);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     invoke<DevicePromptView | null>('device_prompt')
       .then(setPrompt)
       .catch(() => setPrompt(null));
-    const tick = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(tick);
   }, []);
 
   const handleAnswer = (approve: boolean) => {

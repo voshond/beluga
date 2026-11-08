@@ -1,4 +1,4 @@
-import { type Page, expect, test } from '@playwright/test';
+import { type Page, expect, test } from './fixtures.js';
 
 /** The connect page (BLG-51): Run here or a server on a fresh install, and Retry / Change server when it can't be reached. */
 
