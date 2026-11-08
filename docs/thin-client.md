@@ -19,6 +19,10 @@ beluga web passwd <name>   # or: a name and password to sign in with
 ```
 
 The app accepts `https://` addresses, and plain `http://` only for `127.0.0.1` or `localhost`.
+Typed without a scheme, an address means `https://`, except `127.0.0.1` and `localhost`, which mean
+`http://` (an SSH tunnel). Before the window opens the server, the app loads it once itself: a TLS
+error or an error status shows **Can't reach the server** with the reason, **Retry** and **Change
+server**, never a blank window.
 
 ## Connect the app
 

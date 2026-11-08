@@ -14,7 +14,7 @@ type Screen =
   | { readonly kind: 'pick' }
   | { readonly kind: 'server' }
   | { readonly kind: 'connecting'; readonly server: string }
-  | { readonly kind: 'unreachable'; readonly server: string; readonly detail: string };
+  | { readonly kind: 'unreachable'; readonly server: string; readonly detail: string; readonly connect?: { readonly url: string; readonly deviceName: string } };
 
 const errorText = (err: Error | string): string => (typeof err === 'string' ? err : err.message);
 
@@ -61,12 +61,22 @@ export const Connect = () => {
     const nameError = checkDeviceName(deviceName);
     if (!url.ok) return setError(url.error);
     if (nameError) return setError(nameError);
-    setBusy(true);
+    useServer(url.origin, url.url, deviceName);
+  };
+
+  // The server's first load is tried before the window goes there: one that fails says why, with Retry and Change server.
+  const useServer = (server: string, url: string, name: string) => {
     setError(null);
-    invoke('client_use_server', { url: url.url, deviceName }).catch((err: Error | string) => {
+    setScreen({ kind: 'connecting', server });
+    invoke('client_use_server', { url, deviceName: name }).catch((err: Error | string) => {
       setBusy(false);
-      setError(errorText(err));
+      setScreen({ kind: 'unreachable', server, detail: errorText(err), connect: { url, deviceName: name } });
     });
+  };
+
+  const handleRetry = (unreachable: Extract<Screen, { kind: 'unreachable' }>) => {
+    if (unreachable.connect) return useServer(unreachable.server, unreachable.connect.url, unreachable.connect.deviceName);
+    openSaved(unreachable.server);
   };
 
   const handleChangeServer = () => {
@@ -105,7 +115,7 @@ export const Connect = () => {
           {screen.detail}
         </p>
         <div className="connect-actions">
-          <button type="button" className="connect-primary" onClick={() => openSaved(screen.server)}>
+          <button type="button" className="connect-primary" onClick={() => handleRetry(screen)}>
             Retry
           </button>
           <button type="button" onClick={handleChangeServer}>
