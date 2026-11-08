@@ -30,6 +30,16 @@ export const WEB_HELLO_TOKEN = 'browser-session-cookie';
 /** The socket of the page's own origin (the daemon's web port, src/daemon/web.ts). */
 export const webSocketUrl = (loc: Pick<Location, 'protocol' | 'host'>): string => `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/ws`;
 
+export class Unreachable extends Error {}
+
+const RESTARTING = new Set([502, 503, 504]);
+
+export const unreachableDetail = (status: number, statusText: string): string => {
+  const code = `${status}${statusText ? ` ${statusText}` : ''}`;
+  if (RESTARTING.has(status)) return `The server is restarting (${code}). Beluga reconnects by itself.`;
+  return `The server answered with a page Beluga didn’t expect (${code}).`;
+};
+
 /**
  * Where the daemon is: the app's own sidecar (asked through Tauri), the daemon's web port that
  * served this page (`beluga web`: same origin, its session cookie), or the dev server's bridge.
@@ -39,8 +49,12 @@ export async function endpoint(): Promise<Endpoint> {
     const { invoke } = await import('@tauri-apps/api/core');
     return invoke<Endpoint>('daemon_endpoint');
   }
-  const res = await fetch('/__beluga/endpoint', { cache: 'no-store' });
-  const body = (await res.json()) as Partial<Endpoint> & { error?: string; web?: boolean; signedOut?: boolean };
+  const res = await fetch('/__beluga/endpoint', { cache: 'no-store' }).catch(() => {
+    throw new Unreachable('The server didn’t answer. It may be restarting; Beluga reconnects by itself.');
+  });
+  const body = (await res.json().catch(() => {
+    throw new Unreachable(unreachableDetail(res.status, res.statusText));
+  })) as Partial<Endpoint> & { error?: string; web?: boolean; signedOut?: boolean };
   // This browser was revoked (or never let in): the page itself becomes the Ask for a link page.
   if (res.status === 401 && body.signedOut) {
     location.reload();
