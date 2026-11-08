@@ -22,6 +22,7 @@ const REQUIRED: Record<LinkedKind, readonly string[]> = {
   task: ['id'],
   issues: [],
   gh_issue: ['projectId', 'number'],
+  pulls: [],
   actions: [],
   gh_run: ['projectId', 'runId'],
   plans: [],

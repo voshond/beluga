@@ -64,12 +64,8 @@ function planLimits(state: AppState): PlanLimit[] {
 }
 
 /**
-<<<<<<< HEAD
- * Usage: your Claude plan's limits (and friends'), what Claude used this week, and the disk your worktrees take, by project; then every project and worktree side by side, with what
-=======
- * Usage: your Claude plan's limits (and friends'), what Claude used this week, what connected
- * projects earned (Stripe), your stats (prompts, agent time, worktrees, PRs, by project or agent), and the disk your worktrees take, by project; then every project and worktree side by side, with what
->>>>>>> upstream/main
+ * Usage: your Claude plan's limits (and friends'), what Claude used this week, your stats (prompts,
+ * agent time, worktrees, PRs, by project or agent), and the disk your worktrees take, by project; then every project and worktree side by side, with what
  * can be put away to free space.
  */
 export function UsageView() {
@@ -101,22 +97,14 @@ export function UsageView() {
   return (
     <div className={s.page}>
       <div className={s.inner}>
-<<<<<<< HEAD
-        <div className={s.summaryFit}>
-          <div className={s.summary}>
-            <PlanCard state={state} now={now} />
-            <ActivityCard state={state} now={now} />
-=======
         {got.stats ? <YourCard state={state} stats={got.stats} now={got.at} /> : <div className={s.heroWait} aria-hidden />}
-        <Chapter title="Right now" sub="Your plans and how much is left, your agents this week, and what your projects earned.">
+        <Chapter title="Right now" sub="Your plans and how much is left, and your agents this week.">
           <div className={s.summaryFit}>
             <div className={s.summary}>
               <PlanCard state={state} now={now} />
               <ActivityCard state={state} now={now} />
               <SessionsCard windows={got.stats?.plan ?? []} limits={planLimits(state)} now={got.at} />
-              <EarningsSummaryCard />
             </div>
->>>>>>> upstream/main
           </div>
         </Chapter>
         <StatsSection state={state} got={got} />

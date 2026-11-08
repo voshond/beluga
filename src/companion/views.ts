@@ -73,11 +73,7 @@ import { chatTopic, clip, convTopic, dashboardTopic, myId, nameOf, needsYou, pla
 export { chatTopic, convTopic, dashboardTopic, planTopic, sentinelTopic, taskTopic } from './needs-you.js';
 export { needsYou };
 import { ASSISTANT_CHANNEL, ASSISTANT_TITLE, activeAssistantChannel, assistantChatTitle, isAssistant } from '../shared/assistant.js';
-<<<<<<< HEAD
-import { STEERED_IN, type SteeredMessage, asRead, asSent, steeredMessages, steerWaiting } from '../shared/claude-notices.js';
-=======
-import { STEERED_IN, TAKEN_BACK, type SteeredMessage, asSent, steeredMessages, steerWaiting } from '../shared/claude-notices.js';
->>>>>>> upstream/main
+import { STEERED_IN, TAKEN_BACK, type SteeredMessage, asRead, asSent, steeredMessages, steerWaiting } from '../shared/claude-notices.js';
 import { slotWaitDetail } from '../shared/run-slots.js';
 import type { DocKey } from './files.js';
 

@@ -5,11 +5,8 @@ import { BRANCH_PREFIX_RE, EFFORTS, KEEP_AWAKE, LOW_POWER, NotifySettings, THEME
 import { AUTO_COMPACT_MAX, AUTO_COMPACT_MIN } from '../shared/context-usage.js';
 import { PARALLEL_RUNS_MAX, PARALLEL_RUNS_MIN } from '../shared/run-slots.js';
 import { CHAT_LIMIT_MAX } from '../shared/chat-limit.js';
-<<<<<<< HEAD
 import { MACHINE_NOTE_MAX } from '../shared/agent-setup.js';
-=======
 import { AUTO_CONTINUE_OFF_MAX } from '../shared/auto-continue.js';
->>>>>>> upstream/main
 import { ENV_KEY, MAX_ENV_VALUE, MAX_ENV_VARS } from '../shared/env-vars.js';
 import { type ArgsRuntime, MAX_AGENT_ARGS, MAX_AGENT_ARG_LENGTH, agentArgsProblem } from '../shared/agent-args.js';
 import { NETWORK_API } from './network-api.js';

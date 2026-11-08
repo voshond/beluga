@@ -29,12 +29,8 @@ import { type Tally, groupTally, groupWorking, projectPlans, projectTally, proje
 import { TallyMark } from './signal-marks.js';
 import { Row } from './sidebar-parts.js';
 import { WorkspaceRow } from './workspace-row.js';
-<<<<<<< HEAD
 import { GroupPlans, PlanRow } from './plan-row.js';
-=======
-import { PlanRow } from './plan-row.js';
 import { LaterRows, laterOf, notLater } from './later-rows.js';
->>>>>>> upstream/main
 import { useGitHubMenuItems } from '../views/project/GitHubRow.js';
 import { TeamBadge, useTeamMenuItems } from '../team/Team.js';
 import side from './Sidebar.module.css';

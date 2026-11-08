@@ -660,14 +660,9 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | Queue a message | `session.submit` | Return when Queue is the default, Option+Return when Steer is the default · **Queue** |
 | Steer: the agent reads it at its next step without stopping, however long the step runs (a second steer joins the first; only Send now stops a step, and only a dead run is restarted) | `session.submit` with `urgent` | Return when Steer is the default, Option+Return when Queue is the default · **Steer** · agents without steering always queue |
 | What waits, in run order (text, who asked) | `queueIn` (`src/ui/compose.ts`), the prompt comes with the `queued` event | the queue above the box |
-<<<<<<< HEAD
-| Run a waiting message now (steering, as above) | `host.promote` | queue › Steer |
-| A steered message the agent hasn't read yet: sent, not read (its card is a note till the agent reads it: `READS_AFTER_STEP`, `STOPPING_FOR`, then `STEERED_IN` or its own turn) | `steerWaiting` (`src/shared/claude-notices.ts`), the message's `request` | your message dimmed, a clock and “HH:MM · Sent · waiting for the agent to read it”, below the working turn |
-| Where a steered message sits: below everything while unread, then at the moment the agent read it (its card's `readAt`), the turn split there with what came before above it (BLG-47) | `asRead` (`src/shared/claude-notices.ts`), `textMarks` and `endedAt` for the split (BLG-45) | Mac chat and the phone's conversation |
-=======
 | Run a waiting message now (steering, as above; a plan's Steer Now also stops a long command for it: `interrupt`) | `host.promote` | queue › Steer · plan › Steer Now |
 | A steered message the agent hasn't read yet: sent, not read (its card is a note till the agent reads it: `READS_AFTER_STEP`, `STOPPING_FOR`, then `STEERED_IN` or its own turn) | `steerWaiting` (`src/shared/claude-notices.ts`), the message's `request` | your message dimmed, a clock and “Sent · the agent reads it after its current step” |
->>>>>>> upstream/main
+| Where a steered message sits: below everything while unread, then at the moment the agent read it (its card's `readAt`), the turn split there with what came before above it (BLG-47) | `asRead` (`src/shared/claude-notices.ts`), `textMarks` and `endedAt` for the split (BLG-45) | Mac chat and the phone's conversation |
 | Send it now: the agent's step stops (its interrupt, as Stop does) and the conversation goes on from your message | `host.steerNow` | **Send now** on that message · ⇧⌥↩ |
 | Cancel it before the agent reads it: out of Claude Code's queue (`cancel_async_message`), the message and its card leave the chat (`TAKEN_BACK`), its words back in the box; an agent that can't take it back says so | `host.cancelSteer`, `Steer.cancel` | **Cancel** on that message (phone: long-press › Cancel, 1.43) |
 | Drop a waiting message | `host.cancelQueued` | queue › ✕ |

@@ -3,11 +3,8 @@ import { AgentRef } from '../protocol.js';
 import { AUTO_COMPACT_DEFAULT, AUTO_COMPACT_MAX, AUTO_COMPACT_MIN } from './context-usage.js';
 import { PARALLEL_RUNS_DEFAULT, PARALLEL_RUNS_MAX, PARALLEL_RUNS_MIN } from './run-slots.js';
 import { CHAT_LIMIT_DEFAULT, CHAT_LIMIT_MAX } from './chat-limit.js';
-<<<<<<< HEAD
 import { MACHINE_NOTE_MAX } from './agent-setup.js';
-=======
 import { AUTO_CONTINUE_OFF_MAX } from './auto-continue.js';
->>>>>>> upstream/main
 import { MAX_AGENT_ARGS, MAX_AGENT_ARG_LENGTH } from './agent-args.js';
 import { coercePerKind, coerceSound, DEFAULT_SOUND, DEFAULT_VOLUME, PerKindSounds, SoundChoice } from './notify-sound.js';
 

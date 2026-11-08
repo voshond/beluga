@@ -79,13 +79,8 @@ export interface AgentHostDeps {
   readonly confirmTool?: (toolName: string, input: Record<string, unknown>) => { readonly title: string; readonly detail: string } | undefined;
   /** Sentinels (your own runs): their tools, and a sentinel run's brief in its Claude step's conversation (core/sentinel). */
   readonly sentinel?: (channel: string, from: string) => { readonly tools: import('../agent/types.js').SentinelTools; readonly dashboard?: import('../agent/types.js').DashboardTools; readonly brief: string; readonly inRun: boolean } | undefined;
-<<<<<<< HEAD
   /** A plan's home conversation (your own runs): its plan tools and what Claude is told about the plan (core/plans); `said` is what this run was asked. */
-  readonly plans?: (channel: string, from: string, said?: string) => { readonly tools?: import('../agent/types.js').PlanTools; readonly brief?: string } | undefined;
-=======
-  /** A plan's home conversation (your own runs): its plan tools and what Claude is told about the plan (core/plans). */
-  readonly plans?: (channel: string, from: string) => { readonly tools?: import('../agent/types.js').PlanTools; readonly brief?: string; readonly checker?: boolean } | undefined;
->>>>>>> upstream/main
+  readonly plans?: (channel: string, from: string, said?: string) => { readonly tools?: import('../agent/types.js').PlanTools; readonly brief?: string; readonly checker?: boolean } | undefined;
   /** "Your Mac" (core/assistant), your own runs in its conversation: where it runs, its tools, what Claude is told. */
   readonly assistant?: (channel: string, from: string) => { readonly place: AgentPlace; readonly tools: MacTools; readonly brief: string } | undefined;
   /** Your phone (core/phone, BLG-150), your own runs: tools to act on it, saving screenshots in `scratchDir`. `env` lets Bash use adb/scrcpy (BLG-174). */

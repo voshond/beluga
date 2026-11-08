@@ -72,12 +72,8 @@ const MILESTONE = z.object({
   criteria: lines(12).describe('Pass criteria: concrete, checkable'),
   autonomy: AUTONOMY.optional(),
   depends_on: DEPENDS_ON.optional(),
-<<<<<<< HEAD
   repos: REPOS.optional(),
-  tasks: z.array(TASK).max(40),
-=======
   tasks: z.array(TASK),
->>>>>>> upstream/main
 });
 
 /** One thing settled while planning (BLG-8): the user's answer, or a default you chose without asking. */
@@ -175,20 +171,15 @@ export function createPlanToolDefs(plan: PlanTools) {
     tool(
       'plan_write',
       'Write the whole plan (replaces the draft). Milestones in order, each with pass criteria and its tasks; milestones run side by side unless depends_on (or a task’s blocked_by) ties them to an earlier one. Keep ids you used before. Nothing reaches the board until the user approves.',
-<<<<<<< HEAD
       {
         title: z.string().min(1).max(200),
         goal: z.string().max(4000),
-        milestones: z.array(MILESTONE).min(1).max(12),
+        milestones: z.array(MILESTONE).min(1),
         decisions: z.array(DECISION).max(40).optional().describe('What was settled while planning: the user’s answers (by user) and every default you chose without asking (by default)'),
         open_questions: z.array(z.string().min(1).max(400)).max(40).optional().describe('What is still to settle: the plan can’t be approved while one is open'),
         repo_changes: z.array(REPO_CHANGE).max(8).optional().describe('Repos the plan should cover or drop (applied with approval): before milestones name a repo, it must be in the plan'),
       },
       (a) => guarded(() => plan.write({ title: a.title, goal: a.goal, milestones: a.milestones.map(milestoneInput), ...(a.decisions ? { decisions: a.decisions } : {}), ...(a.open_questions ? { openQuestions: a.open_questions } : {}), ...(a.repo_changes ? { repoEdits: a.repo_changes } : {}) } as BodyInput)),
-=======
-      { title: z.string().min(1).max(200), goal: z.string().max(4000), milestones: z.array(MILESTONE).min(1) },
-      (a) => guarded(() => plan.write({ title: a.title, goal: a.goal, milestones: a.milestones.map(milestoneInput) } as BodyInput)),
->>>>>>> upstream/main
     ),
     tool(
       'plan_update',

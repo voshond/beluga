@@ -19,12 +19,9 @@ import { SUGGEST_ALL, chooseProjectIcon, readProjectIcon, suggestProjects } from
 import type { Args, Method } from './api.js';
 import { NETWORK_HANDLERS } from './network-handlers.js';
 import { SUPPORT_HANDLERS } from './support-handlers.js';
-<<<<<<< HEAD
 import { AGENT_SETUP_HANDLERS } from './agent-setup-handlers.js';
-=======
 import { STATS_HANDLERS } from './stats-handlers.js';
 import { maybeStatsOf } from '../core/stats/counter.js';
->>>>>>> upstream/main
 import { WEB_HANDLERS } from './web-handlers.js';
 import { DIAGNOSTICS_HANDLERS } from './diagnostics-handlers.js';
 import { CLAUDE_CODE_HANDLERS } from './claude-code-handlers.js';
@@ -418,11 +415,8 @@ export const HANDLERS = {
   'local.statFiles': (_s, paths) => paths.map(pathInfo),
   ...NETWORK_HANDLERS,
   ...SUPPORT_HANDLERS,
-<<<<<<< HEAD
   ...AGENT_SETUP_HANDLERS,
-=======
   ...STATS_HANDLERS,
->>>>>>> upstream/main
   ...WEB_HANDLERS,
   ...DIAGNOSTICS_HANDLERS,
   ...CLAUDE_CODE_HANDLERS,

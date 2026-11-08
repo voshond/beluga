@@ -119,26 +119,17 @@ function Folding({ children }: { children: ReactNode }) {
  * for Claude's next step) Send now or Cancel. Once Claude reads it the line goes and the message
  * reads as any other; cancelled, the message goes and its words are back in the box.
  */
-<<<<<<< HEAD
-function SteerWaiting({ steer, at }: { steer: SteeredMessage; at: number | undefined }) {
-  const { client } = useBeluga();
-=======
-function SteerWaiting({ steer, channel }: { steer: SteeredMessage; channel: string }) {
+function SteerWaiting({ steer, at, channel }: { steer: SteeredMessage; at: number | undefined; channel: string }) {
   const { client, ui } = useBeluga();
->>>>>>> upstream/main
   const stopping = steer.waiting === 'stopping';
   const agent = useMyAgentName();
   return (
     <div className={s.steerWaiting} data-steer-waiting={steer.waiting} role="status">
       <Icon name="clock" size={11} />
-<<<<<<< HEAD
       <span>
         {at === undefined ? '' : `${time(at)} · `}
-        {stopping ? `Sent · ${agent} is stopping its step to read it` : `Sent · waiting for ${agent} to read it`}
+        {stopping ? `Sent · ${agent} is stopping its step to read it` : `Sent · ${agent} reads it after its current step`}
       </span>
-=======
-      <span>{stopping ? `Sent · ${agent} is stopping its step to read it` : `Sent · ${agent} reads it after its current step`}</span>
->>>>>>> upstream/main
       {stopping ? null : (
         <>
           <Tip label={`Stop ${agent}’s current step so it reads this now`} keys={shortcutKeys('composer-send-now')}>
@@ -225,12 +216,8 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
             ) : null}
             <ImageGrid images={images} />
             {reactions.chips}
-<<<<<<< HEAD
             {prefs.timestamps && ends && !steer ? <span className={s.ownTime}>{time(item.ts)}</span> : null}
-            {steer ? <SteerWaiting steer={steer} at={prefs.timestamps ? item.ts : undefined} /> : null}
-=======
-            {steer ? <SteerWaiting steer={steer} channel={item.channel} /> : null}
->>>>>>> upstream/main
+            {steer ? <SteerWaiting steer={steer} at={prefs.timestamps ? item.ts : undefined} channel={item.channel} /> : null}
             {item.request && item.channel ? <Delivery request={item.request} channel={item.channel} /> : null}
           </div>
         </div>
@@ -266,11 +253,7 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
             ) : null}
             <ImageGrid images={images} />
             {reactions.chips}
-<<<<<<< HEAD
-            {steer ? <SteerWaiting steer={steer} at={prefs.timestamps ? item.ts : undefined} /> : null}
-=======
-            {steer ? <SteerWaiting steer={steer} channel={item.channel} /> : null}
->>>>>>> upstream/main
+            {steer ? <SteerWaiting steer={steer} at={prefs.timestamps ? item.ts : undefined} channel={item.channel} /> : null}
           </div>
         </div>
       </ActionsContext>
@@ -301,11 +284,7 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
           ) : null}
           <ImageGrid images={images} />
           {reactions.chips}
-<<<<<<< HEAD
-          {steer ? <SteerWaiting steer={steer} at={prefs.timestamps ? item.ts : undefined} /> : null}
-=======
-          {steer ? <SteerWaiting steer={steer} channel={item.channel} /> : null}
->>>>>>> upstream/main
+          {steer ? <SteerWaiting steer={steer} at={prefs.timestamps ? item.ts : undefined} channel={item.channel} /> : null}
         </div>
       </div>
     </ActionsContext>
