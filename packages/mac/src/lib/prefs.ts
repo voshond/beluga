@@ -76,6 +76,7 @@ export interface UiPrefs {
   readonly termTheme: TermThemePref | null;
   /** Option sends Meta (Esc+) in the terminal, instead of typing special characters. */
   readonly termOptionMeta: boolean;
+  readonly termCopyOnSelect: boolean;
   /** Keys brought from another terminal (Settings › Terminal › Import from…), over Beluga's terminal keys (BLG-537). */
   readonly termKeys: TermKeysPref | null;
   /** In the terminal view, the terminal's keys win over Beluga's shortcuts (⌘T, ⌘W, ⌘1…). */
@@ -184,6 +185,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   termScrollback: 5000,
   termTheme: null,
   termOptionMeta: true,
+  termCopyOnSelect: false,
   termKeys: null,
   termKeysFirst: true,
   termView: false,

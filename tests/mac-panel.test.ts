@@ -129,7 +129,7 @@ describe('the right panel’s tabs', () => {
     expect(drawerFits(ws)).toBe(true);
     expect(drawerFits(room)).toBe(true);
     expect(drawerFits({ kind: 'terminal' })).toBe(false);
-    expect(drawerFits({ kind: 'shared', owner: 'o', id: 'x', tab: 'chat' })).toBe(false);
+    expect(drawerFits({ kind: 'shared', owner: 'o', id: 'x', tab: 'chat' })).toBe(true);
   });
 });
 

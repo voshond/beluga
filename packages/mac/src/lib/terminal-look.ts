@@ -56,7 +56,7 @@ export function fontChoices(picked: string): Array<{ value: string; label: strin
 }
 
 /** xterm's options for your terminal look. */
-export const terminalOptions = (p: UiPrefs): Pick<ITerminalOptions, 'fontFamily' | 'fontSize' | 'lineHeight' | 'cursorStyle' | 'cursorBlink' | 'scrollback' | 'cursorInactiveStyle' | 'macOptionIsMeta'> => ({
+export const terminalOptions = (p: UiPrefs): Pick<ITerminalOptions, 'fontFamily' | 'fontSize' | 'lineHeight' | 'cursorStyle' | 'cursorBlink' | 'scrollback' | 'cursorInactiveStyle' | 'macOptionIsMeta' | 'macOptionClickForcesSelection'> => ({
   fontFamily: fontStack(p.termFont),
   fontSize: p.termFontSize,
   lineHeight: p.termLineHeight,
@@ -65,6 +65,7 @@ export const terminalOptions = (p: UiPrefs): Pick<ITerminalOptions, 'fontFamily'
   cursorBlink: p.termCursorBlink,
   scrollback: p.termScrollback,
   macOptionIsMeta: p.termOptionMeta,
+  macOptionClickForcesSelection: true,
 });
 
 /** Whether the window looks dark right now (prefs.ts puts it on the document). */

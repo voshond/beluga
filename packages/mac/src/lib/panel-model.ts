@@ -165,8 +165,8 @@ export function clampPanelWidth(width: number, windowWidth: number, sidebarWidth
 
 export const clampShare = (v: number, min: number, max: number): number => Math.min(max, Math.max(min, Number.isFinite(v) ? v : min));
 
-/** The bottom drawer works under any conversation or page, but not over the Terminal view or a friend's workspace. */
-export const drawerFits = (view: View): boolean => view.kind !== 'terminal' && view.kind !== 'shared';
+/** The bottom drawer works under any conversation or page (your own shells under a friend's workspace), but not over the Terminal view: that one is already all shells. */
+export const drawerFits = (view: View): boolean => view.kind !== 'terminal';
 
 /** The ⌥⌘ digit for a tab (1–8). */
 export const panelDigit = (tab: PanelTab): number => PANEL_TABS.indexOf(tab) + 1;

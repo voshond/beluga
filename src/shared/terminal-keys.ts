@@ -17,6 +17,11 @@ export const paneTermId = (wsId: string, n: number): string => `${wsId}:pane:${n
 export const globalShellId = (n: number): string => `shell:${n}`;
 export const isGlobalShell = (key: string): boolean => /^shell:\d+$/.test(key);
 export const globalShellNumber = (key: string): number => Number(key.slice('shell:'.length)) || 0;
+export const SSH_HOST = /^[A-Za-z0-9][\w.-]{0,252}$/;
+export const sshShellId = (host: string): string => `ssh:${host}`;
+export const sshHostOf = (key: string): string => key.slice('ssh:'.length);
+export const isSshShell = (key: string): boolean => key.startsWith('ssh:') && SSH_HOST.test(sshHostOf(key));
+export const isOwnShell = (key: string): boolean => isGlobalShell(key) || isSshShell(key);
 
 /**
  * Where a new global shell starts: the project you last opened a workspace in, else the
@@ -44,5 +49,6 @@ export function terminalLabel(key: string, names: Readonly<Record<string, string
   const named = names[key];
   if (named) return named;
   if (isGlobalShell(key)) return `Shell ${globalShellNumber(key)}`;
+  if (isSshShell(key)) return sshHostOf(key);
   return key.endsWith(':setup') ? 'Setup' : key.endsWith(':run') ? 'Run' : key.endsWith(':github') ? 'GitHub' : isAgentTerm(key) ? 'Agent' : 'Shell';
 }

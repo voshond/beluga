@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AgentRef, ClaudeAnswer, GuestCan, WsRole } from '../protocol.js';
 import { EmojiSchema } from '../shared/reactions.js';
+import { SSH_HOST } from '../shared/terminal-keys.js';
 import { BRANCH_PREFIX_RE, EFFORTS, KEEP_AWAKE, LOW_POWER, NotifySettings, THEMES, TRUST_LEVELS } from '../shared/settings-schema.js';
 import { AUTO_COMPACT_MAX, AUTO_COMPACT_MIN } from '../shared/context-usage.js';
 import { PARALLEL_RUNS_MAX, PARALLEL_RUNS_MIN } from '../shared/run-slots.js';
@@ -403,6 +404,8 @@ export const API = {
   // ---- terminals (the bytes themselves stream separately; see protocol.ts)
   'terminals.shell': args(id, opt(TermSize)),
   'terminals.global': args(id, path, opt(TermSize)),
+  'terminals.sshHosts': args(),
+  'terminals.ssh': args(z.string().regex(SSH_HOST), opt(TermSize)),
   'terminals.close': args(id),
   // Start a shell or the run command again with your variables as they are now (its name stays).
   'terminals.restart': args(id),

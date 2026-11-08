@@ -9,7 +9,9 @@ import { useEffect, useRef } from 'react';
 import { useBeluga } from '../lib/beluga.js';
 import { getPrefs, usePrefs } from '../lib/prefs.js';
 import { importedTheme, terminalOptions } from '../lib/terminal-look.js';
-import { copyText } from '../lib/copy.js';
+import { ActionsContext } from '../components/SpecMenu.js';
+import { attachTermClipboard, clipboardKey } from '../lib/term-clipboard.js';
+import { termMenu } from './term-menu.js';
 import { keyPlatform } from '../lib/shortcuts-model.js';
 import { openExternal } from '../lib/system.js';
 import s from '../views/terminal.module.css';
@@ -60,6 +62,7 @@ export function Xterm({ termKey, start, focus = true, gpu = false, extend, onKey
   const live = useRef<{ term: Terminal; refit: () => void } | undefined>(undefined);
   const prefs = usePrefs();
   const look = terminalOptions(prefs);
+  const menu = termMenu(() => live.current?.term);
   // The program is started once per terminal: not again when it shows up in the state, when
   // it's closed (that empties the pane), or when React mounts twice in development.
   const startedFor = useRef<string | undefined>(undefined);
@@ -139,14 +142,8 @@ export function Xterm({ termKey, start, focus = true, gpu = false, extend, onKey
         e.preventDefault();
         return false;
       }
-      // Linux and Windows terminals copy and paste with Ctrl+Shift+C and V (Ctrl+C is the shell's).
-      if (keyPlatform() !== 'mac' && e.ctrlKey && e.shiftKey && !e.altKey && /^[cv]$/i.test(e.key)) {
-        if (e.type !== 'keydown') return false;
-        e.preventDefault();
-        if (e.key.toLowerCase() === 'c') void copyText(term.getSelection());
-        else void navigator.clipboard.readText().then((t) => t && term.paste(t), () => undefined);
-        return false;
-      }
+      const clipped = clipboardKey(e, term);
+      if (clipped !== undefined) return clipped;
       const line = keyPlatform() === 'mac' && e.type === 'keydown' && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey ? MAC_LINE_KEYS[e.key] : undefined;
       if (!line) return true;
       e.preventDefault();
@@ -161,6 +158,7 @@ export function Xterm({ termKey, start, focus = true, gpu = false, extend, onKey
       }
     };
     el.addEventListener('mousedown', grab);
+    const clipboard = attachTermClipboard(term, el);
     const refit = (): void => {
       try {
         fit.fit();
@@ -211,6 +209,7 @@ export function Xterm({ termKey, start, focus = true, gpu = false, extend, onKey
       clearTimeout(settle);
       anchored?.dispose();
       el.removeEventListener('mousedown', grab);
+      clipboard();
       resize.disconnect();
       restyle.disconnect();
       extra?.();
@@ -231,6 +230,10 @@ export function Xterm({ termKey, start, focus = true, gpu = false, extend, onKey
     if (box.current) box.current.style.background = themeNow().background;
     t.refit();
   }, [look.fontFamily, look.fontSize, look.lineHeight, look.cursorStyle, look.cursorBlink, look.scrollback, look.macOptionIsMeta, prefs.termTheme]);
-  return <div ref={box} className={s.xterm} />;
+  return (
+    <ActionsContext items={menu}>
+      <div ref={box} className={s.xterm} />
+    </ActionsContext>
+  );
 }
 

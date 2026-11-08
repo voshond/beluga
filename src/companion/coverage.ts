@@ -215,6 +215,8 @@ export const PHONE: Record<Method, Side> = {
   'workbench.removeTemplate': 'mac',
   'terminals.shell': 'mac',
   'terminals.global': 'mac',
+  'terminals.sshHosts': 'mac',
+  'terminals.ssh': 'mac',
   'terminals.close': 'mac',
   'terminals.rename': 'mac',
   'terminals.restart': 'mac',

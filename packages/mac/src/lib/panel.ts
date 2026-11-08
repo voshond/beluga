@@ -231,7 +231,6 @@ export function toggleTerminal(state: PanelState): string | undefined {
     else focusTerminal();
     return undefined;
   }
-  if (state.view.kind === 'shared') return 'A shared workspace’s terminal is its owner’s';
   if (state.view.kind === 'terminal') return undefined;
   return revealTerminal(state, true) ? undefined : 'No terminal here';
 }

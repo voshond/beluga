@@ -1,4 +1,4 @@
-import { globalShellDir, globalShellId, globalShellNumber, isGlobalShell, terminalLabel } from '@beluga/shared/terminal-keys.js';
+import { globalShellDir, globalShellId, globalShellNumber, isGlobalShell, isOwnShell, isSshShell, sshHostOf, sshShellId, terminalLabel } from '@beluga/shared/terminal-keys.js';
 import { useApi, useApp, useBeluga, useUi } from './beluga.js';
 
 /** Picked after the last shell is closed: show "no shells" instead of starting a new one. */
@@ -16,7 +16,9 @@ export interface GlobalShells {
   readonly dir: string;
   readonly pick: (key: string) => void;
   readonly open: () => void;
+  readonly openSsh: (host: string) => void;
   readonly close: (key: string) => void;
+  readonly start: (key: string, size?: { cols: number; rows: number }) => void;
 }
 
 /** Your own shells (the Terminal tab and the dock show the same ones). */
@@ -31,9 +33,10 @@ export function useGlobalShells(): GlobalShells {
   const home = useApp((st) => st.home);
   const picked = useUi((u) => u.termKey);
   const dir = globalShellDir(projects, openTabs, home, home);
-  const globals = Object.keys(terminals).filter(isGlobalShell).sort((a, b) => globalShellNumber(a) - globalShellNumber(b));
+  const numbered = Object.keys(terminals).filter(isGlobalShell).sort((a, b) => globalShellNumber(a) - globalShellNumber(b));
+  const globals = [...numbered, ...Object.keys(terminals).filter(isSshShell).sort()];
   for (const k of globals) seen.add(k);
-  const pickable = (k: string | undefined): k is string => !!k && isGlobalShell(k) && (k in terminals || !seen.has(k));
+  const pickable = (k: string | undefined): k is string => !!k && isOwnShell(k) && (k in terminals || !seen.has(k));
   // With none open, the first one starts by itself, unless you (or another screen) closed them all.
   const key = pickable(picked) ? picked : (globals[0] ?? (picked === NONE || seen.size ? undefined : globalShellId(1)));
   const shown = key && !globals.includes(key) ? [...globals, key] : globals;
@@ -45,8 +48,13 @@ export function useGlobalShells(): GlobalShells {
     pick: (k) => ui.patch({ termKey: k }),
     open: () => {
       // Numbered after the open ones; it starts once it's shown.
-      const k = globalShellId(Math.max(0, ...globals.map(globalShellNumber)) + 1);
+      const k = globalShellId(Math.max(0, ...numbered.map(globalShellNumber)) + 1);
       seen.delete(k);
+      ui.patch({ termKey: k });
+    },
+    openSsh: (host) => {
+      const k = sshShellId(host);
+      if (!(k in terminals)) seen.delete(k);
       ui.patch({ termKey: k });
     },
     close: (k) => {
@@ -57,5 +65,6 @@ export function useGlobalShells(): GlobalShells {
       seen.add(k);
       void api.terminals.close(k);
     },
+    start: (k, size) => void (isSshShell(k) ? api.terminals.ssh(sshHostOf(k), size) : api.terminals.global(k, dir, size)),
   };
 }

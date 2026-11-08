@@ -123,6 +123,9 @@ function LookGroup() {
       <Row label="Scrollback" detail="Lines you can scroll back through, per terminal.">
         <Select label="Scrollback" value={String(prefs.termScrollback)} onChange={(v) => setPrefs({ termScrollback: Number(v) })} options={SCROLLBACK_CHOICES.map((n) => ({ value: String(n), label: `${n.toLocaleString()} lines` }))} />
       </Row>
+      <Row label="Copy on select" detail={prefs.termCopyOnSelect ? 'Selecting text in a terminal copies it.' : `Copy with ${keyPlatform() === 'mac' ? '⌘C' : 'Ctrl+Shift+C'} or the right-click menu.`}>
+        <Switch label="Copy on select" on={prefs.termCopyOnSelect} onChange={(v) => setPrefs({ termCopyOnSelect: v })} />
+      </Row>
       {/* Only a Mac's Option key types special characters; Alt is already Meta elsewhere. */}
       {keyPlatform() === 'mac' ? (
         <Row label="Option key as Meta" detail={prefs.termOptionMeta ? 'Option+B and Option+F move by word in the shell.' : 'Option types special characters (é, ©, …).'}>

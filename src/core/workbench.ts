@@ -168,7 +168,8 @@ export function fixFailedPrompt(kind: 'setup' | 'run', command: string, code: nu
 }
 
 export { shellId, setupId, runId, githubId, globalShellId, isGlobalShell, globalShellNumber, globalShellDir } from '../shared/terminal-keys.js';
-import { agentTermId, githubId, runId, setupId, shellId, isGlobalShell, globalShellNumber, cleanTerminalName } from '../shared/terminal-keys.js';
+import { agentTermId, githubId, runId, setupId, shellId, isGlobalShell, globalShellNumber, cleanTerminalName, SSH_HOST, isSshShell, sshHostOf, sshShellId } from '../shared/terminal-keys.js';
+import { readSshHosts } from './ssh-hosts.js';
 import { pace, paced } from './power-saver.js';
 
 /** How soon cmd ends when it couldn't find your editor (Windows). */
@@ -1227,6 +1228,19 @@ export class Workbench {
     return this.openSession(key, { path: dir }, undefined, size);
   }
 
+  sshHosts(): Promise<string[]> {
+    return readSshHosts();
+  }
+
+  sshShell(host: string, size?: { cols: number; rows: number }): PtyProcess | undefined {
+    if (!SSH_HOST.test(host)) return undefined;
+    const key = sshShellId(host);
+    const existing = this.deps.terminals?.get(key);
+    if (existing?.running) return existing;
+    if (existing) this.deps.terminals?.close(key);
+    return this.openSession(key, { path: os.homedir() }, `ssh ${shQuote(host)}`, size);
+  }
+
   /**
    * A program in a workspace's folder as one of its terminals, not your shell: the agent's own
    * terminal app (BLG-534). Your variables and the worktree's, the program's own over them. One
@@ -1279,6 +1293,10 @@ export class Workbench {
       if (session && name) this.deps.store.dispatch({ type: 'terminal_name', id: key, name });
       return session;
     };
+    if (isSshShell(key)) {
+      this.closeTerminal(key);
+      return keepName(this.sshShell(sshHostOf(key)));
+    }
     if (isGlobalShell(key)) {
       if (!was?.place.dir) return undefined;
       this.closeTerminal(key);
