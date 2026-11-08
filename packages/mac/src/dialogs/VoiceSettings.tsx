@@ -5,7 +5,7 @@ import { Button, Kbd } from '../components/ui.js';
 import { useApi } from '../lib/beluga.js';
 import { accelLabel, accelOf, DEFAULT_SHORTCUT, parseAccel } from '../lib/dictation-model.js';
 import { voiceModelOf } from '../lib/dictation.js';
-import { inApp } from '../lib/boot.js';
+import { native } from '../lib/boot.js';
 import { setPrefs, usePrefs } from '../lib/prefs.js';
 import { Group, Row, Select, Switch } from './settings-controls.js';
 import s from './settings.module.css';
@@ -146,7 +146,7 @@ export function VoiceSettings() {
             </Button>
           ) : null}
         </Row>
-        {inApp() ? (
+        {native('globalShortcut') ? (
           <Row label="From any app" detail="The shortcut brings Beluga forward and listens, wherever you are. It writes into the chat you were last in.">
             <Switch label="From any app" on={prefs.voiceAnyApp} onChange={(v) => setPrefs({ voiceAnyApp: v })} />
           </Row>

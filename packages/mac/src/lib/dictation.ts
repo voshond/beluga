@@ -3,7 +3,7 @@ import type { TranscriptView, VoiceMacView } from '@beluga/companion/protocol.js
 import { suggestVoice, VOICE_MODELS, type VoiceModelId, voiceKnows, voiceSize } from '@beluga/shared/voice-models.js';
 import type { SocketClient } from '@beluga/ipc/socket-client.js';
 import { insertText } from '../chat/paste-paths.js';
-import { inApp } from './boot.js';
+import { native } from './boot.js';
 import { getPrefs, usePrefs, type UiPrefs } from './prefs.js';
 import { joinPhrases, PhraseCutter, PHRASE_RATE, promptFrom, Resampler } from '@beluga/shared/voice-phrases.js';
 import { cleanWords, DICTATION_MAX_SECONDS, HOLD_MS, matchesAccel, parseAccel, spoken, wavFromFloats } from './dictation-model.js';
@@ -343,7 +343,7 @@ export function useDictationSetup(c: SocketClient): void {
   client = c;
   const prefs = usePrefs();
   const accel = prefs.voiceShortcut ? parseAccel(prefs.voiceShortcut) : undefined;
-  const global = prefs.voiceAnyApp && inApp() && Boolean(accel);
+  const global = prefs.voiceAnyApp && native('globalShortcut') && Boolean(accel);
   useEffect(() => {
     const down = (e: KeyboardEvent): void => {
       // Settings › Keyboard is recording a shortcut: the keys are its.

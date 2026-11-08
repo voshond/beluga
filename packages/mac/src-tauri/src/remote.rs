@@ -411,6 +411,17 @@ pub async fn client_use_local(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// The name the server's agents call this computer by (Settings › Server).
+#[tauri::command]
+pub fn client_set_device_name(
+    state: tauri::State<'_, ClientState>,
+    name: String,
+) -> Result<String, String> {
+    let name = check_device_name(&name)?;
+    state.update(|config| config.device_name = Some(name.clone()))?;
+    Ok(name)
+}
+
 /// Back to the connect page to pick another server (or Run here), from the server's Settings.
 #[tauri::command]
 pub fn client_change_server(app: AppHandle) -> Result<(), String> {

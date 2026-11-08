@@ -303,13 +303,21 @@ pub fn run() {
             focus_window,
             set_tray_status,
             set_tray_presence,
+            spout::set_tray_spout,
+            spout::play_tray_spout,
             set_menu_state,
             set_menu_keys,
+            set_vibrancy,
             take_pending_links,
             system_idle_seconds,
+            sounds::sound_install,
+            sounds::sound_prune,
             sounds::sound_play_system,
             sounds::notification_access,
             sounds::open_notification_settings,
+            sounds::open_focus_settings,
+            privacy::privacy_access,
+            privacy::privacy_request,
             updater::update_state,
             updater::update_check,
             updater::update_set_mode,
@@ -318,7 +326,8 @@ pub fn run() {
             updater::update_dismiss_news,
             remote::client_config,
             remote::client_use_local,
-            remote::client_change_server
+            remote::client_change_server,
+            remote::client_set_device_name
         ]))
         .manage(updater::Updates::default())
         .manage(requests::TrayState::default())
@@ -364,6 +373,7 @@ pub fn run() {
             remote::client_open,
             remote::client_use_local,
             remote::client_change_server,
+            remote::client_set_device_name,
             export::save_export,
             sounds::sound_install,
             sounds::sound_prune,

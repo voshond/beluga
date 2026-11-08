@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { inApp } from './boot.js';
+import { appInvoke, inApp, native } from './boot.js';
 import type { Actions } from './actions.js';
 import type { UiStore } from './beluga.js';
 import type { SocketClient } from '@beluga/ipc/socket-client.js';
@@ -143,7 +143,7 @@ export function inviteOf(url: string): string | undefined {
 /** Listen to the menu bar and to beluga:// links (only in the app). */
 export function useNative(client: SocketClient, ui: UiStore, actions: Actions, onInvite: (invite: string) => void): void {
   useEffect(() => {
-    if (!inApp()) return;
+    if (!native('tray')) return;
     let off: Array<() => void> = [];
     let alive = true;
     void import('@tauri-apps/api/event').then(async ({ listen }) => {
@@ -165,7 +165,8 @@ export function useNative(client: SocketClient, ui: UiStore, actions: Actions, o
         if (handled.has(url)) return;
         // beluga://add… and beluga://join#…: a friend's or a group's invitation (the Beluga network).
         if (openNetworkLink(url)) return void handled.add(url);
-        const invite = inviteOf(url);
+        // Joining a room restarts this computer's Beluga: the app as a client has none to restart.
+        const invite = inApp() ? inviteOf(url) : undefined;
         if (!invite) return;
         handled.add(url);
         onInvite(invite);
@@ -174,8 +175,7 @@ export function useNative(client: SocketClient, ui: UiStore, actions: Actions, o
       if (alive) off = [a, b];
       else [a, b].forEach((f) => f());
       // A link that launched the app arrived before anyone was listening.
-      const { invoke } = await import('@tauri-apps/api/core');
-      if (alive) for (const url of await invoke<string[]>('take_pending_links')) open(url);
+      if (alive) for (const url of await appInvoke<string[]>('take_pending_links')) open(url);
     });
     return () => {
       alive = false;
@@ -213,18 +213,18 @@ export function menuBarCounts(st: ReturnType<SocketClient['store']['getState']>)
   };
 }
 
-const invokeTray = (cmd: string, args: Record<string, unknown>): void => {
-  void import('@tauri-apps/api/core').then(({ invoke }) => invoke(cmd, args)).catch(() => undefined);
+const invokeTray = (cmd: 'play_tray_spout' | 'set_tray_spout' | 'set_tray_status', args: Record<string, unknown>): void => {
+  void appInvoke(cmd, args).catch(() => undefined);
 };
 
 /** Spout once in the real menu bar now (Settings' "Try It"). */
 export function playTraySpout(): void {
-  if (inApp()) invokeTray('play_tray_spout', {});
+  if (native('tray')) invokeTray('play_tray_spout', {});
 }
 
 export function useTrayStatus(client: SocketClient): void {
   useEffect(() => {
-    if (!inApp()) return;
+    if (!native('tray')) return;
     let last = '';
     let seen: unknown;
     let seenLook: unknown;
@@ -271,7 +271,7 @@ export function useTrayStatus(client: SocketClient): void {
  */
 export function useTraySpout(): void {
   useEffect(() => {
-    if (!inApp()) return;
+    if (!native('tray')) return;
     let key = '';
     let alive = true;
     const send = (): void => {
@@ -316,7 +316,7 @@ export function useWindowFocus(client: SocketClient): void {
       if (focused && !wasFocused) void client.api.workbench.refreshPrs({ reason: 'focus' }).catch(() => undefined);
       wasFocused = focused;
     };
-    if (inApp()) {
+    if (native('windowActive')) {
       let alive = true;
       let off: (() => void) | undefined;
       void import('@tauri-apps/api/window')
@@ -362,7 +362,7 @@ export function useNotificationTaps(client: SocketClient, ui: UiStore, actions: 
     document.addEventListener(NOTIFICATION_TAP, onTap);
     let alive = true;
     let off: (() => void) | undefined;
-    if (inApp()) {
+    if (native('tray')) {
       void import('@tauri-apps/api/event')
         .then(async ({ listen }) => {
           const un = await listen<string | null>('notification-tap', (e) => go(e.payload ?? undefined));
@@ -386,7 +386,7 @@ export function useNotificationTaps(client: SocketClient, ui: UiStore, actions: 
  */
 export function useMenuState(client: SocketClient): void {
   useEffect(() => {
-    if (!inApp()) return;
+    if (!native('appMenu')) return;
     let last = '';
     let timer: ReturnType<typeof setTimeout> | undefined;
     const send = (): void => {
@@ -404,7 +404,7 @@ export function useMenuState(client: SocketClient): void {
       const key = JSON.stringify([enabled, checked, labels]);
       if (key === last) return;
       last = key;
-      void import('@tauri-apps/api/core').then(({ invoke }) => invoke('set_menu_state', { enabled, checked, labels })).catch(() => undefined);
+      void appInvoke('set_menu_state', { enabled, checked, labels }).catch(() => undefined);
     };
     // The store changes many times a second while Claude streams; the menu needn't.
     const update = (): void => {
