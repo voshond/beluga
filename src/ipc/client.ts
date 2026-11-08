@@ -62,8 +62,8 @@ export interface BelugaClient {
   close(): void;
 }
 
-/** The Mac app, a browser on the web port (set by the daemon, never claimed), a command run once (`beluga web`), or a test. */
-export type ClientKind = 'mac' | 'web' | 'cli' | 'test';
+/** The Mac app, a browser on the web port (set by the daemon, never claimed), a command run once (`beluga web`), a test, or the desktop app connected to a server. */
+export type ClientKind = 'mac' | 'web' | 'cli' | 'test' | 'remote-app';
 /** What a screen may say it is in its hello. */
 export type HelloKind = Exclude<ClientKind, 'web'>;
 

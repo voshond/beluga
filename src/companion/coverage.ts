@@ -319,6 +319,8 @@ export const PHONE: Record<Method, Side> = {
   'diagnostics.report': 'mac',
 
   // ---- browsers on the web port (BLG-650): let in and revoked from the Mac's Settings or `beluga web`
+  // ---- client devices (BLG-54): the phone may see which are connected
+  'devices.list': 'phone',
   'web.link': 'mac',
   'web.sessions.list': 'mac',
   'web.sessions.revoke': 'mac',

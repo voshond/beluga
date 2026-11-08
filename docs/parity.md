@@ -649,6 +649,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `git.mergePreview` | ✓ the toolbar's Merge into main: where it goes, the commits and files, and checks (conflicts, uncommitted work, the main folder's branch) before you confirm |
 | `git.filters` | ✓ History's Branch and Author pop-ups |
 | `git.worktreeAt` | ✓ a commit in History › Start a Worktree Here |
+| `devices.list` | ✓ the client devices connected to this server (remote apps offering their machine): name, OS, what they allow (run, file, screenshot), last seen; the agents' `list_devices` reads the same |
 | `web.link` | ✓ Settings › Advanced › Web access: turning on Open Beluga in a browser, and New Link (a one-time join link, 10 minutes, as a QR with Copy, under the address picked in Reached from; opens the web port first when it's closed); `beluga web` prints one |
 | `web.sessions.list` | ✓ Settings › Advanced › Web access: the browsers let in (name, let in, last seen) and whether the port is open; `beluga web sessions` |
 | `web.sessions.revoke` | ✓ a browser's Remove in Settings › Advanced › Web access (its sockets close at once, its page locks); `beluga web revoke <id or name>` |
