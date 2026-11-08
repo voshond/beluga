@@ -2,6 +2,7 @@ import { type AgentRef, CLAUDE_AGENT } from '../protocol.js';
 import { agentLabel } from '../shared/agent-label.js';
 import type { AgentRunInput } from './types.js';
 import { underPart } from '../shared/path-inside.js';
+import { shellName } from '../shared/shells.js';
 
 /** `agent`: the agent this prompt is for ("You are kay's Codex"); default Claude, the runner's. */
 export function buildSystemAppend(ownerName: string, agent: AgentRef = CLAUDE_AGENT): string {
@@ -127,6 +128,20 @@ export function buildKeepAppend(agent: AgentRef = CLAUDE_AGENT): string {
     'asks you to run or start a server, an app or a watcher (or to keep one up), keep it: start it with',
     ...how,
     'started to check something yourself, and never a test run (vitest, playwright, an e2e run): always stopped.',
+  ].join('\n');
+}
+
+/**
+ * Every agent runs its commands in your login shell (Claude Code's Bash tool, Codex's `zsh -lc`), and
+ * writes them for bash. Claude's also get zsh-compat.sh (runtime/claude/zsh-compat.ts); the rest only this.
+ */
+export function buildShellAppend(shell: string | undefined = process.env.SHELL, platform: NodeJS.Platform = process.platform): string {
+  if (platform === 'win32' || !shell || shellName(shell) !== 'zsh') return '';
+  return [
+    '',
+    'Your shell commands run in zsh, not bash. Write them for zsh: quote globs and URLs (`--include=\'*.ts\'`,',
+    '`curl "https://…?a=1"`), since an unquoted one that matches nothing stops the whole command; compare with',
+    '`[[ $a == b ]]` or `[ "$a" = b ]` (`==` inside `[ ]` fails); and never name a variable `path` (it is $PATH) or `status` (read-only).',
   ].join('\n');
 }
 

@@ -13,6 +13,7 @@ import { ToolHost } from '../../tool-host.js';
 import { gateTool } from '../../tool-gate.js';
 import type { AgentRunInput, RoomBridge, TerminalLaunch, TerminalSink } from '../../types.js';
 import { TerminalShelf } from '../../view-tools.js';
+import { zshCompatEnv } from './zsh-compat.js';
 
 /** Claude Code's own settings file (~/.claude.json, or in $CLAUDE_CONFIG_DIR). */
 const claudeJson = (env: NodeJS.ProcessEnv = process.env): string => (env.CLAUDE_CONFIG_DIR ? path.join(env.CLAUDE_CONFIG_DIR, '.claude.json') : path.join(os.homedir(), '.claude.json'));
@@ -140,7 +141,7 @@ export async function claudeTerminal(input: AgentRunInput, sink: TerminalSink, o
     return {
       file: opts.claudePath ?? claudeCodeCommand(),
       args,
-      env: { ...input.env, [GATE_URL_ENV]: mounted.hookUrl ?? '', [GATE_TOKEN_ENV]: mounted.token },
+      env: { ...zshCompatEnv({ ...process.env, ...input.env }, opts.home), ...input.env, [GATE_URL_ENV]: mounted.hookUrl ?? '', [GATE_TOKEN_ENV]: mounted.token },
       session: id,
       fresh,
       close: () => mounted.close(),
