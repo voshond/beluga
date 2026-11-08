@@ -36,6 +36,7 @@ import { shortcutKeys } from '../lib/shortcuts.js';
 import { sentinelSubtitle } from '../sentinel/sentinel-model.js';
 import { CallButton } from '../call/CallStrip.js';
 import { AppMenu } from './AppMenu.js';
+import { WindowControls } from './WindowControls.js';
 import { WebBack } from './WebBack.js';
 
 /** Room the title keeps, and the window buttons on the right (search, bell, panel). */
@@ -92,6 +93,7 @@ function Shell({ title, subtitle, center, right, headerRef }: { title: ReactNode
       {prefs.sidebar ? null : (
         <span className={s.lead}>
           {/* The sidebar's menu-bar button (a browser's), beside it while the sidebar is hidden. */}
+          <WindowControls />
           <AppMenu />
           <WebBack />
           <IconButton icon="sidebar" label="Show sidebar" keys={shortcutKeys('toggle-sidebar')} onClick={() => setPrefs({ sidebar: true })} />

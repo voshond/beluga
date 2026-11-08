@@ -433,7 +433,7 @@
   padding: 10px 10px 10px 14px;
   border-radius: var(--radius-l);
   background: color-mix(in srgb, #a99ad9 12%, var(--bg-sunken));
-  box-shadow: inset 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong);
   color: var(--text-2);
 }
 /* The terminal waits for a turn in the chat to end: over the chat (BLG-553) */

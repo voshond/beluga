@@ -25,7 +25,7 @@
   padding-right: 3px;
   border-radius: 7px;
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong), 0 0.5px 1px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong), 0 0.5px 1px rgba(0, 0, 0, 0.05);
   transition: box-shadow var(--dur-fast), background var(--dur-fast);
 }
 .tile:hover {
@@ -83,7 +83,7 @@
   padding: 7px 8px 7px 11px;
   border-radius: 8px;
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
 }
 .genText {
   display: flex;

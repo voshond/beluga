@@ -5,7 +5,7 @@
   padding: 6px 6px 4px;
   border-radius: var(--radius-l) var(--radius-l) 0 0;
   background: var(--bg-sunken);
-  box-shadow: 0 0 0 0.5px var(--hairline);
+  box-shadow: 0 0 0 var(--hair) var(--hairline);
   animation: rise var(--dur) var(--ease-out);
 }
 @keyframes rise {

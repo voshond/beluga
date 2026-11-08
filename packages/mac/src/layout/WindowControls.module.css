@@ -1,0 +1,36 @@
+.controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 6px;
+}
+.button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--text);
+  cursor: default;
+  transition: background var(--dur-fast);
+}
+.button:hover {
+  background: color-mix(in srgb, var(--text) 17%, transparent);
+}
+.button:active {
+  background: color-mix(in srgb, var(--text) 25%, transparent);
+}
+.button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.button svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

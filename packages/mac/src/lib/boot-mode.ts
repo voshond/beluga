@@ -98,6 +98,8 @@ export const CLIENT_COMMANDS = [
   'device_run',
   'device_file',
   'device_screenshot',
+  'own_title_bar',
+  'window_control',
 ] as const;
 
 export type ClientCommand = (typeof CLIENT_COMMANDS)[number];

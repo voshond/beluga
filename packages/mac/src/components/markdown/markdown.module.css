@@ -276,7 +276,7 @@
   padding: 0.14em 0.38em;
   border-radius: 5px;
   background: var(--code-bg);
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
   font-size: 0.86em;
   overflow-wrap: anywhere;
 }
@@ -296,7 +296,7 @@
   margin: 0 0 1.15em;
   overflow-x: auto;
   border-radius: 8px;
-  box-shadow: inset 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong);
 }
 .tableWrap table {
   border-collapse: collapse;
@@ -376,7 +376,7 @@
   overflow-x: auto;
   border-radius: 8px;
   background: var(--md-faint);
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
 }
 .diagramSvg {
   width: 100%;
@@ -410,7 +410,7 @@
 .doc details {
   padding: 0.55em 0.95em;
   border-radius: 8px;
-  box-shadow: inset 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong);
 }
 .doc details[open] > summary {
   margin-bottom: 0.55em;
@@ -428,7 +428,7 @@
   padding: 0.05em 0.4em;
   border-radius: 4px;
   background: var(--bg-raised);
-  box-shadow: inset 0 0 0 0.5px var(--hairline-strong), inset 0 -1px 0 var(--hairline-strong);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong), inset 0 -1px 0 var(--hairline-strong);
   font: 500 0.8em/1.5 var(--font);
   text-align: center;
 }
@@ -474,7 +474,7 @@
   padding: 0.55em 0.9em;
   border-radius: 8px;
   background: var(--md-faint);
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
   font-size: 0.84em;
 }
 .metaRow {

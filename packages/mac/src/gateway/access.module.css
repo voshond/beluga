@@ -43,7 +43,7 @@
   padding: 1px 8px;
   border-radius: 999px;
   background: var(--bg-sunken);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   font-size: 0.85rem;
   white-space: nowrap;
 }
@@ -68,7 +68,7 @@
   padding: 12px;
   border-radius: var(--radius-l);
   background: var(--bg-sunken);
-  box-shadow: 0 0 0 0.5px var(--hairline);
+  box-shadow: 0 0 0 var(--hair) var(--hairline);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -98,7 +98,7 @@
   border: 0;
   border-radius: var(--radius);
   background: var(--bg-sunken);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   color: var(--text);
   font: inherit;
 }
@@ -209,7 +209,7 @@
   border: 0;
   border-radius: var(--radius);
   background: var(--bg-sunken);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   color: var(--text);
   font: inherit;
   font-size: 0.9rem;
@@ -292,7 +292,7 @@
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--bg-sunken);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   cursor: pointer;
   width: 220px;
   aspect-ratio: 16 / 10;

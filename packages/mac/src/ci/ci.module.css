@@ -288,7 +288,7 @@
   border-radius: var(--radius-l);
   font-size: 12px;
   background: var(--bg-sunken);
-  box-shadow: inset 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong);
 }
 .graphNote {
   margin: 0;
@@ -347,7 +347,7 @@
 .job {
   border-radius: var(--radius-l);
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
 }
 .jobHead {
   display: flex;
@@ -442,7 +442,7 @@
   border-radius: 8px;
   font-size: 11.5px;
   background: var(--bg-sunken);
-  box-shadow: inset 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong);
 }
 .propHint {
   color: var(--text-3);

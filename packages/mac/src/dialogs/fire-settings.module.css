@@ -7,7 +7,7 @@
   padding: 0 44px 22px;
   border-radius: 12px;
   background: var(--bg-sunken);
-  box-shadow: 0 0 0 0.5px var(--hairline);
+  box-shadow: 0 0 0 var(--hair) var(--hairline);
   overflow: hidden;
 }
 .fakeBox {
@@ -16,7 +16,7 @@
 .plainBox {
   position: relative;
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
 }
 .fakeInput {
   display: block;
@@ -47,7 +47,7 @@
   padding: 10px 10px 9px;
   border-radius: 9px;
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   text-align: left;
   transition: box-shadow var(--dur-fast), transform var(--dur-fast);
 }
@@ -121,7 +121,7 @@
   margin-top: -5px;
   border-radius: 50%;
   background: white;
-  box-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.2), 0 1px 3px rgb(0 0 0 / 0.25);
+  box-shadow: 0 0 0 var(--hair) rgb(0 0 0 / 0.2), 0 1px 3px rgb(0 0 0 / 0.25);
 }
 
 /* Colours: cards with three dots; yours among them; a maker for new ones. */
@@ -139,7 +139,7 @@
   padding: 0 11px 0 8px;
   border-radius: 14px;
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   font-size: 0.88rem;
   font-weight: 500;
 }
@@ -199,7 +199,7 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  box-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.2), inset 0 0 0 2px rgb(255 255 255 / 0.35);
+  box-shadow: 0 0 0 var(--hair) rgb(0 0 0 / 0.2), inset 0 0 0 2px rgb(255 255 255 / 0.35);
 }
 .wellDot input {
   position: absolute;

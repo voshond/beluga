@@ -43,6 +43,8 @@ import s from './Sidebar.module.css';
 import { shortcutKeys } from '../lib/shortcuts.js';
 import { CallPill } from '../call/CallLayer.js';
 import { AppMenu } from './AppMenu.js';
+import { WindowControls } from './WindowControls.js';
+import { ownTitleBar } from '../lib/window-frame.js';
 import { WebBack } from './WebBack.js';
 
 /**
@@ -130,10 +132,11 @@ export function Sidebar() {
     <nav ref={drop.ref} className={cx(s.sidebar, drop.over && s.dropping)} aria-label="Sidebar">
       <div className={s.titlebar} data-tauri-drag-region>
         {/* The traffic lights' place; in a browser, which has no menu bar, the menu bar's button (Settings and the rest). */}
-        {inApp() ? (
+        {inApp() && !ownTitleBar() ? (
           <span className={s.trafficSpace} data-tauri-drag-region />
         ) : (
           <span className={s.appMenu}>
+            <WindowControls />
             <AppMenu />
             <WebBack />
           </span>

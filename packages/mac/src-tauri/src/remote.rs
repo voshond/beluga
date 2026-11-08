@@ -29,6 +29,7 @@ const REMOTE_PERMISSIONS: &[&str] = &[
     "core:window:allow-set-focus",
     "core:window:allow-unminimize",
     "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize",
     "core:window:allow-set-title",
     "notification:default",
     "clipboard-manager:allow-write-text",

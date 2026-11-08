@@ -14,7 +14,7 @@
   padding: 10px 12px;
   border-radius: var(--radius-l);
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong), 0 2px 10px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong), 0 2px 10px rgba(0, 0, 0, 0.06);
   animation: rise var(--dur) var(--ease-out);
 }
 @keyframes rise {
@@ -104,7 +104,7 @@
   padding: 6px 9px;
   border-radius: var(--radius);
   text-align: left;
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
 }
 .option:hover {
   background: var(--bg-hover);
@@ -149,7 +149,7 @@
   align-items: flex-start;
   padding: 6px 9px;
   border-radius: var(--radius);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   text-align: left;
 }
 .trust:hover {
@@ -205,5 +205,5 @@
 
 /* Near-black themes: a lit edge in place of the shadow. */
 :global(:root[data-edges='lit']) .card {
-  box-shadow: 0 0 0 0.5px var(--hairline-strong), var(--rim);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong), var(--rim);
 }

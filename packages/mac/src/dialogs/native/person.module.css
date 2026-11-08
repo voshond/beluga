@@ -70,7 +70,7 @@
 .nameInput:focus {
   outline: none;
   background: var(--bg);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent), 0 0 0 0.5px var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent), 0 0 0 var(--hair) var(--accent);
 }
 .tags {
   display: flex;
@@ -92,7 +92,7 @@
   padding: 8px 10px;
   border-radius: 8px;
   background: var(--bg-sunken);
-  box-shadow: 0 0 0 0.5px var(--hairline);
+  box-shadow: 0 0 0 var(--hair) var(--hairline);
 }
 /* Each provider's plans (BLG-597): its name, then a line per window. */
 .usageProvider {
@@ -183,7 +183,7 @@
   border-radius: 50%;
   background: var(--bg-hover);
   color: var(--accent);
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
   transition: background var(--dur-fast), transform var(--dur-fast);
 }
 .action:hover .actionIcon {
@@ -247,7 +247,7 @@
   color: var(--accent);
   font-size: 0.8rem;
   font-weight: 550;
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: inset 0 0 0 var(--hair) color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .addChip:hover {
   background: color-mix(in srgb, var(--accent) 10%, transparent);

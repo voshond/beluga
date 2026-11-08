@@ -11,7 +11,7 @@
   align-items: flex-start;
 }
 .card {
-  --lift: 0 0 0 0.5px var(--hairline-strong), 0 4px 12px rgba(0, 0, 0, 0.22);
+  --lift: 0 0 0 var(--hair) var(--hairline-strong), 0 4px 12px rgba(0, 0, 0, 0.22);
   --resize: 420ms cubic-bezier(0.32, 0.72, 0, 1);
   position: relative;
   box-sizing: border-box;

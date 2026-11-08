@@ -38,7 +38,7 @@
 .tabOn:hover {
   background: color-mix(in srgb, var(--info) 11%, var(--bg));
   color: var(--text);
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--info) 22%, transparent);
+  box-shadow: inset 0 0 0 var(--hair) color-mix(in srgb, var(--info) 22%, transparent);
 }
 .tabMain {
   display: inline-flex;

@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { appInvoke, native } from './boot-mode.js';
 import { getPrefs, subscribePrefs } from './prefs.js';
+import { nativeMenuBar } from './window-frame.js';
 import { type Bindings, type KeyPress, bindingsOf, chordOfAccel, keysLabel, menuAccel, menuKeys, pressed } from './shortcuts-model.js';
 
 /**
@@ -87,7 +88,7 @@ export const belugaHas = (chord: string): boolean => Object.values(getBindings()
 let sentMenu = '';
 
 function sendMenuKeys(): void {
-  if (!native('menuKeys')) return;
+  if (!native('menuKeys') || !nativeMenuBar()) return;
   // Close Window is the menu's own item (menu.rs), with ⌘W unless the terminal has it.
   const keys: Record<string, string | null> = { ...menuKeys(getBindings()), 'close-window': 'CmdOrCtrl+W' };
   const taken = new Set([...terminalChords].map(menuAccel).filter(Boolean));

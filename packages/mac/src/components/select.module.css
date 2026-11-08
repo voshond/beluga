@@ -11,7 +11,7 @@
   padding: 0 7px 0 9px;
   border-radius: 6px;
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong), 0 0.5px 1px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong), 0 0.5px 1px rgba(0, 0, 0, 0.06);
   color: var(--text);
   font-size: 0.95rem;
   text-align: left;
@@ -20,7 +20,7 @@
 }
 :global([data-theme='dark']) .trigger {
   background: color-mix(in srgb, var(--bg-raised) 82%, white);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong), 0 0.5px 1px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong), 0 0.5px 1px rgba(0, 0, 0, 0.3);
 }
 .trigger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--bg-raised) 94%, var(--text));
@@ -33,7 +33,7 @@
 }
 .trigger:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 0.5px var(--hairline-strong), 0 0 0 3px color-mix(in srgb, var(--accent) 50%, transparent);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong), 0 0 0 3px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 .trigger:disabled {
   opacity: 0.45;

@@ -138,7 +138,7 @@
   max-width: 100%;
   margin: 12px auto;
   border-radius: 6px;
-  box-shadow: 0 0 0 0.5px var(--hairline);
+  box-shadow: 0 0 0 var(--hair) var(--hairline);
 }
 .text {
   margin: 0;

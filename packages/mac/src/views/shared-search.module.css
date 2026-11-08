@@ -8,11 +8,11 @@
   border-radius: 7px;
   background: var(--bg-hover);
   color: var(--text-3);
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
 }
 .field:focus-within {
   background: var(--bg);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent), 0 0 0 0.5px var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent), 0 0 0 var(--hair) var(--accent);
 }
 .input {
   flex: 1;

@@ -91,7 +91,7 @@
   padding: 6px 6px 6px 12px;
   border-radius: var(--radius-l);
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
 }
 .steerInput {
   flex: 1;

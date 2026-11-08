@@ -188,7 +188,7 @@
   color: var(--text);
   font-size: 0.84rem;
   font-weight: 500;
-  box-shadow: 0 0 0 0.5px var(--hairline-strong, var(--hairline));
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong, var(--hairline));
   transition: transform var(--dur-fast);
 }
 .done:active {
