@@ -180,6 +180,7 @@ export const SETTINGS: readonly Entry[] = [
     ['Cursor', 'Block, bar or underline.', 'terminal cursor caret block bar underline'],
     ['Blinking cursor', undefined, 'terminal cursor blink'],
     ['Scrollback', 'Lines a terminal keeps.', 'terminal history lines buffer'],
+    ['Copy on select', 'Selecting text in a terminal copies it.', 'clipboard copy paste selection'],
     ['Option key as Meta', undefined, 'alt option meta key'],
   ]),
   group('terminal', 'In this window', 'The terminal at the bottom of the window.', 'dock toggle terminal shortcut'),
