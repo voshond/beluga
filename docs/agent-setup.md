@@ -45,6 +45,13 @@ This is a read-only list of each piece Beluga adds to a run's instructions, in t
 
 The list and the real instructions come from the same code, `INSTRUCTION_PIECES` in `src/agent/run-instructions.ts`, so they can't drift apart. That code is the hook: `runInstructions` joins the pieces for every run. Claude receives the result through `systemPrompt.append`, Codex through `developerInstructions`, and OpenCode through its instructions file. Your own `CLAUDE.md`, `AGENTS.md` and skills don't pass through Beluga: each agent loads them itself on your own runs.
 
+## Zsh
+
+Agents run their commands in your login shell, but they write them for bash. On zsh that used to stop whole commands: an unquoted glob that matches nothing (`--include=*.ts`), `[ "$a" == b ]`, `for f in $list`, `${arr[0]}`.
+
+- Claude: Beluga writes `~/.beluga/zsh-compat.sh` and sets `CLAUDE_ENV_FILE` to it, for chat runs and the terminal view. Claude Code runs the file before every Bash command. In zsh it turns on `NO_NOMATCH`, `NO_BAD_PATTERN`, `NO_EQUALS`, `SH_WORD_SPLIT`, `KSH_ARRAYS` and `BSD_ECHO`, so these commands work as they do in bash. In bash it does nothing. If you set `CLAUDE_ENV_FILE` yourself, Beluga leaves it alone. The file is `src/agent/runtime/claude/zsh-compat.ts`.
+- Every agent (Claude, Codex, OpenCode): when your login shell is zsh, the instructions include the **Your shell is zsh** piece, which says how to write commands for it.
+
 ## The phone
 
 None of this reaches the phone. All `agentSetup.*` methods are `mac` in `src/companion/coverage.ts`.

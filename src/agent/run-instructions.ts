@@ -1,7 +1,7 @@
 import type { AgentRef } from '../protocol.js';
 import type { InstructionPieceView } from '../shared/agent-setup.js';
 import { buildGraphAppend } from './graph-prompt.js';
-import { buildAskOnlyAppend, buildCommitAppend, buildKeepAppend, buildMachineAppend, buildScratchAppend, buildSetupAppend, buildShippedAppend, buildSystemAppend } from './prompt.js';
+import { buildAskOnlyAppend, buildCommitAppend, buildKeepAppend, buildMachineAppend, buildScratchAppend, buildSetupAppend, buildShellAppend, buildShippedAppend, buildSystemAppend } from './prompt.js';
 import { buildSyncMainAppend } from './sync-main.js';
 import { buildTerminalAppend } from './terminal-prompt.js';
 import type { AgentRunInput } from './types.js';
@@ -46,6 +46,7 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
     sample: () => buildSetupAppend(SAMPLE_PROJECT, 'npm ci', 'detected'),
   },
   { id: 'scratch', label: 'Scratch folder', when: 'Worktree runs, with Scratch folder on', source: 'src/agent/prompt.ts', text: (c) => (c.input.scratchDir ? buildScratchAppend(c.input.scratchDir) : ''), sample: () => buildScratchAppend('.beluga/scratch') },
+  { id: 'shell', label: 'Your shell is zsh', when: 'Every run, when your login shell is zsh', source: 'src/agent/prompt.ts', text: () => buildShellAppend(), sample: () => buildShellAppend('/bin/zsh', 'darwin') },
   { id: 'keep', label: 'Processes that keep running', when: 'Worktree runs', source: 'src/agent/prompt.ts', text: (c) => (c.worktree ? buildKeepAppend(c.agent) : ''), sample: () => buildKeepAppend() },
   { id: 'commit', label: 'Commit before ending', when: 'Worktree runs (not a plan’s, not in a main folder)', source: 'src/agent/prompt.ts', text: (c) => (c.worktree && !c.input.planBrief && !c.askOnly ? buildCommitAppend() : ''), sample: () => buildCommitAppend() },
   {
