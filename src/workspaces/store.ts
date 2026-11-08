@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,10 +9,17 @@ import { belugaHome } from '../core/home.js';
 
 export const DEFAULT_ROOTS = ['Projects', 'projects', 'code', 'Code', 'dev', 'src', 'Developer', 'GitHub', 'repos', 'workspace'].map((d) => path.join(os.homedir(), d));
 
+/** The file's JSON, or `fallback`; one there that can't be read is copied aside first, since the next save replaces it. */
 function readJson<T>(file: string, fallback: T): T {
+  if (!existsSync(file)) return fallback;
   try {
     return JSON.parse(readFileSync(file, 'utf8')) as T;
   } catch {
+    try {
+      copyFileSync(file, `${file}.unreadable-${Date.now()}`);
+    } catch {
+      // Nothing more to keep: the fallback it is.
+    }
     return fallback;
   }
 }

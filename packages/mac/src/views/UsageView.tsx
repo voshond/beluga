@@ -102,7 +102,7 @@ export function UsageView() {
           <div className={s.summaryFit}>
             <div className={s.summary}>
               <PlanCard state={state} now={now} />
-              <ActivityCard state={state} now={now} />
+              <ActivityCard state={state} stats={got.stats} now={got.at} />
               <SessionsCard windows={got.stats?.plan ?? []} limits={planLimits(state)} now={got.at} />
             </div>
           </div>
