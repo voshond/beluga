@@ -1,5 +1,6 @@
 import type { Session } from '../core/session.js';
 import { worktreeOf } from './merge.js';
+import type { ThreadChildren } from '../shared/threads.js';
 import type { PhoneBranchStep } from './protocol.js';
 
 /**
@@ -7,7 +8,8 @@ import type { PhoneBranchStep } from './protocol.js';
  * (core/branch-state.ts), done the Mac's own way. One-click ones (archive, merge the PR, update
  * it) say how they went; the ones Claude does start in the worktree's conversation, where the
  * phone follows them. Merging into the main folder keeps its own sheet (companion.mergeCheck /
- * merge), and opening the PR is the phone's browser: neither comes here.
+ * merge), and opening the PR is the phone's browser: neither comes here. `children` (1.47) answers
+ * the question about a chat's threads, for archive and delete only; left out, they stay, as on the Mac.
  */
 
 export interface BranchStepResult {
@@ -16,7 +18,7 @@ export interface BranchStepResult {
   readonly message: string;
 }
 
-export async function branchStep(s: Session, topic: string, step: PhoneBranchStep): Promise<BranchStepResult> {
+export async function branchStep(s: Session, topic: string, step: PhoneBranchStep, children?: ThreadChildren): Promise<BranchStepResult> {
   const id = worktreeOf(s, topic);
   const ws = s.workspaces!;
   const bench = s.workbench;
@@ -77,11 +79,11 @@ export async function branchStep(s: Session, topic: string, step: PhoneBranchSte
       await needBench().continueAfterMerge(id);
       return { ok: true, message: 'This branch starts again from the latest base: the next change gets a new PR' };
     case 'archive': {
-      const done = await ws.archive(id);
-      return done ? { ok: true, message: `${name} is archived: its branch and conversation are kept` } : { ok: false, message: `Couldn’t archive ${name}: see your Mac` };
+      const done = await (children ? ws.archive(id, false, { children }) : ws.archive(id));
+      return done ? { ok: true, message: `${name}${children === 'with' ? ' and its threads are' : ' is'} archived: ${children === 'with' ? 'their branches and conversations are' : 'its branch and conversation are'} kept` } : { ok: false, message: `Couldn’t archive ${name}: see your Mac` };
     }
     case 'delete':
-      await ws.remove(id);
-      return { ok: true, message: `${name} is deleted` };
+      await (children ? ws.remove(id, { children }) : ws.remove(id));
+      return { ok: true, message: `${name}${children === 'with' ? ' and its threads are' : ' is'} deleted` };
   }
 }

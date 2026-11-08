@@ -118,6 +118,8 @@ export interface PullRequest {
   readonly mergeState?: 'behind' | 'blocked';
   /** Its head commit (headRefOid). */
   readonly head?: string;
+  /** When it merged (ms), merged PRs only. */
+  readonly mergedAt?: number;
 }
 
 export interface SetupRun {

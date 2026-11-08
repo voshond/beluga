@@ -16,10 +16,11 @@ export { agentMark, modelMark, runtimeMark } from '../../../src/shared/agent-mar
 /** Hidden from screen readers (the name beside it says it): the phone's own props, or the web's `aria-hidden` (react-native-svg hands props to the DOM `<svg>` as they are). */
 const HIDDEN = Platform.OS === 'web' ? { 'aria-hidden': true } : { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' as const };
 
-export function AgentMarkIcon({ mark, size = 16, color }: { readonly mark: AgentMark; readonly size?: number; readonly color?: string }) {
+/** `muted`: in `color` (or the quiet text tone), not the maker's own color: the marks of child threads (BLG-345). */
+export function AgentMarkIcon({ mark, size = 16, color, muted }: { readonly mark: AgentMark; readonly size?: number; readonly color?: string; readonly muted?: boolean }) {
   return (
     <Svg width={size} height={size} viewBox={AGENT_MARK_VIEWBOX} {...HIDDEN}>
-      <Path d={AGENT_MARKS[mark].d} fill={AGENT_MARKS[mark].color ?? color ?? palette.text} {...(AGENT_MARKS[mark].evenOdd ? { fillRule: 'evenodd' as const, clipRule: 'evenodd' as const } : {})} />
+      <Path d={AGENT_MARKS[mark].d} fill={muted ? (color ?? palette.text3) : (AGENT_MARKS[mark].color ?? color ?? palette.text)} {...(AGENT_MARKS[mark].evenOdd ? { fillRule: 'evenodd' as const, clipRule: 'evenodd' as const } : {})} />
     </Svg>
   );
 }

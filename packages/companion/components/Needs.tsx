@@ -112,7 +112,7 @@ export function NeedFace({ item, full = false, onAnswered, more }: { readonly it
             {k.label}
           </T>
           <T v="caption" numberOfLines={1}>
-            {[item.from, ago(item.askedAt)].filter(Boolean).join(' · ')}
+            {[item.from, item.thread, ago(item.askedAt)].filter(Boolean).join(' · ')}
           </T>
         </View>
         {more ? (

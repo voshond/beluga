@@ -8,6 +8,7 @@ import { Alert, Checkbox } from '../../components/Alert.js';
 import { useApi, useApp } from '../../lib/beluga.js';
 import type { NativeMenuProps } from './index.js';
 import { count, usePick } from './pick.js';
+import { useThreadsChoice } from './ThreadsChoice.js';
 import s from './menus.module.css';
 
 const NO_ENV: readonly EnvChange[] = [];
@@ -79,7 +80,8 @@ function useDeletePlan(id: string, worktree: boolean): DeletePlan | null | undef
  */
 export function ConfirmAlert({ menu, close }: NativeMenuProps<'confirm'>) {
   const api = useApi();
-  const pick = usePick(menu);
+  const threads = useThreadsChoice(menu.id, menu.action);
+  const pick = usePick(threads.children ? { ...menu, children: threads.children } : menu);
   const ws = useApp((st) => findWorkspace(st.projects, menu.id));
   const env = useApp((st) => st.envChanges[menu.id] ?? NO_ENV);
   const [copyEnv, setCopyEnv] = useState(true);
@@ -102,6 +104,13 @@ export function ConfirmAlert({ menu, close }: NativeMenuProps<'confirm'>) {
       <Checkbox checked={saveEnv} onChange={setSaveEnv} label="Save them in Beluga" detail="The project’s own variables: every run gets them, and the file stays as it is" />
     </>
   ) : null;
+  const boxes =
+    envBox || threads.box ? (
+      <>
+        {threads.box}
+        {envBox}
+      </>
+    ) : null;
   const withEnv = copyEnv && env.length > 0;
   /** Save in Beluga first (it reads the worktree's files, so before they go), then the option. */
   const go = (option: string): void => {
@@ -142,7 +151,7 @@ export function ConfirmAlert({ menu, close }: NativeMenuProps<'confirm'>) {
           alternative={{ label: 'Delete Anyway', destructive: true, onClick: remove }}
           onCancel={close}
         >
-          {envBox}
+          {boxes}
         </Alert>
       );
     }
@@ -169,7 +178,7 @@ export function ConfirmAlert({ menu, close }: NativeMenuProps<'confirm'>) {
         confirm={{ label: 'Delete', destructive: true, disabled: asking, onClick: remove }}
         onCancel={close}
       >
-        {envBox}
+        {boxes}
       </Alert>
     );
   }
@@ -211,7 +220,7 @@ export function ConfirmAlert({ menu, close }: NativeMenuProps<'confirm'>) {
       {...(changed ? { alternative: { label: 'Commit & Archive', onClick: commitAndArchive } } : {})}
       onCancel={close}
     >
-      {envBox}
+      {boxes}
     </Alert>
   );
 }

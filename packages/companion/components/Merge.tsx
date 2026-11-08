@@ -4,10 +4,12 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { calls } from '../lib/link/calls';
-import type { BranchStepView, BranchView, MergeCheckView, MergeView, PhoneBranchStep, Topic } from '../lib/link/protocol';
+import type { ThreadChildren } from '../../../src/shared/threads';
+import type { BranchStepView, BranchView, MergeCheckView, MergeView, PhoneBranchStep, ThreadCountView, Topic } from '../lib/link/protocol';
 import { openOnMac } from '../lib/mac';
 import { store } from '../lib/store';
 import { color } from '../lib/theme';
+import { branchChildren, threadsQuestion } from '../lib/thread-rows';
 import { Breathe, TypingDots } from './Live';
 import { Options } from './Options';
 import { Sheet } from './Sheet';
@@ -218,19 +220,21 @@ export function BranchBand({ topic, branch, canMerge, onMerge }: { readonly topi
   const [more, setMore] = useState(false);
   const [asking, setAsking] = useState<BranchStepView | undefined>();
   const [busy, setBusy] = useState<string | undefined>();
+  const [too, setToo] = useState(false);
+  const familyOf = (step: BranchStepView | undefined): ThreadCountView | undefined => (step?.id === 'archive' ? branch.threads?.archive : step?.id === 'delete' ? branch.threads?.delete : undefined);
   const resolve = () => {
     haptic.commit();
     void store.call(calls.resolve(topic), { queue: false }).catch((e: Error) => store.toast({ text: e.message, tone: 'error' }));
   };
   const steps = store.supports('branchSteps') ? (branch.steps ?? []).filter((s) => s.id !== 'merge' || canMerge) : [];
-  const run = (step: BranchStepView): void => {
+  const run = (step: BranchStepView, children?: ThreadChildren): void => {
     if (busy) return;
     if (step.id === 'merge') return onMerge();
     if (step.id === 'open_pr') return void (branch.pr?.url ? Linking.openURL(branch.pr.url) : openOnMac({ topic }));
     haptic.commit();
     setBusy(step.id);
     store
-      .call<{ ok: boolean; message: string }>(calls.branchStep(topic, step.id as PhoneBranchStep, bare(step.label)), { queue: false })
+      .call<{ ok: boolean; message: string }>(calls.branchStep(topic, step.id as PhoneBranchStep, bare(step.label), children), { queue: false })
       .then(
         (r) => {
           if (r) store.toast({ text: r.message, tone: r.ok ? 'ok' : 'error' });
@@ -241,8 +245,12 @@ export function BranchBand({ topic, branch, canMerge, onMerge }: { readonly topi
       )
       .finally(() => setBusy(undefined));
   };
-  // What Claude does, and what can't be undone, asks first (as on the Mac).
-  const tap = (step: BranchStepView): void => (step.claude || step.danger ? setAsking(step) : run(step));
+  // What Claude does, what can't be undone, and what would touch a chat's threads ask first (as on the Mac).
+  const tap = (step: BranchStepView): void => {
+    // Archive's default is to archive the threads too, delete's is to keep them (as on the Mac).
+    setToo(step.id === 'archive');
+    return step.claude || step.danger || familyOf(step)?.count ? setAsking(step) : run(step);
+  };
   const [main, ...rest] = steps;
   const openPr: BranchStepView | undefined = branch.pr?.url && !steps.some((s) => s.id === 'open_pr') ? { id: 'open_pr', label: `Open PR #${branch.pr.number}`, hint: 'On GitHub' } : undefined;
   const others = [...rest, ...(openPr ? [openPr] : [])];
@@ -263,6 +271,10 @@ export function BranchBand({ topic, branch, canMerge, onMerge }: { readonly topi
   // Deleting asks with Archive first: it keeps the branch's commits and the conversation (BLG-617; the hint says what Delete loses).
   const keep = asking?.id === 'delete' ? steps.find((s) => s.id === 'archive') : undefined;
   const confirm = asking ? [...(keep ? [keep] : []), asking] : [];
+  const family = familyOf(asking);
+  const question = family?.count ? threadsQuestion(asking!.id === 'archive' ? 'archive' : 'delete', family) : undefined;
+  // One answer for the sheet, Archive beside Delete included: the Mac's dialog has one box too.
+  const children = branchChildren(store.supports('threads'), family, too);
   return (
     // No layout animation: on Android its snapshot drew as a black box, and a ghost of the old band under the chat.
     <Animated.View key={branch.kind} entering={FadeIn.duration(200)}>
@@ -316,9 +328,27 @@ export function BranchBand({ topic, branch, canMerge, onMerge }: { readonly topi
         window
         visible={Boolean(asking)}
         onClose={() => setAsking(undefined)}
-        title={asking?.danger ? 'This can’t be undone' : 'Your agent does this in the conversation'}
-        options={confirm.map((s) => ({ Icon: iconOf(s), label: bare(s.label), sub: s.hint, tone: toneOf(s), onPress: () => run(s) }))}
+        title={asking?.danger ? 'This can’t be undone' : asking?.id === 'archive' ? 'Archive this chat' : 'Your agent does this in the conversation'}
+        head={question ? <ThreadsBox question={question} on={too} onToggle={() => setToo(!too)} /> : undefined}
+        options={confirm.map((s) => ({ Icon: iconOf(s), label: bare(s.label), sub: s.hint, tone: toneOf(s), onPress: () => run(s, children) }))}
       />
     </Animated.View>
+  );
+}
+
+/** The one question about a chat's threads, inside its archive or delete sheet. */
+function ThreadsBox({ question, on, onToggle }: { readonly question: { readonly label: string; readonly detail: string }; readonly on: boolean; readonly onToggle: () => void }) {
+  return (
+    <Press onPress={onToggle} scaleTo={0.99} accessibilityRole="checkbox" accessibilityState={{ checked: on }} accessibilityLabel={question.label} style={{ flexDirection: 'row', gap: 12, padding: 12, marginBottom: 6, borderRadius: 16, backgroundColor: color.sunken }}>
+      <View style={{ width: 22, height: 22, marginTop: 1, borderRadius: 7, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? toneBg('lavender') : color.card }}>
+        {on ? <Check color={toneInk('lavender')} size={15} strokeWidth={2.4} /> : null}
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <T v="callout" c={color.text} style={{ fontWeight: '600' }}>
+          {question.label}
+        </T>
+        <T v="caption">{question.detail}</T>
+      </View>
+    </Press>
   );
 }

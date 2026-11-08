@@ -194,3 +194,13 @@ export async function tidyScratch(dir: string, opts: TidyOptions): Promise<strin
   totals.delete(dir);
   return gone;
 }
+
+/**
+ * Delete a conversation's copies of what was sent to it (`rel`, from the folder's root: see
+ * core/sent-files.ts), when the conversation goes but its folder stays. Never through a link.
+ */
+export async function dropSent(dir: string, rel: string): Promise<void> {
+  if (!rel.startsWith(`${SCRATCH_DIR}/`) || !(await noLinks(dir, rel))) return;
+  await fs.rm(path.join(dir, rel), { recursive: true, force: true });
+  totals.delete(dir);
+}

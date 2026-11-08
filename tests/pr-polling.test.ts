@@ -7,7 +7,7 @@ import { Store, initialState } from '../src/core/store.js';
 import type { PullRequest } from '../src/core/work-store.js';
 import type { NoticeEvent } from '../src/core/notify.js';
 import type { WorkspaceController } from '../src/core/workspace-controller.js';
-import { PR_FAST_MS, PR_SLOW_MS, Workbench, prCadence, prNews } from '../src/core/workbench.js';
+import { PR_FAST_MS, PR_SLOW_MS, Workbench, mergedLineDue, prCadence, prNews } from '../src/core/workbench.js';
 import { parseChecks, parsePr, parsePrList, remoteRef } from '../src/workspaces/pr.js';
 
 /** Shaped like real `gh pr list --state all --json number,url,state,title,isDraft,statusCheckRollup,reviewDecision,headRefName` output. */
@@ -136,11 +136,23 @@ describe('remoteRef', () => {
 });
 
 /** A Workbench over fake worktrees, a fake gh and a hand-moved clock. */
-function bench(worktrees: Array<{ id: string; branch: string; project?: string; ahead?: number; path?: string }>) {
+function bench(worktrees: Array<{ id: string; branch: string; project?: string; ahead?: number; path?: string }>, more: Partial<ConstructorParameters<typeof Workbench>[0]> = {}) {
   const store = new Store(initialState('t', 'ask'));
-  const workspaces = worktrees.map((w) => ({ id: w.id, name: w.id, kind: 'worktree', branch: w.branch, path: w.path ?? `/code/${w.id}`, projectId: w.project ?? 'p1', status: { changed: 0, ahead: w.ahead ?? 1, behind: 0 } }));
+  const workspaces: Array<{ id: string; name: string; kind: string; branch: string; path: string; projectId: string; status: { changed: number; ahead: number; behind: number }; mergeSaid?: number; mergedHead?: string }> = worktrees.map((w) => ({ id: w.id, name: w.id, kind: 'worktree', branch: w.branch, path: w.path ?? `/code/${w.id}`, projectId: w.project ?? 'p1', status: { changed: 0, ahead: w.ahead ?? 1, behind: 0 } }));
   const projects = [...new Set(workspaces.map((w) => w.projectId))];
-  const manager = { list: projects.map((id) => ({ id, workspaces: workspaces.filter((w) => w.projectId === id) })), find: (id: string) => workspaces.find((w) => w.id === id) };
+  const manager = {
+    list: projects.map((id) => ({ id, workspaces: workspaces.filter((w) => w.projectId === id) })),
+    find: (id: string) => workspaces.find((w) => w.id === id),
+    setMergeSaid: (id: string, number: number) => Object.assign(workspaces.find((w) => w.id === id)!, { mergeSaid: number }),
+    setMergedHead: (id: string, head: string) => {
+      const ws = workspaces.find((w) => w.id === id)!;
+      if (ws.mergedHead === head) return false;
+      ws.mergedHead = head;
+      return true;
+    },
+  };
+  const recounted: string[] = [];
+  const loaded: string[] = [];
   const remote: Record<string, string | undefined> = {};
   const gh = new Map<string, PullRequest>();
   const calls: string[] = [];
@@ -157,7 +169,7 @@ function bench(worktrees: Array<{ id: string; branch: string; project?: string; 
   };
   const wb = new Workbench({
     store,
-    controller: { manager } as unknown as WorkspaceController,
+    controller: { manager, ensureLoaded: (id: string) => void loaded.push(id), refresh: async () => undefined, refreshWorkspace: async (dir: string) => void recounted.push(dir) } as unknown as WorkspaceController,
     notify: (e) => void notices.push(e),
     toast: () => undefined,
     intend: () => undefined,
@@ -168,9 +180,11 @@ function bench(worktrees: Array<{ id: string; branch: string; project?: string; 
     listPrs: async (dir) => (calls.push(`list ${dir}`), slow({ prs: new Map(gh), full: false })),
     remoteRef: (_dir, branch) => remote[branch],
     now: () => clock.now,
+    ...more,
   });
   store.dispatch({ type: 'gh', ok: true });
-  return { wb, store, gh, calls, remote, notices, clock, most: () => most, prs: () => store.getState().prs };
+  const merged = (id: string) => store.getState().log.filter((l) => l.channel === `ws:${id}` && l.type === 'system' && l.merged);
+  return { wb, store, gh, calls, remote, notices, clock, loaded, merged, recounted, workspaces, most: () => most, prs: () => store.getState().prs };
 }
 
 const pr = (number: number, more: Partial<PullRequest> = {}): PullRequest => ({ number, url: `u/${number}`, state: 'OPEN', title: `PR ${number}`, draft: false, checks: 'passing', ...more });
@@ -330,5 +344,76 @@ describe('PR polling', () => {
     const before = b.store.getState().prs;
     await b.wb.refreshPrs('a');
     expect(b.store.getState().prs).toBe(before);
+  });
+});
+
+describe('mergedLineDue', () => {
+  const open = pr(5);
+  const merged = pr(5, { state: 'MERGED', mergedAt: 2_000 });
+  it('says a PR seen merging once, and nothing for one still open or already said', () => {
+    expect(mergedLineDue(merged, open, false, undefined, 9_000)).toBe(true);
+    expect(mergedLineDue(open, open, false, undefined, 0)).toBe(false);
+    expect(mergedLineDue(pr(5, { state: 'CLOSED' }), open, false, undefined, 0)).toBe(false);
+    expect(mergedLineDue(merged, open, false, 5, 0)).toBe(false);
+    // An older PR said doesn't stop a newer one.
+    expect(mergedLineDue(pr(6, { state: 'MERGED' }), pr(6), false, 5, 9_000)).toBe(true);
+  });
+  it('says one first seen merged only when nothing was said in the chat since it merged', () => {
+    expect(mergedLineDue(merged, undefined, true, undefined, 1_500)).toBe(true);
+    expect(mergedLineDue(merged, undefined, true, undefined, 2_500)).toBe(false);
+    expect(mergedLineDue(merged, undefined, false, undefined, 2_500)).toBe(false);
+    expect(mergedLineDue(pr(5, { state: 'MERGED' }), undefined, true, undefined, 0)).toBe(false);
+    expect(mergedLineDue(merged, undefined, true, undefined, undefined)).toBe(false);
+  });
+});
+
+describe('the merged line in the chat', () => {
+  it('shows once when an open PR merges, however it merged', async () => {
+    const b = bench([{ id: 'a', branch: 'klaud/a', project: 'x' }]);
+    b.gh.set('klaud/a', pr(4));
+    await b.wb.refreshPrs();
+    expect(b.merged('a')).toEqual([]);
+    b.gh.set('klaud/a', pr(4, { state: 'MERGED', mergedAt: b.clock.now }));
+    await b.wb.refreshPrs('a');
+    expect(b.merged('a')).toEqual([expect.objectContaining({ text: 'Above this line was merged into main in PR #4.', merged: { into: 'main', number: 4, url: 'u/4' } })]);
+    expect(b.loaded).toEqual(['a']);
+    await b.wb.refreshPrs('a');
+    await b.wb.refreshPrs();
+    expect(b.merged('a')).toHaveLength(1);
+  });
+
+  it('keeps the commit a PR merged at, and counts that worktree again once (BLG-833)', async () => {
+    const b = bench([{ id: 'a', branch: 'klaud/a', project: 'x' }]);
+    b.gh.set('klaud/a', pr(4, { head: 'abc123' }));
+    await b.wb.refreshPrs();
+    expect(b.workspaces[0]?.mergedHead).toBeUndefined();
+    b.gh.set('klaud/a', pr(4, { state: 'MERGED', head: 'abc123', mergedAt: b.clock.now }));
+    await b.wb.refreshPrs('a');
+    expect(b.workspaces[0]?.mergedHead).toBe('abc123');
+    expect(b.recounted).toEqual(['/code/a']);
+    await b.wb.refreshPrs('a');
+    expect(b.recounted).toEqual(['/code/a']);
+  });
+
+  it('shows a merge into its base without a PR', async () => {
+    const b = bench([{ id: 'a', branch: 'klaud/a', project: 'x' }], { mergeToBase: async () => ({ ok: true, how: 'fast_forward', sha: 'abc' }) });
+    expect((await b.wb.mergeToBase('a')).ok).toBe(true);
+    expect(b.merged('a')).toEqual([expect.objectContaining({ text: 'Above this line was merged into main.', merged: { into: 'main' } })]);
+  });
+
+  it('shows one that merged while Beluga was closed, unless the chat went on after it', async () => {
+    const b = bench([
+      { id: 'quiet', branch: 'klaud/quiet', project: 'x' },
+      { id: 'busy', branch: 'klaud/busy', project: 'y' },
+    ]);
+    b.store.dispatch({ type: 'chat', channel: 'ws:quiet', from: 't', text: 'ship it', id: 'm1', ts: 1_000, byAgent: false });
+    b.store.dispatch({ type: 'chat', channel: 'ws:busy', from: 't', text: 'next thing', id: 'm2', ts: 3_000, byAgent: false });
+    b.gh.set('klaud/quiet', pr(1, { state: 'MERGED', mergedAt: 2_000 }));
+    b.gh.set('klaud/busy', pr(2, { state: 'MERGED', mergedAt: 2_000 }));
+    await b.wb.refreshPrs();
+    expect(b.merged('quiet')).toHaveLength(1);
+    expect(b.merged('busy')).toEqual([]);
+    // Nothing on top: it was already news a while ago.
+    expect(b.notices).toEqual([]);
   });
 });

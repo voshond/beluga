@@ -11,7 +11,7 @@ process.env.CLAUDE_CONFIG_DIR = CLAUDE_HOME;
 const { encodeProjectDir, findConversation, listConversations, pathVariants, samePath, sessionTitle } = await import('../src/agent/runtime/claude/claude-sessions.js');
 const { findCreators, worktreeAddTargets } = await import('../src/agent/runtime/claude/worktree-creators.js');
 const { describeOrigin, sourceFromPath, worktreeOrigin } = await import('../src/workspaces/origin.js');
-const { deletesSettled, removeWorktreeKeepingBranch, staleReason, sweepSetAside, worktreeFacts } = await import('../src/workspaces/others.js');
+const { deletesSettled, removeWorktreeKeepingBranch, renameFolder, staleReason, sweepSetAside, worktreeFacts } = await import('../src/workspaces/others.js');
 const { parseConductorRows, inConductorRoot } = await import('../src/workspaces/conductor.js');
 const { OtherWorktrees } = await import('../src/core/other-worktrees.js');
 const { WorkspaceManager } = await import('../src/workspaces/manager.js');
@@ -430,5 +430,34 @@ describe("Conductor's live workspaces", () => {
     expect(await others.cleanUp(projectId, all.filter((w) => w.external).map((w) => w.id))).toEqual({ removed: 1, kept: 1 });
     expect(existsSync(live)).toBe(true);
     expect(existsSync(archived)).toBe(false);
+  });
+});
+
+describe('setting a folder aside to delete it', () => {
+  const held = (code: string, times: number) => {
+    const calls: string[] = [];
+    const move = async (from: unknown, to: unknown): Promise<void> => {
+      calls.push(`${from}->${to}`);
+      if (calls.length <= times) throw Object.assign(new Error(code), { code });
+    };
+    return { calls, move: move as never };
+  };
+
+  it('on Windows, tries again while the folder is held a moment (Defender reading files just made)', async () => {
+    const { calls, move } = held('EPERM', 2);
+    await renameFolder('a', 'b', { platform: 'win32', move });
+    expect(calls).toEqual(['a->b', 'a->b', 'a->b']);
+  });
+
+  it('gives up once it stays held, and never waits on another error or elsewhere', async () => {
+    const stuck = held('EBUSY', 99);
+    await expect(renameFolder('a', 'b', { platform: 'win32', move: stuck.move })).rejects.toThrow('EBUSY');
+    expect(stuck.calls).toHaveLength(6);
+    const gone = held('ENOENT', 99);
+    await expect(renameFolder('a', 'b', { platform: 'win32', move: gone.move })).rejects.toThrow('ENOENT');
+    expect(gone.calls).toHaveLength(1);
+    const mac = held('EPERM', 99);
+    await expect(renameFolder('a', 'b', { platform: 'darwin', move: mac.move })).rejects.toThrow('EPERM');
+    expect(mac.calls).toHaveLength(1);
   });
 });

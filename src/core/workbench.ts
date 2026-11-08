@@ -14,7 +14,7 @@ import type { Workspace } from '../workspaces/types.js';
 import { worktreeOrigin } from '../workspaces/origin.js';
 import { formatBytes, measureAll } from '../workspaces/disk.js';
 import { contentIn, fetchRemote, resetTo } from '../workspaces/git.js';
-import { type MergeOptions, type MergeProblem, type PrStepKind, buildPrPrompt, catchUpPrompt, commitSubjects, createPr, disableAutoMerge, prFromCommits, titleOfBranch, resolvePrConflictsPrompt, customPrPrompt, deleteRemoteBranch, ensurePrPromptFile, explainMergeError, findPr, fixChecksPrompt, forgetGh, ghState, gitSetup, hasGh, listPrs, useHttpsRemote, mergePr, mergeToBase, prStep, pushForPr, remoteRef, rerunFailed, resetPrPrompt, setPrTarget, unpushedCommits } from '../workspaces/pr.js';
+import { type MergeOptions, type MergeProblem, type PrStepKind, buildPrPrompt, catchUpPrompt, commitSubjects, createPr, disableAutoMerge, prFromCommits, titleOfBranch, resolvePrConflictsPrompt, customPrPrompt, deleteRemoteBranch, ensurePrPromptFile, explainMergeError, findPr, fixChecksPrompt, forgetGh, ghState, gitSetup, hasGh, headCarries, listPrs, useHttpsRemote, mergePr, mergeToBase, prStep, pushForPr, remoteRef, rerunFailed, resetPrPrompt, setPrTarget, unpushedCommits } from '../workspaces/pr.js';
 import { prTargetOf, pullOfBranch } from '../workspaces/github.js';
 import { failedRunIds, prOnOriginal } from './branch-state.js';
 import { PROJECT_FILES, type ProjectScripts, checkSetup, projectFileName, scriptEnv } from '../workspaces/scripts.js';
@@ -26,7 +26,9 @@ import { claudeCodeCommand } from '../agent/claude-code.js';
 import { CONTINUE_PROMPT } from '../shared/run-failure.js';
 import type { NoticeEvent } from './notify.js';
 import { type SearchSource, searchConversations } from './search.js';
-import { type LogItem, type Prefs, type Store, shippedText } from './store.js';
+import { type LogItem, type MergedMark, type Prefs, type Store, mergedText, shippedText } from './store.js';
+import { lastLogAt } from './triage/facts.js';
+import { triageKey } from './triage/model.js';
 import { addTemplate, loadTemplates, removeTemplate } from './templates.js';
 import type { ModelChoice, PrConversation, PrThread, PullRequest } from './work-store.js';
 import type { RuntimeStatus } from '../agent/runtime/types.js';
@@ -81,6 +83,8 @@ export interface WorkbenchDeps {
   readonly mergePr?: (dir: string, number: number, opts: MergeOptions) => Promise<void>;
   /** How many commits here the branch on GitHub doesn't have yet (injected in tests). */
   readonly unpushedCommits?: (dir: string, branch: string) => Promise<number>;
+  /** Whether a PR's head holds every commit HEAD has (injected in tests; see pr.ts headCarries). */
+  readonly headCarries?: typeof headCarries;
   /** Delete a merged branch on GitHub (injected in tests). */
   readonly deleteRemoteBranch?: (dir: string, branch: string) => Promise<void>;
   /** A PR's one-click step on GitHub (injected in tests; throws gh's error). */
@@ -145,6 +149,8 @@ export const PR_FAST_MS = 15_000;
 export const PR_SLOW_MS = 60_000;
 /** Checks can take a moment to show up after a push: with none at all, Merge When Ready merges only after this long. */
 export const NO_CHECKS_GRACE_MS = 90_000;
+/** Merge When Ready after a push (BLG-840): how long GitHub's PR may go on without the pushed commits before it stops waiting and says so. */
+export const PUSHED_HEAD_WAIT_MS = 15 * 60_000;
 /** A push keeps its PR on the fast cadence this long (CI starts, a PR gets opened). */
 const PR_PUSHED_FOR_MS = 3 * 60_000;
 /** Coming back to the window refreshes PRs not looked at in this long. */
@@ -194,6 +200,18 @@ export function prNews(name: string, channel: string, before: PullRequest | unde
   if (before.review !== pr.review && pr.review === 'CHANGES_REQUESTED') out.push({ kind: 'pr', title: `Changes requested on PR #${pr.number}`, body: name, channel });
   if (before.review !== pr.review && pr.review === 'APPROVED') out.push({ kind: 'pr', title: `PR #${pr.number} was approved`, body: name, channel });
   return out;
+}
+
+/**
+ * Whether a worktree's chat should now get the line saying its PR merged. Once per PR (`said`: the
+ * one it already shows). Seen merging (open last time, `quiet` off): yes. Otherwise (merged while
+ * Beluga was closed, or between two looks) only when nothing was said in the chat since it merged
+ * (`lastAt`), so everything above the line really is what merged.
+ */
+export function mergedLineDue(pr: PullRequest | undefined, before: PullRequest | undefined, quiet: boolean, said: number | undefined, lastAt: number | undefined): boolean {
+  if (pr?.state !== 'MERGED' || said === pr.number) return false;
+  if (!quiet && before?.number === pr.number && before.state === 'OPEN') return true;
+  return pr.mergedAt !== undefined && lastAt !== undefined && lastAt <= pr.mergedAt;
 }
 
 /**
@@ -297,6 +315,8 @@ export class Workbench {
   private readonly githubSteps = new Map<string, () => void>();
   /** Worktrees whose PR is being merged right now. */
   private readonly merging = new Set<string>();
+  /** Merge When Ready being looked at (refreshes overlap; it awaits git): one at a time per worktree. */
+  private readonly settling = new Set<string>();
   /** Projects Claude is working out the commands of right now (one look each, shared by the worktrees waiting on it). */
   private readonly workingOut = new Map<string, Promise<void>>();
   /** "Run this setup by itself?" questions waiting, by project and command. */
@@ -492,6 +512,7 @@ export class Workbench {
         const files = result.files.slice(0, 3).join(', ') + (result.files.length > 3 ? '…' : '');
         return warn(`${branch} conflicts with origin/${base} (${files}): nothing was pushed. Create a PR, or ask your agent to bring ${base} in first`);
       }
+      this.sayMerged(id, { into: base });
       void this.deps.controller.refresh();
       void this.refreshPrs(id);
       const message = `Merged ${branch} into ${base} on GitHub${result.how === 'fast_forward' ? '' : ' (a merge commit)'}`;
@@ -660,6 +681,16 @@ export class Workbench {
   }
 
   /**
+   * A line across a worktree's chat: what's above it merged (in a PR, on GitHub, or into the main
+   * folder), so you see it there even when it merged outside Beluga. Its saved conversation is
+   * loaded first, so the line lands after it and is saved with it.
+   */
+  private sayMerged(id: string, mark: MergedMark): void {
+    this.deps.controller.ensureLoaded(id);
+    this.deps.store.dispatch({ type: 'system', channel: `ws:${id}`, text: mergedText(mark), merged: mark });
+  }
+
+  /**
    * Keep working in a worktree whose PR merged: its PR is done (the next change opens a new one),
    * and the branch starts again from the base. When everything on it is already in the base it
    * just moves there; when it has work since, Claude merges the base in so nothing is lost.
@@ -678,7 +709,7 @@ export class Workbench {
       return this.deps.toast(`Couldn’t fetch ${target}: ${err instanceof Error ? err.message : String(err)}`, 'error');
     }
     const done = await contentIn(ws.path, 'HEAD', target);
-    this.manager.setPrDone(id, pr.number, { url: pr.url, into: base });
+    this.manager.setPrDone(id, pr.number, { url: pr.url, into: base, ...(pr.head ? { head: pr.head } : {}) });
     this.deps.store.dispatch({ type: 'pr', id, pr: undefined });
     // A line across the chat: what's above went out in this PR, what's below is the next one.
     this.deps.store.dispatch({ type: 'system', channel: `ws:${id}`, text: shippedText(pr.number, base), shipped: { number: pr.number, url: pr.url, into: base } });
@@ -711,6 +742,15 @@ export class Workbench {
    * sentence (a review is required, it conflicts…).
    */
   async mergePr(id: string, opts: MergeOptions): Promise<MergeOutcome> {
+    return this.mergeOnGitHub(id, opts, false);
+  }
+
+  /**
+   * Never a merge without the work it should carry (BLG-840): commits here that the PR doesn't have
+   * are pushed first, and GitHub merges only the head that has them (--match-head-commit). `fromWait`:
+   * Merge When Ready's own merge, which waits again for the checks of anything it had to push.
+   */
+  private async mergeOnGitHub(id: string, opts: MergeOptions, fromWait: boolean): Promise<MergeOutcome> {
     const ws = this.worktree(id);
     const pr = this.deps.store.getState().prs[id];
     const fail = (reason: Extract<MergeOutcome, { ok: false }>['reason'], message: string): MergeOutcome => {
@@ -724,8 +764,17 @@ export class Workbench {
     try {
       // GitHub merges what it has: commits made here since the last push would be left behind, and lost with the worktree. Push them first.
       const unpushed = await (this.deps.unpushedCommits ?? unpushedCommits)(ws.path, ws.branch);
-      if (unpushed > 0) {
-        const commits = unpushed === 1 ? '1 commit' : `${unpushed} commits`;
+      // The PR's own head too: origin/<branch> can be stale, or not the PR's branch at all.
+      const here = await (this.deps.headCarries ?? headCarries)(ws.path, pr.head);
+      // GitHub merges exactly the head that was checked here, or nothing if it moved since.
+      let matchHead = here.carries ? pr.head : undefined;
+      if (unpushed > 0 || here.carries === false) {
+        // Counted as the chip counts them (status.unpushed: main merged in here isn't more work).
+        const n = ws.status?.unpushed || unpushed;
+        const commits = n === 0 ? 'the latest commits' : n === 1 ? '1 commit' : `${n} commits`;
+        const them = n === 1 ? 'it' : 'them';
+        // A fork's pull request checked out here (BLG-756): Beluga can't push to it, so merging would leave them out.
+        if (pullOfBranch(ws.path, ws.branch) !== undefined) return fail('unpushed', `PR #${pr.number} is from someone’s fork, so Beluga can’t push ${commits} here to it, and merging it would leave ${them} out. Suggest ${them} on the PR, or open a PR of your own`);
         this.deps.toast(`Pushing ${commits} to ${ws.branch} before merging PR #${pr.number}…`);
         try {
           await (this.deps.pushForPr ?? pushForPr)(ws.path, ws.branch);
@@ -735,14 +784,23 @@ export class Workbench {
             this.deps.toast(trouble.title, 'warn');
             return { ok: false, reason: 'github', message: troubleLine(trouble), trouble };
           }
-          return fail('unpushed', `Couldn’t push ${commits} in ${ws.name}, so PR #${pr.number} isn’t merged (it would leave ${unpushed === 1 ? 'it' : 'them'} out): ${firstLine(err)}`);
+          return fail('unpushed', `Couldn’t push ${commits} in ${ws.name}, so PR #${pr.number} isn’t merged (it would leave ${them} out): ${firstLine(err)}`);
         }
         this.troubles.delete(id);
         this.pushedAt.set(id, this.now());
+        matchHead = here.head;
+        // Merge When Ready: what was just pushed has checks of its own, so it waits for those too.
+        if (fromWait) {
+          this.manager.setMergeWait(ws.id, { number: pr.number, method: opts.method, since: this.now(), ...(opts.deleteBranch ? { deleteBranch: true } : {}), ...(here.head ? { head: here.head } : {}) });
+          await this.deps.controller.refresh();
+          const message = `Pushed ${commits} to PR #${pr.number}: it merges once their checks pass`;
+          this.deps.toast(message, 'success');
+          return { ok: true, result: 'queued', message };
+        }
       }
-      if (opts.auto) return await this.mergeWhenReady(ws, pr, opts);
+      if (opts.auto) return await this.mergeWhenReady(ws, pr, opts, matchHead !== pr.head ? matchHead : undefined);
       try {
-        await (this.deps.mergePr ?? mergePr)(ws.path, pr.number, opts);
+        await (this.deps.mergePr ?? mergePr)(ws.path, pr.number, matchHead && !opts.matchHead ? { ...opts, matchHead } : opts);
       } catch (err) {
         const trouble = await this.troubleOf(ws, err);
         if (trouble) {
@@ -775,8 +833,8 @@ export class Workbench {
    * Merge When Ready: Beluga waits for the PR's checks itself and merges once they pass (see
    * settleMergeWait). Not GitHub's `--auto`, which merges at once when the repository requires no check.
    */
-  private async mergeWhenReady(ws: Workspace, pr: PullRequest, opts: MergeOptions): Promise<MergeOutcome> {
-    this.manager.setMergeWait(ws.id, { number: pr.number, method: opts.method, since: this.now(), ...(opts.deleteBranch ? { deleteBranch: true } : {}) });
+  private async mergeWhenReady(ws: Workspace, pr: PullRequest, opts: MergeOptions, pushed?: string): Promise<MergeOutcome> {
+    this.manager.setMergeWait(ws.id, { number: pr.number, method: opts.method, since: this.now(), ...(opts.deleteBranch ? { deleteBranch: true } : {}), ...(pushed ? { head: pushed } : {}) });
     await this.deps.controller.refresh();
     const message = `PR #${pr.number} merges once its checks pass`;
     this.deps.toast(message, 'success');
@@ -814,6 +872,16 @@ export class Workbench {
    * with a notice when they fail, it conflicts, or it was closed.
    */
   private async settleMergeWait(ws: Workspace, pr: PullRequest | undefined): Promise<void> {
+    if (this.settling.has(ws.id)) return;
+    this.settling.add(ws.id);
+    try {
+      await this.settleMergeWaitNow(ws, pr);
+    } finally {
+      this.settling.delete(ws.id);
+    }
+  }
+
+  private async settleMergeWaitNow(ws: Workspace, pr: PullRequest | undefined): Promise<void> {
     const wait = this.manager.find(ws.id)?.mergeWhenReady;
     if (!wait || this.merging.has(ws.id)) return;
     const channel = `ws:${ws.id}`;
@@ -828,6 +896,12 @@ export class Workbench {
     };
     // Merged or closed some other way (GitHub says so on its own), or a newer PR: nothing to wait for.
     if (!pr || pr.number !== wait.number || pr.state !== 'OPEN') return done();
+    // Just pushed (BLG-840): until GitHub's PR has that commit, its checks and conflicts are an older one's.
+    // A head it can't place (someone pushed on top) isn't waited on: the merge itself checks again.
+    if (wait.head && pr.head && pr.head !== wait.head && (await (this.deps.headCarries ?? headCarries)(ws.path, pr.head)).carries === false) {
+      if (this.now() - wait.since < PUSHED_HEAD_WAIT_MS) return;
+      return stop(`PR #${pr.number} still doesn’t have the commits pushed for it: not merging it`);
+    }
     if (pr.conflicts) return stop(`PR #${pr.number} conflicts with its base: not merging it`);
     if (pr.checks === 'failing') return stop(`Checks failed on PR #${pr.number}: not merging it`);
     if (pr.review === 'CHANGES_REQUESTED') return stop(`Changes were requested on PR #${pr.number}: not merging it`);
@@ -837,7 +911,9 @@ export class Workbench {
     // Waiting on a review, or the branch's rules: those can pass later.
     if (pr.review === 'REVIEW_REQUIRED' || pr.mergeState === 'blocked' || pr.mergeState === 'behind') return;
     await done();
-    const out = await this.mergePr(ws.id, { method: wait.method, ...(wait.deleteBranch ? { deleteBranch: true } : {}) });
+    const out = await this.mergeOnGitHub(ws.id, { method: wait.method, ...(wait.deleteBranch ? { deleteBranch: true } : {}) }, true);
+    // It pushed commits that weren't on the PR first, and waits for their checks now.
+    if (out.ok && out.result === 'queued') return;
     if (out.ok) this.deps.notify({ kind: 'pr', title: `PR #${pr.number} merged: its checks passed`, body: ws.name, channel });
     else this.deps.notify({ kind: 'problems', title: `PR #${pr.number} didn’t merge`, body: out.message, channel });
   }
@@ -981,6 +1057,11 @@ export class Workbench {
       this.deps.toast(firstLine(err), 'warn');
       return { ok: false, message: firstLine(err) };
     }
+  }
+
+  /** Where a workspace's folder is (a live preview builds from it), or undefined when it's gone. */
+  folderOf(id: string): string | undefined {
+    return this.manager.find(id)?.path;
   }
 
   /** Lines of a file in a workspace, for a code block in chat (never outside it, never a secret). */
@@ -1130,7 +1211,16 @@ export class Workbench {
     const pr = found && ws.prDone !== undefined && sameRepo && found.number <= ws.prDone ? undefined : found;
     const before = this.deps.store.getState().prs[ws.id];
     if (!samePr(before, pr)) this.deps.store.dispatch({ type: 'pr', id: ws.id, pr });
+    // Merged at that commit: what's in it is on GitHub, so the Delete step stops counting it as unpushed (BLG-833).
+    if (pr?.state === 'MERGED' && pr.head && this.manager.setMergedHead(ws.id, pr.head)) void this.deps.controller.refreshWorkspace(ws.path).catch(() => undefined);
     void this.settleMergeWait(ws, pr);
+    const state = this.deps.store.getState();
+    const key = triageKey(state, `ws:${ws.id}`);
+    const lastAt = (key ? state.triage[key]?.lastAt : undefined) ?? lastLogAt(state.log, `ws:${ws.id}`);
+    if (pr && mergedLineDue(pr, before, quiet, this.manager.find(ws.id)?.mergeSaid, lastAt)) {
+      this.manager.setMergeSaid(ws.id, pr.number);
+      this.sayMerged(ws.id, { into: this.prBase(ws), number: pr.number, url: pr.url });
+    }
     if (!pr || quiet) return;
     const asked = this.prAsked.delete(ws.id);
     // Merged or closed is said once, even if gh's answers flicker.

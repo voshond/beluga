@@ -15,11 +15,11 @@ import type { Action, AppState } from '../src/core/store.js';
 import { type ScreenAction, initialAppState, reduceApp } from '../src/client/screen.js';
 import type { Project, Workspace } from '../src/workspaces/types.js';
 import { dockCount, projectTally, signalOf, unreadEntries, workspaceSignal } from '../packages/mac/src/layout/attention-model.js';
-import { remindLabel, remindPending, remindTime } from '../src/shared/remind.js';
-import { Reminders, reminderNotice } from '../src/core/reminders.js';
+import { remindLabel, remindPending, remindPresets, remindTime } from '../src/shared/remind.js';
 import { remindLaterNotice } from '../src/core/notify.js';
+import { launchTriage } from '../src/core/triage/launch.js';
 
-/** Quiet while your agent fixes it, and Remind Me Later on a conversation (BLG-748). */
+/** Quiet while your agent fixes it, and Remind Me Later on a conversation (BLG-748, kept in the triage records since BLG-770). */
 
 const NOW = new Date(2026, 10, 7, 11, 0).getTime(); // a Saturday, 11:00 local
 const HOUR = 3_600_000;
@@ -31,7 +31,7 @@ const ws = (over: Partial<Workspace>): Workspace => ({
 const project = (...workspaces: Workspace[]): Project => ({ id: 'p1', name: 'api', root: '/p', base: 'origin/main', workspaces });
 
 const apply = (s: AppState, ...actions: Array<Action | ScreenAction>): AppState => actions.reduce<AppState>((st, a) => reduceApp(st, a), s);
-const stateWith = (...workspaces: Workspace[]): AppState =>
+const stateOf = (...workspaces: Workspace[]): AppState =>
   apply(initialAppState('room'), { type: 'welcome', self: { peerId: 'me', name: 'kay', agent: true, shares: [] } }, { type: 'projects', projects: [project(...workspaces)] });
 const run = (event: 'started' | 'done' | 'awaiting_approval', channel = 'ws:auth'): Action => ({ type: 'agent_event', owner: 'me', requestId: 'r1', requester: 'me', event, text: event === 'done' ? 'Fixed.' : '', ts: 5, channel });
 const failing: Action = { type: 'pr', id: 'auth', pr: { number: 1, url: 'u', state: 'OPEN', title: 't', draft: false, checks: 'failing' } };
@@ -42,7 +42,7 @@ afterEach(() => vi.useRealTimers());
 
 describe('failing checks or a conflict while your agent works on them', () => {
   it('reads as working, not as a problem, and is red again if it is still failing when the agent stops', () => {
-    const s = apply(stateWith(ws({ id: 'auth', name: 'add-auth' })), overview, failing);
+    const s = apply(stateOf(ws({ id: 'auth', name: 'add-auth' })), overview, failing);
     expect(signalOf(s, 'ws:auth', 'auth')).toMatchObject({ level: 'needs', need: 'checks' });
     // You click Fix in the worktree: your agent starts there.
     const fixing = apply(s, inAuth, run('started'));
@@ -53,7 +53,7 @@ describe('failing checks or a conflict while your agent works on them', () => {
   });
 
   it('does the same for a merge conflict, but an approval still needs you while it works', () => {
-    const s = apply(stateWith(ws({ id: 'auth' })), inAuth, { type: 'conflicts', id: 'auth', files: ['a.ts'] }, run('started'));
+    const s = apply(stateOf(ws({ id: 'auth' })), inAuth, { type: 'conflicts', id: 'auth', files: ['a.ts'] }, run('started'));
     expect(signalOf(s, 'ws:auth', 'auth')).toMatchObject({ level: 'working', tip: 'Your agent is working · A merge conflict to resolve' });
     const asks = apply(s, { type: 'approval_add', approval: { id: 'a1', kind: 'tool', title: 'Bash', detail: '', channel: 'ws:auth' } });
     expect(signalOf(asks, 'ws:auth', 'auth')).toMatchObject({ level: 'needs', need: 'approval' });
@@ -70,18 +70,35 @@ describe('Remind Me Later choices', () => {
     expect(remindTime('week', new Date(2026, 10, 9, 10, 0).getTime())).toBe(new Date(2026, 10, 16, 8, 0).getTime());
   });
 
+  it('crosses a month and a year end', () => {
+    const eve = new Date(2026, 11, 31, 23, 30).getTime();
+    expect(remindTime('hour', eve)).toBe(new Date(2027, 0, 1, 0, 30).getTime());
+    expect(remindTime('tomorrow', eve)).toBe(new Date(2027, 0, 1, 8, 0).getTime());
+  });
+
+  it('one list for every menu, the Mac and the phone, in order', () => {
+    expect(remindPresets(NOW)).toEqual([
+      { label: 'In 1 Hour', at: NOW + HOUR },
+      { label: 'In 3 Hours', at: NOW + 3 * HOUR },
+      { label: 'Tomorrow Morning', at: remindTime('tomorrow', NOW) },
+      { label: 'Next Week', at: remindTime('week', NOW) },
+    ]);
+  });
+
   it('says when it reminds you, and nothing once it has', () => {
-    expect(remindLabel({ remindAt: NOW + HOUR }, NOW)).toBe('Reminds you at 12:00');
-    expect(remindLabel({ remindAt: remindTime('tomorrow', NOW) }, NOW)).toBe('Reminds you tomorrow at 08:00');
-    expect(remindLabel({ remindAt: remindTime('week', NOW) }, NOW)).toBe('Reminds you Mon at 08:00');
-    expect(remindPending({ remindAt: NOW - 1 }, NOW)).toBe(false);
-    expect(remindLabel({ remindAt: NOW - 1 }, NOW)).toBe('');
-    expect(remindPending({}, NOW)).toBe(false);
+    expect(remindLabel(NOW + HOUR, NOW)).toBe('Reminds you at 12:00');
+    expect(remindLabel(remindTime('tomorrow', NOW), NOW)).toBe('Reminds you tomorrow at 08:00');
+    expect(remindLabel(remindTime('week', NOW), NOW)).toBe('Reminds you Mon at 08:00');
+    expect(remindPending(NOW - 1, NOW)).toBe(false);
+    expect(remindLabel(NOW - 1, NOW)).toBe('');
+    expect(remindPending(undefined, NOW)).toBe(false);
   });
 });
 
 describe('a conversation put off till later', () => {
-  const later = ws({ id: 'auth', name: 'add-auth', remindAt: NOW + HOUR });
+  const later = ws({ id: 'auth', name: 'add-auth' });
+  const putOff = (s: AppState, until = NOW + HOUR): AppState => apply(s, { type: 'triage_set', channel: 'ws:auth', record: { snoozed: { at: NOW, until, seen: [] } } });
+  const stateWith = (...workspaces: Workspace[]): AppState => putOff(stateOf(...workspaces));
   const news = (s: AppState): AppState => apply(s, overview, run('started'), run('done'), { type: 'chat', id: 'c1', from: 'me', text: 'hm', ts: 6, byAgent: true, channel: 'ws:auth' });
 
   it('hides its news and failing checks, and leaves the Unread section, tallies and Dock', () => {
@@ -93,12 +110,14 @@ describe('a conversation put off till later', () => {
     expect(dockCount(s)).toBe(0);
   });
 
-  it('still shows your agent at work and what it asks you', () => {
+  it('still shows your agent at work, and anything it asks you after', () => {
     vi.useFakeTimers({ now: NOW });
     const s = apply(stateWith(later), overview, run('started'));
     expect(workspaceSignal(s, later, NOW)).toMatchObject({ level: 'working', tip: 'Your agent is working · Reminds you at 12:00' });
+    // Asking you something new ends the wait (the daemon wakes it): it shows as usual.
     const asks = apply(s, run('awaiting_approval'));
-    expect(workspaceSignal(asks, later, NOW)).toMatchObject({ level: 'needs', need: 'approval', remindAt: NOW + HOUR });
+    expect(workspaceSignal(asks, later, NOW)).toMatchObject({ level: 'needs', need: 'approval' });
+    expect(workspaceSignal(asks, later, NOW).remindAt).toBeUndefined();
     expect(unreadEntries(asks)).toHaveLength(1);
   });
 
@@ -108,7 +127,7 @@ describe('a conversation put off till later', () => {
   });
 
   it('keeps its desktop notices quiet meanwhile, but never your agent asking', () => {
-    const state = { projects: [project(later, ws({ id: 'other' }))] };
+    const state = stateWith(later, ws({ id: 'other' }));
     expect(remindLaterNotice(state, { kind: 'problems', channel: 'ws:auth' }, NOW)).toBe(true);
     expect(remindLaterNotice(state, { kind: 'done', channel: 'ws:auth' }, NOW)).toBe(true);
     expect(remindLaterNotice(state, { kind: 'needsYou', channel: 'ws:auth' }, NOW)).toBe(false);
@@ -116,38 +135,10 @@ describe('a conversation put off till later', () => {
     expect(remindLaterNotice(state, { kind: 'done', channel: 'ws:auth' }, NOW + 2 * HOUR)).toBe(false);
   });
 
-  it('reminds you with what waits there', () => {
-    const s = apply(news(stateWith(later)), failing);
-    expect(reminderNotice(s, later)).toMatchObject({ kind: 'needsYou', title: 'Reminder: add-auth', body: expect.stringMatching(/^Checks failed on its pull request · \d+ new messages?$/), channel: 'ws:auth' });
-    expect(reminderNotice(stateWith(later), later).body).toBe('You asked to be reminded about it');
-  });
-});
-
-describe('the reminder clock', () => {
-  it('hands over one that is due at once, and the next when its time comes', () => {
-    vi.useFakeTimers({ now: NOW });
-    let projects = [project(ws({ id: 'due', remindAt: NOW - 1 }), ws({ id: 'later', remindAt: NOW + HOUR }), ws({ id: 'shown' }))];
-    const reminded: string[][] = [];
-    const clock = new Reminders({
-      projects: () => projects,
-      due: (list) => {
-        const ids = list.map((w) => w.id);
-        reminded.push(ids);
-        projects = projects.map((p) => ({ ...p, workspaces: p.workspaces.map((w) => (ids.includes(w.id) ? { ...w, remindAt: undefined } : w)) }));
-      },
-    });
-    clock.arm();
-    expect(reminded).toEqual([['due']]);
-    vi.advanceTimersByTime(HOUR - 1);
-    expect(reminded).toEqual([['due']]);
-    vi.advanceTimersByTime(1);
-    expect(reminded).toEqual([['due'], ['later']]);
-    clock.stop();
-  });
 });
 
 describe('Remind Me Later through the daemon', () => {
-  it('saves the time, publishes it, shows it again on request, reminds you when due, and refuses a time gone by', async () => {
+  it('works with the categories off, shows it again on request, carries an old reminder in, and refuses a time gone by', async () => {
     const home = mkdtempSync(path.join(os.tmpdir(), 'beluga-remind-'));
     const files = new WorkspaceStore(home);
     files.saveConfig({ roots: [], projects: [], hidden: [] });
@@ -162,31 +153,35 @@ describe('Remind Me Later through the daemon', () => {
       createAgent: (bridge) => createMockBackend(bridge, 0),
     });
     const client = attach(session);
+    const stopTriage = launchTriage({ session, store, demo: true });
     try {
       const controller = session.workspaces!;
       await controller.refresh();
       const chat = (await controller.newChat('chats', 'Later', undefined, { quiet: true }))!;
-      const published = () => store.getState().projects.flatMap((p) => p.workspaces).find((w) => w.id === chat.id);
+      const channel = `ws:${chat.id}`;
       const reminders = () => store.getState().inbox.filter((n) => n.title === 'Reminder: Later');
+      // With the sidebar categories off (the default), as with them on.
+      expect(store.getState().prefs.chatCategories).toBe(false);
       const at = Date.now() + HOUR;
-      await client.api.workspaces.remindLater(chat.id, at);
-      expect(published()?.remindAt).toBe(at);
-      // Saved with the workspace: still put off after a restart.
-      expect(new WorkspaceStore(home).loadRecords().find((r) => r.id === chat.id)?.remindAt).toBe(at);
-      // Show Again Now: null arrives over the socket as left out. No reminder for that.
-      await client.api.workspaces.remindLater(chat.id, null);
-      expect(published()?.remindAt).toBeUndefined();
+      await client.api.triage.snooze(channel, at);
+      expect(store.getState().triage[channel]?.snoozed?.until).toBe(at);
+      // Show Again Now: no reminder for that.
+      await client.api.triage.wake(channel);
+      expect(store.getState().triage[channel]?.snoozed).toBeUndefined();
       expect(reminders()).toEqual([]);
-      // Its time came (here, while Beluga was closed): shown again, and one reminder.
+      // Settling still needs the categories.
+      await expect(client.api.triage.settle(channel)).rejects.toThrow('Chat categories are off');
+      await expect(client.api.triage.snooze(channel, Date.now() - 1000)).rejects.toThrow('future');
+      // An old Remind Me Later on the worktree's record (before BLG-770): carried in once, cleared there, and due now: one reminder.
       manager.setRemindAt(chat.id, Date.now() - 1);
       await controller.refresh();
-      expect(published()?.remindAt).toBeUndefined();
-      expect(reminders()).toHaveLength(1);
+      await vi.waitFor(() => expect(reminders()).toHaveLength(1));
+      expect(store.getState().projects.flatMap((p) => p.workspaces).find((w) => w.id === chat.id)?.remindAt).toBeUndefined();
+      expect(new WorkspaceStore(home).loadRecords().find((r) => r.id === chat.id)?.remindAt).toBeUndefined();
       await controller.refresh();
       expect(reminders()).toHaveLength(1);
-      await expect(client.api.workspaces.remindLater(chat.id, Date.now() - 1000)).rejects.toThrow('still ahead');
-      await expect(client.api.workspaces.remindLater('missing', at)).rejects.toThrow('isn’t there');
     } finally {
+      stopTriage();
       client.close();
       await session.stop();
       rmSync(home, { recursive: true, force: true });

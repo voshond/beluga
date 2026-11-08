@@ -1,32 +1,42 @@
-import type { SubAgent } from '../../../../../src/core/store.js';
+import type { Remark, SubAgent } from '../../../../../src/core/store.js';
 import type { StepSummary } from '../../../../../src/shared/steps.js';
 import { keepSameById, keepSameLists } from '../../lib/stable.js';
 
-/** One row of a card's steps: a step, or a sub-agent (background work) where it started. */
-export type Entry = { readonly kind: 'step'; readonly id: string; readonly step: StepSummary } | { readonly kind: 'sub'; readonly id: string; readonly sub: SubAgent };
+/** One row of a card's steps: a step, a sub-agent (background work) where it started, or what Claude said on the way. */
+export type Entry =
+  | { readonly kind: 'step'; readonly id: string; readonly step: StepSummary }
+  | { readonly kind: 'sub'; readonly id: string; readonly sub: SubAgent }
+  | { readonly kind: 'remark'; readonly id: string; readonly remark: Remark };
 
 /** Still going: never folded away, so what's happening stays in sight. */
-export const isLive = (e: Entry): boolean => (e.kind === 'sub' ? e.sub.status === 'running' : e.step.status === 'running');
+export const isLive = (e: Entry): boolean => (e.kind === 'sub' ? e.sub.status === 'running' : e.kind === 'step' ? e.step.status === 'running' : false);
 
 /**
  * The steps with each sub-agent in the place it started: where its launching call is (launchedAt,
- * your own Claude's records), else when it started. Steps without real times (one-line steps of a
- * friend's Claude) all read as the card's start, so sub-agents go after them; so do ones kept
- * before sub-agents had a start.
+ * your own Claude's records), else when it started; and what Claude said between its steps
+ * (remarks), when it said it. Steps without real times (one-line steps of a friend's Claude) all
+ * read as the card's start, so sub-agents and remarks go after them; so do sub-agents kept before
+ * they had a start.
  */
-export function timelineOf(rows: readonly StepSummary[], subs: readonly SubAgent[], launchedAt: (id: string) => number | undefined): Entry[] {
-  const placed = subs.map((sub) => ({ sub, at: launchedAt(sub.id) ?? sub.startedAt ?? Infinity })).sort((a, b) => a.at - b.at);
+export function timelineOf(rows: readonly StepSummary[], subs: readonly SubAgent[], launchedAt: (id: string) => number | undefined, remarks: readonly Remark[] = []): Entry[] {
+  const placed = [
+    ...subs.map((sub) => ({ entry: subEntry(sub), at: launchedAt(sub.id) ?? sub.startedAt ?? Infinity })),
+    ...remarks.map((remark) => ({ entry: { kind: 'remark', id: `remark:${remark.ts}`, remark } as const, at: remark.ts })),
+  ].sort((a, b) => a.at - b.at);
   const out: Entry[] = [];
   let next = 0;
   for (const step of rows) {
-    while (next < placed.length && placed[next]!.at < step.startedAt) out.push(subEntry(placed[next++]!.sub));
+    while (next < placed.length && placed[next]!.at < step.startedAt) out.push(placed[next++]!.entry);
     out.push({ kind: 'step', id: step.id, step });
   }
-  while (next < placed.length) out.push(subEntry(placed[next++]!.sub));
+  while (next < placed.length) out.push(placed[next++]!.entry);
   return out;
 }
 
 const subEntry = (sub: SubAgent): Entry => ({ kind: 'sub', id: `sub:${sub.id}`, sub });
+
+/** How many of these rows are work (steps, sub-agents): what "N steps" counts, not what was said on the way. */
+export const workIn = (entries: readonly Entry[]): number => entries.filter((e) => e.kind !== 'remark').length;
 
 /**
  * Which finished rows fold into "N steps · 12s": all but the last `keep` of them, once that's

@@ -136,7 +136,7 @@ export interface CollabState {
 export type CollabAction =
   | { type: 'question_add'; question: PendingQuestion }
   | { type: 'question_pick'; qid: string; question: string; answer: string }
-  | { type: 'question_remove'; qid: string }
+  | { type: 'question_remove'; qid: string; unanswered?: true }
   | { type: 'run_ask'; qid: string; state: RunAskState }
   | { type: 'room_open'; open: boolean }
   | { type: 'shared_add'; ws: SharedWorkspace }

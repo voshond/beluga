@@ -1,5 +1,7 @@
 import { formatBytes } from '@beluga/shared/format.js';
+import type { ThreadChildren } from '@beluga/shared/threads.js';
 import { Alert } from '../../components/Alert.js';
+import { useThreadsChoice } from '../../dialogs/native/ThreadsChoice.js';
 import type { WorktreeRow } from './worktrees-model.js';
 
 /**
@@ -13,8 +15,10 @@ export type Batch = 'archive' | 'free' | 'delete';
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-export function BatchAlert({ batch, rows, rebuildable, onConfirm, onCancel }: { batch: Batch; rows: readonly WorktreeRow[]; rebuildable: number; onConfirm: () => void; onCancel: () => void }) {
+export function BatchAlert({ batch, rows, rebuildable, onConfirm, onCancel }: { batch: Batch; rows: readonly WorktreeRow[]; rebuildable: number; onConfirm: (children?: ThreadChildren) => void; onCancel: () => void }) {
   const n = rows.length;
+  const threads = useThreadsChoice(rows.map((r) => r.ws.id), batch === 'delete' ? 'delete' : 'archive');
+  const go = (): void => onConfirm(threads.children);
   const freed = rebuildable ? `about ${formatBytes(rebuildable)}` : 'their space';
   const outside = rows.filter((r) => r.madeBy.kind === 'outside').length;
   if (batch === 'free') {
@@ -29,7 +33,7 @@ export function BatchAlert({ batch, rows, rebuildable, onConfirm, onCancel }: { 
             <p>Your work stays: files, commits, uncommitted changes, ignored files like .env, and the worktrees themselves. To work in one again, run its setup (npm install and the like).</p>
           </>
         }
-        confirm={{ label: 'Remove Build Files', onClick: onConfirm }}
+        confirm={{ label: 'Remove Build Files', onClick: () => onConfirm() }}
         onCancel={onCancel}
       />
     );
@@ -57,9 +61,11 @@ export function BatchAlert({ batch, rows, rebuildable, onConfirm, onCancel }: { 
             <p>You can’t undo this. To keep the work, archive {n === 1 ? 'it' : 'them'} instead.</p>
           </>
         }
-        confirm={{ label: `Delete ${plural(n, 'Worktree')}`, destructive: true, onClick: onConfirm }}
+        confirm={{ label: `Delete ${plural(n, 'Worktree')}`, destructive: true, onClick: go }}
         onCancel={onCancel}
-      />
+      >
+        {threads.box}
+      </Alert>
     );
   }
   if (batch === 'delete') {
@@ -81,9 +87,11 @@ export function BatchAlert({ batch, rows, rebuildable, onConfirm, onCancel }: { 
             <p>You can’t undo this.</p>
           </>
         }
-        confirm={{ label: `Delete ${plural(n, 'Worktree')}`, destructive: true, onClick: onConfirm }}
+        confirm={{ label: `Delete ${plural(n, 'Worktree')}`, destructive: true, onClick: go }}
         onCancel={onCancel}
-      />
+      >
+        {threads.box}
+      </Alert>
     );
   }
   return (
@@ -98,8 +106,10 @@ export function BatchAlert({ batch, rows, rebuildable, onConfirm, onCancel }: { 
           {outside ? <p>{outside === 1 ? 'One was' : `${outside} were`} made outside Beluga: the app that made {outside === 1 ? 'it' : 'them'} may still have {outside === 1 ? 'it' : 'them'} open.</p> : null}
         </>
       }
-      confirm={{ label: `Archive ${plural(n, 'Worktree')}`, onClick: onConfirm }}
+      confirm={{ label: `Archive ${plural(n, 'Worktree')}`, onClick: go }}
       onCancel={onCancel}
-    />
+    >
+      {threads.box}
+    </Alert>
   );
 }

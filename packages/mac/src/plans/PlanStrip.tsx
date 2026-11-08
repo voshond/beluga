@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { planForHome, planTitle, planTaskOfIssue } from '@beluga/core/plans/model.js';
+import { planForHome, planTitle, planTaskOfIssue, reviewState } from '@beluga/core/plans/model.js';
 import { issueForWorkspace } from '@beluga/core/board/model.js';
 import { Icon } from '../components/Icon.js';
 import { Button, Tip } from '../components/ui.js';
@@ -33,6 +33,7 @@ export function PlanStrip({ workspaceId }: { workspaceId: string }) {
     // Questions still open (BLG-8): approving waits on them, unless you approve anyway.
     const openQuestions = planNotes(home).open;
     const anyway = openQuestions.length ? { anyway: true } : undefined;
+    const review = reviewState(home);
     /** Approve (with `agent`: worked by that one from now on; null: your default), then on to the plan, where it runs. */
     const approve = (agent?: AgentRef | null): void =>
       void act(
@@ -73,9 +74,32 @@ export function PlanStrip({ workspaceId }: { workspaceId: string }) {
               <Button size="small" variant="primary" onClick={() => approve()}>
                 {openQuestions.length ? 'Apply Anyway' : 'Apply Changes'}
               </Button>
+            ) : review === 'reviewing' ? (
+              // A fresh agent verifies the draft, as you asked (BLG-772): its findings show on the plan.
+              <Button size="small" variant="primary" disabled>
+                Verifying…
+              </Button>
+            ) : review === 'findings' && !home.review?.fixAsked ? (
+              <Tip label="Verifying found things to fix in the plan: see them there">
+                <Button size="small" variant="primary" icon="wand" onClick={() => open(home.id)}>
+                  See What It Found
+                </Button>
+              </Tip>
             ) : (
               // Approve, worked by ▸ (BLG-506): who works its milestones and tasks, set as it's approved.
-              <SplitButton label="Approve, worked by another agent" items={startWith(home.agent, (a) => approve(a ?? null), 'Approve, worked by')}>
+              <SplitButton
+                label="More ways to approve"
+                items={[
+                  // Verify, Then Approve (BLG-772): a fresh agent checks it holds together first.
+                  {
+                    label: 'Verify, Then Approve',
+                    icon: 'eye',
+                    onSelect: () => undefined,
+                    submenu: startWith(home.agent, (a) => void act(async () => (await api.setWorkAgent(home.id, a ?? null), api.verify(home.id, { thenApprove: true })), 'A fresh agent is verifying the plan: it’s approved once nothing needs fixing'), ''),
+                  },
+                  ...startWith(home.agent, (a) => approve(a ?? null), 'Approve, worked by').map((item, i) => (i === 0 ? { ...item, separate: true } : item)),
+                ]}
+              >
                 <Button size="small" variant="primary" onClick={() => approve()}>
                   {openQuestions.length ? 'Approve Anyway' : 'Approve Plan'}
                 </Button>

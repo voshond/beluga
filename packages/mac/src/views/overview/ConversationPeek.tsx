@@ -6,6 +6,8 @@ import { Icon } from '../../components/Icon.js';
 import { ProjectIcon } from '../../components/ProjectIcon.js';
 import { Empty, cx } from '../../components/ui.js';
 import { useApi } from '../../lib/beluga.js';
+import { useThreadsChoice } from '../../dialogs/native/ThreadsChoice.js';
+import type { ThreadChildren } from '@beluga/shared/threads.js';
 import type { OverviewItem } from './overview-model.js';
 import f from '../../components/form.module.css';
 import s from './peek.module.css';
@@ -91,8 +93,9 @@ export function ConversationPeek({ item, onClose, onRestore, onDelete }: { item:
 }
 
 /** "Delete for good?" for an archived worktree or chat: red, and says exactly what goes. */
-export function DeleteArchivedAlert({ item, onCancel, onDelete }: { item: OverviewItem; onCancel: () => void; onDelete: () => void }) {
+export function DeleteArchivedAlert({ item, onCancel, onDelete }: { item: OverviewItem; onCancel: () => void; onDelete: (children?: ThreadChildren) => void }) {
   const w = item.ws;
+  const threads = useThreadsChoice(w.id, 'delete');
   const branch = w.kind === 'worktree' && w.branch && !w.external;
   return (
     <Alert
@@ -113,8 +116,10 @@ export function DeleteArchivedAlert({ item, onCancel, onDelete }: { item: Overvi
           <p>You can’t undo this.</p>
         </>
       }
-      confirm={{ label: 'Delete', destructive: true, onClick: onDelete }}
+      confirm={{ label: 'Delete', destructive: true, onClick: () => onDelete(threads.children) }}
       onCancel={onCancel}
-    />
+    >
+      {threads.box}
+    </Alert>
   );
 }

@@ -125,7 +125,7 @@ export function More({ onPress, label = 'More', size = 34 }: { readonly onPress:
 }
 
 /** A list row: icon badge, a label (and a quiet line under it), something on the right, a chevron. */
-export function Row({ Icon, tone = 'plain', label, sub, right, onPress, chevron = true, first }: { readonly Icon?: LucideIcon; readonly tone?: Tone; readonly label: string; readonly sub?: string; readonly right?: ReactNode; readonly onPress?: () => void; readonly chevron?: boolean; readonly first?: boolean }) {
+export function Row({ Icon, tone = 'plain', label, sub, right, onPress, onLongPress, chevron = true, first }: { readonly Icon?: LucideIcon; readonly tone?: Tone; readonly label: string; readonly sub?: string; readonly right?: ReactNode; readonly onPress?: () => void; readonly onLongPress?: (() => void) | undefined; readonly chevron?: boolean; readonly first?: boolean }) {
   const body = (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14 }}>
       {Icon ? <IconBadge Icon={Icon} tone={tone} size={30} /> : null}
@@ -147,7 +147,7 @@ export function Row({ Icon, tone = 'plain', label, sub, right, onPress, chevron 
     <View>
       {!first ? <Hairline style={{ marginLeft: Icon ? 56 : 14 }} /> : null}
       {onPress ? (
-        <Press onPress={onPress}>
+        <Press onPress={onPress} {...(onLongPress ? { onLongPress, delayLongPress: 350 } : {})}>
           {body}
         </Press>
       ) : (

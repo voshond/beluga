@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accelLabel, accelOf, cleanWords, downsample, levelOf, matchesAccel, parseAccel, spoken, wavFromFloats } from '../packages/mac/src/lib/dictation-model.js';
+import { accelLabel, accelOf, cleanWords, dictationAudio, downsample, levelOf, matchesAccel, microphonesOf, parseAccel, spoken, wavFromFloats } from '../packages/mac/src/lib/dictation-model.js';
 
 /** Speaking instead of typing in the Mac app (BLG-145): the talk shortcut, the recording, the words. */
 const key = (code: string, m: { meta?: boolean; ctrl?: boolean; alt?: boolean; shift?: boolean } = {}) => ({ code, metaKey: Boolean(m.meta), ctrlKey: Boolean(m.ctrl), altKey: Boolean(m.alt), shiftKey: Boolean(m.shift) });
@@ -80,5 +80,22 @@ describe('the talk shortcut off the Mac', () => {
     const accel = parseAccel('CommandOrControl+D')!;
     expect(matchesAccel(accel, press('KeyD', { ctrl: true }), false)).toBe(true);
     expect(matchesAccel(accel, press('KeyD', { meta: true }), false)).toBe(false);
+  });
+});
+
+describe('the microphone it listens to', () => {
+  const dev = (kind: string, deviceId: string, label = '') => ({ kind, deviceId, label });
+
+  it('lists the microphones once each, without macOS’s own stand-ins, and names unnamed ones', () => {
+    const all = [dev('audioinput', 'default', 'Default - MacBook Pro Microphone'), dev('audioinput', 'built-in', 'MacBook Pro Microphone'), dev('audiooutput', 'spk', 'Speakers'), dev('audioinput', 'usb'), dev('audioinput', '')];
+    expect(microphonesOf(all)).toEqual([
+      { id: 'built-in', label: 'MacBook Pro Microphone' },
+      { id: 'usb', label: 'Microphone 2' },
+    ]);
+  });
+
+  it('asks for the one picked, and takes macOS’s own when it’s gone', () => {
+    expect(dictationAudio('')).not.toHaveProperty('deviceId');
+    expect(dictationAudio('usb')).toMatchObject({ channelCount: 1, echoCancellation: true, deviceId: { ideal: 'usb' } });
   });
 });

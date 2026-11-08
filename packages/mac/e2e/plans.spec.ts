@@ -248,12 +248,12 @@ test('where the plan’s work goes, one click from the canvas: main, then each m
   await info.attach('where the work goes', { path: shot, contentType: 'image/png' });
   // Hidden and shown again: what you typed is still there.
   const chat = page.getByRole('complementary', { name: 'Conversation' });
-  if (!(await chat.isVisible())) await main(page).getByRole('button', { name: 'Show the Chat' }).click();
+  if (!(await chat.isVisible())) await main(page).getByRole('button', { name: 'Open Orchestrator' }).click();
   const box = chat.getByRole('textbox').first();
   await box.fill('half a thought about refunds');
-  await main(page).getByRole('button', { name: 'Hide the Chat' }).click();
+  await main(page).getByRole('button', { name: 'Hide Orchestrator' }).click();
   await expect(chat).toHaveCount(0);
-  await main(page).getByRole('button', { name: 'Show the Chat' }).click();
+  await main(page).getByRole('button', { name: 'Open Orchestrator' }).click();
   await expect(chat.getByRole('textbox').first()).toHaveValue('half a thought about refunds');
 });
 
@@ -284,7 +284,7 @@ test('a task’s panel keeps its head and Close in reach while its brief scrolls
   await expect(main(page).getByRole('group', { name: '“Safe payments” leads to “Refunds and launch”', exact: true })).toHaveCount(1);
   await expect(main(page).getByRole('group', { name: /^“Test-mode foundations” leads to/ })).toHaveCount(0);
   // Milestones that run side by side make the plan wide: room for it (the conversation folded away), all of it in view.
-  await main(page).getByRole('button', { name: 'Hide the Chat' }).click();
+  await main(page).getByRole('button', { name: 'Hide Orchestrator' }).click();
   await main(page).getByRole('button', { name: 'Fit to View' }).click();
   // Fit frames every milestone tightly: 48 px above (the view switch sits there), and no more than that on the side that limits it (KLD-67).
   // Waited for, not slept on: the fit animates, so it's read until it frames them that way.

@@ -3,13 +3,13 @@ import { OFFER_DETAIL, knockWords, offerWords } from '../core/team/model.js';
 import type { PendingQuestion } from '../core/collab-store.js';
 import type { TaskView as GwTask } from '../core/gateway/model.js';
 import { parseDecisionQid } from '../core/plans/decisions.js';
-import { type Plan, isMultiRepo, planBranchFor, planPrFor, planTitle, prRef, shipOrder, shippedIn } from '../core/plans/model.js';
+import { type Plan, isMultiRepo, planBranchFor, planPrFor, planTitle, prRef, reviewState, shipOrder, shippedIn } from '../core/plans/model.js';
 import { firstLine, sentinelById } from '../core/sentinel/model.js';
 import { type PlanView as PlanProgress, planView } from '../core/plans/progress.js';
 import { type NeedsYou, Topic } from './protocol.js';
 import { plainLine, stripCode } from './strip.js';
 import { agentLabel } from '../shared/agent-label.js';
-import { defaultAgentOf } from '../protocol.js';
+import { type AgentRef, defaultAgentOf } from '../protocol.js';
 
 /**
  * Everything waiting for you, each with the API calls its buttons make: the phone's Needs You
@@ -18,6 +18,7 @@ import { defaultAgentOf } from '../protocol.js';
  */
 
 export const clip = (s: string, max: number): string => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+export const agentRefView = (a: AgentRef): AgentRef => ({ runtime: clip(a.runtime, 32), label: clip(a.label, 64), ...(a.model ? { model: clip(a.model, 64) } : {}) });
 const valid = (t: string): Topic | undefined => (Topic.safeParse(t).success ? (t as Topic) : undefined);
 
 /** A conversation's topic (`room` → `conv:room`, `ws:<id>` → `conv:ws:<id>`). */
@@ -39,12 +40,19 @@ const agentOf = (state: DomainState, peerId: string | undefined, owner: string, 
     ? agentLabel(defaultAgentOf(state.self), undefined, true, { capital })
     : agentLabel(defaultAgentOf(state.peers.find((p) => p.peerId === peerId)), owner, false, { capital });
 
+/** The child thread a need holds up, by title: without it "your Claude" could be any of a tree's chats. */
+function threadPlace(state: DomainState, channel: string | undefined): Pick<NeedsYou, 'thread'> {
+  const ws = channel?.startsWith('ws:') ? state.projects.flatMap((p) => p.workspaces).find((w) => w.id === channel.slice(3)) : undefined;
+  return ws?.thread ? { thread: clip(ws.name, 300) } : {};
+}
+
 function approvalItem(state: DomainState, a: Approval): NeedsYou {
   const from = a.peer ? `${nameOf(state, a.peer) ?? 'a friend'}` : agentOf(state, undefined, '');
   // A friends' chat opens that chat (a request from there, your Claude working there: BLG-207).
   const topic = a.channel ? (/^(dm|group):/.test(a.channel) ? chatTopic(a.channel) : convTopic(a.channel)) : undefined;
   return {
     id: `approval:${a.id}`,
+    ...threadPlace(state, a.channel),
     kind: a.kind === 'request' ? 'request' : 'approval',
     title: clip(a.title, 500),
     ...(a.detail ? { detail: clip(plainLine(a.detail, 64_000), 64_000) } : {}),
@@ -72,7 +80,7 @@ const commandsIn = (markdown: string): string =>
 function questionItem(state: DomainState, q: PendingQuestion): NeedsYou {
   const topic = convTopic(q.channel);
   const owner = agentOf(state, q.owner, nameOf(state, q.owner) ?? 'a friend');
-  const base = { id: `question:${q.qid}`, from: owner, ...(topic ? { topic } : {}) };
+  const base = { id: `question:${q.qid}`, from: owner, ...(topic ? { topic } : {}), ...threadPlace(state, q.channel) };
   if (q.question.kind === 'plan') {
     return {
       ...base,
@@ -270,6 +278,27 @@ function gateItems(plan: Plan, progress: PlanProgress, title: string, at: Pick<N
   const next = progress.next;
   // Claude is still writing the first plan: nothing to approve yet (the Mac's Approve Plan waits too).
   if (next.kind === 'approve' && !progress.body?.milestones.length) return [];
+  // A fresh agent is verifying the draft, as you asked (BLG-772): the Mac's Approve Plan waits for it too.
+  const review = reviewState(plan);
+  if (next.kind === 'approve' && review === 'reviewing') return [];
+  if (next.kind === 'approve' && review === 'findings' && plan.review && !plan.review.fixAsked) {
+    const found = plan.review.findings;
+    return [
+      {
+        id: `plan:${plan.id}:review:${plan.draftRev}`,
+        kind: 'decision',
+        title: `The reviewer found ${found.length === 1 ? 'one thing' : `${found.length} things`} to fix in “${title}”`,
+        detail: clip(found.map((f, i) => `${i + 1}. ${plainLine(f.text, 1000)}`).join('\n'), 64_000),
+        ...at,
+        askedAt: plan.review.at,
+        actions: [
+          { label: 'Fix', tone: 'main', method: 'plans.fixReview', args: [plan.id] },
+          { label: 'Approve anyway', tone: 'plain', method: 'plans.approve', args: [plan.id] },
+          { label: 'Discard', tone: 'danger', method: 'plans.discard', args: [plan.id] },
+        ],
+      },
+    ];
+  }
   if (next.kind === 'approve' || next.kind === 'review_changes') {
     // Questions still open (BLG-8): the card says which; answering them is in the plan's conversation, or approve anyway.
     const open = plan.draft?.openQuestions ?? [];
@@ -285,6 +314,8 @@ function gateItems(plan: Plan, progress: PlanProgress, title: string, at: Pick<N
         askedAt: plan.updatedAt,
         actions: [
           open.length ? { label: 'Approve Anyway', tone: 'main', method: 'plans.approve', args: [plan.id, { anyway: true }] } : { label: 'Approve', tone: 'main', method: 'plans.approve', args: [plan.id] },
+          // A first draft can be read by a fresh agent first, and approved once it reads well (BLG-772).
+          ...(next.kind === 'approve' && !open.length ? [{ label: 'Verify, then approve', tone: 'plain' as const, method: 'plans.verify', args: [plan.id, { thenApprove: true }] }] : []),
           { label: 'Discard', tone: 'danger', method: 'plans.discard', args: [plan.id] },
         ],
       },

@@ -6,6 +6,7 @@ import { createPhoneTools } from './phone-tools.js';
 import { createPlanTools } from './plan-tools.js';
 import { createSentinelTools } from './sentinel-tools.js';
 import { createTaskTools } from './task-tools.js';
+import { createThreadTools } from './thread-tools.js';
 import type { ToolSuite } from './tool-kit.js';
 import { createRoomTools } from './tools.js';
 import type { AgentRunInput, RoomBridge } from './types.js';
@@ -36,6 +37,8 @@ export function runToolSuites(input: AgentRunInput, bridge: RoomBridge, shelf: V
     ...(input.phoneTools ? { beluga_phone: createPhoneTools(input.phoneTools) } : {}),
     // Your own runs can look up what was said in calls you were in (core/calls, BLG-715).
     ...(input.callNotesTools ? { beluga_calls: createCallNotesTools(input.callNotesTools) } : {}),
+    // Your own runs, when you turned agent threads on (core/threads).
+    ...(input.threadTools ? { beluga_threads: createThreadTools(input.threadTools) } : {}),
     beluga_view: createViewTools(shelf, cwd),
   };
 }

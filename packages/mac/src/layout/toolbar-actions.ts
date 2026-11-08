@@ -1,4 +1,4 @@
-import { type BranchState, branchState, onGitHub, prBlocker } from '@beluga/core/branch-state.js';
+import { type BranchState, branchState, notOnPr, notOnPrLabel, onGitHub, prBlocker } from '@beluga/core/branch-state.js';
 import type { AppState } from '@beluga/core/store.js';
 import { type PlanOwner, planOwnerOf } from '@beluga/core/plans/owner.js';
 import { planTitle } from '@beluga/core/plans/model.js';
@@ -176,6 +176,9 @@ export function pickPrimary(state: AppState, ws: Workspace, all: readonly ToolAc
   if (commit) return commit;
   if (pr?.state === 'OPEN') {
     const open = by('pr');
+    // Never a bare "PR #n" while commits here aren't on it (BLG-840): merging it would leave them out.
+    const gap = notOnPr(pr, ws);
+    if (open && gap) return { ...open, label: `PR #${pr.number} · ${gap.count} Not Pushed`, hint: `${notOnPrLabel(gap)}: push them before you merge it`, tone: 'info' };
     if (open) return { ...open, label: `PR #${pr.number}` };
   }
   if (pr?.state === 'MERGED') {

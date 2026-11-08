@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { HookCallback, Options } from '@anthropic-ai/claude-agent-sdk';
 import { describe, expect, it, vi } from 'vitest';
-import { BackgroundAgents, PromptQueue, TurnRouter } from '../src/agent/live-run.js';
+import { BackgroundAgents, PromptQueue, TurnRouter, startedPrompt } from '../src/agent/live-run.js';
 import type { AgentRunInput, FollowUp, RoomBridge, Steer } from '../src/agent/types.js';
 import { endProcess } from '../src/agent/claude-process.js';
 import { spawn } from 'node:child_process';
@@ -277,6 +277,46 @@ describe('steering', () => {
     release();
     expect(await running).toBe('all done');
     expect(got).toEqual(['steer folded']);
+  });
+
+  it('a turn you started says a steered message was read when Claude Code takes it off its queue', async () => {
+    let steer: ((f: FollowUp) => boolean) | undefined;
+    const got: string[] = [];
+    let release!: () => void;
+    const held = new Promise<object>((r) => (release = () => r({ ...result('all done'), user_message_uuids: ['p-first', 'p-steer'] })));
+    const lifecycle = (command_uuid: string, state: string) => ({ type: 'command_lifecycle', command_uuid, state, session_id: 's1' });
+    script.prompts = [];
+    script.turns = [
+      () => {
+        expect(steer!({ prompt: 'use pnpm', promptId: 'p-steer', requesterName: 'kay', viaAgent: false, context: [], ...route(got, 'steer') })).toBe(true);
+        // As Claude Code sends it: later assistant frames of this turn never name the steered message.
+        return [lifecycle('p-first', 'started'), { ...text('working'), user_message_uuids: ['p-first'] }, lifecycle('p-steer', 'queued'), text('still working'), lifecycle('p-steer', 'started'), text('switching to pnpm'), held];
+      },
+    ];
+    const running = createClaudeBackend({ cwd: '/tmp', autoEdit: false, additionalDirectories: [], bridge }).run(runInput({ promptId: 'p-first', onSteer: (s) => void (steer = s) }));
+    await vi.waitFor(() => expect(got).toEqual(['steer folded']));
+    release();
+    expect(await running).toBe('all done');
+    expect(got).toEqual(['steer folded']);
+  });
+
+  it('a message steered in and taken off the queue between turns is a turn of its own, not read early', () => {
+    const got: string[] = [];
+    const turns = new TurnRouter({ onEvent: () => undefined });
+    turns.current();
+    turns.queue(route(got, 's'), 'us', true);
+    turns.end(true, 'done', ['u0']);
+    turns.read(['us']);
+    turns.current();
+    expect(got).toEqual(['s started']);
+  });
+
+  it('reads only a started command_lifecycle frame', () => {
+    expect(startedPrompt({ type: 'command_lifecycle', command_uuid: 'u1', state: 'started' })).toBe('u1');
+    expect(startedPrompt({ type: 'command_lifecycle', command_uuid: 'u1', state: 'queued' })).toBeUndefined();
+    expect(startedPrompt({ type: 'command_lifecycle', state: 'started' })).toBeUndefined();
+    expect(startedPrompt({ type: 'assistant', command_uuid: 'u1', state: 'started' })).toBeUndefined();
+    expect(startedPrompt(null)).toBeUndefined();
   });
 
   it('offers steering while the run works, without stopping the turn', async () => {

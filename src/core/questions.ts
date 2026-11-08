@@ -53,7 +53,7 @@ export class QuestionBroker {
   /** Take back a card `pose` put up (it isn't needed any more). */
   withdraw(qid: string): void {
     if (!this.posed.delete(qid)) return;
-    if (this.deps.store.getState().questions.some((q) => q.qid === qid)) this.deps.store.dispatch({ type: 'question_remove', qid });
+    if (this.deps.store.getState().questions.some((q) => q.qid === qid)) this.deps.store.dispatch({ type: 'question_remove', qid, unanswered: true });
   }
 
   /** Whether a card `pose` put up is still waiting. */
@@ -74,7 +74,7 @@ export class QuestionBroker {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         if (!this.waiting.delete(qid)) return;
-        this.deps.store.dispatch({ type: 'question_remove', qid });
+        this.deps.store.dispatch({ type: 'question_remove', qid, unanswered: true });
         this.deps.toast(`Your agent's ${question.kind === 'plan' ? 'plan' : 'question'} went unanswered, so it carried on without it`, 'warn');
         resolve(SKIP);
       }, this.deps.timeoutMs());

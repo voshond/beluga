@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import type { ArchiveManifest, ArchivePhase, ArchivePreview } from '../workspaces/archive.js';
 import { formatBytes } from '../workspaces/disk.js';
 import { worktreeOrigin } from '../workspaces/origin.js';
+import { pullOfBranch } from '../workspaces/github.js';
 import os from 'node:os';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -9,24 +10,24 @@ import { cleanPlanTitle, slugify } from '../agent/namer.js';
 import { SESSION_RUNTIME_DEFAULT, carrySession, resumeFor } from '../agent/session-carry.js';
 import { sessionBefore } from '../agent/runtime/claude/session-rewind.js';
 import { promptRef, restoreSnapshot, snapshot, snapshotAt } from '../workspaces/snapshots.js';
-import type { AgentPlace } from '../agent/types.js';
+import type { AgentPlace, OpenPr } from '../agent/types.js';
 import type { AgentRef } from '../protocol.js';
 import { placeAgent } from '../shared/agent-picker.js';
 import { agentName } from '../shared/agent-label.js';
 import { carriedPrompt, transcriptOf } from './agent-switch.js';
 import { type ArrangeTarget, type WorkspaceManager, real } from '../workspaces/manager.js';
+import type { ThreadChildren, ThreadRecord } from '../shared/threads.js';
+import { type ThreadNode, stopOrder } from './threads/model.js';
 import { type EnvChange, scanEnvFiles } from '../workspaces/env.js';
 import type { BranchList, DeletePlan, Project, PullHead, RenameResult, Workspace } from '../workspaces/types.js';
 import { type MergeResult, git } from '../workspaces/git.js';
 import type { FoundConversation } from '../agent/runtime/claude/claude-sessions.js';
 import type { ShareService } from './shares.js';
-import { type LogItem, type Store, type WorkspaceTab, settleRun } from './store.js';
+import { type LogItem, type Store, type WorkspaceTab, mergedText, settleRun } from './store.js';
 import { type Conversation, isImportedItem } from '../agent/transcript.js';
 import type { Intent } from './intents.js';
 import { type OtherTools, OtherWorktrees } from './other-worktrees.js';
 import { MainSync } from './main-sync.js';
-import { Reminders, reminderNotice } from './reminders.js';
-import type { NoticeEvent } from './notify.js';
 import { agentWorktreesFrom, cleanupText, removeAgentWorktrees } from './agent-worktree-cleanup.js';
 import { claudeHome } from './claude-code/launch.js';
 import { HistorySaver } from './history-saver.js';
@@ -48,8 +49,6 @@ export interface ControllerDeps {
   readonly shares: ShareService;
   readonly selfId: () => string;
   readonly toast: (text: string, level?: 'info' | 'success' | 'warn' | 'error') => void;
-  /** Remind Me Later's time came: the reminder (a notification). */
-  readonly remind?: (notice: NoticeEvent) => void;
   /** Ask the screen to go somewhere, open a dialog or close a tab (see core/intents.ts). */
   readonly intend: (intent: Intent) => void;
   /**
@@ -61,6 +60,8 @@ export interface ControllerDeps {
   readonly askClaude: (prompt: string, channel: string, opts?: { readonly echo?: boolean | string; readonly shown?: string; readonly terminal?: boolean }) => void;
   /** Generate a title from recent chat content with a separate side call. */
   readonly titleChat?: (content: string) => Promise<string | undefined>;
+  /** Plan with Tasks in a conversation: an empty draft plan, written from what's said there next (throws where plans can't be made). */
+  readonly planHere?: (channel: string) => void;
   /** Draw your first message in a conversation that isn't there yet (a worktree being made) → its request id. */
   readonly showAsk?: (prompt: string, channel: string) => string;
   /** Stop your Claude in a conversation, resolving once nothing runs there (editing a message cuts it there). */
@@ -155,6 +156,8 @@ export type WorktreeEvent =
  * session per workspace, history saved to disk), and every workspace action.
  */
 /** What the archive did, in words. */
+const threadsText = (did: string, n: number): string | undefined => (n ? `Also ${did} ${n} thread${n === 1 ? '' : 's'}.` : undefined);
+
 export function archivedText(m: ArchiveManifest | undefined): string {
   if (!m) return 'Archived. The branch and conversation are kept; restore it any time.';
   const freed = m.freedBytes ? ` Freed ${formatBytes(m.freedBytes)} of dependencies, builds and caches (made again when you restore it).` : '';
@@ -179,16 +182,6 @@ export class WorkspaceController {
   readonly others: OtherWorktrees;
   /** Keeping main folders current: fetching, Update main, and Claude's sync runs. */
   readonly mainSync: MainSync;
-  /** Remind Me Later: shows each conversation again when its time comes, and reminds you of it. */
-  private readonly reminders = new Reminders({
-    projects: () => this.deps.manager.list,
-    due: (list) => {
-      for (const ws of list) this.deps.manager.setRemindAt(ws.id, undefined);
-      this.publish();
-      const state = this.deps.store.getState();
-      for (const ws of list) this.deps.remind?.(reminderNotice(state, ws));
-    },
-  });
   /** Conversations whose next run may sync git in the main folder ("Let Claude handle it"), by workspace id. */
   private readonly syncRuns = new Map<string, { branch: string; upstream: string }>();
   /** Main-folder conversations that may edit one hidden worktree (a plan's Claude fixing a conflict there), by workspace id. */
@@ -299,7 +292,6 @@ export class WorkspaceController {
 
   stop(): void {
     if (this.envTimer) clearTimeout(this.envTimer);
-    this.reminders.stop();
     this.unsubscribe();
     this.mainSync.stop();
     this.saver.stop();
@@ -319,17 +311,13 @@ export class WorkspaceController {
       }
     }
     this.publish();
-    this.reminders.arm();
     this.checkEnvSoon();
   }
 
-  /** Remind Me Later: quiet until then (epoch ms), and a reminder then; null shows it again now, with no reminder. */
-  remindLater(id: string, at: number | null): void {
-    if (!this.deps.manager.find(id)) throw new Error('That conversation isn’t there anymore');
-    if (at !== null && at <= Date.now()) throw new Error('Pick a time that’s still ahead');
-    this.deps.manager.setRemindAt(id, at ?? undefined);
+  /** Remind Me Later from before BLG-770, carried into triage.json (core/triage): cleared here. */
+  forgetReminders(ids: readonly string[]): void {
+    for (const id of ids) if (this.deps.manager.find(id)) this.deps.manager.setRemindAt(id, undefined);
     this.publish();
-    this.reminders.arm();
   }
 
   private envCheckedAt = 0;
@@ -456,6 +444,12 @@ export class WorkspaceController {
       this.deps.toast(`Couldn't keep them: ${errorText(err)}`, 'error');
     }
     void this.checkEnv(this.deps.manager.find(id)?.projectId);
+  }
+
+  /** A chat's thread record (core/threads): saved at once, and on every screen at once. */
+  setThread(id: string, thread: ThreadRecord): void {
+    this.deps.manager.setThread(id, thread);
+    this.publish();
   }
 
   /** Publish the projects as they're arranged (no re-scan: arranging is instant); nothing when nothing changed. */
@@ -699,7 +693,7 @@ export class WorkspaceController {
       // Worktrees are disposable sandboxes, so edits there don't need approval.
       autoEdit: ws.kind === 'worktree',
       // A project's main folder is questions only: work happens in worktrees.
-      ...(ws.askOnly ? { askOnly: { project: this.deps.manager.list.find((p) => p.root && real(p.root) === real(ws.path))?.name ?? path.basename(ws.path) } } : {}),
+      ...(ws.askOnly ? { askOnly: { project: this.deps.manager.list.find((p) => p.root && real(p.root) === real(ws.path))?.name ?? path.basename(ws.path), ...(ws.thread?.readOnly ? { stays: true } : {}) } } : {}),
       // Only a session its own runtime made: another runtime's id is never fed to this one.
       ...resumeFor(ws, runtime, this.pendingResume.get(ws.id)),
       onSession: (sessionId) => this.deps.manager.rememberSession(ws.id, sessionId, runtime),
@@ -707,9 +701,22 @@ export class WorkspaceController {
       ...(ws.model ? { model: ws.model } : {}),
       ...(ws.effort ? { effort: ws.effort } : {}),
       ...(ws.prShipped && ws.kind === 'worktree' ? { shipped: ws.prShipped } : {}),
+      ...this.openPrOf(ws),
       ...(syncMain ? { syncMain } : {}),
       ...(ws.askOnly && this.fixups.has(ws.id) ? { fixup: this.fixups.get(ws.id)! } : {}),
     };
+  }
+
+  /**
+   * A worktree's open pull request, for its run (BLG-840): the agent pushes its commits there when its
+   * turn ends (unless Settings › Workspaces says not to), so Merge never takes an older version.
+   */
+  private openPrOf(ws: Workspace): { openPr?: OpenPr } {
+    const state = this.deps.store.getState();
+    const pr = state.prs[ws.id];
+    if (ws.kind !== 'worktree' || ws.askOnly || !ws.branch || pr?.state !== 'OPEN') return {};
+    const fork = pullOfBranch(ws.path, ws.branch) !== undefined;
+    return { openPr: { number: pr.number, url: pr.url, branch: ws.branch, push: state.prefs.pushToPr !== false, ...(fork ? { fork: true } : {}) } };
   }
 
   /** The agent a workspace conversation runs on: its pick, else yours (undefined: not a workspace, or the daemon's own runtime). */
@@ -846,7 +853,7 @@ export class WorkspaceController {
    */
   /** `agent`: the agent it runs (unset: your default). */
   /** `id`: the id it gets (from newWorktreeId), else a fresh one. */
-  async newWorktree(projectId: string, name: string, opts: { base?: string; quiet?: boolean; agent?: AgentRef; id?: string } = {}): Promise<Workspace | undefined> {
+  async newWorktree(projectId: string, name: string, opts: { base?: string; quiet?: boolean; agent?: AgentRef; id?: string; thread?: ThreadRecord } = {}): Promise<Workspace | undefined> {
     const project = this.deps.manager.list.find((p) => p.root !== '' && (p.id === projectId || p.root === projectId));
     const id = opts.id ?? this.deps.manager.newWorktreeId();
     if (project) {
@@ -854,7 +861,7 @@ export class WorkspaceController {
       this.publish();
       if (!opts.quiet) this.deps.intend({ type: 'navigate', view: { kind: 'workspace', id, tab: 'chat' } });
     }
-    const ws = await this.act("Couldn't create the worktree", () => this.deps.manager.createWorktree(projectId, name, opts.base, { id, ...(opts.agent ? { agent: opts.agent } : {}) }), undefined, { later: true });
+    const ws = await this.act("Couldn't create the worktree", () => this.deps.manager.createWorktree(projectId, name, opts.base, { id, ...(opts.agent ? { agent: opts.agent } : {}), ...(opts.thread ? { thread: opts.thread } : {}) }), undefined, { later: true });
     const shown = this.ahead.making.delete(id);
     this.publish();
     if (ws) {
@@ -919,8 +926,8 @@ export class WorkspaceController {
   }
 
   /** `quiet`: made for something else's page (a plan's conversation), so it doesn't take you there. */
-  async newChat(projectId: string, title: string, inDir?: string, opts: { readonly quiet?: boolean } = {}): Promise<Workspace | undefined> {
-    const ws = await this.act("Couldn't start the chat", () => this.deps.manager.createChat(projectId, title, inDir), undefined, { later: true });
+  async newChat(projectId: string, title: string, inDir?: string, opts: { readonly quiet?: boolean; readonly dir?: string; readonly thread?: ThreadRecord } = {}): Promise<Workspace | undefined> {
+    const ws = await this.act("Couldn't start the chat", () => this.deps.manager.createChat(projectId, title, inDir, { ...(opts.dir ? { dir: opts.dir } : {}), ...(opts.thread ? { thread: opts.thread } : {}) }), undefined, { later: true });
     if (ws && !opts.quiet) this.open(ws.id);
     return ws;
   }
@@ -979,12 +986,14 @@ export class WorkspaceController {
    * With no message it just creates the worktree.
    */
   /**
-   * `plan`: its Claude plans first (plan mode is on in it before the message goes). `quiet`: made
+   * `plan`: its Claude plans first (plan mode is on in it before the message goes). `tasks`: Plan
+   * with Tasks, its conversation is a draft plan's home before the message goes (where no plan can be
+   * made, it plans first instead). `quiet`: made
    * from elsewhere (the phone, Your Mac), so the Mac's window stays where it is. → the worktree,
    * by the name the model gave it; with `nameLater`, as soon as it's made (its id stays when the
    * name comes, so a caller that only wants the id needn't wait for the model).
    */
-  async startWorktree(projectId: string, firstMessage: string, nameTask: (prompt: string) => Promise<string>, opts: { base?: string; name?: string; plan?: boolean; quiet?: boolean; nameLater?: boolean; agent?: AgentRef; terminal?: boolean } = {}): Promise<Workspace | undefined> {
+  async startWorktree(projectId: string, firstMessage: string, nameTask: (prompt: string) => Promise<string>, opts: { base?: string; name?: string; plan?: boolean; tasks?: boolean; quiet?: boolean; nameLater?: boolean; agent?: AgentRef; terminal?: boolean } = {}): Promise<Workspace | undefined> {
     const text = firstMessage.trim();
     const named = opts.name?.trim();
     const proper = named || !text ? undefined : nameTask(firstMessage).catch(() => undefined);
@@ -994,15 +1003,29 @@ export class WorkspaceController {
     const shown = text && this.deps.showAsk ? this.deps.showAsk(firstMessage, channel) : undefined;
     const ws = await this.newWorktree(projectId, named || (text ? slugify(text) : 'worktree'), { id, ...(opts.base ? { base: opts.base } : {}), ...(opts.quiet ? { quiet: true } : {}), ...(opts.agent ? { agent: opts.agent } : {}) });
     if (!ws && shown) this.deps.store.dispatch({ type: 'clear', channel });
-    if (ws && opts.plan) this.deps.store.dispatch({ type: 'plan_mode', channel, on: true });
+    const tasks = Boolean(ws && opts.tasks && this.planHereOrSay(channel));
+    // A plan's own conversation has no plan mode; one whose plan couldn't be made plans first.
+    if (ws && !tasks && (opts.plan || opts.tasks)) this.deps.store.dispatch({ type: 'plan_mode', channel, on: true });
     // Seen as its terminal (BLG-553): the terminal opens on the message, not a turn in the chat (a plan's stays in the chat).
-    const terminal = opts.terminal && !opts.plan;
+    const terminal = opts.terminal && !opts.plan && !opts.tasks;
     if (ws && text) this.deps.askClaude(firstMessage, channel, shown || terminal ? { ...(shown ? { shown } : {}), ...(terminal ? { terminal } : {}) } : undefined);
     if (ws && proper) {
       if (opts.nameLater) void this.renameWhenNamed(ws.id, proper);
       else await this.renameWhenNamed(ws.id, proper);
     }
     return ws ? (this.deps.manager.find(ws.id) ?? ws) : undefined;
+  }
+
+  /** A draft plan in this conversation → whether there is one (else the toast says why). */
+  private planHereOrSay(channel: string): boolean {
+    try {
+      if (!this.deps.planHere) throw new Error('Plans need the Beluga app');
+      this.deps.planHere(channel);
+      return true;
+    } catch (err) {
+      this.deps.toast(`Couldn’t plan it with tasks (${err instanceof Error ? err.message : String(err)}): its agent plans first instead`, 'warn');
+      return false;
+    }
   }
 
   /** The model's name for a worktree made under a quick one, once it arrives (never fails the start). */
@@ -1217,9 +1240,10 @@ export class WorkspaceController {
   /**
    * Archive smartly (see workspaces/archive.ts): nothing of yours is lost, so uncommitted work
    * no longer stops it (`_force` is from when it did). How far along shows while it runs.
-   * `quiet`: a plan clearing away merged work (no toast).
+   * `quiet`: a plan clearing away merged work (no toast). `children`: its threads go too (`with`),
+   * or stay as chats of their own (`keep`, the default).
    */
-  async archive(id: string, _force = false, opts: { readonly quiet?: boolean } = {}): Promise<boolean> {
+  async archive(id: string, _force = false, opts: { readonly quiet?: boolean; readonly children?: ThreadChildren } = {}): Promise<boolean> {
     const running = this.archiving.get(id);
     if (running) return running;
     const job = this.archiveNow(id, opts);
@@ -1231,7 +1255,7 @@ export class WorkspaceController {
     }
   }
 
-  private async archiveNow(id: string, opts: { readonly quiet?: boolean }): Promise<boolean> {
+  private async archiveNow(id: string, opts: { readonly quiet?: boolean; readonly children?: ThreadChildren }): Promise<boolean> {
     const agents = this.agentWorktreesOf(id);
     const ws = this.deps.manager.find(id);
     // Out of the sidebar now (it can't be archived: the manager says why); saving and removing the folder follow.
@@ -1240,6 +1264,7 @@ export class WorkspaceController {
     const phase = (p?: ArchivePhase): void => void this.deps.store.dispatch({ type: 'archiving', id, ...(p ? { phase: p } : {}) });
     let manifest: ArchiveManifest | undefined;
     const answers = this.answersIn(id);
+    const threads = opts.children === 'with' ? await this.takeThreads(id, async (child) => !this.deps.manager.find(child)?.archived && this.archive(child, false, { quiet: true })) : 0;
     await this.endRunsIn(id, 'Stopped: its worktree was archived');
     const done = await this.inLane(ws?.projectRoot || ws?.path || id, () =>
       this.act(
@@ -1260,11 +1285,34 @@ export class WorkspaceController {
       this.deps.intend({ type: 'close_tab', id });
       // The rows its views fetched go (they're fetched again if it comes back); their scripts stay.
       forgetViews(answers, 'archived');
+      this.keepThreads(id, ws?.name, (child) => !child.archived);
       const also = await this.removeAgentWorktrees(agents);
-      if (!opts.quiet) this.deps.toast([archivedText(manifest), also].filter(Boolean).join(' '), 'success');
+      if (!opts.quiet) this.deps.toast([archivedText(manifest), threadsText('archived', threads), also].filter(Boolean).join(' '), 'success');
       this.emit({ kind: 'archived', id });
     }
     return Boolean(done);
+  }
+
+  /** Whether the sidebar has already let this one go, with its archive or delete still under way. */
+  isLeaving(id: string): boolean {
+    return this.ahead.leaving.has(id);
+  }
+
+  /** The threads under a chat go first, depth first, each through the same call. One that fails stays. → how many went. */
+  private async takeThreads(id: string, take: (child: string) => Promise<boolean>): Promise<number> {
+    const nodes = this.deps.manager.list.flatMap((p) => p.workspaces).flatMap((w): ThreadNode[] => (w.thread ? [{ id: w.id, channel: `${WS_PREFIX}${w.id}`, thread: w.thread }] : []));
+    let went = 0;
+    for (const n of stopOrder(nodes, `${WS_PREFIX}${id}`)) if (await take(n.id)) went++;
+    return went;
+  }
+
+  /** The parent went: each thread still here stands on its own, and says who it was. A grandchild keeps its parent and its root. */
+  private keepThreads(id: string, name: string | undefined, stays: (child: Workspace) => boolean): void {
+    for (const child of this.threadsOf(id)) if (stays(child)) this.deps.manager.setThread(child.id, { ...child.thread!, parentGone: true, ...(name ? { parentTitle: name } : {}) });
+  }
+
+  private threadsOf(id: string): Workspace[] {
+    return this.deps.manager.list.flatMap((p) => p.workspaces).filter((w) => w.thread?.parent === `${WS_PREFIX}${id}`);
   }
 
   /** Claude's answers in a workspace's conversation (saved, and said this session): where its views are. */
@@ -1352,7 +1400,10 @@ export class WorkspaceController {
 
   /** What Delete would lose that Archive keeps: commits pushed nowhere (the Delete dialog warns and leads with Archive). */
   deletePlan(id: string): Promise<DeletePlan | undefined> {
-    return this.deps.manager.deletePlan(id).catch(() => undefined);
+    // Its pull request merged on GitHub: what it merged at shipped, whatever main did to those files since (BLG-831).
+    const pr = this.deps.store.getState().prs[id];
+    const merged = pr?.state === 'MERGED' && pr.head ? [pr.head] : [];
+    return this.deps.manager.deletePlan(id, merged).catch(() => undefined);
   }
 
   /** Free space in a worktree you keep (its dependencies, builds and caches) → bytes freed. */
@@ -1381,20 +1432,32 @@ export class WorkspaceController {
       }),
     );
     if (!done) return;
+    // Back: its threads link to it again, and what they saved for it follows (thread delivery).
+    for (const child of this.threadsOf(id)) {
+      if (!child.thread?.parentGone) continue;
+      const { parentGone: _gone, ...thread } = child.thread;
+      this.deps.manager.setThread(child.id, thread);
+    }
     this.open(id);
     this.emit({ kind: 'restored', id });
     const back = this.deps.manager.find(id);
     if (back && manifest?.dropped.length) this.deps.onWorktreeRestored?.(back, manifest.remake);
   }
 
-  /** Delete for good. `quiet`: a sentinel clearing away a run's chat (no toast). */
-  async remove(id: string, opts: { readonly quiet?: boolean } = {}): Promise<void> {
+  /** Delete for good. `quiet`: a sentinel clearing away a run's chat (no toast). `children`: as in archive. */
+  async remove(id: string, opts: { readonly quiet?: boolean; readonly children?: ThreadChildren } = {}): Promise<void> {
     const agents = this.agentWorktreesOf(id);
     const ws = this.deps.manager.find(id);
     // Gone from the sidebar now; the folder, its branch and the conversation follow.
     this.going(id);
     const settle = ws && ws.kind !== 'main' ? this.leaveNow(id, 'delete') : () => undefined;
     const answers = this.answersIn(id);
+    const threads = opts.children === 'with'
+      ? await this.takeThreads(id, async (child) => {
+          await this.remove(child, { quiet: true });
+          return !this.deps.manager.find(child);
+        })
+      : 0;
     await this.endRunsIn(id, 'Stopped: its worktree was deleted');
     const done = await this.inLane(ws?.projectRoot || ws?.path || id, () =>
       this.act(
@@ -1415,8 +1478,9 @@ export class WorkspaceController {
       this.deps.intend({ type: 'close_tab', id });
       // Its views' rows go, and their scripts and handed-over rows unless another conversation shows them.
       forgetViews(answers, 'deleted', () => this.answersElsewhere(id));
+      this.keepThreads(id, ws?.name, () => true);
       const also = await this.removeAgentWorktrees(agents);
-      if (!opts.quiet) this.deps.toast(['Deleted.', also].filter(Boolean).join(' '), 'success');
+      if (!opts.quiet) this.deps.toast(['Deleted.', threadsText('deleted', threads), also].filter(Boolean).join(' '), 'success');
       this.emit({ kind: 'removed', id });
     }
   }
@@ -1436,6 +1500,10 @@ export class WorkspaceController {
     this.deps.store.dispatch({ type: 'conflicts', id, files: !result.ok && result.reason === 'conflict' ? result.files : [] });
     if (result.ok) {
       this.deps.toast(`Merged ${ws.branch} into the main folder`, 'success');
+      // A line across its chat: what's above it is in the main folder now.
+      this.ensureLoaded(id);
+      const mark = { into: 'the main folder' };
+      this.deps.store.dispatch({ type: 'system', channel: `${WS_PREFIX}${id}`, text: mergedText(mark), merged: mark });
       this.emit({ kind: 'merged', id });
       return result;
     }

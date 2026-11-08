@@ -50,6 +50,8 @@ export const PhoneCalls = {
   // Give a conversation its terminal drives back to the chat (BLG-534).
   'agentTerm.takeOver': entry('agentTerm.takeOver', done),
   'host.stopRun': entry('host.stopRun', z.object({ stopped: z.boolean(), returned: z.array(z.string()) }).partial().passthrough().optional()),
+  'threads.stop': entry('threads.stop', z.object({ stopped: z.boolean(), returned: z.array(z.string()) }).partial().passthrough().optional()),
+  'threads.stopAll': entry('threads.stopAll', z.object({ stopped: z.number() }).passthrough().optional()),
   'host.cancelQueued': entry('host.cancelQueued', done),
   'inbox.read': entry('inbox.read', done),
   'inbox.unread': entry('inbox.unread', done),
@@ -71,6 +73,11 @@ export const PhoneCalls = {
   'network.status': entry('network.status', done),
   'network.friends.list': entry('network.friends.list', done),
   'network.friends.answerOffer': entry('network.friends.answerOffer', done),
+  'triage.settle': entry('triage.settle', done),
+  'triage.unsettle': entry('triage.unsettle', done),
+  'triage.snooze': entry('triage.snooze', done),
+  'triage.wake': entry('triage.wake', done),
+  'triage.setAutoSettle': entry('triage.setAutoSettle', done),
   // Team boards: an offer to team up with a friend on the same repository (its card).
   'team.answer': entry('team.answer', done),
   'team.ackAssignment': entry('team.ackAssignment', done),
@@ -124,6 +131,8 @@ export const PhoneCalls = {
   // 1.5: how a plan runs (Step by Step, Check-ins, Autopilot), from its page.
   'plans.setAutonomy': entry('plans.setAutonomy', done),
   'plans.discard': entry('plans.discard', done),
+  'plans.fixReview': entry('plans.fixReview', done),
+  'plans.verify': entry('plans.verify', done),
   'plans.pass': entry('plans.pass', done),
   'plans.recheck': entry('plans.recheck', done),
   'plans.sendBack': entry('plans.sendBack', done),

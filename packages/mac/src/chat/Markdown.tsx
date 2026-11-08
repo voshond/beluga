@@ -1,5 +1,5 @@
 import { baseName, endsWithSep, isAbsolutePath } from '@beluga/shared/os-path.js';
-import { createContext, memo, useContext, useEffect, useMemo, useState } from 'react';
+import { Suspense, createContext, lazy, memo, useContext, useEffect, useMemo, useState } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -35,6 +35,8 @@ import { CODE_FENCE } from '@beluga/shared/code-ref.js';
 import { CodeRefBlock } from '../components/code/CodeRefBlock.js';
 import { PR_COMMENTS_FENCE } from '@beluga/shared/pr-comments-ref.js';
 import { PrCommentsBlock } from '../pr/PrCommentsBlock.js';
+import { PREVIEW_FENCE } from '@beluga/shared/preview/ref.js';
+import { PreviewNotice, usePreviewHere } from '../components/preview/PreviewNotice.js';
 import { linkPaths, parsePathHref } from '@beluga/shared/render/path-refs.js';
 import { PathLink } from './PathLink.js';
 import s from './chat.module.css';
@@ -142,6 +144,21 @@ function MessageGraph({ code, localImages }: { code: string; localImages: boolea
 function MessageView({ code, type, local }: { code: string; type: NonNullable<ReturnType<typeof viewFenceType>>; local: boolean }) {
   const live = useContext(LiveText);
   return <ViewBlock code={code} type={type} live={live} local={local} />;
+}
+
+/** A live preview (Settings › Experimental): built only for your own Claude's, once the text is all there. */
+// Loaded only when a message has a preview: with the experiment off, none of it is ever loaded.
+const PreviewBlock = lazy(() => import('../components/preview/PreviewBlock.js').then((m) => ({ default: m.PreviewBlock })));
+
+function MessagePreview({ code, local }: { code: string; local: boolean }) {
+  const live = useContext(LiveText);
+  // Off (or a friend's, or no worktree here): a small card, and nothing of the previews loads.
+  if (!usePreviewHere(local).draws) return <PreviewNotice code={code} local={local} />;
+  return (
+    <Suspense fallback={null}>
+      <PreviewBlock code={code} live={live} local={local} />
+    </Suspense>
+  );
 }
 
 /**
@@ -295,6 +312,8 @@ export const Markdown = memo(function Markdown({ text, paths = false, localImage
       if (lang === CODE_FENCE) return <CodeRefBlock code={code} />;
       // The worktree's PR comments, when you asked what reviewers said (shared/pr-comments-ref.ts): read-only, the PR page answers them.
       if (lang === PR_COMMENTS_FENCE) return <PrCommentsBlock code={code} />;
+      // A component or page drawn live (shared/preview/ref.ts), when Live previews are on.
+      if (lang === PREVIEW_FENCE) return <MessagePreview code={code} local={localImages} />;
       // Tables, charts, stats, code and colors (docs/views.md): data, drawn live.
       const view = viewFenceType(lang);
       if (view) return <MessageView code={code} type={view} local={localImages} />;

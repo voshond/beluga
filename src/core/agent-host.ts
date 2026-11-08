@@ -16,6 +16,8 @@ import { StepBook, importedKey, runKey } from './step-book.js';
 import { Compactor } from './compactor.js';
 import { BtwDesk } from './btw.js';
 import { SCRATCH_DIR, ensureScratch } from '../workspaces/scratch.js';
+import { withSentFiles } from './sent-files.js';
+import { sentFolder } from '../shared/scratch-dir.js';
 import { isImportedItem } from '../agent/transcript.js';
 import { PHONE_LOOK_TOOLS } from '../agent/phone-tools.js';
 import { buildMachineAppend } from '../agent/prompt.js';
@@ -33,6 +35,8 @@ import { ASSISTANT_TITLE, isAssistant } from '../shared/assistant.js';
 import { type SlotWait, clampParallelRuns } from '../shared/run-slots.js';
 import { fallbackFor } from '../shared/runtime-fallbacks.js';
 import { agentForAsk } from './gateway/serve.js';
+import { buildPreviewAppend } from '../agent/preview-prompt.js';
+import { experimentOn } from '../shared/experiments.js';
 
 export interface AgentHostDeps {
   readonly store: Store;
@@ -81,6 +85,8 @@ export interface AgentHostDeps {
   readonly sentinel?: (channel: string, from: string) => { readonly tools: import('../agent/types.js').SentinelTools; readonly dashboard?: import('../agent/types.js').DashboardTools; readonly brief: string; readonly inRun: boolean } | undefined;
   /** A plan's home conversation (your own runs): its plan tools and what Claude is told about the plan (core/plans); `said` is what this run was asked. */
   readonly plans?: (channel: string, from: string, said?: string) => { readonly tools?: import('../agent/types.js').PlanTools; readonly brief?: string; readonly checker?: boolean } | undefined;
+  /** Child threads (core/threads): their tools, bound to this chat. Your own runs only, with the flag on (see runAgent). */
+  readonly threads?: (channel: string) => import('../agent/types.js').ThreadTools | undefined;
   /** "Your Mac" (core/assistant), your own runs in its conversation: where it runs, its tools, what Claude is told. */
   readonly assistant?: (channel: string, from: string) => { readonly place: AgentPlace; readonly tools: MacTools; readonly brief: string } | undefined;
   /** Your phone (core/phone, BLG-150), your own runs: tools to act on it, saving screenshots in `scratchDir`. `env` lets Bash use adb/scrcpy (BLG-174). */
@@ -173,6 +179,8 @@ interface Lane {
   stopping?: boolean;
   /** Who started the current run. */
   runFrom?: string;
+  /** The current run has the plan's tools (BLG-773): one started before the conversation had a plan never takes your messages in. */
+  runPlanTools?: boolean;
   /** Set while the run has answered but waits on background agents: messages go straight in. */
   followUps?: (followUp: FollowUp) => boolean;
   /** Set while a run of Claude's works here: your urgent messages steer it (see steer). */
@@ -188,6 +196,14 @@ interface Lane {
   held?: boolean;
   /** The slot wait its first message's card shows now ("requestId running/limit"), so it's said once (see pump). */
   slotNoted?: string;
+  /** Where what you send the current run goes (see withSentFiles): your own run with a scratch folder only. */
+  sent?: SentPlace;
+}
+
+/** A conversation's folder and, from its root, the folder copies of what you send it go in. */
+interface SentPlace {
+  readonly root: string;
+  readonly rel: string;
 }
 
 /** A tool running at least this long: a steer interrupts it instead of waiting for Claude's next step. */
@@ -523,8 +539,8 @@ export class AgentHost {
   }
 
   /** Run your Claude for someone else in one of your workspaces (they were invited to work there). */
-  runFor(from: string, channel: string, prompt: string, plan = false): void {
-    const body: BodyOf<'agent_request'> = { kind: 'agent_request', requestId: randomUUID(), prompt: prompt.slice(0, MAX_TEXT), viaAgent: false, channel, urgent: false, plan };
+  runFor(from: string, channel: string, prompt: string, plan = false, requestId: string = randomUUID()): void {
+    const body: BodyOf<'agent_request'> = { kind: 'agent_request', requestId, prompt: prompt.slice(0, MAX_TEXT), viaAgent: false, channel, urgent: false, plan };
     this.deps.questions.track(body.requestId, this.selfId, channel);
     void this.onAgentRequest(from, body);
   }
@@ -610,14 +626,17 @@ export class AgentHost {
    * messages still waiting there come out of the queue: their prompts are returned in queue order
    * so the screen can put them back in the message box (Claude goes quiet, nothing typed is lost).
    * Other people's requests there keep their places and run next; other conversations carry on.
+   * `threads`: how many child threads this Stop also stopped (see stopChat), so the toast says so.
+   * `quiet`: no toast (an agent stopped its thread; nobody pressed anything).
    */
-  stopRun(channel: string): { stopped: boolean; returned: string[] } {
+  stopRun(channel: string, opts: { readonly quiet?: boolean; readonly threads?: number } = {}): { stopped: boolean; returned: string[] } {
     const lane = this.lanes.get(channel);
     const mine = lane?.waiting.filter((w) => w.from === this.selfId) ?? [];
+    const threads = opts.threads ? `${opts.threads} thread${opts.threads === 1 ? '' : 's'}` : '';
     if (!lane || (!lane.current && !mine.length)) {
-      const busy = [...this.lanes.values()].some((l) => l.current || l.waiting.length);
-      this.toast(busy ? "Your agent isn't working here" : 'Your agent is not running anything');
-      return { stopped: false, returned: [] };
+      if (threads) this.toast(`Stopped ${threads}`, 'success');
+      else if (!opts.quiet) this.toast([...this.lanes.values()].some((l) => l.current || l.waiting.length) ? "Your agent isn't working here" : 'Your agent is not running anything');
+      return { stopped: Boolean(threads), returned: [] };
     }
     for (const [id, at] of [...this.toolApprovals]) if (at === channel) this.answerApproval('no', id);
     this.deps.questions.cancelChannel(channel);
@@ -629,7 +648,7 @@ export class AgentHost {
     }
     const n = mine.filter((w) => !w.compact).length;
     const back = n ? ` · ${n} queued message${n === 1 ? '' : 's'} back in the box` : '';
-    this.toast(`Stopped your agent here${back}`, 'success');
+    if (!opts.quiet) this.toast(`Stopped your agent here${threads ? ` and ${threads}` : ''}${back}`, 'success');
     return { stopped: true, returned: mine.filter((w) => !w.compact).map((w) => w.body.prompt) };
   }
 
@@ -676,7 +695,7 @@ export class AgentHost {
       lane.held = undefined;
       const { from, body } = item;
       const live = lane.current && !lane.current.signal.aborted && !lane.interrupting;
-      const steer = live && lane.steer && lane.runFrom === from && !body.plan && !body.project && !item.compact ? lane.steer : undefined;
+      const steer = live && lane.steer && lane.runFrom === from && !body.plan && !body.project && !item.compact && !this.missesPlanTools(lane, from, body.channel) ? lane.steer : undefined;
       if (steer && this.steerIn(lane, item, steer)) return true;
       const at = lane.waiting.findIndex((w) => !w.urgent);
       lane.waiting.splice(at === -1 ? lane.waiting.length : at, 0, { ...item, urgent: true });
@@ -706,7 +725,7 @@ export class AgentHost {
     }
     const { from, body } = item;
     const live = lane.current && !lane.current.signal.aborted;
-    const steer = live && lane.steer && lane.runFrom === from && !body.plan && !body.project && !item.compact ? lane.steer : undefined;
+    const steer = live && lane.steer && lane.runFrom === from && !body.plan && !body.project && !item.compact && !this.missesPlanTools(lane, from, body.channel) ? lane.steer : undefined;
     const plan = steer ? planSteer(steer.status?.(), Date.now()) : undefined;
     const emit = (event: BodyOf<'agent_event'>['event'], text = ''): void => this.emitAgent(body.requestId, from, event, text, body.channel);
     const into = plan?.kind === 'steer' || (plan?.kind === 'interrupt' && !interrupt);
@@ -893,16 +912,26 @@ export class AgentHost {
    * person straight into it instead of queueing behind it (or interrupting and killing them).
    * Someone else's message still queues: approvals in that run are judged for its requester.
    */
+  /**
+   * The conversation became a plan's home after its current run started (Plan with Tasks, chosen
+   * while the agent worked: BLG-773). That run has no plan tools, and a run's tools are fixed when it
+   * starts, so your message must start a run of its own (with them) instead of joining this one.
+   */
+  private missesPlanTools(lane: Lane, from: string, channel: string): boolean {
+    if (!lane.current || lane.runPlanTools || from !== this.selfId) return false;
+    return Boolean(this.deps.plans?.(channel, from)?.tools);
+  }
+
   private sendFollowUp(lane: Lane, from: string, body: BodyOf<'agent_request'>): boolean {
     // A request for one of your projects runs in that project's folder, so it never joins a run elsewhere.
-    if (!lane.followUps || lane.runFrom !== from || body.plan || body.project) return false;
+    if (!lane.followUps || lane.runFrom !== from || body.plan || body.project || this.missesPlanTools(lane, from, body.channel)) return false;
     // Claude went on working (a background job reported back): it isn't between turns, so the
     // message goes into the turn it's on, read at its next step, like a steer (urgent: see rush).
     const steer = lane.steer;
     if (steer?.status && !steer.status().between) return !body.urgent && this.steerIn(lane, { from, body }, steer);
     const emit =(event: BodyOf<'agent_event'>['event'], text = ''): void => this.emitAgent(body.requestId, from, event, text, body.channel);
     const sent = lane.followUps({
-      prompt: this.promptOf(body),
+      prompt: this.promptOf(body, lane.sent),
       ...this.promptIdOf(body),
       requesterName: peerName(this.store.getState(), from),
       viaAgent: body.viaAgent,
@@ -934,7 +963,7 @@ export class AgentHost {
     let read = false;
     const settled = (): void => void lane.steered?.delete(body.requestId);
     return {
-      prompt: this.promptOf(body),
+      prompt: this.promptOf(body, lane.sent),
       ...this.promptIdOf(body),
       requesterName: peerName(this.store.getState(), from),
       viaAgent: body.viaAgent,
@@ -1206,7 +1235,7 @@ export class AgentHost {
     let ended = false;
     const finished = new Promise<void>((resolve) => (markFinished = resolve));
     // In a main folder, a change request carries the conversation into a new worktree.
-    const move = place?.askOnly && !place.syncMain && body.channel !== 'room' ? (task: string) => this.moveToWorktree(from, requesterName, body.channel, task, finished) : undefined;
+    const move = place?.askOnly && !place.syncMain && !place.askOnly.stays && body.channel !== 'room' ? (task: string) => this.moveToWorktree(from, requesterName, body.channel, task, finished) : undefined;
     if (body.channel !== 'room' && !place) {
       const why = isAssistant(body.channel)
         ? `${ASSISTANT_TITLE}’s assistant needs the Beluga app.`
@@ -1229,12 +1258,18 @@ export class AgentHost {
     try {
       // A workspace (not a main folder, where nothing may change) gets its scratch folder.
       const scratch = place && !place.askOnly && this.store.getState().prefs.scratchFolder && (await ensureScratch(place.cwd)) ? SCRATCH_DIR : undefined;
+      // What you send it (images, files) is copied into its scratch folder, this message and the ones that join this run.
+      lane.sent = scratch && place && from === this.selfId ? { root: place.cwd, rel: sentFolder(body.channel, this.ownFolder(body.channel)) } : undefined;
       // Your phone (core/phone): your own runs can drive it; a screenshot lands in this run's scratch.
       const phone = from === this.selfId ? this.deps.phone?.(scratch && place ? path.join(place.cwd, scratch) : undefined) : undefined;
       // Calls you were in (BLG-715): your own runs look up what was said, a page at a time.
       const callNotes = from === this.selfId ? this.deps.callNotes?.() : undefined;
+      // Live previews (Settings › Experimental): your own runs in a project's folder learn to show what they build.
+      const previewBrief = from === this.selfId && place && experimentOn(this.store.getState().prefs.experiments, 'previews') ? buildPreviewAppend() : undefined;
       // A plan's home conversation (a main folder's chat, often): the plan's tools.
       const plans = from !== this.selfId || place?.syncMain ? undefined : this.deps.plans?.(body.channel, from, body.requestId.startsWith('compact-') ? undefined : body.prompt);
+      // Syncing main never gets them, so it never counts as missing them.
+      lane.runPlanTools = Boolean(plans?.tools || place?.syncMain);
       // Your own runs get the board: a run doing a task gets it, and the tools to keep it true. A main
       // folder's chat too (BLG-626): the board is Beluga's, not a file there, so the folder stays read-only.
       // A plan's own conversation too, for tasks outside the plan. Not while syncing main, nor in a
@@ -1246,6 +1281,8 @@ export class AgentHost {
       // A friend's run gets its repo's board too, as their trust allows (BLG-701; see boardAccess).
       const friendBoard = from === this.selfId ? undefined : this.boardAccess(from);
       const board = noBoard || (from !== this.selfId && !friendBoard) ? undefined : this.deps.board?.(body.channel, from, { plan: planFirst && from === this.selfId, ...(friendBoard ? { friend: { id: from, name: requesterName } } : {}) });
+      // Child threads: your own runs in your own chats, with the flag on. A dialogue's turn comes through runDialogueTurn and never gets them.
+      const threads = from === this.selfId && this.store.getState().prefs.agentThreads && !root && !place?.syncMain && !sentinelChat && !sentinel?.inRun ? this.deps.threads?.(body.channel) : undefined;
       // A run stopped but not ending (wedged, or never started: no Claude Code yet) has its Claude
       // Code killed after a moment (at once when it's gone already), then is left behind so what
       // comes next in the conversation starts (BLG-402): never while its Claude Code could still
@@ -1287,11 +1324,13 @@ export class AgentHost {
         ...(board?.needsDefinition && board.planApproved ? { planTask: { needsDefinition: board.needsDefinition, approved: board.planApproved } } : {}),
         ...(plans?.tools ? { planTools: plans.tools } : {}),
         ...(plans?.brief ? { planBrief: plans.brief } : {}),
+        ...(threads ? { threadTools: threads } : {}),
         ...(mac ? { macTools: mac.tools, macBrief: mac.brief } : {}),
         ...(phone ? { phoneTools: phone.tools, phoneBrief: phone.brief } : {}),
         ...(callNotes ? { callNotesTools: callNotes } : {}),
+        ...(previewBrief ? { previewBrief } : {}),
         ...(sentinel ? { sentinelTools: sentinel.tools, sentinelBrief: sentinel.brief, ...(sentinel.dashboard ? { dashboardTools: sentinel.dashboard } : {}) } : {}),
-        prompt: this.promptOf(body),
+        prompt: this.promptOf(body, lane.sent),
         ...this.promptIdOf(body),
         requesterName,
         viaAgent: body.viaAgent,
@@ -1371,6 +1410,7 @@ export class AgentHost {
         lane.followUps = undefined;
         lane.steer = undefined;
         lane.runFrom = undefined;
+        lane.runPlanTools = undefined;
       }
       lane.interruptedBy = undefined; // never carry an interrupt label into the next run
       lane.interruptNote = undefined;
@@ -1574,12 +1614,21 @@ export class AgentHost {
     return { promptId: body.requestId };
   }
 
-  /** The words Claude reads: each "@BLG-24" this board has says it's a task, and which ("@BLG-24 (task: Fix the login)"). */
-  private promptOf(body: BodyOf<'agent_request'>): string {
+  /**
+   * The words Claude reads: each "@BLG-24" this board has says it's a task, and which ("@BLG-24 (task: Fix the login)").
+   * `sent`: what the message sends (images, files) is copied there, and the words say where.
+   */
+  private promptOf(body: BodyOf<'agent_request'>, sent?: SentPlace): string {
     const board = this.store.getState().board;
-    const prompt = board.issues.length ? explainTaskMentions(body.prompt, (key) => findIssue(board, key)) : body.prompt;
+    const mentioned = board.issues.length ? explainTaskMentions(body.prompt, (key) => findIssue(board, key)) : body.prompt;
+    const prompt = sent ? withSentFiles(mentioned, this.selfId, sent.root, sent.rel) : mentioned;
     // The first run after a quiet switch (BLG-592) takes the recent conversation along; the chat and the queue keep only the message.
     return this.deps.workspaces?.withCarry?.(body.channel, prompt, body.requestId) ?? prompt;
+  }
+
+  /** A worktree's own conversation, the only one in its folder (others share theirs: Your Mac's chats, a chat in a folder). */
+  private ownFolder(channel: string): boolean {
+    return this.deps.workspaces?.inChannel?.(channel)?.kind === 'worktree';
   }
 
   private recentChat(channel = 'room'): string[] {

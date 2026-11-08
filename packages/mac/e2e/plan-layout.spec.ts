@@ -29,11 +29,11 @@ test('the plan and its chat share the page: no panel, a toggle that stays, a wid
   await expect(panel).toHaveAttribute('aria-hidden', 'true');
   // …⌥⌘0 hid the chat instead (its right side); the header's toggle is still there to bring it back.
   await expect(chat(page)).toHaveCount(0);
-  const toggle = main(page).getByRole('button', { name: 'Show the Chat' });
+  const toggle = main(page).getByRole('button', { name: 'Open Orchestrator' });
   await expect(toggle).toBeVisible();
   await toggle.click();
   await expect(chat(page)).toBeVisible();
-  await expect(main(page).getByRole('button', { name: 'Hide the Chat' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(main(page).getByRole('button', { name: 'Hide Orchestrator' })).toHaveAttribute('aria-pressed', 'true');
 
   // 380 wide, wider from the keyboard on its edge, and kept.
   // (Within a pixel: the page's width splits into fractions.)
@@ -45,12 +45,12 @@ test('the plan and its chat share the page: no panel, a toggle that stays, a wid
   await expect.poll(async () => Math.abs((await chat(page).boundingBox())!.width - 428)).toBeLessThanOrEqual(1);
 
   // Hidden, then back after a reload: still hidden, and as wide when shown again.
-  await main(page).getByRole('button', { name: 'Hide the Chat' }).click();
+  await main(page).getByRole('button', { name: 'Hide Orchestrator' }).click();
   await page.reload();
   await openPlan(page, /^Card checkout for launch,/);
   await expect(page.getByRole('textbox', { name: 'Plan name' })).toHaveValue('Card checkout for launch');
   await expect(chat(page)).toHaveCount(0);
-  await main(page).getByRole('button', { name: 'Show the Chat' }).click();
+  await main(page).getByRole('button', { name: 'Open Orchestrator' }).click();
   expect(Math.abs((await chat(page).boundingBox())!.width - 428)).toBeLessThanOrEqual(1);
   // Elsewhere (the group chat), the panel is as you left it.
   await sidebar(page).getByRole('button', { name: /^Group chat/ }).click();

@@ -116,7 +116,7 @@ describe('planning finds the repos near it (BLG-28, BLG-30)', () => {
     t.plansWork.edit(t.plan.id, [{ op: 'repo', repo: 'whisper', on: false }]);
     const draft = t.plans.need(t.plan.id).draft!;
     expect(draft.repoChanges).toBeUndefined();
-    expect(draft.decisions).toEqual([{ question: 'Should this plan cover whisper-api?', answer: 'No: leave whisper-api out', by: 'user' }]);
+    expect(draft.decisions).toEqual([{ id: 'should-this-plan-cover-whisper-a', question: 'Should this plan cover whisper-api?', answer: 'No: leave whisper-api out', by: 'user' }]);
   });
 
   it('a repo you tag in the plan’s chat goes in the draft as yours; agents, emails, unknown and covered names don’t (BLG-32)', () => {

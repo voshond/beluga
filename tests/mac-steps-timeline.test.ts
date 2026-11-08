@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SubAgent } from '../src/core/store.js';
 import type { StepSummary } from '../src/shared/steps.js';
-import { foldOf, movedTogether, ownStepsOf, subRowView, timelineOf } from '../packages/mac/src/chat/steps/timeline.js';
+import { foldOf, movedTogether, ownStepsOf, subRowView, timelineOf, workIn } from '../packages/mac/src/chat/steps/timeline.js';
 import { sameFields } from '../packages/mac/src/lib/stable.js';
 
 /** A card's steps with sub-agents and background work where they started, and which rows fold (KLD-51). */
@@ -24,6 +24,27 @@ describe('timelineOf', () => {
   it('after the steps when it has no start (kept before it had one, or a friend’s one-line steps)', () => {
     expect(ids(timelineOf(rows, [sub('old', undefined)], () => undefined))).toEqual(['a', 'b', 'c', 'sub:old']);
     expect(ids(timelineOf([], [sub('only', 5)], () => undefined))).toEqual(['sub:only']);
+  });
+});
+
+describe('remarks in the timeline', () => {
+  const rows = [step('a', 10), step('b', 20), step('c', 30)];
+
+  it('puts what Claude said between the steps it came between', () => {
+    expect(ids(timelineOf(rows, [], () => undefined, [{ text: 'first', ts: 5 }, { text: 'then', ts: 22 }]))).toEqual(['remark:5', 'a', 'b', 'remark:22', 'c']);
+  });
+
+  it('among sub-agents by time, and after a friend’s one-line steps (they have no times)', () => {
+    expect(ids(timelineOf(rows, [sub('late', 25)], () => undefined, [{ text: 'x', ts: 24 }]))).toEqual(['a', 'b', 'remark:24', 'sub:late', 'c']);
+    const lines = [step('line-0', 1), step('line-1', 1)];
+    expect(ids(timelineOf(lines, [], () => undefined, [{ text: 'x', ts: 4 }]))).toEqual(['line-0', 'line-1', 'remark:4']);
+  });
+
+  it('never counts as a step, and folds with the steps around it', () => {
+    const t = timelineOf([step('a', 1), step('b', 3), step('c', 5), step('d', 7)], [], () => undefined, [{ text: 'x', ts: 2 }]);
+    const { older } = foldOf(t, 2);
+    expect(ids(older)).toEqual(['a', 'remark:2', 'b']);
+    expect(workIn(older)).toBe(2);
   });
 });
 

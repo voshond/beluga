@@ -1,11 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createMockBackend } from './agent/mock.js';
 import { seedMockContext } from './agent/mock-context.js';
 import { ATTACHMENT_SCHEME, ATTACHMENT_SHARE, formatBytes } from './core/attachments.js';
-import { DEMO_DOCS, DEMO_LANDING_SVG, DEMO_PAYMENTS_TS, DEMO_PLANS_JSON, DEMO_SERVER_WITH_AUTH } from './demo-docs.js';
+import { DEMO_BADGES_TSX, DEMO_DOCS, DEMO_HERO_CSS, DEMO_HERO_TSX, DEMO_LANDING_SVG, DEMO_PAYMENTS_TS, DEMO_PLANS_JSON, DEMO_SERVER_WITH_AUTH } from './demo-docs.js';
 import { seedBobPulls, seedLandingHistory } from './demo-history.js';
 import { demoScreenshot } from './demo-image.js';
 import { demoPdf } from './demo-pdf.js';
@@ -291,7 +291,17 @@ export async function createDemoWorkspaces(): Promise<WorkspaceManager> {
       'README.md': '# Landing page\n\nMarketing site for the launch. Built with Astro.\n\n## Develop\n\n- `npm run dev` to preview\n- Copy lives in `content/`\n- The brand brief is in `docs/brand-brief.pdf`\n\n| Page | Status |\n| --- | --- |\n| Hero | **new** |\n| Pricing | draft |\n',
       'public/hero-shot.png': demoScreenshot(),
       'docs/brand-brief.pdf': demoPdf(),
+      // A component for live previews (Settings › Experimental), drawn with the Mac app's own React.
+      'src/components/Hero.tsx': DEMO_HERO_TSX,
+      'src/components/hero.css': DEMO_HERO_CSS,
+      'src/components/Badges.tsx': DEMO_BADGES_TSX,
     });
+    const react = path.resolve(import.meta.dirname, '../packages/mac/node_modules');
+    if (existsSync(path.join(react, 'react-dom'))) {
+      symlinkSync(react, path.join(hero.path, 'node_modules'));
+      // Installed packages aren't a change: the Changes tab leaves them out, as a project's .gitignore would.
+      writeFileSync(path.join(landingDir, '.git', 'info', 'exclude'), 'node_modules\n', { flag: 'a' });
+    }
   }
   await mgr.refresh();
   seedDemoUsage(mgr);

@@ -3,6 +3,7 @@ import { trayName } from '../lib/os-words.js';
 import type { PaneInfo, SettingEntry, SettingsPane } from '../lib/settings-search.js';
 // Relative, not @beluga/ui: the root's tests and typecheck read this file too.
 import { HIDEABLE_BUTTONS } from '../../../../src/ui/settings-menus.js';
+import { EXPERIMENTS, EXPERIMENT_INFO } from '../../../../src/shared/experiments.js';
 
 /** Settings' panes, in sidebar order, with other words people use for them. */
 export const PANES: ReadonlyArray<PaneInfo<SettingsPane> & { icon: IconName; keywords?: string }> = [
@@ -20,11 +21,15 @@ export const PANES: ReadonlyArray<PaneInfo<SettingsPane> & { icon: IconName; key
   { id: 'phone', label: 'Phone', icon: 'phone', keywords: 'android iphone mobile companion' },
   { id: 'voice', label: 'Voice', icon: 'mic', keywords: 'dictation speech microphone talk transcribe' },
   { id: 'keyboard', label: 'Keyboard', icon: 'command', keywords: 'shortcuts keys hotkeys bindings' },
-  { id: 'advanced', label: 'Advanced', icon: 'wrench', keywords: 'web access browser' },
+  { id: 'advanced', label: 'Advanced', icon: 'wrench', keywords: 'web access browser agent threads' },
+  { id: 'experimental', label: 'Experimental', icon: 'flask', keywords: 'labs beta early preview features try' },
   { id: 'about', label: 'About', icon: 'globe', keywords: 'version logs support' },
 ];
 
 type Entry = SettingEntry<SettingsPane>;
+
+/** Shown with agent threads on (see SettingsSearch). */
+export const THREAD_LIMITS_GROUP = 'Thread limits';
 
 /** The rows of one group of a pane: `[label, detail?, keywords?]`. */
 const rows = (pane: SettingsPane, group: string | undefined, list: ReadonlyArray<readonly [string, string?, string?]>): Entry[] =>
@@ -72,6 +77,9 @@ export const SETTINGS: readonly Entry[] = [
     ['Conversation width', 'Narrow, wide or the full window.', 'chat width narrow wide full'],
     ['Unread in the sidebar', 'Conversations that finished or need you, at the top.', 'unread finished section'],
     ['Friends in the sidebar', 'The Friends and Channels sections, the room and Invite bar, and your status.', 'friends channels invite room just you status online presence hide network sidebar section footer'],
+    ['Sidebar categories', 'Sort chats into Inbox, Working, Later and Settled, in place of Unread and Chats.', 'inbox working later remind snoozed snooze settled settle triage chats'],
+    ['Settle when a pull request merges', 'The chat moves to Settled when its pull request merges. Shows when Sidebar categories is on.', 'auto settle merge merged pr automatic'],
+    ['Settle idle chats', 'A chat with no activity moves to Settled. Shows when Sidebar categories is on.', 'auto settle idle inactive days automatic'],
     ['Sidebar width', undefined, 'sidebar size'],
     ['Reduce motion', undefined, 'animation motion accessibility'],
     ['Reduce transparency', 'A solid sidebar, with no blur behind the window.', 'blur vibrancy translucent solid accessibility'],
@@ -105,6 +113,12 @@ export const SETTINGS: readonly Entry[] = [
   ]),
   ...rows('claude', 'Working at once', [['Conversations your agent works in at once', 'Past it, a message waits its turn.', 'parallel concurrency limit queue simultaneous runs']]),
   ...rows('claude', 'Open chats', [['Chats kept at once', 'How many chats Your Mac and Sentinel keep as tabs.', 'chat limit tabs sentinel']]),
+  ...rows('claude', THREAD_LIMITS_GROUP, [
+    ['Levels of threads', 'How deep a chat’s threads go.', 'thread depth child sub-agent limit'],
+    ['Working at once in one chat’s tree', 'Threads working under one chat.', 'thread running tree limit'],
+    ['Kept in one chat’s tree', 'Threads under one chat that are not archived.', 'thread archived tree limit'],
+    ['Working at once on this computer', 'Threads working in all your chats.', 'thread running mac computer limit'],
+  ]),
   ...rows('claude', 'Scratch folder', [
     ['Give your agent a scratch folder', 'Screenshots, logs and notes go to .beluga/scratch/.', 'scratch screenshots logs notes'],
     ['Show the Scratch tab', 'Watch that folder live in the right panel.', 'scratch tab panel'],
@@ -157,6 +171,7 @@ export const SETTINGS: readonly Entry[] = [
     ['Run setup in new worktrees', 'The project’s setup command runs in each new worktree.', 'npm install setup command auto setup'],
     ['Branch prefix', 'What new worktrees’ branches start with.', 'git branch name prefix'],
     ['New projects go in', 'The folder new projects and clones start in.', 'default projects folder path clone location home directory github'],
+    ['Keep open pull requests current', 'Your agent pushes its commits to an open pull request when its turn ends.', 'push pr pull request git agent commits'],
     ['Friends may start work here', 'They ask to start a worktree or hand work to you.', 'friend worktrees'],
   ]),
   group('workspaces', 'Hidden projects', 'Projects you hid from the sidebar.', 'hide show unhide project sidebar'),
@@ -267,6 +282,7 @@ export const SETTINGS: readonly Entry[] = [
 
   // Voice
   ...rows('voice', 'Writing it down', [
+    ['Microphone', 'The microphone you speak into.', 'microphone mic input device airpods headset usb'],
     ['Model', 'The model that writes down what you say.', 'whisper parakeet speech model transcribe'],
     ['Language', 'The language you speak.', 'language english turkish auto'],
   ]),
@@ -283,6 +299,10 @@ export const SETTINGS: readonly Entry[] = [
     ['Address', 'Where the browser opens Beluga.', 'url address link'],
     ['Let a browser in', 'A link that works once, for 10 minutes.', 'link browser login'],
   ]),
+  ...rows('advanced', 'Agent threads', [['Let your agents start threads', 'Child chats, each with its own agent.', 'threads child sub-agent family orchestrate']]),
+
+  // Experimental: one group per experiment, its switch the row (made from shared/experiments.ts).
+  ...EXPERIMENTS.flatMap((id) => rows('experimental', EXPERIMENT_INFO[id].title, [[EXPERIMENT_INFO[id].title, EXPERIMENT_INFO[id].summary, `${id} experimental early ${EXPERIMENT_INFO[id].keywords}`]])),
 
   // About
   ...rows('about', undefined, [

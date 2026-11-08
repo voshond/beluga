@@ -75,6 +75,19 @@
   max-height: 14rem;
   overflow: auto;
   padding-right: 4px;
+  transition: max-height var(--dur) var(--ease-out);
+}
+/* Read in full: the card grows up over the chat (it sits on the box), leaving a strip of the chat, the header and the box in view. */
+.planFull {
+  max-height: max(14rem, calc(100vh - 27rem));
+}
+.cardFull {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan {
+    transition: none;
+  }
 }
 .question {
   margin-top: 6px;

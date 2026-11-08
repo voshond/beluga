@@ -2304,3 +2304,160 @@ textarea.goalBox {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* A draft's review before approval (BLG-772): the head line, then what it found. */
+.review {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.reviewHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.reviewHead > svg {
+  color: var(--accent);
+}
+.findings {
+  margin: 0;
+  padding: 0 0 2px 23px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.finding {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.finding > span:first-child {
+  flex: none;
+}
+
+/* A decision a later one replaced (BLG-772): kept, crossed out, with the tasks still written its way. */
+.decisionOld .decisionQuestion,
+.decisionOld .decisionAnswer {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+.decisionStale {
+  color: var(--text-2);
+}
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+}
+.linkButton:hover {
+  text-decoration: underline;
+}
+
+/* Verifying the plan (BLG-772): alive while it works, so it's never taken for stuck. */
+.verifying {
+  position: relative;
+  overflow: hidden;
+  gap: 7px;
+}
+.verifyTime {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+.verifyWhy {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.verifyChecks {
+  margin: 0;
+  padding: 0 0 0 23px;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.verifyCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+  transition: color 240ms ease;
+}
+.verifyCheck[data-state='done'] {
+  color: var(--text-2);
+}
+.verifyCheck[data-state='done'] > svg {
+  color: var(--ok);
+}
+.verifyCheck[data-state='now'] {
+  color: var(--accent);
+  font-weight: 600;
+}
+.verifyTodo {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px dashed color-mix(in srgb, var(--text) 30%, transparent);
+}
+.verifyNow {
+  padding: 0 0 4px 23px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: verifyLine 260ms ease-out;
+}
+.verifySaid {
+  color: var(--text-2);
+  font-style: italic;
+}
+@keyframes verifyLine {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+/* A soft sweep along the bottom edge: moving, never glowing. */
+.verifyBar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  overflow: hidden;
+}
+.verifyBar::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: verifySweep 1.8s ease-in-out infinite;
+}
+@keyframes verifySweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(290%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .verifyBar::after,
+  .verifyNow {
+    animation: none;
+  }
+}

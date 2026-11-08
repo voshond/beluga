@@ -245,6 +245,11 @@ test('A PR that conflicts says so at the top and offers Resolve Conflicts; a mer
     await expect(toolbar(page).locator('[data-branch-state="merged"]')).toBeVisible({ timeout: 30_000 });
     await expect(page.locator('[data-pr-strip]')).toHaveCount(0);
     await expect(toolbar(page).getByRole('button', { name: 'Archive Worktree' })).toBeVisible();
+    // Merged on GitHub, not here: the chat says so too, with a line across it.
+    const line = page.locator('[data-merged-divider="7"]');
+    await expect(line).toContainText('Above was merged into main in PR #7');
+    await line.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: test.info().outputPath('merged-line.png') });
     await toolbar(page).getByRole('button', { name: 'Other steps for this branch' }).click();
     await expect(page.getByRole('menuitem', { name: /^Delete Worktree…/ })).toBeVisible();
     await page.getByRole('menuitem', { name: /^Continue After Merge…/ }).click();

@@ -379,6 +379,21 @@
   background: currentColor;
   opacity: 0.3;
 }
+/* Answering a card above the box (a plan's changes, your own answer): one button that says so. */
+.answer {
+  align-items: center;
+  gap: 5px;
+  padding: 0 11px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.answer:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.planning .answer.splitReady {
+  background: color-mix(in srgb, var(--plan) 88%, var(--text));
+}
 .splitReady {
   background: var(--accent);
   color: white;

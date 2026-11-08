@@ -100,7 +100,7 @@ function WorkspaceItemRow(props: RowBase & { now: number }) {
     return { st: stateOf(full, w, 0), running: act.running, lastTs: act.lastTs, unread: full.unread[`ws:${w.id}`] ?? 0, pr: full.prs[w.id], ctx: full.context[`ws:${w.id}`] };
   }, sameRow);
   return (
-    <ActionsContext items={() => workspaceItems(client.store.getState(), w, actions.run)}>
+    <ActionsContext items={() => workspaceItems(client.store.getState(), w, actions.run, client)}>
       <div {...rowProps(props, `${w.name}, ${st.label}`)} className={s.row}>
         <span className={s.kind}>
           <Icon name={w.kind === 'chat' ? 'chat' : w.kind === 'main' ? 'folder' : 'branch'} size={14} />

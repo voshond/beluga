@@ -114,7 +114,7 @@ export const COMPANION_API = {
   'companion.merge': { args: z.tuple([wsTopic]) },
   'companion.resolve': { args: z.tuple([wsTopic]) },
   // 1.8: one of a worktree's branch steps (BranchView.steps), the Mac's own way → { ok, message }.
-  'companion.branchStep': { args: z.tuple([wsTopic, z.enum(PHONE_BRANCH_STEPS)]) },
+  'companion.branchStep': { args: z.tuple([wsTopic, z.enum(PHONE_BRANCH_STEPS), z.enum(['with', 'keep']).optional()]) },
   // A live view's rows (BLG-68): the view is named by its conversation, turn and block (one in your
   // own Claude's answer); `source` is one that view names (an action's, a control's). The Mac runs
   // it as view.fetch does → ViewPage, or { needsApproval, what } for a command that hasn't run before.

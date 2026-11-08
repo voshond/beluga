@@ -53,8 +53,10 @@ describe('pickPrimary: a PR’s next step', () => {
     const notPushed = ws({ status: { changed: 0, ahead: 3, behind: 0, unpushed: 1 } });
     const a = primary(notPushed, pr({ conflicts: true, checks: 'failing' }))!;
     expect(a.action).toBe('pr');
-    expect(a.label).toBe('PR #366');
-    expect(a.tone).toBeUndefined();
+    // Never a bare "PR #366" while it lacks commits made here (BLG-840).
+    expect(a.label).toBe('PR #366 · 1 Not Pushed');
+    expect(a.hint).toBe('1 commit not on PR #366: push them before you merge it');
+    expect(a.tone).toBe('info');
   });
 
   it('checks still running (one failed already): no red Fix yet', () => {
@@ -65,6 +67,20 @@ describe('pickPrimary: a PR’s next step', () => {
   it('GitHub still working out mergeability shows no conflict', () => {
     // pr.ts sets `conflicts` only for CONFLICTING: an UNKNOWN PR comes without it.
     expect(primary(ws(), pr())?.action).toBe('pr');
+  });
+
+  it('BLG-840: commits its open PR doesn’t have lead as “Push 3 Commits to PR #398”, never a bare “PR #398”', () => {
+    const behind = ws({ status: { changed: 0, ahead: 11, behind: 0, unpushed: 3 } });
+    const t = toolbarActions(stateWith(behind, pr({ number: 398 })), behind);
+    expect(t.primary).toBeUndefined();
+    expect(t.branch?.label).toBe('3 commits not on PR');
+    expect(t.branch?.pr?.number).toBe(398);
+    expect(t.branch?.steps.map((s) => s.label)).toEqual(['Push 3 Commits to PR #398', 'Push and Merge When Ready', 'Open PR #398']);
+    // No step merges it as it is.
+    expect(t.branch?.steps.some((s) => s.id === 'merge_pr' || s.id === 'merge_admin')).toBe(false);
+    // Pushed: the PR is ready to merge again.
+    const pushed = ws({ status: { changed: 0, ahead: 11, behind: 0 } });
+    expect(toolbarActions(stateWith(pushed, pr({ number: 398 })), pushed).branch?.steps[0]).toMatchObject({ id: 'merge_pr', label: 'Squash and Merge' });
   });
 
   it('in the toolbar, an open PR’s worktree leads with its branch steps, so the two never disagree', () => {

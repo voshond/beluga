@@ -1,5 +1,5 @@
 import { ESTIMATES, PRIORITIES, type Priority } from '../board/model.js';
-import { AUTONOMIES, type Autonomy, MAX_PLAN_REPOS, type PlanBody, type PlanDecision, type PlanDecisionEntry, type PlanMilestone, type PlanRepoChange, type PlanTask, allTasks, reposWith, runOf } from './model.js';
+import { AUTONOMIES, type Autonomy, MAX_PLAN_REPOS, type PlanBody, type PlanDecision, type PlanDecisionEntry, decisionText, type PlanMilestone, type PlanRepoChange, type PlanTask, allTasks, reposWith, runOf } from './model.js';
 
 /**
  * Writing a plan: a whole one (Claude's plan_write), or a change at a time (Claude's plan_update,
@@ -68,6 +68,7 @@ export interface BodyInput {
   readonly title: string;
   readonly goal: string;
   readonly milestones: readonly MilestoneInput[];
+  /** Left out: the plan's decisions stay as they were. */
   readonly decisions?: readonly DecisionInput[];
   readonly openQuestions?: readonly string[];
   /** Repos to add to the plan (on) or drop from it (off), applied when it's approved. */
@@ -82,13 +83,21 @@ export interface RepoChangeInput {
   readonly by?: 'claude' | 'user';
 }
 
-/** A decision as Claude writes it (BLG-8): `by` left out is a default it chose. */
+/**
+ * A decision as Claude writes it (BLG-8): `by` left out is a default it chose. `supersedes` names
+ * the one it replaces; one for a question already decided replaces that one anyway (BLG-772).
+ */
 export interface DecisionInput {
+  readonly id?: string;
   readonly question: string;
   readonly answer: string;
   readonly why?: string;
   readonly by?: 'user' | 'default';
   readonly tasks?: readonly string[];
+  readonly terms?: readonly string[];
+  readonly retires?: readonly string[];
+  /** The decision it replaces (its id). */
+  readonly supersedes?: string;
 }
 
 export type PlanOp =
@@ -105,6 +114,18 @@ export type PlanOp =
   | { readonly op: 'decide'; readonly decision: DecisionInput }
   /** A question still to settle (on), or settled or dropped (off). */
   | { readonly op: 'open_question'; readonly question: string; readonly on: boolean }
+  /** A repo in or out of the plan, once it's approved (BLG-29). */
+  | {
+      readonly op: 'update_decision';
+      readonly id: string;
+      readonly question?: string;
+      readonly answer?: string;
+      readonly why?: string;
+      readonly tasks?: readonly string[];
+      readonly terms?: readonly string[];
+      readonly retires?: readonly string[];
+    }
+  | { readonly op: 'remove_decision'; readonly id: string }
   /** A repo in or out of the plan, once it's approved (BLG-29). */
   | ({ readonly op: 'repo' } & RepoChangeInput);
 
@@ -135,14 +156,35 @@ export function lines(input: readonly string[] | string | undefined): string[] {
     .slice(0, MAX_LINES);
 }
 
-/** An id that's free (`taken` grows with it). */
-function freeId(wanted: string | undefined, fallback: string, taken: Set<string>): string {
-  const base = slugId(wanted?.trim() || fallback);
-  let id = base;
-  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
+/**
+ * A new item's id (`taken` grows with it). One that's taken is refused, never renamed: a silent
+ * "-2" kept a stale task beside its replacement (BLG-772). `held` says what holds an id, for the error.
+ */
+function newId(wanted: string | undefined, fallback: string, taken: Set<string>, what: 'task' | 'milestone' | 'decision', held: (id: string) => string | undefined): string {
+  const id = slugId(wanted?.trim() || fallback);
+  if (taken.has(id)) {
+    const holder = held(id);
+    const change = what === 'task' ? 'update_task' : what === 'milestone' ? 'update_milestone' : 'update_decision';
+    const remove = what === 'task' ? 'remove_task' : what === 'milestone' ? 'remove_milestone' : 'remove_decision';
+    const named = wanted?.trim() ? '' : ' (its id comes from its title)';
+    throw new PlanError(`There's already a ${what} "${id}"${holder ? `: ${holder}` : ''}. Change that one with ${change}, take it out first with ${remove}, or give the new ${what} an id of its own${named}`);
+  }
   taken.add(id);
   return id;
 }
+
+const taskHolder = (body: PlanBody) => (id: string): string | undefined => {
+  const hit = allTasks(body).find((t) => t.task.id === id);
+  return hit ? `“${hit.task.title}”, in milestone “${hit.milestone.title}”` : undefined;
+};
+const milestoneHolder = (body: PlanBody) => (id: string): string | undefined => {
+  const m = body.milestones.find((x) => x.id === id);
+  return m ? `“${m.title}”` : undefined;
+};
+const decisionHolder = (list: readonly PlanDecisionEntry[]) => (id: string): string | undefined => {
+  const d = list.find((x) => x.id === id);
+  return d ? `“${oneLine(decisionText(d), 120)}”` : undefined;
+};
 
 function task(input: TaskInput, id: string, keep?: PlanTask): PlanTask {
   const title = oneLine(input.title ?? '', MAX_TITLE);
@@ -200,18 +242,23 @@ export function normalizeBody(input: BodyInput, previous?: readonly (PlanBody | 
   for (const body of previous ?? []) for (const { task: t } of allTasks(body)) if (!known.has(t.id) || t.issueId) known.set(t.id, t);
   const milestoneIds = new Set<string>();
   const taskIds = new Set<string>();
+  // What holds each id so far, for a clear error when two would share one.
+  const held = new Map<string, string>();
   // Ids as written first, so a task's blockers can name tasks further down.
   const milestones = (input.milestones ?? []).map((m) => {
-    const id = freeId(m.id, m.title, milestoneIds);
+    const id = newId(m.id, m.title, milestoneIds, 'milestone', (x) => held.get(`m:${x}`));
+    held.set(`m:${id}`, `“${oneLine(m.title ?? '', 120)}”`);
     const tasks = (m.tasks ?? []).map((t) => {
-      const tid = freeId(t.id, t.title, taskIds);
+      const tid = newId(t.id, t.title, taskIds, 'task', (x) => held.get(`t:${x}`));
+      held.set(`t:${tid}`, `“${oneLine(t.title ?? '', 120)}”, in milestone “${oneLine(m.title ?? '', 120)}”`);
       return task(t, tid, known.get(tid));
     });
     return milestone(m, id, tasks);
   });
   const goal = block(input.goal, MAX_GOAL) ?? '';
-  const decisions = dedupeDecisions((input.decisions ?? []).map(decisionEntry));
-  const openQuestions = questionList(input.openQuestions ?? []).filter((q) => !decisions.some((d) => sameText(d.question, q)));
+  // Decisions are the plan's: a whole new plan that says none keeps the ones it had.
+  const decisions = input.decisions ? decisionsOf(input.decisions) : (previous?.find((b) => b?.decisions)?.decisions ?? []);
+  const openQuestions = questionList(input.openQuestions ?? []).filter((q) => !decisions.some((d) => !d.supersededBy && sameText(d.question, q)));
   // The repo changes drafted before stay (a whole plan rewrites the milestones, not which repos it covers).
   const kept = withRepoChanges({ title, goal, milestones, ...(decisions.length ? { decisions } : {}), ...(openQuestions.length ? { openQuestions } : {}) }, previous?.[0]?.repoChanges ?? []);
   const body = (input.repoEdits ?? []).reduce((b, c) => withRepo(b, c, repos), kept);
@@ -246,28 +293,69 @@ function withRepo(body: PlanBody, input: RepoChangeInput, base: readonly string[
   return withRepoChanges(body, next);
 }
 
-const MAX_DECISIONS = 40;
+const MAX_DECISIONS = 60;
+const MAX_TERMS = 8;
 const sameText = (a: string, b: string): boolean => oneLine(a, MAX_LINE).toLowerCase() === oneLine(b, MAX_LINE).toLowerCase();
+const termList = (input: readonly string[] | undefined): string[] => [...new Set((input ?? []).map((t) => oneLine(t, 60)).filter((t) => t.length >= 2))].slice(0, MAX_TERMS);
 
-function decisionEntry(d: DecisionInput): PlanDecisionEntry {
+function decisionEntry(d: DecisionInput, id: string, keep?: PlanDecisionEntry): PlanDecisionEntry {
   const question = oneLine(d.question ?? '', MAX_LINE);
   const answer = oneLine(d.answer ?? '', MAX_LINE);
   if (!question || !answer) throw new PlanError('Every decision needs its question and its answer');
   const why = d.why ? oneLine(d.why, MAX_LINE) : '';
   const tasks = [...new Set((d.tasks ?? []).map((t) => t.trim()).filter(Boolean))];
-  return { question, answer, ...(why ? { why } : {}), by: d.by === 'user' ? 'user' : 'default', ...(tasks.length ? { tasks } : {}) };
+  const terms = termList(d.terms ?? keep?.terms);
+  const retires = termList(d.retires ?? keep?.retires);
+  const supersedes = d.supersedes?.trim() || keep?.supersedes;
+  return {
+    id,
+    question,
+    answer,
+    ...(why ? { why } : {}),
+    by: d.by === 'user' ? 'user' : 'default',
+    ...(tasks.length ? { tasks } : {}),
+    ...(terms.length ? { terms } : {}),
+    ...(retires.length ? { retires } : {}),
+    ...(supersedes ? { supersedes } : {}),
+    ...(keep?.supersededBy ? { supersededBy: keep.supersededBy } : {}),
+  };
 }
 
-/** One decision per question (a later one wins), at most MAX_DECISIONS. */
-function dedupeDecisions(list: readonly PlanDecisionEntry[]): PlanDecisionEntry[] {
-  const out: PlanDecisionEntry[] = [];
-  for (const d of list) {
-    const at = out.findIndex((x) => sameText(x.question, d.question));
-    if (at >= 0) out[at] = d;
-    else out.push(d);
+/** A new decision's id: the one asked for (refused when taken), or one made from its question. */
+function decisionId(input: DecisionInput, list: readonly PlanDecisionEntry[]): string {
+  const taken = new Set(list.map((d) => d.id));
+  if (input.id?.trim()) return newId(input.id, input.question, taken, 'decision', decisionHolder(list));
+  const base = slugId(input.question ?? '') || 'decision';
+  let id = base;
+  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
+  return id;
+}
+
+/**
+ * A decision added. The one it replaces (named in `supersedes`, or the one in force for the same
+ * question) is kept for the record, marked replaced (BLG-772); the same answer again only updates it.
+ */
+function addDecision(list: readonly PlanDecisionEntry[], made: PlanDecisionEntry): PlanDecisionEntry[] {
+  if (made.supersedes) {
+    const named = list.find((d) => d.id === made.supersedes);
+    if (!named) throw new PlanError(`Decision "${made.id}" supersedes "${made.supersedes}", which isn't one of the plan's decisions (${list.map((d) => d.id).join(', ') || 'none yet'})`);
+    if (named.supersededBy) throw new PlanError(`Decision "${named.id}" was already superseded by "${named.supersededBy}": supersede that one instead`);
   }
-  if (out.length > MAX_DECISIONS) throw new PlanError(`A plan keeps at most ${MAX_DECISIONS} decisions: fold small ones together`);
-  return out;
+  const old = made.supersedes ? list.find((d) => d.id === made.supersedes) : list.find((d) => !d.supersededBy && sameText(d.question, made.question));
+  if (old && !made.supersedes && sameText(old.answer, made.answer)) return list.map((d) => (d.id === old.id ? { ...made, id: old.id, ...(old.supersedes ? { supersedes: old.supersedes } : {}) } : d));
+  if (list.length >= MAX_DECISIONS) throw new PlanError(`A plan keeps up to ${MAX_DECISIONS} decisions: remove ones that no longer matter`);
+  const replacing = old ? { ...made, supersedes: old.id } : made;
+  return [...list.map((d) => (old && d.id === old.id ? { ...d, supersededBy: made.id } : d)), replacing];
+}
+
+/** Decisions from a whole plan: ids made where missing; a question written twice keeps the later answer in its place. */
+function decisionsOf(input: readonly DecisionInput[]): PlanDecisionEntry[] {
+  let list: PlanDecisionEntry[] = [];
+  for (const d of input) {
+    const same = d.supersedes ? undefined : list.find((x) => !x.supersededBy && sameText(x.question, d.question ?? ''));
+    list = same ? list.map((x) => (x === same ? decisionEntry(d, same.id) : x)) : addDecision(list, decisionEntry(d, decisionId(d, list)));
+  }
+  return list;
 }
 
 function questionList(list: readonly string[]): string[] {
@@ -323,9 +411,9 @@ function applyOp(body: PlanBody, op: PlanOp, repos: readonly string[] | undefine
     case 'repo':
       return withRepo(body, op, repos);
     case 'decide': {
-      const d = decisionEntry(op.decision);
-      const decisions = dedupeDecisions([...(body.decisions ?? []), d]);
-      return withNotes(body, decisions, (body.openQuestions ?? []).filter((q) => !sameText(q, d.question)));
+      const list = body.decisions ?? [];
+      const made = decisionEntry(op.decision, decisionId(op.decision, list));
+      return withNotes(body, addDecision(list, made), (body.openQuestions ?? []).filter((q) => !sameText(q, made.question)));
     }
     case 'open_question': {
       const q = oneLine(op.question ?? '', MAX_LINE);
@@ -339,8 +427,8 @@ function applyOp(body: PlanBody, op: PlanOp, repos: readonly string[] | undefine
       return { ...body, title, goal: op.goal !== undefined ? (block(op.goal, MAX_GOAL) ?? '') : body.goal };
     }
     case 'add_milestone': {
-      const id = freeId(op.milestone.id, op.milestone.title, milestoneIds);
-      const tasks = (op.milestone.tasks ?? []).map((t) => task(t, freeId(t.id, t.title, taskIds)));
+      const id = newId(op.milestone.id, op.milestone.title, milestoneIds, 'milestone', milestoneHolder(body));
+      const tasks = (op.milestone.tasks ?? []).map((t) => task(t, newId(t.id, t.title, taskIds, 'task', taskHolder(body))));
       const made = milestone(op.milestone, id, tasks);
       const at = op.after ? body.milestones.findIndex((m) => m.id === op.after) : -2;
       if (op.after && at < 0) needMilestone(op.after);
@@ -372,7 +460,7 @@ function applyOp(body: PlanBody, op: PlanOp, repos: readonly string[] | undefine
     }
     case 'add_task': {
       const m = needMilestone(op.milestone);
-      const made = task(op.task, freeId(op.task.id, op.task.title, taskIds));
+      const made = task(op.task, newId(op.task.id, op.task.title, taskIds, 'task', taskHolder(body)));
       const at = op.after ? m.tasks.findIndex((t) => t.id === op.after) : -1;
       const tasks = [...m.tasks];
       tasks.splice(at >= 0 ? at + 1 : tasks.length, 0, made);
@@ -428,6 +516,45 @@ function applyOp(body: PlanBody, op: PlanOp, repos: readonly string[] | undefine
       needTask(op.by);
       const blockedBy = op.on ? [...new Set([...t.blockedBy, op.by])] : t.blockedBy.filter((b) => b !== op.by);
       return mapTasks((x) => (x.id === t.id ? { ...x, blockedBy } : x));
+    }
+    case 'update_decision': {
+      const list = body.decisions ?? [];
+      const was = list.find((d) => d.id === op.id);
+      if (!was) throw new PlanError(`There's no decision "${op.id}" (decisions: ${list.map((d) => d.id).join(', ') || 'none yet'})`);
+      const next = decisionEntry(
+        {
+          question: op.question ?? was.question,
+          answer: op.answer ?? was.answer,
+          by: was.by,
+          ...((op.why ?? was.why) ? { why: (op.why ?? was.why)! } : {}),
+          ...((op.tasks ?? was.tasks) ? { tasks: (op.tasks ?? was.tasks)! } : {}),
+          ...(op.terms ? { terms: op.terms } : {}),
+          ...(op.retires ? { retires: op.retires } : {}),
+        },
+        was.id,
+        was,
+      );
+      return { ...body, decisions: list.map((d) => (d.id === was.id ? next : d)) };
+    }
+    case 'remove_decision': {
+      const list = body.decisions ?? [];
+      if (!list.some((d) => d.id === op.id)) throw new PlanError(`There's no decision "${op.id}" (decisions: ${list.map((d) => d.id).join(', ') || 'none yet'})`);
+      // The one it had replaced is in force again; one that replaced it stands on its own.
+      const rest = list
+        .filter((d) => d.id !== op.id)
+        .map((d) => {
+          if (d.supersededBy === op.id) {
+            const { supersededBy: _s, ...kept } = d;
+            return kept;
+          }
+          if (d.supersedes === op.id) {
+            const { supersedes: _s, ...kept } = d;
+            return kept;
+          }
+          return d;
+        });
+      const { decisions: _d, ...without } = body;
+      return rest.length ? { ...body, decisions: rest } : without;
     }
   }
 }

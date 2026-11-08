@@ -5,7 +5,7 @@ import type { Plan } from '../src/core/plans/model.js';
 import type { Action, AppState } from '../src/core/store.js';
 import { type ScreenAction, attentionOf, initialAppState, initialScreen, reduceApp } from '../src/client/screen.js';
 import type { Project, Workspace } from '../src/workspaces/types.js';
-import { planRowSignal, planSignal, unreadEntries } from '../packages/mac/src/layout/attention-model.js';
+import { categoriesOf, planRowSignal, planSignal, unreadEntries } from '../packages/mac/src/layout/attention-model.js';
 
 /** The plan's row in the sidebar counts only what's new at the plan's level, never its tasks' worktrees summed up (BLG-12). */
 
@@ -83,5 +83,14 @@ describe('a plan that gave up on something by itself', () => {
     const rescued: Plan = { ...plan, rescue: { m: { sig: 's', tries: 6, at: 1, tried: [], yours: true } } };
     expect(planSignal({ ...base(), plans: { enabled: true, plans: [rescued], style: '' } }, rescued)).toMatchObject({ level: 'needs', need: 'stuck', tip: 'Stuck on “M”' });
     expect(planSignal(base(), plan).level).toBe('idle');
+  });
+});
+
+describe('the plan in the sidebar categories', () => {
+  it('is one row, with its tasks’ worktrees not listed, in Working while a task runs', () => {
+    const s = apply(base(), { type: 'agent_event', owner: 'me', requestId: 'run', requester: 'me', event: 'started', text: '', ts: 5, channel: 'ws:t1' });
+    const all = Object.values(categoriesOf(s)).flat();
+    expect(all.filter((e) => e.kind === 'plan').map((e) => [e.name, e.category, e.key])).toEqual([['Checkout', 'working', 'plan:pl']]);
+    expect(all.map((e) => e.channel)).not.toContain('ws:t1');
   });
 });

@@ -1,20 +1,40 @@
-import { remindLabel, remindPending } from '@beluga/shared/remind.js';
+import { useMemo } from 'react';
+import { laterUntil } from '@beluga/core/triage/facts.js';
+import { remindLabel } from '@beluga/shared/remind.js';
 import type { Workspace } from '@beluga/workspaces/types.js';
 import { Icon } from '../components/Icon.js';
 import { cx } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
 import { useApp, useUi } from '../lib/beluga.js';
+import { sameDeep } from '../lib/stable.js';
 import { Row } from './sidebar-parts.js';
 import { WorkspaceWithAgents } from './SubAgents.js';
 import side from './Sidebar.module.css';
 import s from './project-groups.module.css';
 
+/** When each of your conversations put off till later (Remind Me Later) reminds you, by id: from your records (core/triage). */
+export type Later = ReadonlyMap<string, number>;
+
+/** Your conversations put off till later. A reminder that comes changes the records, so this draws again then. */
+export function useLater(): Later {
+  const pairs = useApp(
+    (st) =>
+      st.projects.flatMap((p) =>
+        p.workspaces.flatMap((w) => {
+          const until = w.archived ? undefined : laterUntil(st, `ws:${w.id}`);
+          return until === undefined ? [] : [[w.id, until] as const];
+        }),
+      ),
+    sameDeep,
+  );
+  return useMemo(() => new Map(pairs), [pairs]);
+}
+
 /** Conversations put off till later (Remind Me Later, BLG-748), soonest reminder first. */
-export const laterOf = (list: readonly Workspace[], now = Date.now()): Workspace[] =>
-  list.filter((w) => !w.archived && remindPending(w, now)).sort((a, b) => a.remindAt! - b.remindAt!);
+export const laterOf = (later: Later, list: readonly Workspace[]): Workspace[] => list.filter((w) => later.has(w.id)).sort((a, b) => later.get(a.id)! - later.get(b.id)!);
 
 /** Not put off: what the list shows in its place. */
-export const notLater = (w: Workspace, now = Date.now()): boolean => !remindPending(w, now);
+export const notLater = (later: Later, w: Workspace): boolean => !later.has(w.id);
 
 /**
  * A project's (or Chats') conversations put off till later, out of the way at its bottom: one
@@ -25,9 +45,10 @@ export function LaterRows({ list, indent, foldKey }: { list: readonly Workspace[
   const actions = useActions();
   const here = useApp((st) => (st.view.kind === 'workspace' ? st.view.id : undefined));
   const open = useUi((u) => u.collapsed.includes(foldKey));
+  const later = useLater();
   if (!list.length) return null;
   const shown = open ? list : list.filter((w) => w.id === here);
-  const next = remindLabel(list[0]!);
+  const next = remindLabel(later.get(list[0]!.id));
   return (
     <>
       <Row

@@ -45,6 +45,8 @@ export interface UiPrefs {
   readonly sidebarWidth: number;
   /** Sidebar sections you've folded. */
   readonly folded: readonly string[];
+  /** Your folds from before Sidebar categories went on: turning it off gives them back. */
+  readonly foldedBeforeCategories: readonly string[];
   /** Projects you unfolded in the sidebar (by id): the rest start folded. */
   readonly openProjects: readonly string[];
   /** The sidebar's Unread section: conversations that finished or need you, at the top (only while there are some). */
@@ -131,6 +133,8 @@ export interface UiPrefs {
   readonly voiceSend: boolean;
   /** The shortcut works from any app: Beluga comes forward and listens. */
   readonly voiceAnyApp: boolean;
+  /** The microphone dictation listens to (a device id; '' : the one macOS uses). Calls pick their own. */
+  readonly voiceMic: string;
   /** Settings › Keyboard (BLG-289): the shortcuts you gave other keys (the rest keep theirs). */
   readonly shortcuts: ShortcutOverrides;
 }
@@ -169,6 +173,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   sidebar: true,
   sidebarWidth: SIDEBAR_DEFAULT,
   folded: [],
+  foldedBeforeCategories: [],
   openProjects: [],
   unreadSection: true,
   friendsSidebar: true,
@@ -214,6 +219,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   voiceShortcut: 'Alt+Space',
   voiceSend: false,
   voiceAnyApp: false,
+  voiceMic: '',
   shortcuts: {},
 };
 

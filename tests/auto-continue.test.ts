@@ -219,3 +219,22 @@ describe('sending it on', () => {
     w.auto.stop();
   });
 });
+
+describe('child threads (BLG-344)', () => {
+  it('skips a chat its caller says to skip, and tells the caller which request it sent', () => {
+    const w = world();
+    const skipped = new Set(['ws:w2']);
+    const sent: Array<[string, string]> = [];
+    let now = T0;
+    const asked: string[] = [];
+    const auto = new AutoContinue({ store: w.store, ask: (_p, channel) => (asked.push(channel), `ask-${channel}`), now: () => now, skip: (channel) => skipped.has(channel), sent: (channel, requestId) => void sent.push([channel, requestId]) });
+    w.limit('r1', 'ws:w1');
+    w.limit('r2', 'ws:w2');
+    w.auto.stop();
+    now = RESET + LIMIT_MARGIN_MS + 1;
+    auto.tick();
+    auto.stop();
+    expect(asked).toEqual(['ws:w1']);
+    expect(sent).toEqual([['ws:w1', 'ask-ws:w1']]);
+  });
+});

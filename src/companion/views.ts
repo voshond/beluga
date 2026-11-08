@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { STILLS_DIR, STILL_SCHEME } from '../shared/preview/ref.js';
+import { SCRATCH_DIR } from '../shared/scratch-dir.js';
 import { dialogueHeader } from '../core/dialogues/view.js';
 import { agentPicker, pickedAgent } from '../shared/agent-picker.js';
 import { roomAgentTags } from '../shared/agent-tags.js';
@@ -11,9 +14,10 @@ import type { CcAgent } from '../core/claude-code/model.js';
 import type { PendingQuestion } from '../core/collab-store.js';
 import { type TaskView as GwTask, isFinal, requestGist, stateLabel, stateTone, targetLabel } from '../core/gateway/model.js';
 import { parseDecisionQid } from '../core/plans/decisions.js';
-import { type Plan, type PlanPr, draftRepoPlan, isMultiRepo, milestoneRepos, planForHome, planRepos, planTitle, prRef } from '../core/plans/model.js';
+import { type Plan, type PlanPr, draftRepoPlan, isMultiRepo, milestoneRepos, planForHome, planRepos, planTitle, prRef, reviewState } from '../core/plans/model.js';
+import { verifyProgress } from '../core/plans/verify-progress.js';
 import { planOwnerOf } from '../core/plans/owner.js';
-import { branchState } from '../core/branch-state.js';
+import { branchState, notOnPr } from '../core/branch-state.js';
 import { type RunSummary, type Sentinel, type SentinelState, activeSentinelChat, firstLine, isLive, isSentinelChat, lastRunOf, pausedWords, runsOf, scheduleSentence, sentinelById, sentinelChatTitle } from '../core/sentinel/model.js';
 import { type Dashboard, type Tile, metricOf, outputLook, tileColumns, tileCompare, tileMetrics, tileOutput, tileStateIn, tileTitle } from '../core/sentinel/dashboard-model.js';
 import { documentMime, isDocumentKind, storageName, storageSources } from '../core/sentinel/columns.js';
@@ -22,6 +26,8 @@ import { widgetSnapshot } from '../core/sentinel/widgets.js';
 import { COMPARE, changeText, deltaOf, formatMetric } from '../core/sentinel/metrics.js';
 import type { Workspace } from '../workspaces/types.js';
 import { type MilestoneView, type PlanView as PlanProgress, agentNowWords, liveFrom, planView } from '../core/plans/progress.js';
+import { triageFacts } from '../core/triage/facts.js';
+import { categoryOf, triageKey } from '../core/triage/model.js';
 import { shortVersion } from '../net/mesh/features.js';
 import type { MessageView, PersonView } from '../net/mesh/views.js';
 import { type Reaction, quickReactions } from '../shared/reactions.js';
@@ -29,6 +35,7 @@ import { chatReactions, reactableChannel } from '../core/chat-reactions.js';
 import { resumeOf } from '../core/auto-continue.js';
 import { chatPeople, claudePill, offlineNote, waitingIn, waitingLabel } from '../core/chat-people.js';
 import { type AgentRef, CLAUDE_AGENT, type Profile, defaultAgentOf } from '../protocol.js';
+import { threadNesting } from '../ui/thread-tree.js';
 import { providerCards } from '../ui/usage-cards.js';
 import {
   type BranchView,
@@ -68,7 +75,8 @@ import {
 } from './protocol.js';
 import { HIDDEN_STEP, humanizeDoing, humanizeStep, plainLine, stepWords, stripCode } from './strip.js';
 import { withMath } from './math-svg.js';
-import { chatTopic, clip, convTopic, dashboardTopic, myId, nameOf, needsYou, planTopic, progressOf, sentinelTopic, taskTopic } from './needs-you.js';
+import { agentRefView, chatTopic, clip, convTopic, dashboardTopic, myId, nameOf, needsYou, planTopic, progressOf, sentinelTopic, taskTopic } from './needs-you.js';
+import { familyOf, threadFamilyOf, threadRowOf } from './thread-family.js';
 
 export { chatTopic, convTopic, dashboardTopic, planTopic, sentinelTopic, taskTopic } from './needs-you.js';
 export { needsYou };
@@ -92,6 +100,12 @@ const PICTURE = /!\[([^\]\n]*)\]\((?:<([^>\n]+)>|([^)\s]+))\)/g;
 export function withPictures(prose: ProseView, refs: ViewContext['refs'], cwd?: string): ProseView {
   if (!prose.text.includes('![')) return prose;
   const text = prose.text.replace(PICTURE, (all, alt: string, angled: string | undefined, bare: string | undefined) => {
+    // A live preview (strip.ts): its newest picture, from the worktree's scratch folder, else in words.
+    if (bare?.startsWith(STILL_SCHEME)) {
+      const name = bare.slice(STILL_SCHEME.length);
+      const still = cwd && /^[\w.-]+\.png$/.test(name) ? refs.output(path.join(cwd, SCRATCH_DIR, STILLS_DIR, name), { cwd }) : undefined;
+      return still?.kind === 'image' ? `![${alt}](${still.ref})` : `_${alt}._`;
+    }
     // file:///C:/x is C:/x on Windows; ~ is your home there too (USERPROFILE: Windows has no $HOME).
     let p = (angled ?? bare ?? '').replace(/^file:\/\//, '').replace(/^\/(?=[A-Za-z]:[\\/])/, '').replace(/^~(?=[\\/])/, () => process.env.HOME || process.env.USERPROFILE || '~');
     try {
@@ -463,7 +477,8 @@ function turnOf(state: DomainState, item: LogItem, outputs: readonly OutputView[
       };
     }
     if (item.said) return { id: item.id, who: item.said.byAgent ? 'claude' : item.said.from === me ? 'you' : 'friend', name: clip(item.said.name, 100), prose: proseOf(item.said.text), ts: item.said.ts };
-    if (item.level === 'info') return undefined;
+    // Info lines stay on the Mac, but a merge (and Continue After Merge's line) is news here too.
+    if (item.level === 'info' && !item.merged && !item.shipped) return undefined;
     return { id: item.id, who: 'system', name: 'Beluga', prose: proseOf(item.text), ts: item.ts };
   }
   if (item.type === 'shell') {
@@ -583,7 +598,16 @@ function summaryOf(state: DomainState, conv: Conversation, waiting: ReadonlySet<
     ...(subs ? { agents: subs } : {}),
     ...(conv.projectId && conv.projectId !== 'asked' ? { projectId: clip(conv.projectId, 200), ...iconOf(ctx, conv.projectId) } : {}),
     ...(fresh ? { fresh } : {}),
+    ...notOnPrOf(state, conv.channel),
   };
+}
+
+/** A worktree's commits its open PR doesn't have (BLG-840), as the Mac's row chip counts them. */
+function notOnPrOf(state: DomainState, channel: string): Pick<ConvSummary, 'notOnPr'> {
+  const id = channel.startsWith('ws:') ? channel.slice(3) : undefined;
+  const ws = id ? state.projects.flatMap((p) => p.workspaces).find((w) => w.id === id) : undefined;
+  const gap = ws?.kind === 'worktree' && !ws.archived ? notOnPr(state.prs[ws.id], ws) : undefined;
+  return gap ? { notOnPr: { count: Math.min(gap.count, 100_000), pr: gap.number } } : {};
 }
 
 /** A one-line summary names what Your Mac started (`worktree:<id>`, `plan:<id>`, `task:<KEY>`) by its name, not its id. */
@@ -634,6 +658,7 @@ export function homeView(state: DomainState, ctx: ViewContext): HomeView {
 export function workView(state: DomainState, ctx?: ViewContext): WorkView {
   const waiting = waitingTopics(needsYou(state));
   const convs = conversations(state);
+  const nesting = threadNesting(state);
   const byProject = new Map<string, { id: string; name: string; conversations: ConvSummary[]; icon?: string }>();
   // Your Mac has its own places (Home, the Ask sheet's first target).
   for (const c of convs) {
@@ -642,7 +667,7 @@ export function workView(state: DomainState, ctx?: ViewContext): WorkView {
     if (!s) continue;
     const key = c.projectId ?? (c.channel === 'room' ? 'room' : `shared:${c.project ?? ''}`);
     const entry = byProject.get(key) ?? { id: clip(key, 200), name: clip(c.project ?? c.title, 200), conversations: [], ...(c.projectId ? iconOf(ctx, c.projectId) : {}) };
-    entry.conversations.push(s);
+    entry.conversations.push({ ...s, ...threadRowOf(state, c.channel, nesting), ...triageFields(state, c.channel) });
     byProject.set(key, entry);
   }
   // Every project of yours, even one with nothing in it yet (one just added on a server): the Ask
@@ -657,6 +682,21 @@ export function workView(state: DomainState, ctx?: ViewContext): WorkView {
       .map((p) => ({ ...p, conversations: p.conversations.sort((a, b) => (b.lastAt ?? 0) - (a.lastAt ?? 0)).slice(0, 200) }))
       .sort((a, b) => lastOf(b) - lastOf(a))
       .slice(0, 200),
+    ...(state.prefs.chatCategories ? { categories: true as const } : {}),
+  };
+}
+
+/** A chat's category for Work: nothing while `chatCategories` is off, or for what has no category. */
+function triageFields(state: DomainState, channel: string): Pick<ConvSummary, 'category' | 'snoozedUntil' | 'settledWhy' | 'back'> {
+  const key = state.prefs.chatCategories ? triageKey(state, channel) : undefined;
+  if (!key) return {};
+  const record = state.triage[key];
+  const category = categoryOf(record, triageFacts(state, key));
+  return {
+    category,
+    ...(category === 'snoozed' && record?.snoozed ? { snoozedUntil: record.snoozed.until } : {}),
+    ...(category === 'settled' && record?.settled ? { settledWhy: record.settled.why } : {}),
+    ...(record?.backAt !== undefined ? { back: true as const } : {}),
   };
 }
 
@@ -715,6 +755,7 @@ export function convView(state: DomainState, ctx: ViewContext, topic: Topic): Co
     outputs: outputs.slice(0, 100),
     ...(queue.length ? { queue } : {}),
     ...mergeOf(state, ctx, channel),
+    ...threadFamilyOf(state, channel),
     ...(plan && planT ? { plan: planBand(state, plan, planT) } : {}),
     ...waitingOf(state, channel),
     ...pickerOf(state, channel, conv?.mine ?? false),
@@ -753,8 +794,6 @@ function workPicker(state: DomainState, ref: AgentRef | undefined): AgentPickerV
   // None picked: the phone's "Your agent" row is the one on, not your default's model.
   return ref ? p : { ...p, groups: p.groups.map((g) => ({ ...g, models: g.models.map((m) => ({ ...m, on: false })) })) };
 }
-
-const agentRefView = (a: AgentRef): AgentRef => ({ runtime: clip(a.runtime, 32), label: clip(a.label, 64), ...(a.model ? { model: clip(a.model, 64) } : {}) });
 
 function pickerView(p: ReturnType<typeof agentPicker>): AgentPickerView {
   return {
@@ -824,6 +863,7 @@ function branchViewOf(state: DomainState, ws: Workspace): BranchView | undefined
     ...(b.pr ? { pr: { ...b.pr, ...(url ? { url: clip(url, 500) } : {}) } } : {}),
     ...(next ? { next: { id: next.id, label: clip(next.label, 80), ...(next.claude ? { claude: true } : {}) } } : {}),
     ...(phoneSteps.length ? { steps: phoneSteps.slice(0, 20).map((s) => ({ id: s.id, label: clip(s.label, 80), hint: clip(plainLine(s.hint, 300), 300), ...(s.claude ? { claude: true } : {}), ...(s.danger ? { danger: true } : {}) })) } : {}),
+    ...familyOf(state, ws.id),
   };
 }
 
@@ -942,7 +982,7 @@ export function planPageView(state: DomainState, id: string): PlanView | undefin
     })),
     autonomy: plan.autonomy,
     ...shipOf(state, plan, progress),
-    ...(notes?.decisions?.length ? { decisions: notes.decisions.slice(0, 40).map((d) => ({ question: clip(d.question, 400), answer: clip(d.answer, 400), by: d.by, ...(d.why ? { why: clip(d.why, 400) } : {}) })) } : {}),
+    ...(notes?.decisions?.length ? { decisions: notes.decisions.slice(-40).map((d) => ({ question: clip(d.question, 400), answer: clip(d.answer, 400), by: d.by, ...(d.why ? { why: clip(d.why, 400) } : {}), ...(d.supersededBy ? { replaced: true } : {}) })) } : {}),
     ...(notes?.openQuestions?.length ? { openQuestions: notes.openQuestions.slice(0, 40).map((q) => clip(q, 400)) } : {}),
     ...(plan.paused ? { paused: true } : {}),
     parallel: plan.maxParallel,
@@ -954,6 +994,24 @@ export function planPageView(state: DomainState, id: string): PlanView | undefin
     // 1.35 (BLG-498): who works its milestones and tasks (none: your default), and the list to change it from.
     ...(plan.agent ? { agent: agentRefView(plan.agent) } : {}),
     ...(plan.status !== 'done' ? { agents: workPicker(state, plan.agent) } : {}),
+    // 1.49 (BLG-772): its draft's review.
+    ...reviewOf(state, plan),
+  };
+}
+
+/** A verification under way, from its agent's run: so the phone shows it moving, never stuck. */
+function verifyingNow(state: DomainState, review: NonNullable<Plan['review']>): { now: string; checksDone: number; since: number } {
+  const channel = review.chat ? `ws:${review.chat}` : undefined;
+  const run = channel ? [...state.log].reverse().find((l) => l.type === 'agent' && l.channel === channel && l.ts >= review.at - 2000) : undefined;
+  const p = verifyProgress(run?.type === 'agent' ? run : undefined);
+  return { now: clip(plainLine(p.now, 240), 240), checksDone: p.checks.filter((c) => c.state === 'done').length, since: p.startedAt ?? review.at };
+}
+
+function reviewOf(state: DomainState, plan: Plan): Pick<PlanView, 'review'> {
+  const r = reviewState(plan);
+  const review = plan.review;
+  return {
+    ...(r !== 'off' && r !== 'none' && review ? { review: { state: r, ...(review.fixAsked ? { fixAsked: true } : {}), findings: review.findings.slice(0, 20).map((f) => ({ kind: f.kind, text: clip(plainLine(f.text, 1000), 1000) })), ...(r === 'reviewing' ? verifyingNow(state, review) : {}) } } : {}),
   };
 }
 

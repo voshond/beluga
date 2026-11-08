@@ -1,6 +1,7 @@
 import { switchAgent } from './agent-switch.js';
 import { runtimeChoices } from '../shared/agent-runtimes.js';
 import type { SessionOptions, Session } from './session.js';
+import { threadsOf } from './threads/launch.js';
 import type { ModelChoice } from './work-store.js';
 import { WorkspaceController } from './workspace-controller.js';
 import { Notifier } from './notify.js';
@@ -25,7 +26,7 @@ import { LOCAL_RUNTIME, localModels, localWhy } from '../shared/local-endpoints.
 import { useViewEnv } from './views/sources.js';
 import { boardOf } from './board/registry.js';
 import { sentinelOf } from './sentinel/registry.js';
-import { plansOf } from './plans/registry.js';
+import { needPlans, plansOf } from './plans/registry.js';
 import { assistantOf } from './assistant/registry.js';
 import { companionOf } from '../companion/registry.js';
 import { stopTestProcesses } from '../workspaces/test-procs.js';
@@ -85,10 +86,10 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
         defaultRuntime: () => opts.runtime?.agent ?? 'claude',
         defaultAgent: (project) => session.agentFor(project),
         toast: (text, level) => session.toast(text, level),
-        remind: (notice) => notifier.notify(notice),
         intend: (intent) => session.intend(intent),
         askClaude: (prompt, channel, o) => (o?.terminal ? session.startInTerminal(prompt, channel, o.shown) : session.askOwnClaude(prompt, channel, false, o?.echo ?? true, o?.shown)),
         showAsk: (prompt, channel) => session.showAsk(prompt, channel),
+        planHere: (channel) => void needPlans(session).here(channel),
         titleChat: (content) => session.titleChat(content),
         compact: (channel, instructions) => session.compact(channel, instructions),
         stopHere: async (channel) => {
@@ -238,6 +239,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       sentinelChat: (channel, from) => sentinelOf(session)?.chatPlace(channel, from),
       confirmTool: (toolName, input) => sentinelOf(session)?.confirmWords(toolName, input),
       plans: (channel, from, said) => plansOf(session)?.forRun(channel, from, said),
+      threads: (channel) => threadsOf(session)?.forRun(channel),
       // "Your Mac"'s chats, and your own asks in friends' chats (BLG-207): both work in its folder.
       assistant: (channel, from) => assistantOf(session)?.forRun(channel, from) ?? assistantOf(session)?.forChat(channel, from),
       phone: (scratchDir) => companionOf(session)?.control.toolsFor(scratchDir),

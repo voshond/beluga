@@ -103,6 +103,16 @@
   font-size: 0.88rem;
   font-weight: 400;
 }
+/* A category row's status and pull request, at its right edge. */
+.status {
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.statusLoud {
+  color: var(--text);
+  font-weight: 600;
+}
 .unreadIcon {
   display: inline-grid;
   place-items: center;

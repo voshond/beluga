@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import type { PrCheck, PullRequest } from '@beluga/core/work-store.js';
+import { notOnPr } from '@beluga/core/branch-state.js';
+import type { AppState } from '@beluga/core/store.js';
 import type { MergeMethod } from '@beluga/workspaces/pr.js';
 import { findWorkspace } from '@beluga/ui/workspace-models.js';
 import { CommandLine, Field, FormSheet, TextArea, formStyles as f } from '../../components/FormSheet.js';
@@ -93,7 +95,11 @@ export function MergeButton({ wsId, pr, onError, size }: { wsId: string; pr: Pul
   const api = useApi();
   const [method, setMethod] = useState<MergeMethod>(lastMethod);
   const [busy, setBusy] = useState(false);
-  const merge = async (how: MergeMethod, mode?: 'auto' | 'admin'): Promise<void> => {
+  // Commits here the PR doesn't have (BLG-840): never merged without them. Push and Merge pushes
+  // them, then merges once their checks pass (the daemon pushes first whichever way you merge).
+  const gap = useApp((st) => unpushedOnPr(st, wsId, pr));
+  const merge = async (how: MergeMethod, picked?: 'auto' | 'admin'): Promise<void> => {
+    const mode = picked ?? (gap ? 'auto' : undefined);
     if (busy) return;
     setMethod(how);
     rememberMethod(how);
@@ -112,16 +118,18 @@ export function MergeButton({ wsId, pr, onError, size }: { wsId: string; pr: Pul
   const chosen = MERGE_METHODS.find((m) => m.method === method)!;
   const auto = canAutoMerge(pr);
   const skip = canSkipChecks(pr);
+  const commits = gap === 1 ? '1 commit' : `${gap} commits`;
   const items = [
-    ...MERGE_METHODS.map((m) => ({ label: m.label, hint: m.hint, checked: m.method === method, onSelect: () => void merge(m.method) })),
-    ...(auto ? [{ label: 'Merge When Checks Pass', hint: `${chosen.label} as soon as GitHub allows it`, separate: true, onSelect: () => void merge(method, 'auto') }] : []),
-    ...(skip ? [{ label: 'Merge Now, Skipping Checks', hint: `${chosen.label} into the base on GitHub right away, past its checks and reviews (needs admin rights)`, danger: true, onSelect: () => void merge(method, 'admin') }] : []),
+    ...MERGE_METHODS.map((m) => ({ label: m.label, hint: gap ? `Pushes the ${commits}, then merges this way once ${gap === 1 ? 'its' : 'their'} checks pass` : m.hint, checked: m.method === method, onSelect: () => void merge(m.method) })),
+    ...(auto && !gap ? [{ label: 'Merge When Checks Pass', hint: `${chosen.label} as soon as GitHub allows it`, separate: true, onSelect: () => void merge(method, 'auto') }] : []),
+    ...(skip ? [{ label: gap ? 'Push and Merge Now, Skipping Checks' : 'Merge Now, Skipping Checks', hint: `${gap ? `Pushes the ${commits}, then ${chosen.label.toLowerCase()}` : chosen.label} into the base on GitHub right away, past its checks and reviews (needs admin rights)`, danger: true, separate: Boolean(gap), onSelect: () => void merge(method, 'admin') }] : []),
   ];
+  const tip = pr.draft ? 'It’s a draft: mark it ready for review on GitHub first' : gap ? `${commits} here ${gap === 1 ? 'isn’t' : 'aren’t'} on PR #${pr.number} yet: pushes ${gap === 1 ? 'it' : 'them'}, then ${chosen.label.toLowerCase()} once ${gap === 1 ? 'its' : 'their'} checks pass` : `${chosen.label} on GitHub`;
   return (
     <span className={s.split} role="group" aria-label="Merge on GitHub">
-      <Tip label={pr.draft ? 'It’s a draft: mark it ready for review on GitHub first' : `${chosen.label} on GitHub`}>
-        <Button variant="merge" icon="merge" size={size ?? 'regular'} className={s.splitMain} disabled={busy || pr.draft} data-merge-github={method} onClick={() => void merge(method)}>
-          {busy ? 'Merging…' : 'Merge on GitHub'}
+      <Tip label={tip}>
+        <Button variant="merge" icon={gap ? 'up' : 'merge'} size={size ?? 'regular'} className={s.splitMain} disabled={busy || pr.draft} data-merge-github={method} data-push-first={gap || undefined} onClick={() => void merge(method)}>
+          {busy ? (gap ? 'Pushing…' : 'Merging…') : gap ? 'Push and Merge' : 'Merge on GitHub'}
         </Button>
       </Tip>
       <ActionsDropdown items={items} align="start">
@@ -131,6 +139,12 @@ export function MergeButton({ wsId, pr, onError, size }: { wsId: string; pr: Pul
       </ActionsDropdown>
     </span>
   );
+}
+
+/** Commits in this worktree its open PR doesn't have (0: none), as the branch pill counts them. */
+function unpushedOnPr(st: AppState, wsId: string, pr: PullRequest): number {
+  const ws = findWorkspace(st.projects, wsId);
+  return ws ? (notOnPr(pr, ws)?.count ?? 0) : 0;
 }
 
 /** GitHub can't merge a PR that conflicts with its base: Claude resolves it in the chat (asks first). */
@@ -177,6 +191,8 @@ function PrCard({ wsId, pr, pick, refresh, close }: { wsId: string; pr: PullRequ
   const open = pr.state === 'OPEN';
   // Beluga waits for the checks and merges then (Merge When Checks Pass), or GitHub's own auto-merge is on.
   const waiting = useApp((st) => Boolean(st.projects.flatMap((p) => p.workspaces).find((w) => w.id === wsId)?.mergeWhenReady));
+  const gap = useApp((st) => unpushedOnPr(st, wsId, pr));
+  const changed = useApp((st) => findWorkspace(st.projects, wsId)?.status?.changed ?? 0);
   return (
     <div className={s.pr} data-pr-state={pr.state}>
       <div className={s.prTop}>
@@ -200,6 +216,12 @@ function PrCard({ wsId, pr, pick, refresh, close }: { wsId: string; pr: PullRequ
         ) : null}
         {review && open ? <span className={cx(s.pill, review.tone)}>{review.label}</span> : null}
         {open && pr.conflicts ? <span className={cx(s.pill, s.pillBad)}>Conflicts with the base</span> : null}
+        {open && gap ? (
+          <span className={cx(s.pill, s.pillWait)} data-not-on-pr={gap}>
+            <Icon name="up" size={11} />
+            {gap === 1 ? '1 commit' : `${gap} commits`} not on it yet
+          </span>
+        ) : null}
         {open && (pr.autoMerge || waiting) ? (
           <span className={cx(s.pill, s.pillWait)}>
             <Icon name="clock" size={11} />
@@ -236,6 +258,8 @@ function PrCard({ wsId, pr, pick, refresh, close }: { wsId: string; pr: PullRequ
       ) : null}
       {pr.state === 'MERGED' ? <div className={s.prNote}>Merged on GitHub, so this worktree is done. Archive it to put it away (its branch and conversation are kept), or Continue After Merge to keep working here with a new PR.</div> : null}
       {open && pr.conflicts ? <div className={s.prNote}>It conflicts with its base, so GitHub can’t merge it until the conflicts are resolved and pushed.</div> : null}
+      {open && gap ? <div className={s.prNote}>{gap === 1 ? '1 commit' : `${gap} commits`} in this worktree {gap === 1 ? 'isn’t' : 'aren’t'} on PR #{pr.number} yet, so merging it as it is would leave {gap === 1 ? 'it' : 'them'} out. Push and Merge pushes {gap === 1 ? 'it' : 'them'} first, then merges once {gap === 1 ? 'its' : 'their'} checks pass.</div> : null}
+      {open && changed ? <div className={s.prNote}>{changed === 1 ? '1 uncommitted change stays' : `${changed} uncommitted changes stay`} here: commit {changed === 1 ? 'it' : 'them'} first to have {changed === 1 ? 'it' : 'them'} in the merge.</div> : null}
     </div>
   );
 }

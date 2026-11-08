@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { otherKeyShortcut, otherKeySteers, sendAction, sendsUrgent, steerBlockNote } from '../packages/mac/src/chat/send-action.js';
+import { answerSend, answeringIn, otherKeyShortcut, otherKeySteers, sendAction, sendsUrgent, steerBlockNote } from '../packages/mac/src/chat/send-action.js';
 import { DEFAULT_PREFS } from '../packages/mac/src/lib/prefs.js';
 import { runtimeHas } from '../src/shared/runtime-fallbacks.js';
 
@@ -80,5 +80,28 @@ describe('the Mac send action', () => {
     expect(sendAction('steer', { busy: true, canSteer: runtimeHas('opencode', 'steer') })).toBe('queue');
     expect(runtimeHas('claude', 'steer')).toBe(true);
     expect(runtimeHas('codex', 'steer')).toBe(true);
+  });
+});
+
+describe('the box while a card waits on you', () => {
+  const plan = { channel: 'ws:a', question: { kind: 'plan' } };
+  const ask = { channel: 'ws:a', question: { kind: 'question' } };
+
+  it('answers the plan or question waiting in this conversation', () => {
+    expect(answeringIn([plan], 'ws:a')).toBe('plan');
+    expect(answeringIn([ask], 'ws:a')).toBe('question');
+  });
+
+  it('is an ordinary box when nothing waits here', () => {
+    expect(answeringIn([], 'ws:a')).toBeUndefined();
+    expect(answeringIn([plan], 'ws:b')).toBeUndefined();
+  });
+
+  it('says it sends changes to the plan, never steer or queue', () => {
+    const send = answerSend('plan', 'Claude');
+    expect(send.label).toBe('Send Changes');
+    expect(send.tip).toContain('revises the plan');
+    expect(`${send.label} ${send.tip}`).not.toMatch(/steer|queue/i);
+    expect(answerSend('question', 'Claude').label).toBe('Answer');
   });
 });

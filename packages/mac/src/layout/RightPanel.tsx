@@ -1,4 +1,4 @@
-import { type DragEvent, type KeyboardEvent, lazy, memo, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type DragEvent, type KeyboardEvent, memo, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { shareNameOf } from '@beluga/shared/share-names.js';
 import { runId, setupId } from '@beluga/shared/terminal-keys.js';
 import { findWorkspace } from '@beluga/ui/workspace-models.js';
@@ -6,6 +6,7 @@ import { Icon, type IconName } from '../components/Icon.js';
 import { ActionsContext } from '../components/SpecMenu.js';
 import { IconButton, Segmented, cx } from '../components/ui.js';
 import { useApp, useBeluga } from '../lib/beluga.js';
+import { ViewBoundary, lazyView } from '../lib/lazy-view.js';
 import { currentTab, filesWsOf, focusFor, paneShowing, paneTabsOf, placeTab, resetPanelLayout, setPanelTab, setPhoneTab, showPanelTab, tabShowing, tabsOf, usePanelRuntime, useWorkspaceTabBridge } from '../lib/panel.js';
 import { PANEL_DEFAULT, PANEL_LABELS, type PaneId, type PanelTab, SPLIT_MAX, SPLIT_MIN, PANES_DEFAULT, clampPanelWidth, clampShare, paneKey, panelDigit, panelFits, slotOf, viewsOf } from '../lib/panel-model.js';
 import { setPrefs, usePrefs } from '../lib/prefs.js';
@@ -24,7 +25,7 @@ import { BackgroundTab, useBackgroundRunning } from './panel/BackgroundTab.js';
 import s from './panel/panel.module.css';
 import { shortcutKeys } from '../lib/shortcuts.js';
 
-const PhonePanel = lazy(() => import('../phone/PhoneView.js').then((m) => ({ default: m.PhonePanel })));
+const PhonePanel = lazyView('phone/PhonePanel', () => import('../phone/PhoneView.js').then((m) => m.PhonePanel), false);
 
 const ICONS: Record<PanelTab, IconName> = {
   changes: 'diff',
@@ -289,9 +290,11 @@ function Pane({ pane, lead, style, badges, settled }: { pane: PaneId; lead: bool
             {making || !settled ? (
               <div className={s.loading} />
             ) : (
-              <Suspense fallback={<div className={s.loading} />}>
-                <Body tab={tab} wsId={wsId} {...(view.kind === 'project' ? { projectId: view.id, mainId } : {})} {...(view.kind === 'shared' ? { sharedWs: { id: view.id, owner: view.owner } } : {})} {...(view.kind === 'assistant' ? { mac: true } : {})} />
-              </Suspense>
+              <ViewBoundary at={`${wsId}:${tab}`}>
+                <Suspense fallback={<div className={s.loading} />}>
+                  <Body tab={tab} wsId={wsId} {...(view.kind === 'project' ? { projectId: view.id, mainId } : {})} {...(view.kind === 'shared' ? { sharedWs: { id: view.id, owner: view.owner } } : {})} {...(view.kind === 'assistant' ? { mac: true } : {})} />
+                </Suspense>
+              </ViewBoundary>
             )}
           </div>
         </>

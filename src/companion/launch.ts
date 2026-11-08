@@ -12,6 +12,7 @@ import { installedVersion } from '../core/version.js';
 import { dispatchCall } from '../daemon/dispatch.js';
 import type { Identity } from '../net/crypto.js';
 import { listScratch } from '../workspaces/scratch.js';
+import { isSentPath } from '../shared/scratch-dir.js';
 import { assistantOf } from '../core/assistant/registry.js';
 import { ASSISTANT_CHANNEL, isAssistant } from '../shared/assistant.js';
 import { DeviceBook } from './devices.js';
@@ -94,7 +95,8 @@ class OutputCache {
         const wsId = channel.slice(3);
         const ws = state.projects.flatMap((p) => p.workspaces).find((w) => w.id === wsId);
         if (!ws?.path) continue;
-        const scratch = (await listScratch(ws.path).catch(() => [])).map((f) => ({ path: path.join(ws.path, f.path), size: f.size, ts: f.mtime, cwd: ws.path }));
+        // What you sent Claude (sent/) is yours, not one of its outputs.
+        const scratch = (await listScratch(ws.path).catch(() => [])).filter((f) => !isSentPath(f.path)).map((f) => ({ path: path.join(ws.path, f.path), size: f.size, ts: f.mtime, cwd: ws.path }));
         const agents = this.agentOutputs(wsId, ws.path);
         const all = [...agents, ...scratch].sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0)).slice(0, 100);
         const before = this.cache.get(channel);

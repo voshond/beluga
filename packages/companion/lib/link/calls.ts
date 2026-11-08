@@ -1,4 +1,5 @@
 import type { PhoneArgs, PhoneMethod } from '../../../../src/companion/calls';
+import type { ThreadChildren } from '../../../../src/shared/threads';
 import type { NeedsYou, PhoneBranchStep, Topic, VoiceModelId } from './protocol';
 
 /**
@@ -46,6 +47,11 @@ export const calls = {
   deleteMacChat: (topic: Topic): Call => make('assistant.deleteChat', [macChatOf(topic)], 'Delete the chat'),
   /** A chat's id → its topic: the first (`main`) keeps `conv:mac:assistant`. */
   macChatTopic: (id: string): Topic => (id === 'main' ? 'conv:mac:assistant' : `conv:mac:assistant:${id}`) as Topic,
+  /** 1.44 (BLG-74): a chat's category, as its sheet in Work changes it. The setting itself stays the Mac's. */
+  settle: (topic: Topic): Call => make('triage.settle', [channelOf(topic)], 'Settle'),
+  unsettle: (topic: Topic): Call => make('triage.unsettle', [channelOf(topic)], 'Un-settle'),
+  snooze: (topic: Topic, until: number): Call => make('triage.snooze', [channelOf(topic), until], 'Remind Me Later'),
+  wake: (topic: Topic): Call => make('triage.wake', [channelOf(topic)], 'Show Again Now'),
   /** A message in a conversation (yours, or shared with you to work in), with photos. */
   send: (topic: Topic, text: string, files?: Files): Call => make('companion.ask', [{ target: { topic }, text, ...withFiles(files) }], `Send "${short(text)}"`),
   /** Ask your Mac in a project: a new conversation there (its topic comes back). */
@@ -110,7 +116,10 @@ export const calls = {
   merge: (topic: Topic): Call => make('companion.merge', [topic], 'Merge'),
   resolve: (topic: Topic): Call => make('companion.resolve', [topic], 'Ask your agent to resolve'),
   /** 1.8: one of a worktree's branch steps (Archive, Squash and Merge, Fix with Claude…), as the Mac's toolbar does it. */
-  branchStep: (topic: Topic, step: PhoneBranchStep, label: string): Call => make('companion.branchStep', [topic, step], label),
+  branchStep: (topic: Topic, step: PhoneBranchStep, label: string, children?: ThreadChildren): Call => make('companion.branchStep', children ? [topic, step, children] : [topic, step], label),
+  /** 1.47: one child thread and those under it stop, as the Mac's Threads panel does it. */
+  stopThread: (id: string): Call => make('threads.stop', [id], 'Stop the thread'),
+  stopThreads: (id: string): Call => make('threads.stopAll', [id], 'Stop the threads'),
   /** Your steered message Claude hasn't read yet, now: its step stops and it reads it next. */
   steerNow: (request: string): Call => make('host.steerNow', [request], 'Send now'),
   /** 1.43: your steered message Claude hasn't read yet, taken back → { cancelled, prompt: its words, for the box }. */

@@ -1,3 +1,4 @@
+import { blackbox } from '../core/blackbox/recorder.js';
 import { makeReport } from '../core/blackbox/report.js';
 import { installedVersion } from '../core/version.js';
 import type { Session } from '../core/session.js';
@@ -10,4 +11,8 @@ type DiagnosticsHandlers = { readonly [M in DiagnosticsMethod]: (s: Session, ...
 
 export const DIAGNOSTICS_HANDLERS = {
   'diagnostics.report': () => makeReport({ version: installedVersion() }),
+  'diagnostics.windowProblem': (_s, p) => {
+    const what = p.kind === 'stalled' ? 'never finished loading' : 'failed to load';
+    blackbox.record('error', `window: chunk ${p.chunk} ${what} after ${Math.round(p.ms)} ms: ${p.message}`);
+  },
 } satisfies DiagnosticsHandlers;

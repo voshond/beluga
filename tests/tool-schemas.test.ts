@@ -7,6 +7,7 @@ import { createMacToolDefs } from '../src/agent/mac-tools.js';
 import { createPhoneToolDefs } from '../src/agent/phone-tools.js';
 import { createPlanToolDefs } from '../src/agent/plan-tools.js';
 import { createSentinelToolDefs } from '../src/agent/sentinel-tools.js';
+import { createThreadToolDefs } from '../src/agent/thread-tools.js';
 import { createTaskToolDefs } from '../src/agent/task-tools.js';
 import { createRoomToolDefs } from '../src/agent/tools.js';
 import { fromToolDraft } from '../src/core/sentinel/sentinels.js';
@@ -28,6 +29,7 @@ const SERVERS = {
   beluga_plan: createPlanToolDefs(any),
   beluga_sentinel: createSentinelToolDefs(any),
   beluga_task: createTaskToolDefs(any),
+  beluga_threads: createThreadToolDefs(any),
 };
 
 describe('every tool Claude is given has an input JSON Schema can say', () => {

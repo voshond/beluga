@@ -166,6 +166,25 @@ test('with reduced motion, steps go into the fold at once', async ({ page }) => 
   await page.getByRole('button', { name: 'Stop Claude' }).first().click();
 });
 
+test('with reduced motion, the step Claude is on reads as plain text in light and dark', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await openWorkspace(page, 'new-hero', 'landing');
+  await send(page, 'deep dive into the webhook code, take your time');
+  const words = lastSteps(page).locator('[data-current="true"] [class*="shimmer"]').first();
+  await expect(words).toBeVisible({ timeout: 20_000 });
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
+    // No gradient left behind without its clip (that paints a box over the words), and the words keep a colour.
+    const look = await words.evaluate((el) => {
+      const css = getComputedStyle(el);
+      return { image: css.backgroundImage, clip: css.backgroundClip || css.webkitBackgroundClip, color: css.color };
+    });
+    expect(look.image === 'none' || look.clip === 'text', `${colorScheme}: ${JSON.stringify(look)}`).toBe(true);
+    expect(look.color).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+  }
+  await page.getByRole('button', { name: 'Stop Claude' }).first().click();
+});
+
 test('a sent message flies from the box into the chat and lands in place', async ({ page }) => {
   await openWorkspace(page, 'new-hero', 'landing');
   await countFlights(page);

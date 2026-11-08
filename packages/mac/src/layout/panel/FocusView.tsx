@@ -1,4 +1,5 @@
-import { type ReactNode, lazy, Suspense, useEffect } from 'react';
+import { type ReactNode, Suspense, useEffect } from 'react';
+import { lazyView } from '../../lib/lazy-view.js';
 import { shareNameOf } from '@beluga/shared/share-names.js';
 import { Icon } from '../../components/Icon.js';
 import { Kbd } from '../../components/ui.js';
@@ -8,10 +9,10 @@ import { ChatView } from '../../views/ChatView.js';
 import { ConvoCenter } from '../../agent-term/ConvoCenter.js';
 import s from './panel.module.css';
 
-const DiffView = lazy(() => import('../../views/DiffView.js').then((m) => ({ default: m.DiffView })));
-const FileFocus = lazy(() => import('../../views/reader/FileFocus.js').then((m) => ({ default: m.FileFocus })));
-const PrPage = lazy(() => import('../../pr/PrPage.js').then((m) => ({ default: m.PrPage })));
-const TerminalView = lazy(() => import('../../views/TerminalView.js').then((m) => ({ default: m.TerminalView })));
+const DiffView = lazyView('views/DiffView', () => import('../../views/DiffView.js').then((m) => m.DiffView), false);
+const FileFocus = lazyView('views/reader/FileFocus', () => import('../../views/reader/FileFocus.js').then((m) => m.FileFocus));
+const PrPage = lazyView('pr/PrPage', () => import('../../pr/PrPage.js').then((m) => m.PrPage));
+const TerminalView = lazyView('views/TerminalView', () => import('../../views/TerminalView.js').then((m) => m.TerminalView), false);
 
 const TITLES: Record<FocusKind, string> = { diff: 'Changes', file: 'File', terminal: 'Terminal', pr: 'Pull Request' };
 

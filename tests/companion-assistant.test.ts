@@ -167,7 +167,7 @@ describe('Advanced Planning on the phone (BLG-69)', () => {
     expect(view.milestones[0]!.tasks[1]!.blockedBy).toEqual(['api']);
     expect(view.milestones[1]!.dependsOn).toEqual(['m1']);
     // Approve and Discard wait on its page (and Home) as a needs-you item.
-    expect(view.needsYou.map((n) => n.actions.map((a) => a.method))).toEqual([['plans.approve', 'plans.discard']]);
+    expect(view.needsYou.map((n) => n.actions.map((a) => a.method))).toEqual([['plans.approve', 'plans.verify', 'plans.discard']]);
     expect(PHONE['plans.setAutonomy']).toBe('phone');
     expect(Object.keys(PhoneCalls)).toContain('plans.setAutonomy');
   });

@@ -16,7 +16,7 @@ import { compactEnv } from '../../../shared/context-usage.js';
 import { zshCompatEnv } from './zsh-compat.js';
 import { progressCount } from '../../../shared/progress-count.js';
 import { resultText } from '../../../shared/steps.js';
-import { BackgroundAgents, type PromptContent, PromptQueue, TurnRouter } from './live-run.js';
+import { BackgroundAgents, type PromptContent, PromptQueue, TurnRouter, startedPrompt } from './live-run.js';
 import { sideCalls } from '../../side-calls.js';
 import { claudeComplete } from './complete.js';
 import { askBtw } from './btw.js';
@@ -488,6 +488,9 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
           if (route) stepTo = route.onStep;
           // A message steered in, read now (not only once the turn ends).
           if (route && msg.type === 'assistant' && msg.user_message_uuids?.length) turns.read(msg.user_message_uuids);
+          // Claude Code took it off its queue into the running turn (between turns, read ignores it: it's a turn of its own).
+          const started = startedPrompt(msg);
+          if (started) turns.read([started]);
           recorder.observe(msg as RecorderMessage);
           if (msg.type === 'user' && msg.parent_tool_use_id === null) {
             for (const e of subagents.user(msg.message.content as never)) input.onEvent('sub', JSON.stringify(e));

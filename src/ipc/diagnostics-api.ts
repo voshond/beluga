@@ -8,4 +8,17 @@ import { z } from 'zod';
 export const DIAGNOSTICS_API = {
   // Settings › About › Report a Problem: write a report into ~/.beluga/logs/reports and say where.
   'diagnostics.report': { args: z.tuple([]) },
+  // The window couldn't load a part of itself (a code chunk that stalled or failed, #370): noted in the black box.
+  'diagnostics.windowProblem': {
+    args: z.tuple([
+      z
+        .object({
+          kind: z.enum(['stalled', 'failed']),
+          chunk: z.string().min(1).max(200),
+          ms: z.number().min(0).max(86_400_000),
+          message: z.string().max(1000),
+        })
+        .strict(),
+    ]),
+  },
 } as const;

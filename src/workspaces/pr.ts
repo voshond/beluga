@@ -276,6 +276,7 @@ interface GhPr {
   mergeStateStatus?: string;
   autoMergeRequest?: unknown;
   headRefOid?: string;
+  mergedAt?: string;
 }
 
 function toPr(raw: GhPr): PullRequest | undefined {
@@ -284,6 +285,7 @@ function toPr(raw: GhPr): PullRequest | undefined {
   const review = raw.reviewDecision === 'APPROVED' || raw.reviewDecision === 'CHANGES_REQUESTED' || raw.reviewDecision === 'REVIEW_REQUIRED' ? raw.reviewDecision : undefined;
   const checkRuns = parseChecks(raw.statusCheckRollup);
   const open = state === 'OPEN';
+  const mergedAt = state === 'MERGED' && typeof raw.mergedAt === 'string' ? Date.parse(raw.mergedAt) : NaN;
   return {
     number: raw.number,
     url: raw.url,
@@ -296,6 +298,7 @@ function toPr(raw: GhPr): PullRequest | undefined {
     ...(open && raw.mergeable === 'CONFLICTING' ? { conflicts: true } : {}),
     ...(open && raw.autoMergeRequest ? { autoMerge: true } : {}),
     ...(typeof raw.headRefOid === 'string' && raw.headRefOid ? { head: raw.headRefOid } : {}),
+    ...(Number.isFinite(mergedAt) ? { mergedAt } : {}),
     ...(open && raw.mergeStateStatus === 'BEHIND' ? { mergeState: 'behind' as const } : open && raw.mergeStateStatus === 'BLOCKED' ? { mergeState: 'blocked' as const } : {}),
   };
 }
@@ -332,7 +335,7 @@ export function parsePrList(json: string): Map<string, PullRequest> | undefined 
   return out;
 }
 
-const PR_FIELDS = 'number,url,state,title,isDraft,statusCheckRollup,reviewDecision,mergeable,mergeStateStatus,autoMergeRequest,headRefOid';
+const PR_FIELDS = 'number,url,state,title,isDraft,statusCheckRollup,reviewDecision,mergeable,mergeStateStatus,autoMergeRequest,headRefOid,mergedAt';
 /** How many PRs one `gh pr list` asks for. */
 export const PR_LIST_LIMIT = 60;
 
@@ -536,6 +539,8 @@ const METHOD_NAME: Record<MergeMethod, string> = { squash: 'Squash merging', mer
 export function explainMergeError(error: string, method: MergeMethod = 'squash'): { reason: MergeProblem; message: string } {
   const text = error.trim();
   const say = (reason: MergeProblem, message: string) => ({ reason, message });
+  // --match-head-commit (BLG-840): the PR's head moved since Beluga looked, so GitHub merged nothing.
+  if (/head branch was modified|head (commit|sha|ref).*(match|changed|modified)/i.test(text)) return say('other', 'The pull request changed on GitHub since Beluga looked (a new push), so nothing merged. Look at it again, then merge.');
   if (/conflict|cannot be cleanly created|mergeable state is dirty/i.test(text)) return say('conflicts', 'This branch conflicts with the base branch. Solve the conflict (or ask Claude to), push, then merge.');
   if (/auto.?merge.*(not allowed|disabled|not enabled|isn.t enabled)|enablePullRequestAutoMerge|auto merge is not allowed/i.test(text)) return say('auto_off', "Auto-merge is off for this repository. Turn on “Allow auto-merge” in its GitHub settings, or merge once the checks pass.");
   if (/draft/i.test(text)) return say('draft', 'This pull request is still a draft. Mark it ready for review on GitHub first.');
@@ -641,6 +646,22 @@ export async function unpushedCommits(dir: string, branch: string, remote = 'ori
   } catch {
     return 0;
   }
+}
+
+/**
+ * Whether a pull request's head (GitHub's headRefOid) holds every commit HEAD has (BLG-840): `carries`
+ * true when it's HEAD or HEAD is in it (Update Branch merged the base in on GitHub), false when HEAD
+ * has commits it doesn't, undefined when that head isn't a commit here (pushed from elsewhere) or
+ * git can't tell. `head`: HEAD's commit.
+ */
+export async function headCarries(dir: string, prHead: string | undefined): Promise<{ readonly head?: string; readonly carries?: boolean }> {
+  const head = (await run('git', ['rev-parse', '--verify', '--quiet', 'HEAD^{commit}'], dir, 5000).catch(() => '')).trim() || undefined;
+  if (!head || !prHead || !/^[0-9a-f]{7,64}$/i.test(prHead)) return head ? { head } : {};
+  if (head === prHead) return { head, carries: true };
+  const known = await run('git', ['cat-file', '-e', `${prHead}^{commit}`], dir, 5000).then(() => true, () => false);
+  if (!known) return { head };
+  const carries = await run('git', ['merge-base', '--is-ancestor', head, prHead], dir, 15_000).then(() => true, () => false);
+  return { head, carries };
 }
 
 /**

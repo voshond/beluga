@@ -521,7 +521,7 @@ describe('models, usage, space and search', () => {
       expect(kay.session.host.runningIn(`ws:${ws!.id}`)).toBe(false);
       if (name === 'deleted') {
         await new Promise((r) => setTimeout(r, 100));
-        expect(kay.state().log.some((l) => l.channel === `ws:${ws!.id}`)).toBe(false);
+        expect(kay.state().log.filter((l) => l.channel === `ws:${ws!.id}`)).toEqual([]);
         // Its run's last words, echoed back by the hub after the clear (on a slow computer): they don't land either.
         const self = kay.session.selfId;
         kay.session.send({ kind: 'agent_event', requestId: 'late', requester: self, event: 'error', text: 'Stopped: its worktree was deleted', channel: `ws:${ws!.id}` }, { to: self });

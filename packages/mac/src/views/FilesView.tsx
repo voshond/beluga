@@ -1,10 +1,11 @@
-import { Fragment, lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Fragment, Suspense, useEffect, useRef, useState } from 'react';
 import type { BrowserRow, ViewerState } from '@beluga/core/store.js';
 import { shareNameOf } from '@beluga/shared/share-names.js';
 import { formatBytes } from '@beluga/shared/format.js';
 import { Icon } from '../components/Icon.js';
 import { Avatar, Button, Empty, IconButton, Segmented, cx } from '../components/ui.js';
 import { useApi, useApp, useBeluga } from '../lib/beluga.js';
+import { lazyView } from '../lib/lazy-view.js';
 import { ActionsContext, type ActionItem } from '../components/SpecMenu.js';
 import { useActions } from '../lib/actions.js';
 import { copyText } from '../lib/copy.js';
@@ -18,7 +19,7 @@ import { revealLabel } from '../lib/os-words.js';
 export { LANG, ext } from './reader/reader-model.js';
 
 /** The reader comes in its own chunk, the first time a file is opened. */
-const FileContent = lazy(() => import('./reader/FileReader.js').then((m) => ({ default: m.FileContent })));
+const FileContent = lazyView('views/reader/FileReader', () => import('./reader/FileReader.js').then((m) => m.FileContent), false);
 
 /** A decoded image (RGBA pixels) drawn at its size, scaled down to fit. */
 export function Bitmap({ image }: { image: NonNullable<ViewerState['image']> }) {

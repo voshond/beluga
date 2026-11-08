@@ -7,6 +7,8 @@ import { useActions } from '../../lib/actions.js';
 import { toast, useApi, useApp, useBeluga } from '../../lib/beluga.js';
 import { openSheet } from '../../lib/sheets.js';
 import { outsideOf } from '../../layout/outside-model.js';
+import type { ThreadChildren } from '@beluga/shared/threads.js';
+import { batchCalls } from '../../lib/thread-family.js';
 import { type Batch, BatchAlert } from './BatchAlerts.js';
 import { ArchivedItem, WorktreeItem } from './WorktreeItem.js';
 import { forgetRebuildable, useRebuildable } from './use-rebuildable.js';
@@ -67,12 +69,14 @@ export function WorktreesView({ projectId }: { projectId?: string | undefined })
    * disk work one at a time behind them). Freeing space and restoring: one at a time. What failed
    * says why and the rest go on.
    */
-  const run = async (kind: Batch | 'restore', list: readonly WorktreeRow[]): Promise<void> => {
+  const run = async (kind: Batch | 'restore', list: readonly WorktreeRow[], children?: ThreadChildren): Promise<void> => {
     setBatch(undefined);
     setRunning(true);
     try {
       if (kind === 'archive' || kind === 'delete') {
-        await Promise.all(list.map((r) => (kind === 'archive' ? api.workspaces.archive(r.ws.id) : api.workspaces.remove(r.ws.id)).catch((err: unknown) => toast(client, `${r.ws.name}: ${errorText(err)}`, 'error'))));
+        const calls = batchCalls(client.store.getState(), list.map((r) => r.ws.id), children);
+        const one = (id: string) => (kind === 'archive' ? (children ? api.workspaces.archive(id, false, { children }) : api.workspaces.archive(id)) : children ? api.workspaces.remove(id, { children }) : api.workspaces.remove(id));
+        await Promise.all(list.filter((r) => calls.includes(r.ws.id)).map((r) => one(r.ws.id).catch((err: unknown) => toast(client, `${r.ws.name}: ${errorText(err)}`, 'error'))));
         return;
       }
       for (const r of list) {
@@ -218,7 +222,7 @@ export function WorktreesView({ projectId }: { projectId?: string | undefined })
           )}
         </footer>
       ) : null}
-      {batch ? <BatchAlert batch={batch.kind} rows={batch.rows} rebuildable={totals(batch.rows, rebuildable).rebuildable} onConfirm={() => void run(batch.kind, batch.rows)} onCancel={() => setBatch(undefined)} /> : null}
+      {batch ? <BatchAlert batch={batch.kind} rows={batch.rows} rebuildable={totals(batch.rows, rebuildable).rebuildable} onConfirm={(children) => void run(batch.kind, batch.rows, children)} onCancel={() => setBatch(undefined)} /> : null}
     </div>
   );
 }

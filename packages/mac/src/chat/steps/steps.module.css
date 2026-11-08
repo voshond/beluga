@@ -611,7 +611,9 @@ button.head:focus-visible {
   .countNow {
     animation: none;
   }
-  .shimmer {
+  /* The current step's gradient too: it outranks `.shimmer`, and without its clip it paints a box over the words. */
+  .shimmer,
+  .rowCurrent .shimmer {
     color: inherit;
     background: none;
   }
@@ -671,4 +673,18 @@ button.head:focus-visible {
     grid-template-rows: 0fr;
     opacity: 0;
   }
+}
+
+/* What Claude said between its steps: quiet like them (lined up with their icons), so only the
+   words after its last step read as its answer. */
+.remark {
+  padding: 3px 6px 4px 18px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.remark :is(p, li, h1, h2, h3, h4, strong, a) {
+  color: inherit;
+}
+.remark :is(h1, h2, h3, h4) {
+  font-size: 1em;
 }

@@ -1,0 +1,643 @@
+/* A live preview in chat or Files (PreviewBlock.tsx): a header, the frame, what fired, its props. */
+.preview {
+  max-width: 100%;
+  margin: 0.4em 0 0.8em;
+  border-radius: var(--radius-l);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  overflow: hidden;
+  background: var(--bg);
+  contain: layout paint;
+}
+.embedded {
+  margin: 0;
+  border-radius: var(--radius);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--bg-sunken) 70%, var(--bg));
+  font-size: 12px;
+}
+.headIcon {
+  flex: none;
+  color: var(--text-3);
+}
+.title {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+button.title {
+  cursor: pointer;
+}
+button.title:hover {
+  text-decoration: underline;
+}
+.grow {
+  flex: 1;
+}
+.liveChip,
+.staleChip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 550;
+}
+.liveChip {
+  background: color-mix(in srgb, var(--ok) 13%, transparent);
+  color: color-mix(in srgb, var(--ok) 75%, var(--text));
+}
+.liveDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.staleChip {
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  color: color-mix(in srgb, var(--warn) 70%, var(--text));
+  cursor: default;
+}
+.on {
+  background: var(--bg-selected);
+}
+.note {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+/* The frame: its height follows what the component needs, smoothly; it fades in once drawn. */
+.stage {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(45deg, color-mix(in srgb, var(--text) 2.5%, transparent) 25%, transparent 25%) 0 0 / 16px 16px,
+    linear-gradient(-45deg, color-mix(in srgb, var(--text) 2.5%, transparent) 25%, transparent 25%) 0 0 / 16px 16px,
+    #ffffff;
+  transition: height var(--dur) var(--ease-out);
+}
+:global([data-theme='dark']) .stage {
+  background-color: #fbfaff;
+}
+.pageStage {
+  background: #ffffff;
+}
+.frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  transform-origin: 0 0;
+  transition: opacity var(--dur) var(--ease-out);
+  color-scheme: light;
+}
+.frameShown {
+  opacity: 1;
+}
+
+.skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #8a84a3;
+  font-size: 12px;
+}
+.skeletonPulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 45%, #ffffff);
+  animation: pulse 1.2s var(--ease-out) infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeletonPulse {
+    animation: none;
+  }
+}
+.waiting .skeleton {
+  position: static;
+  min-height: 96px;
+  background: color-mix(in srgb, var(--bg-sunken) 50%, var(--bg));
+  color: var(--text-3);
+}
+
+/* Why it isn't drawing: calm, on the frame's own canvas. */
+.problem {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #fbfaff;
+  color: #3b3550;
+  font-size: 12.5px;
+}
+.problemOver {
+  inset: auto 10px 10px;
+  border-radius: var(--radius);
+  box-shadow:
+    0 0 0 1px rgba(60, 50, 90, 0.1),
+    0 6px 20px rgba(60, 50, 90, 0.1);
+}
+.problemIcon {
+  flex: none;
+  color: #8a84a3;
+}
+.problemText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.problemText strong {
+  font-weight: 600;
+}
+.problemText span {
+  color: #6c6684;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--bg-sunken) 50%, var(--bg));
+  color: var(--text-3);
+  font-size: 12px;
+}
+.noticeText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.noticeText strong {
+  color: var(--text);
+  font-weight: 550;
+}
+
+/* What the callbacks did, newest first. */
+.events {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--hairline);
+  font-size: 11.5px;
+}
+.event {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--text-2);
+  animation: eventIn var(--dur) var(--ease-out);
+}
+.event:not(:first-child) {
+  opacity: 0.6;
+}
+.event code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+}
+.eventDetail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@keyframes eventIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+
+/* Its props. */
+.panel {
+  border-top: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--bg-sunken) 35%, var(--bg));
+}
+.panelHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 12px;
+}
+.panelTitle {
+  font-weight: 600;
+}
+.panelHint {
+  overflow: hidden;
+  color: var(--text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.props {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 2px 14px;
+  max-height: 320px;
+  padding: 8px 12px 10px;
+  overflow: auto;
+}
+.propsEmpty {
+  padding: 10px 12px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.prop {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 5px 0;
+}
+.propWide {
+  grid-column: 1 / -1;
+}
+.propHead {
+  display: flex;
+  align-items: center;
+  min-height: 16px;
+}
+.propName {
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.propDoc {
+  text-decoration: underline dotted color-mix(in srgb, var(--text-3) 60%, transparent);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.optional {
+  color: var(--text-3);
+  font-style: normal;
+}
+.propControl {
+  display: flex;
+  min-width: 0;
+}
+.field {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-s);
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+textarea.field {
+  height: auto;
+  padding: 5px 8px;
+  resize: vertical;
+  line-height: 1.4;
+}
+.field:focus,
+.cell:focus,
+.json:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.choices {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.choice {
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  background: var(--bg);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.choice:hover {
+  background: var(--bg-hover);
+}
+.choiceOn,
+.choiceOn:hover {
+  box-shadow: none;
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg));
+  color: var(--text);
+}
+.switch {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.switchOn {
+  background: color-mix(in srgb, var(--accent) 75%, #ffffff);
+}
+.switchOn::after {
+  transform: translateX(12px);
+}
+.colorField,
+.pictureField {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.colorField input[type='color'] {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: none;
+  cursor: pointer;
+}
+.pictureField img {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-s);
+  object-fit: cover;
+}
+.unset {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-s);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.setIt {
+  color: var(--accent);
+  font-weight: 550;
+}
+.fired {
+  color: var(--text-3);
+  font-size: 11.5px;
+  line-height: 26px;
+}
+.firedOn {
+  color: var(--text);
+}
+.mini,
+.iconMini {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.mini:hover,
+.iconMini:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.mini:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.iconMini {
+  width: 18px;
+  height: 18px;
+  justify-content: center;
+  padding: 0;
+}
+
+/* A matrix, and rows as a small table. */
+.gridEdit,
+.rowsEdit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: 100%;
+}
+.gridCells {
+  display: grid;
+  gap: 3px;
+}
+.cell {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-s);
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.gridSize {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.gridSize > span {
+  margin-right: 6px;
+  font-family: var(--font-mono);
+}
+.rowsScroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.rowsTable {
+  border-collapse: separate;
+  border-spacing: 3px;
+  font-size: 11px;
+}
+.rowsTable th {
+  padding: 0 4px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  text-align: left;
+}
+.rowsTable td {
+  min-width: 70px;
+}
+.pictureCell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pictureCell img {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+.rowsTable td:last-child {
+  min-width: 0;
+}
+.json {
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-s);
+  box-shadow: inset 0 0 0 1px var(--hairline-strong);
+  background: var(--code-bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  resize: vertical;
+}
+.jsonBad,
+.jsonBad:focus {
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--warn) 70%, transparent);
+}
+
+/* A dark canvas, for a component's dark look. */
+.stageDark,
+:global([data-theme='dark']) .stageDark {
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.03) 25%, transparent 25%) 0 0 / 16px 16px,
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.03) 25%, transparent 25%) 0 0 / 16px 16px,
+    #1e1c26;
+}
+.stageDark .skeleton {
+  color: #a49fbb;
+}
+.titleChevron {
+  margin-left: 4px;
+  color: var(--text-3);
+  vertical-align: 1px;
+}
+button.title {
+  display: inline-flex;
+  align-items: center;
+}
+.pinChip {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text-2);
+  font-size: 10.5px;
+  font-weight: 550;
+}
+
+/* What the accessibility check found. */
+.audit {
+  border-top: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--bg-sunken) 35%, var(--bg));
+}
+.issues {
+  max-height: 220px;
+  margin: 0;
+  padding: 4px 6px 8px;
+  overflow: auto;
+  list-style: none;
+}
+.issue {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.issue:hover {
+  background: var(--bg-hover);
+}
+.issue strong {
+  font-weight: 550;
+}
+.issue span {
+  color: var(--text-3);
+}

@@ -35,6 +35,7 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
   { id: 'plan', label: 'Plan brief', when: 'A plan’s conversations', source: 'src/core/plans/prompt.ts', text: (c) => c.input.planBrief ?? '' },
   { id: 'mac', label: 'Your Mac', when: 'Your Mac’s assistant', source: 'src/core/assistant', text: (c) => c.input.macBrief ?? '' },
   { id: 'phone', label: 'Your phone', when: 'Your own runs, with a phone set up', source: 'src/core/phone', text: (c) => c.input.phoneBrief ?? '' },
+  { id: 'preview', label: 'Live previews', when: 'Your own runs, with Live previews on (Settings › Experimental)', source: 'src/core/previews', text: (c) => (c.input.terminal ? '' : (c.input.previewBrief ?? '')) },
   { id: 'sentinel', label: 'Sentinel', when: 'Your own runs (a sentinel run gets its brief)', source: 'src/core/sentinel/prompt.ts', text: (c) => c.input.sentinelBrief ?? '' },
   { id: 'dialogue', label: 'Dialogue turn', when: 'A turn of a chaired dialogue', source: 'src/core/dialogues/prompt.ts', text: (c) => c.input.dialogue?.brief ?? '' },
   {
@@ -48,7 +49,7 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
   { id: 'scratch', label: 'Scratch folder', when: 'Worktree runs, with Scratch folder on', source: 'src/agent/prompt.ts', text: (c) => (c.input.scratchDir ? buildScratchAppend(c.input.scratchDir) : ''), sample: () => buildScratchAppend('.beluga/scratch') },
   { id: 'shell', label: 'Your shell is zsh', when: 'Every run, when your login shell is zsh', source: 'src/agent/prompt.ts', text: () => buildShellAppend(), sample: () => buildShellAppend('/bin/zsh', 'darwin') },
   { id: 'keep', label: 'Processes that keep running', when: 'Worktree runs', source: 'src/agent/prompt.ts', text: (c) => (c.worktree ? buildKeepAppend(c.agent) : ''), sample: () => buildKeepAppend() },
-  { id: 'commit', label: 'Commit before ending', when: 'Worktree runs (not a plan’s, not in a main folder)', source: 'src/agent/prompt.ts', text: (c) => (c.worktree && !c.input.planBrief && !c.askOnly ? buildCommitAppend() : ''), sample: () => buildCommitAppend() },
+  { id: 'commit', label: 'Commit before ending', when: 'Worktree runs (not a plan’s, not in a main folder)', source: 'src/agent/prompt.ts', text: (c) => (c.worktree && !c.input.planBrief && !c.askOnly ? buildCommitAppend(c.input.place?.openPr) : ''), sample: () => buildCommitAppend() },
   {
     id: 'shipped',
     label: 'Continue after merge',

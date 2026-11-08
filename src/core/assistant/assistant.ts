@@ -4,7 +4,8 @@ import path from 'node:path';
 import { dropAgentSession } from '../../agent/runtime/drop-session.js';
 import type { AgentPlace, MacTools } from '../../agent/types.js';
 import { ASSISTANT_CHANNEL, ASSISTANT_TITLE, CHAT_ID, FIRST_CHAT, THIS_COMPUTER, type AssistantChats, assistantChannel, assistantChatOf } from '../../shared/assistant.js';
-import { SCRATCH_DIR, type ScratchFile, type ScratchTotal, listScratch, scratchTotal, tidyScratch } from '../../workspaces/scratch.js';
+import { SCRATCH_DIR, type ScratchFile, type ScratchTotal, dropSent, listScratch, scratchTotal, tidyScratch } from '../../workspaces/scratch.js';
+import { isSentPath, sentFolder } from '../../shared/scratch-dir.js';
 import { moveToTrash } from '../../workspaces/trash.js';
 import { type SystemPort, captureScreen, describeDevice, deviceInfo, realSystem } from '../gateway/device.js';
 import { HistorySaver } from '../history-saver.js';
@@ -313,6 +314,8 @@ export class MacAssistant {
     this.deps.store.dispatch({ type: 'clear', channel });
     this.deps.store.dispatch({ type: 'context_reset', channel });
     await fs.rm(this.chatDir(id), { recursive: true, force: true });
+    // What you sent it (the folder Claude works in is shared, so only this chat's own copies).
+    await dropSent(this.workDir, sentFolder(channel, false)).catch(() => undefined);
     if (sessionId) await dropAgentSession(this.workDir, sessionId, runtime, { ...(this.deps.claudeDir ? { claude: this.deps.claudeDir } : {}), ...(this.deps.codexDir ? { codex: this.deps.codexDir } : {}) });
     for (const c of chats) if (!this.saved.has(c.id)) this.fresh(c.id);
     this.save(this.list);
@@ -414,7 +417,8 @@ export class MacAssistant {
   /** Its outputs (what's in its scratch folder), newest first: what the phone shows with it. */
   async outputs(): Promise<Array<{ path: string; size: number; ts: number; cwd: string }>> {
     const files = await listScratch(this.workDir).catch(() => []);
-    return files.map((f) => ({ path: path.join(this.workDir, f.path), size: f.size, ts: f.mtime, cwd: this.workDir })).sort((a, b) => b.ts - a.ts);
+    // What you sent it (sent/) is yours, not one of its outputs.
+    return files.filter((f) => !isSentPath(f.path)).map((f) => ({ path: path.join(this.workDir, f.path), size: f.size, ts: f.mtime, cwd: this.workDir })).sort((a, b) => b.ts - a.ts);
   }
 
   private project(name: string): { id: string; name: string } {

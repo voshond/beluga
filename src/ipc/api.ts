@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AgentRef, ClaudeAnswer, GuestCan, WsRole } from '../protocol.js';
 import { EmojiSchema } from '../shared/reactions.js';
 import { SSH_HOST } from '../shared/terminal-keys.js';
-import { BRANCH_PREFIX_RE, EFFORTS, KEEP_AWAKE, LOW_POWER, NotifySettings, THEMES, TRUST_LEVELS } from '../shared/settings-schema.js';
+import { BRANCH_PREFIX_RE, EFFORTS, KEEP_AWAKE, LOW_POWER, NotifySettings, SETTLE_IDLE_DAYS_MAX, THEMES, ThreadLimitsSchema, TRUST_LEVELS } from '../shared/settings-schema.js';
 import { AUTO_COMPACT_MAX, AUTO_COMPACT_MIN } from '../shared/context-usage.js';
 import { PARALLEL_RUNS_MAX, PARALLEL_RUNS_MIN } from '../shared/run-slots.js';
 import { CHAT_LIMIT_MAX } from '../shared/chat-limit.js';
@@ -11,6 +11,7 @@ import { AUTO_CONTINUE_OFF_MAX } from '../shared/auto-continue.js';
 import { ENV_KEY, MAX_ENV_VALUE, MAX_ENV_VARS } from '../shared/env-vars.js';
 import { type ArgsRuntime, MAX_AGENT_ARGS, MAX_AGENT_ARG_LENGTH, agentArgsProblem } from '../shared/agent-args.js';
 import { NETWORK_API } from './network-api.js';
+import { TRIAGE_API } from './triage-api.js';
 import { SUPPORT_API } from './support-api.js';
 import { STATS_API } from './stats-api.js';
 import { WEB_API } from './web-api.js';
@@ -29,6 +30,7 @@ import { ISSUES_API } from './issues-api.js';
 import { TEAM_API } from './team-api.js';
 import { GIT_API } from './git-api.js';
 import { VIEWS_API } from './views-api.js';
+import { PREVIEW_API } from './preview-api.js';
 import { FILES_EDIT_API } from './files-api.js';
 import { COMPANION_API } from './companion-api.js';
 import { ASSISTANT_API } from './assistant-api.js';
@@ -75,6 +77,9 @@ const agentArgs = (runtime: ArgsRuntime) =>
       if (problem) ctx.addIssue({ code: 'custom', message: problem });
     });
 
+/** How many experiment ids a list may hold (more than there are: a newer Beluga's stay). */
+const EXPERIMENTS_MAX = 20;
+
 /** A settings change (no defaults: only the keys you send change). */
 export const PrefsPatch = z
   .object({
@@ -101,6 +106,12 @@ export const PrefsPatch = z
     autoContinueSkip: z.number().int().min(0),
     parallelRuns: z.number().int().min(PARALLEL_RUNS_MIN).max(PARALLEL_RUNS_MAX),
     chatLimit: z.number().int().min(0).max(CHAT_LIMIT_MAX),
+    agentThreads: bool,
+    threadLimits: ThreadLimitsSchema,
+    chatCategories: bool,
+    settleOnMerge: bool,
+    settleIdleDays: z.number().int().min(0).max(SETTLE_IDLE_DAYS_MAX),
+    pushToPr: bool,
     scratchFolder: bool,
     machineNote: z.string().max(MACHINE_NOTE_MAX),
     machineNoteOn: bool,
@@ -115,6 +126,8 @@ export const PrefsPatch = z
     shellArgs: z.array(z.string().max(200)).max(20),
     claudeArgs: agentArgs('claude'),
     codexArgs: agentArgs('codex'),
+    // Experimental features that are on (shared/experiments.ts): the whole list each time.
+    experiments: z.array(z.string().max(40)).max(EXPERIMENTS_MAX),
   })
   .partial();
 
@@ -178,6 +191,10 @@ export const API = {
   'host.cancelSteer': args(id),
   // Stop your Claude in one conversation: → { stopped, returned: your queued prompts, in order }.
   'host.stopRun': args(channel),
+  // A person's Stop on one child thread, from the parent's panel.
+  'threads.stop': args(id),
+  // A person's Stop All Running on a chat's threads: its own turn goes on → { stopped: how many }.
+  'threads.stopAll': args(id),
   'host.cancelQueued': args(id),
   'host.reorderQueued': args(id, z.number().int().min(0).max(100)),
 
@@ -272,13 +289,13 @@ export const API = {
   // Generate a title from recent chat content. The chat session stays unchanged.
   'workspaces.regenerateTitle': args(id),
   // Remind Me Later: a chat or worktree stays quiet (its news, failing checks, conflicts) until then (epoch ms), then you're reminded once. Null or left out: show it again now.
-  'workspaces.remindLater': args(id, z.number().int().positive().nullish()),
   'workspaces.newWorktree': args(id, z.string().max(200), opt(z.object({ base: opt(z.string().min(1).max(250)), agent: opt(AgentRef) }))),
   'workspaces.newChat': args(id, z.string().max(200), opt(path)),
   // `terminal`: you see it as its agent's terminal, so that opens on the message (BLG-553).
   'workspaces.startChat': args(id, str, opt(path.nullable()), opt(z.object({ terminal: opt(bool), plan: opt(bool) }))),
-  // → the new worktree's id. `plan`: its Claude plans first. `quiet`: started from the phone, the Mac's window stays put.
-  'workspaces.startWorktree': args(id, str, opt(z.object({ base: opt(z.string().min(1).max(250)), name: opt(z.string().max(200)), plan: opt(bool), quiet: opt(bool), agent: opt(AgentRef), terminal: opt(bool) }))),
+  // → the new worktree's id. `plan`: its Claude plans first. `tasks`: Plan with Tasks, its conversation is a
+  // draft plan's home, written from the first message. `quiet`: started from the phone, the Mac's window stays put.
+  'workspaces.startWorktree': args(id, str, opt(z.object({ base: opt(z.string().min(1).max(250)), name: opt(z.string().max(200)), plan: opt(bool), tasks: opt(bool), quiet: opt(bool), agent: opt(AgentRef), terminal: opt(bool) }))),
   // What a new worktree can start from: → { base: the default, branches: default first, then newest }.
   'workspaces.branches': args(id),
   'workspaces.fork': args(id, z.string().max(200)),
@@ -288,7 +305,7 @@ export const API = {
   // `agent` (BLG-506): who goes on there; unset: the conversation's own. One that can't resume the conversation starts fresh, handed it.
   'workspaces.continueInWorktree': args(id, opt(z.object({ task: opt(str), base: opt(z.string().min(1).max(250)), name: opt(z.string().max(200)), agent: opt(AgentRef) }).strict())),
   // `quiet`: no success toast; a batch says it once for all its chats (the sidebar's chat selection).
-  'workspaces.archive': args(id, opt(bool), opt(z.object({ quiet: opt(bool) }).strict())),
+  'workspaces.archive': args(id, opt(bool), opt(z.object({ children: opt(z.enum(['with', 'keep'])), quiet: opt(bool) }).strict())),
   'workspaces.restore': args(id),
   // What archiving (or freeing space) would throw away and keep → ArchivePreview (none: not a worktree that's there).
   'workspaces.archivePlan': args(id),
@@ -297,7 +314,7 @@ export const API = {
   // Throw away a worktree's dependencies, builds and caches → bytes freed.
   'workspaces.freeSpace': args(id),
   // `quiet`: as for archive.
-  'workspaces.remove': args(id, opt(z.object({ quiet: opt(bool) }).strict())),
+  'workspaces.remove': args(id, opt(z.object({ children: opt(z.enum(['with', 'keep'])), quiet: opt(bool) }).strict())),
   'workspaces.commit': args(id, opt(z.string().max(2000))),
   'workspaces.merge': args(id),
   'workspaces.prepareRemoval': args(id),
@@ -503,9 +520,12 @@ export const API = {
   ...CI_API,
   // ---- team boards: friends on the same GitHub repository keep one board (team-api.ts)
   ...TEAM_API,
+  // ---- each chat's category for you (triage-api.ts)
+  ...TRIAGE_API,
   // ---- git: keeping main current, GitHub, history (git-api.ts)
   ...GIT_API,
   ...VIEWS_API,
+  ...PREVIEW_API,
   // ---- your workspace's files: searching their contents, editing, formatting (files-api.ts)
   ...FILES_EDIT_API,
   // ---- your phone: pairing it, removing it, what it asks for (companion-api.ts)
