@@ -198,8 +198,9 @@ export interface Status {
 const landedCache = new Map<string, boolean>();
 
 /**
- * Whether HEAD's work is already in `into`: HEAD is part of it, or every file the branch changed
- * reads the same there (a squash merge). Read-only git calls.
+ * Whether HEAD's work is already in `into`: HEAD is part of it, every file the branch changed
+ * reads the same there (a squash merge), or merging it in would change nothing (squashed, and a
+ * later commit on `into` edited some of those files again: BLG-831). Nothing checked out or moved.
  */
 async function landedIn(dir: string, head: string, into: string): Promise<boolean> {
   const key = `${head}:${into}`;
@@ -209,6 +210,8 @@ async function landedIn(dir: string, head: string, into: string): Promise<boolea
   if (!landed) {
     const files = (await tryGit(dir, ['diff', '--name-only', '--no-renames', `${into}...${head}`]))?.split('\n').filter(Boolean) ?? [];
     if (files.length && files.length <= 2000) landed = await git(dir, ['diff', '--quiet', '--no-renames', into, head, '--', ...files], 15_000).then(() => true, () => false);
+    // A git without merge-tree --write-tree (before 2.38), or a merge that conflicts: not landed, as before.
+    if (!landed && files.length) landed = (await contentIn(dir, head, into)) === true;
   }
   if (landedCache.size > 2000) landedCache.clear();
   landedCache.set(key, landed);
@@ -227,10 +230,17 @@ async function hasLanded(dir: string, base: string, tip = 'HEAD'): Promise<boole
 /** What a remote already has: every remote-tracking branch, and the fork pull requests' heads kept here. */
 const ON_A_REMOTE = ['--remotes', `--glob=${PULL_HEADS}/*`] as const;
 
-/** Commits on `tip` that are on neither `base` nor any remote: only this branch has them. */
-async function countUnpushed(dir: string, tip: string, base: string): Promise<number> {
-  const out = await tryGit(dir, ['rev-list', '--count', tip, '--not', base, ...ON_A_REMOTE]);
+/** Commits on `tip` that are on neither `base` nor any remote (nor in `also`): only this branch has them. */
+async function countUnpushed(dir: string, tip: string, base: string, also: readonly string[] = []): Promise<number> {
+  const out = await tryGit(dir, ['rev-list', '--count', tip, '--not', base, ...ON_A_REMOTE, ...also]);
   return Number(out?.trim() ?? 0) || 0;
+}
+
+/** The heads of this branch's merged pull requests that are commits here: GitHub keeps each (refs/pull/<n>/head), so what's in one is never lost. */
+async function shippedHeads(repo: string, heads: readonly string[]): Promise<string[]> {
+  const sound = [...new Set(heads)].filter((h) => /^[0-9a-f]{7,64}$/i.test(h));
+  const here = await Promise.all(sound.map((h) => isCommit(repo, h)));
+  return sound.filter((_, i) => here[i]);
 }
 
 /** What deleting a branch would lose: its commits on neither `base` nor a remote, newest first (subjects, at most 5). */
@@ -241,14 +251,16 @@ export interface Unpushed {
 
 /**
  * The commits only `branch` has (BLG-617): not in `base` and not pushed anywhere. None when its work
- * already landed in `base` (a squash merge) or the branch is gone. Read-only git calls.
+ * already landed in `base` (a squash merge) or the branch is gone. `shipped`: head commits of its pull
+ * requests that merged (BLG-831), so only commits made after one count. Nothing checked out or moved.
  */
-export async function unpushedCommits(repo: string, branch: string, base: string): Promise<Unpushed> {
+export async function unpushedCommits(repo: string, branch: string, base: string, shipped: readonly string[] = []): Promise<Unpushed> {
   const tip = `refs/heads/${branch}`;
   if (!branch || branch.startsWith('-') || !(await tryGit(repo, ['rev-parse', '--verify', '--quiet', `${tip}^{commit}`]))) return { count: 0, subjects: [] };
-  const count = await countUnpushed(repo, tip, base);
+  const heads = await shippedHeads(repo, shipped);
+  const count = await countUnpushed(repo, tip, base, heads);
   if (!count || (await hasLanded(repo, base, tip))) return { count: 0, subjects: [] };
-  const log = await tryGit(repo, ['log', '--format=%s', '-n', '5', tip, '--not', base, ...ON_A_REMOTE]);
+  const log = await tryGit(repo, ['log', '--format=%s', '-n', '5', tip, '--not', base, ...ON_A_REMOTE, ...heads]);
   return { count, subjects: log?.split('\n').filter(Boolean) ?? [] };
 }
 
@@ -276,9 +288,9 @@ export async function catchUpForDelete(repo: string, branch: string, base: strin
 /** Status reads run a few at a time (each is one or two git processes): a refresh of many worktrees never forks dozens at once. */
 export const statusSlots = limiter(4);
 
-/** Uncommitted file count plus commits ahead/behind `base`. */
-export function status(dir: string, base?: string): Promise<Status> {
-  return statusSlots(() => readStatus(dir, base));
+/** Uncommitted file count plus commits ahead/behind `base`. `shipped`: its merged pull requests' heads (see unpushedCommits). */
+export function status(dir: string, base?: string, shipped: readonly string[] = []): Promise<Status> {
+  return statusSlots(() => readStatus(dir, base, shipped));
 }
 
 /**
@@ -358,10 +370,10 @@ export async function refsMark(dir: string): Promise<string | undefined> {
 
 /**
  * Commits ahead of and behind `base`, whether they landed there, and how many are pushed nowhere:
- * git asked only when its refs moved (or every few minutes).
+ * git asked only when its refs moved (or every few minutes), or a pull request of it merged since.
  */
-async function countAgainst(dir: string, base: string): Promise<{ ahead: number; behind: number; landed: boolean; unpushed: number }> {
-  const key = `${dir}\0${base}`;
+async function countAgainst(dir: string, base: string, shipped: readonly string[]): Promise<{ ahead: number; behind: number; landed: boolean; unpushed: number }> {
+  const key = `${dir}\0${base}\0${shipped.join(' ')}`;
   // Marked before git counts, so a ref that moves while it counts shows as a change next time.
   const mark = await refsMark(dir).catch(() => undefined);
   const known = refsCounts.get(key);
@@ -370,21 +382,22 @@ async function countAgainst(dir: string, base: string): Promise<{ ahead: number;
   const behind = Number(counts?.[0] ?? 0) || 0;
   const ahead = Number(counts?.[1] ?? 0) || 0;
   const landed = ahead > 0 && (await hasLanded(dir, base));
-  const unpushed = ahead > 0 && !landed ? await countUnpushed(dir, 'HEAD', base) : 0;
+  // What a merged pull request had is on GitHub for good (BLG-833): the Delete step's hint agrees with Delete's own check.
+  const unpushed = ahead > 0 && !landed ? await countUnpushed(dir, 'HEAD', base, await shippedHeads(dir, shipped)) : 0;
   if (refsCounts.size > 2000) refsCounts.clear();
   if (mark) refsCounts.set(key, { mark, at: Date.now(), ahead, behind, landed, unpushed });
   else refsCounts.delete(key);
   return { ahead, behind, landed, unpushed };
 }
 
-async function readStatus(dir: string, base?: string): Promise<Status> {
+async function readStatus(dir: string, base?: string, shipped: readonly string[] = []): Promise<Status> {
   // Never take the index lock just to look: a commit (yours or Claude's) may be running.
   // Always asked: files you edit, and new ones, change nothing git's refs or index would show.
   const out = await git(dir, ['--no-optional-locks', 'status', '--porcelain=v1', '-b']);
   const [head = '', ...files] = out.split('\n').filter(Boolean);
   const branch = /^## (?:No commits yet on )?([^.\s]+)/.exec(head)?.[1];
   if (base) {
-    const { ahead, behind, landed, unpushed } = await countAgainst(dir, base);
+    const { ahead, behind, landed, unpushed } = await countAgainst(dir, base, shipped);
     return { branch, changed: files.length, ahead, behind, ...(landed ? { landed: true as const } : {}), ...(unpushed ? { unpushed } : {}) };
   }
   // "## main...origin/main [ahead 1, behind 2]": how the checkout compares to what it tracks.

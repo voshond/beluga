@@ -6,6 +6,7 @@ import { CHAT_LIMIT_DEFAULT, CHAT_LIMIT_MAX } from './chat-limit.js';
 import { MACHINE_NOTE_MAX } from './agent-setup.js';
 import { AUTO_CONTINUE_OFF_MAX } from './auto-continue.js';
 import { MAX_AGENT_ARGS, MAX_AGENT_ARG_LENGTH } from './agent-args.js';
+import { THREAD_LIMITS_DEFAULT, THREAD_LIMITS_MAX } from './threads.js';
 import { coercePerKind, coerceSound, DEFAULT_SOUND, DEFAULT_VOLUME, PerKindSounds, SoundChoice } from './notify-sound.js';
 
 // Settings as data (no file access), so the reducer and the clients can use them anywhere.
@@ -27,6 +28,10 @@ export type Effort = (typeof EFFORTS)[number];
 export const BRANCH_PREFIX_DEFAULT = 'beluga/';
 /** A prefix git accepts in front of a slug: letters, digits, `. _ - /`, no `..`, `//`, or part starting with `.` `-` `/`. */
 export const BRANCH_PREFIX_RE = /^(?![./-])(?!.*\.\.)(?!.*\/\/)(?!.*\/[.-])[\w./-]{0,40}$/;
+
+/** How many days without activity settle a chat (core/triage); 0: never. */
+export const SETTLE_IDLE_DAYS_DEFAULT = 3;
+export const SETTLE_IDLE_DAYS_MAX = 365;
 
 /** Keep the Mac awake for your phone: never, only on power, or always (the display may still sleep). */
 export const KEEP_AWAKE = ['off', 'power', 'always'] as const;
@@ -78,6 +83,15 @@ export type NotifySettings = z.infer<typeof NotifySettings>;
 
 const peerKey = z.string().regex(/^[\w-]{8,64}$/);
 
+const threadLimit = (max: number) => z.number().int().min(1).max(max);
+/** How far your agents' threads go (shared/threads.ts). */
+export const ThreadLimitsSchema = z.object({
+  depth: threadLimit(THREAD_LIMITS_MAX.depth),
+  treeRunning: threadLimit(THREAD_LIMITS_MAX.treeRunning),
+  treeLive: threadLimit(THREAD_LIMITS_MAX.treeLive),
+  macRunning: threadLimit(THREAD_LIMITS_MAX.macRunning),
+});
+
 /** Choices that persist between runs in ~/.beluga/settings.json. */
 export const Settings = z.object({
   name: z.string().regex(/^[\w.-]{1,32}$/).optional(),
@@ -126,6 +140,18 @@ export const Settings = z.object({
   parallelRuns: z.number().int().min(PARALLEL_RUNS_MIN).max(PARALLEL_RUNS_MAX).catch(PARALLEL_RUNS_DEFAULT),
   /** How many chats Your Mac and Sentinel each keep open (shared/chat-limit.ts); 0: no limit. */
   chatLimit: z.number().int().min(0).max(CHAT_LIMIT_MAX).catch(CHAT_LIMIT_DEFAULT),
+  /** Your agents may start child threads (core/threads). Off until you turn it on. */
+  agentThreads: z.boolean().default(false),
+  /** How far those threads go (shared/threads.ts). */
+  threadLimits: ThreadLimitsSchema.catch(THREAD_LIMITS_DEFAULT),
+  /** Sort chats into Inbox, Working, Later and Settled (core/triage). Off: nothing settles, and triage.json only keeps Remind Me Later. */
+  chatCategories: z.boolean().catch(false),
+  /** A merged PR settles its chat. */
+  settleOnMerge: z.boolean().catch(true),
+  /** Days without activity before a chat settles; 0: never. */
+  settleIdleDays: z.number().int().min(0).max(SETTLE_IDLE_DAYS_MAX).catch(SETTLE_IDLE_DAYS_DEFAULT),
+  /** An agent in a worktree whose pull request is open pushes its commits there when its turn ends (BLG-840). */
+  pushToPr: z.boolean().catch(true),
   /** Claude keeps screenshots and scratch output in the workspace's git-ignored `.beluga/scratch/` folder. */
   scratchFolder: z.boolean().default(true),
   machineNote: z.string().max(MACHINE_NOTE_MAX).catch('').default(''),
@@ -153,6 +179,8 @@ export const Settings = z.object({
   /** Your own flags for `claude` and `codex` on your own runs (shared/agent-args.ts), e.g. --dangerously-skip-permissions. */
   claudeArgs: z.array(z.string().max(MAX_AGENT_ARG_LENGTH)).max(MAX_AGENT_ARGS).default([]),
   codexArgs: z.array(z.string().max(MAX_AGENT_ARG_LENGTH)).max(MAX_AGENT_ARGS).default([]),
+  /** Experimental features you turned on (shared/experiments.ts); ids a newer Beluga knows are kept. */
+  experiments: z.array(z.string().max(40)).max(20).catch([]).default([]),
   /** Be on the Beluga network (friends, groups, presence) while the Mac app's daemon runs. Off by default for now. */
   network: z.boolean().optional(),
   /** Where frames wait for a friend you're never online with at the same time (BLG-272): a mailbox's https URL, or "off". Unset: Beluga's own. */

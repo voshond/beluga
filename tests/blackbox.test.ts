@@ -3,10 +3,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { blackboxPaths, readJournal } from '../src/core/blackbox/paths.js';
-import { Recorder, SLOW_CALL_MS, type Snapshot, TEXT_MAX } from '../src/core/blackbox/recorder.js';
+import { Recorder, SLOW_CALL_MS, type Snapshot, TEXT_MAX, blackbox } from '../src/core/blackbox/recorder.js';
 import { makeReport } from '../src/core/blackbox/report.js';
 import { KEEP_INCIDENTS, startBlackbox } from '../src/daemon/blackbox.js';
 import { problemIssueUrl } from '../packages/mac/src/lib/report.js';
+import { API } from '../src/ipc/api.js';
+import { DIAGNOSTICS_HANDLERS } from '../src/ipc/diagnostics-handlers.js';
+import type { Session } from '../src/core/session.js';
 import { waitFor } from './helpers.js';
 
 const lag = { p50: 1, p95: 2, max: 3 };
@@ -145,5 +148,24 @@ describe('a problem report', () => {
     expect(url.searchParams.get('title')).toBe('Problem: uncaught exception');
     expect(url.searchParams.get('body')).toContain('Beluga 2.1.0 on Darwin 25.6.0 (arm64)');
     expect(url.searchParams.get('body')).toContain('beluga-report.json');
+  });
+});
+
+describe('the window notes a part of itself that did not load (#370)', () => {
+  const args = API['diagnostics.windowProblem'].args;
+  const note = DIAGNOSTICS_HANDLERS['diagnostics.windowProblem'];
+
+  it('records which chunk stalled and how long it waited', () => {
+    const before = blackbox.version;
+    const [problem] = args.parse([{ kind: 'stalled', chunk: 'views/ProjectHome', ms: 20_000, message: 'no answer after 20 s' }]);
+    note({} as Session, problem);
+    expect(blackbox.since(before).map((e) => [e.kind, e.text])).toEqual([['error', 'window: chunk views/ProjectHome never finished loading after 20000 ms: no answer after 20 s']]);
+  });
+
+  it('takes only a short, known shape', () => {
+    expect(args.safeParse([{ kind: 'stalled', chunk: 'x', ms: 1, message: 'y' }]).success).toBe(true);
+    expect(args.safeParse([{ kind: 'crashed', chunk: 'x', ms: 1, message: 'y' }]).success).toBe(false);
+    expect(args.safeParse([{ kind: 'failed', chunk: 'x'.repeat(201), ms: 1, message: 'y' }]).success).toBe(false);
+    expect(args.safeParse([{ kind: 'failed', chunk: 'x', ms: 1, message: 'y', extra: 1 }]).success).toBe(false);
   });
 });

@@ -1,3 +1,5 @@
+import { closePreviews } from '../preview/off.js';
+import { experimentOn } from '../shared/experiments.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { isTermBusy } from '../shared/terminal-keys.js';
 import { agentLabel } from '../shared/agent-label.js';
@@ -321,6 +323,13 @@ export class Session {
     const backend = guardedBackend(rt.create({ ...this.opts.runtime.options, bridge: this.bridge }), rt.capabilities);
     this.otherBackends.set(runtime, backend);
     return backend;
+  }
+
+  /** Whether a runtime takes a message into a running turn (undefined: your default agent's). A local model is Claude Code pointed elsewhere. */
+  canSteer(runtime: string | undefined): boolean {
+    if (!runtime) return this.runtime?.capabilities.canSteer ?? false;
+    const id = runtime === LOCAL_RUNTIME ? CLAUDE_AGENT.runtime : runtime;
+    return (this.opts.runtime?.runtimes(id) ?? this.opts.alsoRuntimes?.find((r) => r.id === id))?.capabilities.canSteer ?? false;
   }
 
   /** Whether this Mac can run that agent now: its runtime is here (a local model: its endpoint is set up). */
@@ -1379,6 +1388,8 @@ export class Session {
     const forScreens = Object.fromEntries(Object.entries(prefs).map(([k, v]) => [k, v === undefined ? null : v]));
     this.store.dispatch({ type: 'prefs', prefs: forScreens });
     this.opts.saveSettings?.(Object.fromEntries(Object.entries(prefs).map(([k, v]) => [k, v === null ? undefined : v])) as Partial<Settings>);
+    // Live previews turned off (Settings › Experimental): every one is let go at once.
+    if ('experiments' in prefs && !experimentOn(this.store.getState().prefs.experiments, 'previews')) void closePreviews();
     // Your default agent rides on your peer card: friends see the change at once, no reconnect.
     if ('defaultAgent' in prefs || 'projectAgents' in prefs) {
       const chosen = this.store.getState().prefs;

@@ -14,6 +14,7 @@ import {
   type Autonomy,
   type Combining,
   DEFAULT_AUTONOMY,
+  type DraftReview,
   DEFAULT_PARALLEL,
   type GateCheck,
   KEEP_PLAN_ACTIVITY,
@@ -45,6 +46,7 @@ import {
   planRepos,
   prRef,
   shipOrder,
+  withDecisionIds,
 } from './model.js';
 
 /**
@@ -83,6 +85,12 @@ const Body = z
         })
         .passthrough(),
     ),
+    // Decisions saved before they had ids get one (BLG-772 supersedes them by id).
+    decisions: z
+      .array(z.object({ question: z.string(), answer: z.string(), id: z.string().optional() }).passthrough())
+      .optional()
+      .catch(undefined)
+      .transform((list) => (list ? withDecisionIds(list) : undefined)),
   })
   .passthrough();
 
@@ -207,7 +215,7 @@ export class Plans {
 
   private setDraft(plan: Plan, draft: PlanBody, by: Actor, text: string): Plan {
     // Back to exactly what was approved: no changes are waiting.
-    const same = plan.body && isEmptyDiff(diffBodies(plan.body, draft)) && plan.body.title === draft.title && plan.body.goal === draft.goal;
+    const same = plan.body && isEmptyDiff(diffBodies(plan.body, draft)) && plan.body.title === draft.title && plan.body.goal === draft.goal && JSON.stringify(plan.body.decisions ?? []) === JSON.stringify(draft.decisions ?? []);
     const last = plan.activity.at(-1);
     const quick = last && last.kind === 'drafted' && sameActor(last.by, by) && this.now() - last.at < DRAFT_NOTE_MS;
     const activity = same ? [] : [event(by, 'drafted', text, this.now())];
@@ -384,6 +392,13 @@ export class Plans {
   setBoard(id: string, board: string | undefined): Plan {
     const plan = this.need(id);
     return plan.board === board ? plan : this.change(plan, { board }, []);
+  }
+
+  /** The draft's review by a fresh agent (see draft-review.ts); undefined: none. */
+  setReview(id: string, review: DraftReview | undefined): Plan {
+    const plan = this.need(id);
+    if (JSON.stringify(plan.review) === JSON.stringify(review)) return plan;
+    return this.change(plan, { review }, []);
   }
 
   /** Its epics on the board (see epics.ts). */

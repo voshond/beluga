@@ -142,14 +142,51 @@ export interface PlanMilestone {
 /**
  * One thing settled while planning (BLG-8): what was asked, what was decided and why. `user`: you
  * answered it; `default`: Claude chose it without asking (a sensible default you can override
- * before approving). `tasks`: the plan tasks it bears on, whose briefs get it.
+ * before approving). `tasks`: the plan tasks it bears on, whose briefs get it. The plan's own, so
+ * replacing one is explicit and the tasks still written the old way can be found (BLG-772).
  */
 export interface PlanDecisionEntry {
+  readonly id: string;
   readonly question: string;
   readonly answer: string;
   readonly why?: string;
   readonly by: 'user' | 'default';
   readonly tasks?: readonly string[];
+  /** Words that mark text following it ("New Window"): once it's superseded, tasks still using them are listed. */
+  readonly terms?: readonly string[];
+  /** Words it retires (an old name: "machine", "Auto"): tasks still using them are listed. */
+  readonly retires?: readonly string[];
+  /** The decision it replaced (an id). */
+  readonly supersedes?: string;
+  /** Replaced by a later decision (its id): kept for the record, no longer in force. */
+  readonly supersededBy?: string;
+}
+
+/** A plan's decision (one shape for planning's answers and what it decides along the way). */
+export type Decided = PlanDecisionEntry;
+
+/** A decision in a line: what was asked and what was decided. */
+export const decisionText = (d: Pick<PlanDecisionEntry, 'question' | 'answer'>): string => `${d.question} → ${d.answer}`;
+
+/** A decision's id made from its question: lower case, dashes, short. */
+export const decisionSlug = (text: string): string =>
+  text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'decision';
+
+/** Decisions saved before they had ids (BLG-8) get one from their question, unique in the plan. */
+export function withDecisionIds<T extends { readonly question: string; readonly id?: string }>(list: readonly T[]): Array<T & { readonly id: string }> {
+  const taken = new Set(list.flatMap((d) => (d.id ? [d.id] : [])));
+  return list.map((d) => {
+    if (d.id) return d as T & { readonly id: string };
+    const base = decisionSlug(d.question);
+    let id = base;
+    for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
+    taken.add(id);
+    return { ...d, id };
+  });
 }
 
 /**
@@ -169,7 +206,7 @@ export interface PlanBody {
   readonly title: string;
   readonly goal: string;
   readonly milestones: readonly PlanMilestone[];
-  /** What was settled while planning: your answers and Claude's defaults (BLG-8). Every agent on the plan reads them. */
+  /** What was settled: your answers and Claude's defaults (BLG-8), in the order decided (superseded ones kept, marked: BLG-772). Every agent on the plan reads the ones in force. */
   readonly decisions?: readonly PlanDecisionEntry[];
   /** What's still to be settled: the plan can't be approved while one is open. */
   readonly openQuestions?: readonly string[];
@@ -179,7 +216,36 @@ export interface PlanBody {
 
 /** The plan's decisions that bear on one task, as lines for its brief's Decisions. */
 export function decisionLines(body: PlanBody | undefined, taskId: string): string[] {
-  return (body?.decisions ?? []).filter((d) => d.tasks?.includes(taskId)).map((d) => `- ${d.question} → ${d.answer}${d.by === 'default' ? ' (a default, not asked)' : ''}${d.why ? ` — ${d.why}` : ''}`);
+  return activeDecisions(body).filter((d) => d.tasks?.includes(taskId)).map((d) => `- ${d.question} → ${d.answer}${d.by === 'default' ? ' (a default, not asked)' : ''}${d.why ? ` — ${d.why}` : ''}`);
+}
+
+/** One thing a draft's reviewer found (see draft-review.ts). */
+export interface ReviewFinding {
+  readonly kind: 'contradiction' | 'duplicate' | 'stale' | 'order' | 'other';
+  readonly text: string;
+  /** The plan's task (or milestone) ids it's about. */
+  readonly ids?: readonly string[];
+}
+
+export const FINDING_KINDS: readonly ReviewFinding['kind'][] = ['contradiction', 'duplicate', 'stale', 'order', 'other'];
+
+/**
+ * A fresh agent's read of the draft, when you ask for it (Verify, Then Approve: see draft-review.ts):
+ * for one revision of it. `reviewing` while it reads; `done` with what it found (none: it reads
+ * well); `failed` when it ended without a verdict (Approve Plan is offered as before).
+ */
+export interface DraftReview {
+  /** The draftRev it read. */
+  readonly rev: number;
+  readonly at: number;
+  readonly state: 'reviewing' | 'done' | 'failed';
+  readonly findings: readonly ReviewFinding[];
+  /** Its conversation (a workspace id), kept across rounds: it remembers what it found before. */
+  readonly chat?: string;
+  /** Fix was sent to the plan's agent for this revision. */
+  readonly fixAsked?: boolean;
+  /** Approve the plan once it reads well (Verify, Then Approve). */
+  readonly thenApprove?: boolean;
 }
 
 /** Claude's check of a milestone's pass criteria. */
@@ -406,6 +472,8 @@ export interface Plan {
   readonly epics?: PlanEpics;
   /** Beluga moving its stalled milestones along (see the pilot's rescue), by milestone id: kept, so a restart doesn't start over. */
   readonly rescue?: Readonly<Record<string, PlanRescue>>;
+  /** The first draft's review by a fresh agent, when you asked for one (see draft-review.ts). */
+  readonly review?: DraftReview;
   readonly activity: readonly PlanEvent[];
   readonly createdAt: number;
   readonly updatedAt: number;
@@ -529,6 +597,32 @@ export function checkerOf(state: PlansState, channel: string): { readonly plan: 
   for (const plan of state.plans) for (const [milestone, run] of Object.entries(plan.runs ?? {})) if (run?.checker === id) return { plan, milestone };
   return undefined;
 }
+
+/** The draft plan a conversation reviews (see DraftReview.chat). */
+export function reviewerOf(state: PlansState, channel: string): Plan | undefined {
+  if (!channel.startsWith('ws:')) return undefined;
+  const id = channel.slice(3);
+  return state.plans.find((p) => p.review?.chat === id);
+}
+
+/**
+ * Where the review of a first draft stands, for the draft as it is now: `off` (no first draft to
+ * review: approved, or nothing in it yet), `none` (not verified: only when you ask), `reviewing`,
+ * `findings` (Fix, or Approve Anyway), `clean`, or `failed` (it didn't finish).
+ */
+export type ReviewState = 'off' | 'none' | 'reviewing' | 'findings' | 'clean' | 'failed';
+
+export function reviewState(plan: Plan): ReviewState {
+  if (plan.body || plan.status !== 'draft' || !plan.draft?.milestones.length) return 'off';
+  const r = plan.review;
+  if (!r || r.rev !== plan.draftRev) return 'none';
+  if (r.state === 'reviewing') return 'reviewing';
+  if (r.state === 'failed') return 'failed';
+  return r.findings.length ? 'findings' : 'clean';
+}
+
+/** The decisions in force (not superseded). */
+export const activeDecisions = (body: Pick<PlanBody, 'decisions'> | undefined): readonly Decided[] => (body?.decisions ?? []).filter((d) => !d.supersededBy);
 
 /**
  * The conversation is a live plan's own (its head Claude plans and runs it there): it has no
@@ -690,7 +784,7 @@ export function diffBodies(before: PlanBody | undefined, after: PlanBody | undef
   });
   const ms = (b: PlanBody | undefined): string => (b?.milestones ?? []).map((m) => `${m.id}\0${m.title}\0${m.goal ?? ''}\0${m.criteria.join('\0')}\0${m.dependsOn?.join(',') ?? '-'}\0${m.repos?.join(',') ?? '-'}`).join('\n');
   const milestones = ms(before) === ms(after) ? 0 : Math.max(1, Math.abs((after?.milestones.length ?? 0) - (before?.milestones.length ?? 0)));
-  const notes = (b: PlanBody | undefined): Set<string> => new Set([...(b?.decisions ?? []).map((d) => JSON.stringify(d)), ...(b?.openQuestions ?? []).map((q) => `?${q}`)]);
+  const notes = (b: PlanBody | undefined): Set<string> => new Set([...activeDecisions(b).map((d) => JSON.stringify(d)), ...(b?.openQuestions ?? []).map((q) => `?${q}`)]);
   const was = notes(before);
   const is = notes(after);
   const decisions = [...is].filter((x) => !was.has(x)).length + [...was].filter((x) => !is.has(x)).length;

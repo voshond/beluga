@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { unpushedCommits } from '../src/workspaces/git.js';
 import { WorkspaceManager } from '../src/workspaces/manager.js';
 import { WorkspaceStore } from '../src/workspaces/store.js';
@@ -16,6 +16,7 @@ const commitIn = (dir: string, file: string, msg: string) => {
   sh(dir, 'add', '.');
   sh(dir, 'commit', '-m', msg);
 };
+const writeLines = (dir: string, file: string, lines: readonly string[]) => writeFileSync(path.join(dir, file), `${lines.join('\n')}\n`);
 
 let base: string;
 let repo: string;
@@ -45,6 +46,13 @@ afterEach(async () => {
 });
 
 const project = () => mgr.list.find((p) => p.root)!;
+
+/** Squash-merge a branch into main and push main, as GitHub's Squash and Merge does; the branch itself is never pushed. */
+const squashIntoMain = (branch: string) => {
+  sh(repo, 'merge', '--squash', branch);
+  sh(repo, 'commit', '-m', `squash ${branch}`);
+  sh(repo, 'push', 'origin', 'main');
+};
 
 describe('deleting a worktree with commits pushed nowhere (BLG-617)', () => {
   it('counts the commits only its branch has, and none once they are pushed', async () => {
@@ -77,6 +85,123 @@ describe('deleting a worktree with commits pushed nowhere (BLG-617)', () => {
     sh(repo, 'fetch', 'origin');
     expect(await unpushedCommits(repo, 'beluga/squashed', 'origin/main')).toEqual({ count: 0, subjects: [] });
     expect(await mgr.deletePlan(ws.id)).toBeUndefined();
+  });
+
+  it('none once it was squash-merged, even after a later change to one of its files on main (BLG-831)', async () => {
+    commitIn(repo, 'notes.md', ['top', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'bottom'].join('\n'));
+    sh(repo, 'push', 'origin', 'main');
+    const ws = await mgr.createWorktree(project().id, 'squashed-then-edited');
+    writeLines(ws.path, 'notes.md', ['top', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'bottom from the branch']);
+    sh(ws.path, 'commit', '-am', 'bottom');
+    commitIn(ws.path, 'b.txt', 'two');
+    squashIntoMain('beluga/squashed-then-edited');
+    // A later pull request edits the same file elsewhere: the file no longer reads as the branch left it.
+    writeLines(repo, 'notes.md', ['top from main', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'bottom from the branch']);
+    sh(repo, 'commit', '-am', 'later PR');
+    sh(repo, 'push', 'origin', 'main');
+    sh(repo, 'fetch', 'origin');
+    expect(await unpushedCommits(repo, 'beluga/squashed-then-edited', 'origin/main')).toEqual({ count: 0, subjects: [] });
+    expect(await mgr.deletePlan(ws.id)).toBeUndefined();
+    await mgr.refresh();
+    expect(mgr.find(ws.id)?.status).toMatchObject({ landed: true });
+    expect(mgr.find(ws.id)?.status?.unpushed).toBeUndefined();
+
+    // Work after that, not in main: still lost with the branch.
+    commitIn(ws.path, 'c.txt', 'after the merge');
+    expect(await mgr.deletePlan(ws.id)).toMatchObject({ unpushed: 3, subjects: ['after the merge', 'two', 'bottom'] });
+  });
+
+  it('a real change main never got still warns, though main changed the same file', async () => {
+    commitIn(repo, 'notes.md', ['top', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'bottom'].join('\n'));
+    sh(repo, 'push', 'origin', 'main');
+    const ws = await mgr.createWorktree(project().id, 'not-merged');
+    writeLines(ws.path, 'notes.md', ['top', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'bottom from the branch']);
+    sh(ws.path, 'commit', '-am', 'bottom');
+    writeLines(repo, 'notes.md', ['top from main', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'bottom']);
+    sh(repo, 'commit', '-am', 'other PR');
+    sh(repo, 'push', 'origin', 'main');
+    expect(await mgr.deletePlan(ws.id)).toMatchObject({ unpushed: 1, subjects: ['bottom'] });
+  });
+
+  it('none once its own pull request shipped, even where main later rewrote its lines; commits after the merge still warn', async () => {
+    const ws = await mgr.createWorktree(project().id, 'shipped');
+    commitIn(ws.path, 'a.txt', 'one');
+    const head = sh(ws.path, 'rev-parse', 'HEAD').trim();
+    squashIntoMain('beluga/shipped');
+    // A later pull request rewrites the very line: merging the branch now conflicts, so only the PR says it shipped.
+    commitIn(repo, 'a.txt', 'one, rewritten');
+    sh(repo, 'push', 'origin', 'main');
+    expect(await mgr.deletePlan(ws.id)).toMatchObject({ unpushed: 1 });
+    // Merged on GitHub with that head (the PR Beluga shows as Merged): GitHub keeps it.
+    expect(await mgr.deletePlan(ws.id, [head])).toBeUndefined();
+    // Continue After Merge kept it as prShipped.
+    mgr.setPrDone(ws.id, 7, { into: 'main', head });
+    expect(await mgr.deletePlan(ws.id)).toBeUndefined();
+
+    commitIn(ws.path, 'b.txt', 'after the merge');
+    expect(await mgr.deletePlan(ws.id)).toEqual({ branch: 'beluga/shipped', into: 'origin/main', unpushed: 1, subjects: ['after the merge'] });
+    // A head this repository doesn't have proves nothing.
+    expect(await unpushedCommits(repo, 'beluga/shipped', 'origin/main', ['0123456789abcdef0123456789abcdef01234567', '--all'])).toMatchObject({ count: 2 });
+  });
+
+  it("the Delete step's hint agrees with Delete once GitHub says its PR merged, even where main later rewrote its lines (BLG-833)", async () => {
+    const ws = await mgr.createWorktree(project().id, 'hint');
+    commitIn(ws.path, 'a.txt', 'one');
+    const head = sh(ws.path, 'rev-parse', 'HEAD').trim();
+    squashIntoMain('beluga/hint');
+    commitIn(repo, 'a.txt', 'one, rewritten');
+    sh(repo, 'push', 'origin', 'main');
+    const state = { projects: mgr.list, gh: undefined, prs: { [ws.id]: { number: 7, state: 'MERGED' as const } }, conflicts: {} } as unknown as Parameters<typeof branchState>[0];
+    const hint = () => branchState(state, mgr.find(ws.id)!)?.steps.find((s) => s.id === 'delete')?.hint;
+    await mgr.refresh();
+    expect(mgr.find(ws.id)?.status).toMatchObject({ unpushed: 1 });
+
+    // Polling heard it merged at this commit.
+    expect(mgr.setMergedHead(ws.id, head)).toBe(true);
+    expect(mgr.setMergedHead(ws.id, head)).toBe(false);
+    await mgr.refreshWorkspace(ws.path);
+    expect(mgr.find(ws.id)?.status?.unpushed).toBeUndefined();
+    expect(hint()).toBe('Remove the folder and its branch for good');
+    expect(await mgr.deletePlan(ws.id)).toBeUndefined();
+    // Kept across a restart: it's on the record.
+    const restarted = new WorkspaceManager(new WorkspaceStore(path.join(base, 'home')));
+    await restarted.refresh();
+    expect(restarted.find(ws.id)).toMatchObject({ mergedHead: head });
+    expect(restarted.find(ws.id)?.status?.unpushed).toBeUndefined();
+
+    commitIn(ws.path, 'b.txt', 'after the merge');
+    await mgr.refreshWorkspace(ws.path);
+    expect(mgr.find(ws.id)?.status).toMatchObject({ unpushed: 1 });
+    expect(hint()).toMatch(/^1 commit on beluga\/hint was never pushed/);
+    expect(await mgr.deletePlan(ws.id)).toMatchObject({ unpushed: 1, subjects: ['after the merge'] });
+  });
+
+  // The old git is a shell script put first on PATH: Windows finds git.exe instead.
+  it.skipIf(process.platform === 'win32')('with a git older than merge-tree --write-tree, it warns as before', async () => {
+    commitIn(repo, 'notes.md', ['top', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'bottom'].join('\n'));
+    sh(repo, 'push', 'origin', 'main');
+    const ws = await mgr.createWorktree(project().id, 'old-git');
+    writeLines(ws.path, 'notes.md', ['top', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'bottom from the branch']);
+    sh(ws.path, 'commit', '-am', 'bottom');
+    squashIntoMain('beluga/old-git');
+    writeLines(repo, 'notes.md', ['top from main', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'bottom from the branch']);
+    sh(repo, 'commit', '-am', 'later PR');
+    sh(repo, 'push', 'origin', 'main');
+    // A git that has no `merge-tree --write-tree` (before 2.38): it says so and exits 129.
+    const bin = path.join(base, 'old-git-bin');
+    mkdirSync(bin);
+    const real = execFileSync('which', ['git']).toString().trim();
+    writeFileSync(path.join(bin, 'git'), `#!/bin/sh\nfor a in "$@"; do [ "$a" = "--write-tree" ] && { echo "error: unknown option \\\`write-tree'" >&2; exit 129; }; done\nexec "${real}" "$@"\n`, { mode: 0o755 });
+    const PATH = process.env.PATH;
+    process.env.PATH = `${bin}${path.delimiter}${PATH}`;
+    try {
+      vi.resetModules();
+      const old = await import('../src/workspaces/git.js');
+      expect(await old.contentIn(repo, 'beluga/old-git', 'origin/main')).toBeUndefined();
+      expect(await old.unpushedCommits(repo, 'beluga/old-git', 'origin/main')).toEqual({ count: 1, subjects: ['bottom'] });
+    } finally {
+      process.env.PATH = PATH;
+    }
   });
 
   it('none once it was squash-merged on the remote since the last fetch: it checks there before warning (BLG-746)', async () => {

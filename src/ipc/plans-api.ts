@@ -52,6 +52,10 @@ export const PLANS_API = {
   'plans.approve': { args: z.tuple([id, z.object({ anyway: z.boolean().optional() }).strict().optional()]) },
   // Throw the draft away (a plan never approved goes with it).
   'plans.discard': { args: z.tuple([id]) },
+  // Verify a draft with a fresh agent (BLG-772), and approve it once it reads well (`thenApprove`) → the plan.
+  // Fix sends what it found to the plan's agent.
+  'plans.verify': { args: z.tuple([id, z.object({ thenApprove: z.boolean().optional() }).strict().optional()]) },
+  'plans.fixReview': { args: z.tuple([id]) },
   'plans.edit': { args: z.tuple([id, z.array(PlanOpSchema).min(1).max(40)]) },
   // The plan's autonomy, or one milestone's.
   'plans.setAutonomy': { args: z.tuple([id, autonomy, ref.optional()]) },

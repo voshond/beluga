@@ -24,18 +24,8 @@ import { openDm } from '../network/use-net.js';
 import { sameDeep, sameFields } from '../lib/stable.js';
 import s from './Inspector.module.css';
 import { fileManager } from '../lib/os-words.js';
-
-function Panel({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
-  return (
-    <section className={s.panel}>
-      <div className={s.panelHead}>
-        <h3>{title}</h3>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
+import { ThreadsSection } from '../threads/ThreadsSection.js';
+import { Panel } from './inspector-parts.js';
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -190,6 +180,7 @@ function WorkspaceDetails({ id }: { id: string }) {
   const project = state.projects.find((p) => p.id === ws.projectId);
   return (
     <>
+      <ThreadsSection id={id} />
       <Panel title="This workspace">
         <Field label="State">
           <span className={s[`tone_${st.tone}`]}>{st.label}</span>

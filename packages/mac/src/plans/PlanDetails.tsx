@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { type Criterion, criteria } from '@beluga/core/board/criteria.js';
-import type { Plan } from '@beluga/core/plans/model.js';
+import { type Plan, shownBody, taskById } from '@beluga/core/plans/model.js';
 import { taskProof } from '@beluga/core/board/model.js';
 import { FINISHED, type MilestoneView, type PlanView, type TaskView, taskOrder } from '@beluga/core/plans/progress.js';
 import { Markdown } from '../chat/Markdown.js';
@@ -62,7 +62,7 @@ export function PlanDetails({ view, picked, canStart, onPick, onClose }: { view:
         <IconButton icon="x" label="Close" className={p.detailsClose} onClick={onClose} />
       </header>
       <div key={picked} className={p.detailsBody} onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 0)}>
-        {feed ? <PlanFeed plan={view.plan} /> : branch ? <BranchFlow view={view} /> : decided ? <DecisionsList plan={view.plan} /> : gate ? <GateDetails plan={view.plan} m={gate} onPick={onPick} /> : <TaskDetails view={view} t={task!} canStart={canStart} />}
+        {feed ? <PlanFeed plan={view.plan} /> : branch ? <BranchFlow view={view} /> : decided ? <DecisionsList plan={view.plan} onPick={onPick} /> : gate ? <GateDetails plan={view.plan} m={gate} onPick={onPick} /> : <TaskDetails view={view} t={task!} canStart={canStart} />}
       </div>
     </aside>
   );

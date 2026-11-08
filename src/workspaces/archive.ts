@@ -6,6 +6,7 @@ import { parseWorktreeList } from './git.js';
 import { deleteFolderInBackground, removeWorktreeKeepingBranch } from './others.js';
 import { ArchiveError, LONG_MS, RAW_ARGS, RAW_ENV, assertSettled, fingerprint, git, gitLiteral, ignoredByProject, ignoredIn, pack, run, snapshot, submoduleOnlyHere, submodulesIn, tryGit, unpackKeeping, untrackedDirs } from './archive-git.js';
 import { type RegenRule, regenRule, remakeSteps } from './regenerable.js';
+import { SENT_DIR } from '../shared/scratch-dir.js';
 
 /**
  * A smart archive of a worktree: nothing of yours is lost, and what can be made again doesn't
@@ -138,11 +139,26 @@ function without(dir: string, folder: string, out: ReadonlySet<string>): string[
   });
 }
 
+/** The copies of what you sent Claude in a worktree (see core/sent-files.ts): never kept by an archive. */
+const SENT = `${SENT_DIR}/`;
+const SENT_RULE: RegenRule = { what: 'copies of files you sent Claude', names: [] };
+
+/** Whether what would be kept holds the sent copies (a real folder, never a link). */
+function sentIn(dir: string, kept: readonly string[]): boolean {
+  if (!kept.some((rel) => rel.startsWith(SENT) || (rel.endsWith('/') && SENT.startsWith(rel)))) return false;
+  try {
+    return lstatSync(path.join(dir, SENT_DIR)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 /**
  * What an archive would throw away and keep, without touching anything. Only what git lists as
  * ignored is ever thrown away, as git lists it: a folder only when git ignores all of it.
+ * `archiving`: the worktree goes, so the copies of what you sent Claude go too (freeing space keeps them).
  */
-export async function planArchive(dir: string): Promise<ArchivePlan> {
+export async function planArchive(dir: string, opts: { readonly archiving?: boolean } = {}): Promise<ArchivePlan> {
   const entries = await ignoredIn(dir);
   const candidates = entries.map((rel) => ({ rel, rule: regenRule(dir, rel) })).filter((c): c is { rel: string; rule: RegenRule } => Boolean(c.rule));
   const theirs = await ignoredByProject(
@@ -158,7 +174,11 @@ export async function planArchive(dir: string): Promise<ArchivePlan> {
   const inside = [...ignoredFolders].flatMap((folder) => regenUnder(dir, folder));
   const drop = [...candidates.filter((c) => theirs.has(c.rel)), ...inside];
   const nestedDrops = new Set(inside.map((d) => d.rel));
-  const keep = kept.flatMap((rel) => (ignoredFolders.has(rel) ? without(dir, rel, nestedDrops) : [rel]));
+  const listed = kept.flatMap((rel) => (ignoredFolders.has(rel) ? without(dir, rel, nestedDrops) : [rel]));
+  // Copies of what you sent Claude (the originals are yours elsewhere): they go with the worktree.
+  const sent = opts.archiving === true && sentIn(dir, listed);
+  const keep = sent ? listed.flatMap((rel) => (rel.startsWith(SENT) ? [] : SENT.startsWith(rel) ? without(dir, rel, new Set([SENT])) : [rel])) : listed;
+  if (sent) drop.push({ rel: SENT, rule: SENT_RULE });
   const sized = await Promise.all(drop.map(async (d) => ({ path: d.rel, rule: d.rule, bytes: (await folderSize(path.join(dir, d.rel))) ?? 0 })));
   return { drop: sized, keep, dropBytes: sized.reduce((n, d) => n + d.bytes, 0), remake: remakeSteps(sized.map((d) => d.rule)) };
 }
@@ -258,7 +278,7 @@ export function archiveWorktree(o: ArchiveOptions): Promise<ArchiveManifest> {
       mkdirSync(work, { recursive: true });
       try {
         o.onPhase?.('saving');
-        const plan = await planArchive(o.dir);
+        const plan = await planArchive(o.dir, { archiving: true });
         const branch = await tryGit(o.dir, ['symbolic-ref', '--short', '--quiet', 'HEAD']);
         const snap = await snapshot(o.dir, `Beluga archive of ${path.basename(o.dir)}`);
         const keep = outermost([...plan.keep, ...snap.nested.map((n) => `${n}/`), ...empty]);
@@ -271,7 +291,7 @@ export function archiveWorktree(o: ArchiveOptions): Promise<ArchiveManifest> {
         }
         // Written to meanwhile (an agent, a dev server, you): save it again, so nothing new is lost.
         const again = await snapshot(o.dir, 'check');
-        const againPlan = await planArchive(o.dir);
+        const againPlan = await planArchive(o.dir, { archiving: true });
         const keepAgain = outermost([...againPlan.keep, ...again.nested.map((n) => `${n}/`), ...empty]);
         if (!sameSave({ tree: snap.tree, keep, print }, { tree: again.tree, keep: keepAgain, print: fingerprint(o.dir, keepAgain) })) {
           if (attempt < ATTEMPTS) continue;

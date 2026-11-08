@@ -137,11 +137,28 @@ function deleteInBackground(dir: string): void {
 const SET_ASIDE = /^\..+\.removing-\d+$/;
 const asideOf = (dir: string): string => path.join(path.dirname(dir), `.${path.basename(dir)}.removing-${Date.now()}`);
 
+/** Windows refuses a folder rename for a moment while it's held (Defender or the indexer reading files just made). */
+const HELD = new Set(['EPERM', 'EACCES', 'EBUSY']);
+const RENAME_WAITS_MS = [50, 100, 200, 400, 800];
+
+/** Rename a folder; on Windows, held a moment, tried again a few times (as graceful-fs does) before giving up. */
+export async function renameFolder(from: string, to: string, { platform = process.platform, move = rename }: { platform?: NodeJS.Platform; move?: typeof rename } = {}): Promise<void> {
+  for (const wait of platform === 'win32' ? RENAME_WAITS_MS : []) {
+    try {
+      return await move(from, to);
+    } catch (err) {
+      if (!HELD.has((err as NodeJS.ErrnoException).code ?? '')) throw err;
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+  await move(from, to);
+}
+
 /** Delete a folder that isn't a worktree (any more) without waiting: set aside, then deleted in the background. */
 export async function deleteFolderInBackground(dir: string): Promise<void> {
   if (!existsSync(dir)) return;
   const aside = asideOf(dir);
-  await rename(dir, aside);
+  await renameFolder(dir, aside);
   deleteInBackground(aside);
 }
 
@@ -186,7 +203,7 @@ export async function removeWorktreeKeepingBranch(repo: string, dir: string, for
   if (!force && !(await cleanEnough(dir))) return g.removeWorktree(repo, dir, false);
   const aside = asideOf(dir);
   try {
-    await rename(dir, aside);
+    await renameFolder(dir, aside);
   } catch {
     return g.removeWorktree(repo, dir, force); // something holds it: the slow way
   }

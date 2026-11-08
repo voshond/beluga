@@ -30,6 +30,23 @@ export function otherKeySteers(preferred: DuringTurnAction, canSteer: boolean): 
   return sendAction(preferred, { busy: true, canSteer, secondary: true }) === 'steer';
 }
 
+/** A card above the box is waiting on you: what you type is your answer to it, not a message for the turn. */
+export type Answering = 'plan' | 'question';
+
+/** The card waiting on you in this conversation, if any (the one the box answers: see submitTyped). */
+export function answeringIn(questions: readonly { readonly channel: string; readonly question: { readonly kind: string } }[], channel: string): Answering | undefined {
+  const q = questions[0];
+  if (!q || q.channel !== channel) return undefined;
+  return q.question.kind === 'plan' ? 'plan' : 'question';
+}
+
+/** The send control while a card waits: it answers the card, it never steers or queues. */
+export function answerSend(kind: Answering, agent: string): { readonly label: string; readonly tip: string } {
+  return kind === 'plan'
+    ? { label: 'Send Changes', tip: `Send what to change: ${agent} revises the plan and shows it to you again` }
+    : { label: 'Answer', tip: `Send your own answer to ${agent}'s question` };
+}
+
 /** What the composer says when a message can't steer here. */
 export function steerBlockNote(block: SteerBlock): string {
   return block === 'plan' ? 'In Plan First, messages queue.' : 'This agent cannot steer. Messages queue.';

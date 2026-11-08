@@ -43,6 +43,10 @@ export function runMenu(ctx: MenuContext, menu: MenuKind, index: number): void {
   }
   const reopen = (): void => patchUi({ menu: { menu, selected: index } });
   const confirmId = menu.kind === 'confirm' ? menu.id : undefined;
+  // What the dialog's question about threads said. With none, the calls stay as they were.
+  const children = menu.kind === 'confirm' ? menu.children : undefined;
+  const archive = (id: string, force?: boolean) => (children ? api.workspaces.archive(id, force ?? false, { children }) : force === undefined ? api.workspaces.archive(id) : api.workspaces.archive(id, force));
+  const remove = (id: string) => (children ? api.workspaces.remove(id, { children }) : api.workspaces.remove(id));
   const project = menu.kind === 'project' ? latest.projects.find((p) => p.id === menu.id) : undefined;
   const archived = menu.kind === 'archived' ? findWorkspace(latest.projects, menu.id) : undefined;
   if (option.id.startsWith('p-group:') && project) {
@@ -88,18 +92,18 @@ export function runMenu(ctx: MenuContext, menu: MenuKind, index: number): void {
       return;
     case 'confirm-archive':
     case 'confirm-archive-force':
-      if (confirmId) void api.workspaces.archive(confirmId, option.id === 'confirm-archive-force');
+      if (confirmId) void archive(confirmId, option.id === 'confirm-archive-force');
       return;
     case 'confirm-commit-archive':
-      if (confirmId) void api.workspaces.commit(confirmId).then(() => void api.workspaces.archive(confirmId));
+      if (confirmId) void api.workspaces.commit(confirmId).then(() => void archive(confirmId));
       return;
     case 'confirm-delete':
-      if (confirmId) void api.workspaces.remove(confirmId);
+      if (confirmId) void remove(confirmId);
       return;
     case 'confirm-archive-env':
     case 'confirm-delete-env':
       if (confirmId) {
-        void api.workspaces.applyEnvBack(confirmId).then(() => void (option.id === 'confirm-archive-env' ? api.workspaces.archive(confirmId, true) : api.workspaces.remove(confirmId)));
+        void api.workspaces.applyEnvBack(confirmId).then(() => void (option.id === 'confirm-archive-env' ? archive(confirmId, true) : remove(confirmId)));
       }
       return;
     case 'set-name':

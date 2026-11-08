@@ -1,8 +1,9 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { type AppState, type Location, type ViewerState, fileKey } from '@beluga/core/store.js';
 import type { ChangedFile as Change } from '@beluga/workspaces/git.js';
 import { shareNameOf } from '@beluga/shared/share-names.js';
 import { useApi, useApp } from '../lib/beluga.js';
+import { lazyView } from '../lib/lazy-view.js';
 import type { DocVariant } from '../components/markdown/MarkdownDoc.js';
 import { hasRenderedLook, isVisualFile } from './reader/reader-model.js';
 import r from './reader/reader.module.css';
@@ -12,7 +13,7 @@ import r from './reader/reader.module.css';
  * code as it is now. Read on its own, so the Files tab's open file stays where it is.
  */
 
-const FileContent = lazy(() => import('./reader/FileReader.js').then((m) => ({ default: m.FileContent })));
+const FileContent = lazyView('views/reader/FileReader', () => import('./reader/FileReader.js').then((m) => m.FileContent), false);
 
 /** How a changed file can be looked at: its diff, or the file (a picture or a PDF only as itself). */
 export type ChangeLook = 'diff' | 'file';

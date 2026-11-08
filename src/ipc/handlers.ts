@@ -33,12 +33,15 @@ import { DASHBOARD_HANDLERS } from './dashboard-handlers.js';
 import { SENTINEL_HANDLERS } from './sentinel-handlers.js';
 import { PLANS_HANDLERS } from './plans-handlers.js';
 import { plansOf } from '../core/plans/registry.js';
+import { stopChat, stopThreadsUnder } from '../core/threads/launch.js';
 import { DIALOGUES_HANDLERS } from './dialogues-handlers.js';
 import { ISSUES_HANDLERS } from './issues-handlers.js';
 import { CI_HANDLERS } from './ci-handlers.js';
 import { TEAM_HANDLERS } from './team-handlers.js';
+import { TRIAGE_HANDLERS } from './triage-handlers.js';
 import { GIT_HANDLERS } from './git-handlers.js';
 import { VIEWS_HANDLERS } from './views-handlers.js';
+import { PREVIEW_HANDLERS } from './preview-handlers.js';
 import { FILES_EDIT_HANDLERS } from './files-handlers.js';
 import { COMPANION_HANDLERS } from './companion-handlers.js';
 import { ASSISTANT_HANDLERS } from './assistant-handlers.js';
@@ -112,7 +115,12 @@ export const HANDLERS = {
   'host.sendNext': (s, requestId) => s.host.sendNext(requestId),
   'host.steerNow': (s, requestId) => s.host.steerNow(requestId),
   'host.cancelSteer': (s, requestId) => s.host.cancelSteer(requestId),
-  'host.stopRun': (s, channel) => s.host.stopRun(channel),
+  'host.stopRun': (s, channel) => stopChat(s, channel),
+  'threads.stop': (s, id): ReturnType<Session['host']['stopRun']> => {
+    if (!ctl(s)?.manager.find(id)?.thread) throw new Error('That chat is not a child thread.');
+    return HANDLERS['host.stopRun'](s, `ws:${id}`);
+  },
+  'threads.stopAll': (s, id) => stopThreadsUnder(s, id),
   'host.cancelQueued': (s, requestId) => s.host.cancelQueued(requestId),
   'host.reorderQueued': (s, requestId, index) => s.host.reorderQueued(requestId, index),
 
@@ -201,19 +209,19 @@ export const HANDLERS = {
   'workspaces.newWorktree': async (s, projectId, name, opts) => (await ctl(s)?.newWorktree(projectId, name, { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.agent ? { agent: opts.agent } : {}) }))?.id,
   'workspaces.newChat': async (s, projectId, title, dir) => (await ctl(s)?.newChat(projectId, title, dir))?.id,
   'workspaces.startChat': (s, projectId, text, dir, opts) => (maybeStatsOf(s)?.prompt(`new-chat:${projectId}`, text), ctl(s)?.startChat(projectId, text, dir ?? undefined, { ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.plan ? { plan: true } : {}) })),
-  'workspaces.startWorktree': async (s, projectId, text, opts) => (maybeStatsOf(s)?.prompt(`new-worktree:${projectId}`, text, opts?.agent?.runtime), await ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.terminal ? { terminal: true } : {}), nameLater: true }))?.id,
+  'workspaces.startWorktree': async (s, projectId, text, opts) => (maybeStatsOf(s)?.prompt(`new-worktree:${projectId}`, text, opts?.agent?.runtime), await ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.tasks ? { tasks: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.terminal ? { terminal: true } : {}), nameLater: true }))?.id,
   'workspaces.branches': (s, projectId) => ctl(s)?.branches(projectId),
   'workspaces.fork': async (s, id, name) => (await ctl(s)?.fork(id, name))?.id,
   'workspaces.editPrompt': (s, id, line, text, mode) => ctl(s)?.editPrompt(id, line, text, mode),
   'workspaces.continueInWorktree': async (s, id, opts) =>
     // Claude starts there once whatever runs in the conversation now has finished (its session is complete then).
     (await ctl(s)?.continueInWorktree(id, (prompt) => s.nameTask(prompt), { ...(opts?.task ? { task: opts.task } : {}), ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), after: s.host.idle(`ws:${id}`) }))?.id,
-  'workspaces.archive': (s, id, force, opts) => ctl(s)?.archive(id, force, { ...(opts?.quiet ? { quiet: true } : {}) }),
+  'workspaces.archive': (s, id, force, opts) => ctl(s)?.archive(id, force, opts),
   'workspaces.restore': (s, id) => ctl(s)?.restore(id),
   'workspaces.archivePlan': (s, id) => ctl(s)?.archivePlan(id),
   'workspaces.deletePlan': (s, id) => ctl(s)?.deletePlan(id),
   'workspaces.freeSpace': (s, id) => ctl(s)?.freeSpace(id),
-  'workspaces.remove': (s, id, opts) => ctl(s)?.remove(id, { ...(opts?.quiet ? { quiet: true } : {}) }),
+  'workspaces.remove': (s, id, opts) => ctl(s)?.remove(id, opts),
   'workspaces.commit': (s, id, message) => ctl(s)?.commit(id, message),
   'workspaces.merge': (s, id) => ctl(s)?.merge(id),
   'workspaces.prepareRemoval': (s, id) => ctl(s)?.prepareRemoval(id),
@@ -229,7 +237,6 @@ export const HANDLERS = {
   'workspaces.renameGroup': (s, from, to) => ctl(s)?.renameGroup(from, to),
   'workspaces.rename': (s, id, name) => ctl(s)?.rename(id, name),
   'workspaces.regenerateTitle': (s, id) => ctl(s)?.regenerateTitle(id),
-  'workspaces.remindLater': (s, id, at) => ctl(s)?.remindLater(id, at ?? null),
   'workspaces.ungroup': (s, name) => ctl(s)?.ungroup(name),
   'workspaces.arrange': (s, item, place) => ctl(s)?.arrange(item, place ?? {}) ?? false,
   'workspaces.newGroup': (s, name, opts) => ctl(s)?.newGroup(name, opts ?? {}),
@@ -437,8 +444,10 @@ export const HANDLERS = {
   ...ISSUES_HANDLERS,
   ...CI_HANDLERS,
   ...TEAM_HANDLERS,
+  ...TRIAGE_HANDLERS,
   ...GIT_HANDLERS,
   ...VIEWS_HANDLERS,
+  ...PREVIEW_HANDLERS,
   ...FILES_EDIT_HANDLERS,
   ...COMPANION_HANDLERS,
   ...ASSISTANT_HANDLERS,

@@ -57,6 +57,9 @@ export const PHONE: Record<Method, Side> = {
   'host.steerNow': 'phone',
   'host.cancelSteer': 'phone',
   'host.stopRun': 'phone',
+  // Stop one child thread: like Stop, phone-sized.
+  'threads.stop': 'phone',
+  'threads.stopAll': 'phone',
   'host.cancelQueued': 'phone',
   'host.reorderQueued': 'mac',
 
@@ -152,7 +155,6 @@ export const PHONE: Record<Method, Side> = {
   'workspaces.renameGroup': 'mac',
   'workspaces.rename': 'mac',
   'workspaces.regenerateTitle': 'mac',
-  'workspaces.remindLater': 'mac',
   'workspaces.ungroup': 'mac',
   'workspaces.arrange': 'mac',
   'workspaces.newGroup': 'mac',
@@ -317,6 +319,7 @@ export const PHONE: Record<Method, Side> = {
   'stats.note': 'mac',
   'stats.saveImage': 'mac',
   'diagnostics.report': 'mac',
+  'diagnostics.windowProblem': 'mac',
 
   // ---- browsers on the web port (BLG-650): let in and revoked from the Mac's Settings or `beluga web`
   // ---- client devices (BLG-54): the phone may see which are connected
@@ -430,6 +433,8 @@ export const PHONE: Record<Method, Side> = {
   'plans.here': 'mac',
   'plans.approve': 'phone',
   'plans.discard': 'phone',
+  'plans.fixReview': 'phone',
+  'plans.verify': 'phone',
   'plans.edit': 'mac',
   'plans.setAutonomy': 'phone',
   'plans.setPaused': 'mac',
@@ -469,6 +474,12 @@ export const PHONE: Record<Method, Side> = {
   'ci.log': 'mac',
   'ci.rerun': 'mac',
   'ci.cancel': 'mac',
+  // Each chat's category: reading and sorting your own list, as the Mac does.
+  'triage.settle': 'phone',
+  'triage.unsettle': 'phone',
+  'triage.snooze': 'phone',
+  'triage.wake': 'phone',
+  'triage.setAutoSettle': 'phone',
   // Team boards: answering an offer is the phone's (a NeedsYou card); leaving a team is the Mac's.
   'team.answer': 'phone',
   'team.leave': 'mac',
@@ -502,6 +513,9 @@ export const PHONE: Record<Method, Side> = {
   'git.filters': 'mac',
   'git.worktreeAt': 'mac',
   'view.fetch': 'mac',
+  // A live preview builds and runs code on the Mac for its own window's frame; the phone shows a plain card.
+  'preview.open': 'mac',
+  'preview.snapshot': 'mac',
   'files.searchContent': 'mac',
   'files.searchNames': 'mac',
   'files.save': 'mac',

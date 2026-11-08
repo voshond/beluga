@@ -1,0 +1,16 @@
+.line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 16px;
+  border-top: 0.5px solid var(--hairline);
+  color: var(--text-2);
+  font-size: 0.94em;
+}
+.words {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -39,6 +39,7 @@
     "b4a": "^1.9.0",
     "chokidar": "^5.0.0",
     "cloudflared": "^0.7.3",
+    "esbuild": "^0.28.2",
     "hyperdht": "^6.34.1",
     "jpeg-js": "^0.4.4",
     "mathjax-full": "^3.2.2",

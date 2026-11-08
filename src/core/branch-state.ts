@@ -125,9 +125,22 @@ export function failedRunIds(pr: Pick<PullRequest, 'checkRuns'>): number[] {
  */
 export type PrBlocker = 'push' | 'resolve_pr' | 'checks_running' | 'fix_checks';
 
+/**
+ * Commits here that its open PR doesn't have (BLG-840): what Merge on GitHub would leave out. The
+ * count is status.unpushed (on no remote and not in the base), so main merged in here doesn't add
+ * to it. Undefined: no open PR, or nothing missing from it.
+ */
+export function notOnPr(pr: Pick<PullRequest, 'number' | 'state'> | undefined, ws: Pick<Workspace, 'status'>): { readonly count: number; readonly number: number } | undefined {
+  const count = ws.status?.unpushed ?? 0;
+  return pr?.state === 'OPEN' && count > 0 ? { count, number: pr.number } : undefined;
+}
+
+/** "3 commits not on PR #398": the chip on a worktree and its row, and the phone's. */
+export const notOnPrLabel = (gap: { readonly count: number; readonly number: number }): string => `${plural(gap.count, 'commit')} not on PR #${gap.number}`;
+
 export function prBlocker(pr: PullRequest | undefined, ws: Pick<Workspace, 'status'>): PrBlocker | undefined {
   if (pr?.state !== 'OPEN') return undefined;
-  if ((ws.status?.unpushed ?? 0) > 0) return 'push';
+  if (notOnPr(pr, ws)) return 'push';
   if (pr.conflicts) return 'resolve_pr';
   if (pr.checks !== 'failing') return undefined;
   return (pr.checkRuns ?? []).some((c) => c.state !== 'completed') ? 'checks_running' : 'fix_checks';
@@ -202,11 +215,15 @@ export function branchState(state: Pick<DomainState, 'projects' | 'gh' | 'prs' |
     const n = `PR #${pr.number}`;
     const blocker = prBlocker(pr, ws);
     const fixChecks: BranchStep = { id: 'fix_checks', label: 'Fix Checks…', hint: 'Your agent reads the failing logs, fixes them and pushes', claude: true };
-    // Fixes made here and not pushed yet: what GitHub says (failing, conflicts) is about an older commit.
+    // Work committed here and not pushed yet (BLG-840): merging on GitHub would leave it out, and what
+    // GitHub says (failing, conflicts) is about an older commit. Pushing leads; merging waits for it.
     if (blocker === 'push') {
       const was = pr.conflicts ? `says it conflicts with ${into}` : pr.checks === 'failing' ? 'says its checks failed' : pr.checks === 'pending' ? 'is running checks' : 'shows';
-      return at('not_pushed', 'Not pushed', 'info', `${plural(unpushed, 'commit')} here ${unpushed === 1 ? 'isn’t' : 'aren’t'} on ${n} yet, so what GitHub ${was} is for an older commit: push to run its checks again`, [
-        { id: 'push', label: `Push ${plural(unpushed, 'Commit')}`, hint: `Pushes ${ws.branch} to ${n}: GitHub runs its checks again and looks for conflicts with ${into}${changed ? ` (the ${plural(changed, 'uncommitted change')} stay here)` : ''}` },
+      const them = unpushed === 1 ? 'it' : 'them';
+      // The pill reads "3 commits not on PR #398" (its number is drawn beside it).
+      return at('not_pushed', `${plural(unpushed, 'commit')} not on PR`, 'info', `${plural(unpushed, 'commit')} here ${unpushed === 1 ? 'isn’t' : 'aren’t'} on ${n} yet: merging it now would leave ${them} out, and what GitHub ${was} is for an older commit`, [
+        { id: 'push', label: `Push ${plural(unpushed, 'Commit')} to ${n}`, hint: `Pushes ${ws.branch} to ${n}: GitHub runs its checks again and looks for conflicts with ${into}${changed ? ` (the ${plural(changed, 'uncommitted change')} stay here)` : ''}` },
+        !original && !pr.draft && { id: 'merge_auto', label: 'Push and Merge When Ready', hint: `Pushes the ${plural(unpushed, 'commit')} to ${n}, then Beluga merges it once their checks pass` },
         commit,
         openPr,
       ]);

@@ -143,8 +143,22 @@ test('Files: a tree you search by name, a preview with colors, and the file in f
   await expect(panel(page).getByRole('treeitem', { name: 'NOTES.md' })).toBeHidden();
   await panel(page).getByLabel('Search file names').press('Escape');
   await expect(panel(page).getByRole('treeitem', { name: 'NOTES.md' })).toBeVisible();
-  // In full, then back.
+  // The arrows show each file they land on, no Enter needed.
+  await panel(page).getByRole('treeitem', { name: 'auth.ts' }).click();
+  await page.keyboard.press('ArrowDown');
+  const next = (await panel(page).locator('[role="treeitem"][aria-selected="true"]').getAttribute('aria-label'))!;
+  expect(next).not.toBe('auth.ts');
+  await expect(panel(page).getByRole('region', { name: next })).toBeVisible();
+  await page.keyboard.press('ArrowUp');
+  await expect(preview.getByText('requireUser').first()).toBeVisible();
+  // In full, then back; the tree's arrows keep stepping through files while it's open.
   await preview.getByRole('button', { name: 'Open in full' }).click();
+  await expect(page.getByRole('main').getByRole('region', { name: 'auth.ts' })).toBeVisible();
+  await page.getByRole('button', { name: /^Show the panel/ }).click();
+  await panel(page).getByRole('treeitem', { name: 'auth.ts' }).click();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByRole('main').getByRole('region', { name: next })).toBeVisible();
+  await page.keyboard.press('ArrowUp');
   await expect(page.getByRole('main').getByRole('region', { name: 'auth.ts' })).toBeVisible();
   await page.getByRole('button', { name: 'Back to Chat' }).click();
   await expect(composer(page)).toBeVisible();

@@ -4,6 +4,13 @@
   min-height: 0;
   display: flex;
 }
+/* A child thread's chat: its "Started by" line above the conversation. */
+.logWrap:has(> [data-started-by]) {
+  flex-direction: column;
+}
+.logWrap:has(> [data-started-by]) > .log {
+  min-height: 0;
+}
 .log {
   flex: 1;
   min-width: 0;

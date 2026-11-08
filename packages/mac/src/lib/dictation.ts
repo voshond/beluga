@@ -6,13 +6,13 @@ import { insertText } from '../chat/paste-paths.js';
 import { native } from './boot.js';
 import { getPrefs, usePrefs, type UiPrefs } from './prefs.js';
 import { joinPhrases, PhraseCutter, PHRASE_RATE, promptFrom, Resampler } from '@beluga/shared/voice-phrases.js';
-import { cleanWords, DICTATION_MAX_SECONDS, HOLD_MS, matchesAccel, parseAccel, spoken, wavFromFloats } from './dictation-model.js';
+import { cleanWords, DICTATION_MAX_SECONDS, dictationAudio, HOLD_MS, matchesAccel, parseAccel, spoken, wavFromFloats } from './dictation-model.js';
 import { isRecording } from './shortcuts.js';
 import { microphoneSettings, thisComputer } from './os-words.js';
 
 /**
  * Speak instead of typing (BLG-145): the microphone beside Send, and the talk shortcut (Settings ›
- * Voice). The window records (getUserMedia), and each pause cuts a phrase (BLG-160) that the daemon
+ * Voice). The window records (getUserMedia, from the microphone picked there), and each pause cuts a phrase (BLG-160) that the daemon
  * writes down on the Mac's GPU at once (voice.transcribe: Whisper Turbo or Parakeet, the phone's On
  * your Mac engine), in order, while you keep talking; so when you stop, the words are ready. They go
  * in at the cursor of the box you were in, to read over; or, with Send right away, they're sent.
@@ -218,7 +218,7 @@ export async function startDictation(prefer?: HTMLTextAreaElement | null): Promi
     return set({ kind: 'off', error: `Couldn’t get ${VOICE_MODELS[model].label}: ${errorText(e)}` });
   }
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: dictationAudio(getPrefs().voiceMic) });
     // Esc while macOS asked for the microphone.
     if (getDictation().kind !== 'getting') return void stream.getTracks().forEach((t) => t.stop());
     const ctx = new AudioContext();

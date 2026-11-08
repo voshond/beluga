@@ -286,6 +286,23 @@ sends neither, and its approve card is as before.
 drops (−, rose) with why and whether the agent or you made the change (`PlanView.repoChanges`), and
 `repos` (and each milestone's) as the plan covers them once it's approved. Read-only: approving applies
 them. An older Mac sends none.
+1.49 (BLG-772) marks a decision a later one replaced (`PlanView.decisions[].replaced`): the phone keeps it
+last, crossed out. An older Mac never sends it.
+1.50 (BLG-172) brings child threads to the phone (`SINCE.threads`). With Agent threads on, each row of
+Work shows its chat's harness mark and a child sits under its parent (`ConvSummary.harness`, `parent`;
+a kept child, or one whose parent is gone, is a row of its own). A chat's ••• › Threads opens its parent
+and children with their live state, and Stop on each one at work (`ConvView.threadFamily`, `threads.stop`, `threads.stopAll`):
+the Mac's own stop, so those under it stop too. The sheet carries titles and states only, never a
+thread's task or result. Its native sub-agents share the list as read-only rows (`ThreadFamilyView.agents`,
+`SINCE.threadAgents`): the chat's harness mark, a quiet "sub-agent" word, no Stop and no page of their own
+(their steps stay on the conversation's strip); one "N running" counts both kinds. An older Mac leaves them
+out: the sheet lists threads only. A need in a child names
+it (`NeedsYou.thread`). Archive and Delete ask once about a chat's threads, with the Mac's defaults:
+archive takes them, delete keeps them (`BranchView.threads`, and the third argument of
+`companion.branchStep`, `with` or `keep`). The phone sends that argument only to a Mac with
+`SINCE.threads`, because an older Mac refuses an argument it doesn't know. An older Mac sends none of the
+fields: flat rows, no Threads sheet, no question, and its children stay. An older phone sends no answer to a
+newer Mac: children stay there too.
 - `chats` and `chat:<conversation>`: friends' DMs and channels.
 - `people`: friends, presence, their usage and what they let your agent do.
 
@@ -577,7 +594,11 @@ Advanced at the bottom. Learn it once and it works everywhere.
   Always. Then **Running now**: each live conversation as a card with its project's icon, its step
   ticking over, its sub-agents as dots and a small count of new outputs. Then tasks **for your
   review**.
-- **Work**: Conversations · Plans · Tasks. A conversation reads as cards: your message, the agent's
+- **Work**: Conversations · Plans · Tasks. While Settings on the Mac has chat categories on, Conversations
+  shows the Inbox by project, then Working, Later and Settled, folded. Long-press a chat for Settle, Remind Me
+  Later, Show Again Now or Un-settle. The phone never changes the setting, and a question in a chat put off
+  till later stays in Needs you.
+  A conversation reads as cards: your message, the agent's
   answer (code folded into chips; views and graphs drawn), and while it works a live panel: thinking
   or writing with a soft shimmer, the step it's on with its tool, time and progress, the steps
   before it sliding in. Sub-agents are rows in the turn that started them, with their own live step

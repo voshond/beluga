@@ -10,14 +10,17 @@ import type { Intent } from '../intents.js';
 import type { LogItem, Store } from '../store.js';
 import type { WorkspaceController } from '../workspace-controller.js';
 import { ApplyError, applyDraft, planBoard } from './apply.js';
+import { coherenceWarnings, warningsText } from './coherence.js';
+import { DraftReviewer } from './draft-review.js';
 import { dropEpics, syncEpics } from './epics.js';
 import type { BodyInput, PlanOp, RepoChangeInput, TaskInput } from './edit.js';
-import { type Autonomy, MAX_PLAN_REPOS, type Plan, type TestsAt, allTasks, checkerOf, isMultiRepo, milestoneRepos, planForHome, planRepos, planTaskOfIssue, planTitle, proposedRepos, runOf } from './model.js';
+import { type Autonomy, MAX_PLAN_REPOS, type Plan, type TestsAt, activeDecisions, allTasks, checkerOf, decisionText, isMultiRepo, milestoneRepos, planForHome, planRepos, planTaskOfIssue, planTitle, proposedRepos, reviewerOf, runOf } from './model.js';
+import { issueForWorkspace } from '../board/model.js';
 import { type PilotDeps, PlanPilot } from './pilot.js';
 import type { TaskView } from './progress.js';
 import { type PlanGit, planGitOf } from './plan-git.js';
 import { type Plans, UNTITLED } from './plans.js';
-import { type MilestoneWhere, type NearRepo, type PlanRepoInfo, checkFailedPrompt, checkerBrief, describePlan, handbackPrompt, headBrief, milestoneNote, milestoneWhere, planningBrief, sizeWords, workerNote } from './prompt.js';
+import { type MilestoneWhere, type NearRepo, type PlanRepoInfo, checkFailedPrompt, checkerBrief, describePlan, handbackPrompt, headBrief, milestoneNote, milestoneWhere, planningBrief, reviewerBrief, sizeWords, workerNote } from './prompt.js';
 
 /**
  * Plans at work: making a plan (its own conversation, in the project's main folder where Claude
@@ -100,9 +103,35 @@ export class PlansWork {
   readonly pilot: PlanPilot;
   /** Work handed back this session (plan id and the words), so the same thing reaches the head once. */
   private readonly handedBack = new Set<string>();
+  /** A fresh agent's read of each first draft, before Approve Plan (see draft-review.ts). */
+  readonly reviewer: DraftReviewer;
 
   constructor(private readonly deps: PlansWorkDeps) {
     this.plans = deps.plans;
+    this.reviewer = new DraftReviewer({
+      store: deps.store,
+      plans: deps.plans,
+      askClaude: deps.askClaude,
+      // On the plan's agent, like its checkers; a conversation of its own, folded into the plan.
+      ...(deps.controller
+        ? {
+            reviewChat: async (plan: Plan) => {
+              const ws = await deps.controller!.newChat(plan.projectId, `Review: ${planTitle(plan)}`.slice(0, 40), undefined, { quiet: true });
+              if (ws && plan.agent) deps.controller!.manager.setAgent(ws.id, plan.agent);
+              return ws?.id;
+            },
+            chatAgent: (chat: string, plan: Plan) => {
+              if (plan.agent) deps.controller!.manager.setAgent(chat, plan.agent);
+            },
+          }
+        : {}),
+      // Verify, Then Approve: you asked for it, so it's approved as you.
+      approve: (id: string) => void this.approve(id),
+      ...(deps.alive ? { alive: deps.alive } : {}),
+      ...(deps.cancel ? { cancel: deps.cancel } : {}),
+      ...(deps.now ? { now: deps.now } : {}),
+      ...(deps.delayMs !== undefined ? { delayMs: deps.delayMs } : {}),
+    });
     const git = deps.git === null ? undefined : (deps.git ?? (deps.controller?.manager ? planGitOf(deps.controller) : undefined));
     this.pilot = new PlanPilot({
       store: deps.store,
@@ -161,6 +190,7 @@ export class PlansWork {
   stop(): void {
     this.offReads?.();
     this.pilot.stop();
+    this.reviewer.stop();
     this.plans.flush();
   }
 
@@ -338,6 +368,8 @@ export class PlansWork {
     }
     const { body, summary } = applied;
     const done = this.structure(this.plans.approved(id, body, by, summary).id);
+    this.retireReview(done);
+    this.syncHomeTask(done);
     this.deps.store.dispatch({ type: 'system', channel: plan.home, text: plan.body ? `Changes applied: ${summary}.` : `Plan approved: ${summary} are on the board now.`, level: 'info' });
     this.pilot.schedule();
     return done;
@@ -353,7 +385,51 @@ export class PlansWork {
   }
 
   discard(id: string): Plan | undefined {
-    return this.plans.discard(id, this.me());
+    const plan = this.plans.need(id);
+    const next = this.plans.discard(id, this.me());
+    if (!next) this.retireReview(plan);
+    return next;
+  }
+
+  /** Fix: the draft's review findings go to the plan's agent (see draft-review.ts). */
+  fixReview(id: string): Plan {
+    return this.reviewer.fix(id);
+  }
+
+  /** Verify the draft with a fresh agent (`thenApprove`: approve it once it reads well). */
+  verify(id: string, thenApprove = false): Promise<Plan> {
+    return this.reviewer.verify(id, thenApprove);
+  }
+
+  /** A draft's reviewer is done with (the plan was approved, or thrown away): its conversation archived. */
+  private retireReview(plan: Plan): void {
+    const chat = plan.review?.chat;
+    if (!chat) return;
+    if (this.plans.get(plan.id)) this.plans.setReview(plan.id, undefined);
+    void this.deps.controller?.archive(chat, false, { quiet: true }).catch(() => undefined);
+  }
+
+  /**
+   * The plan home's own board task (a worktree doing a task, planning there): its goal and decisions
+   * follow the plan's, so it never goes on describing a first draft (BLG-772). What its brief said
+   * before stays in the brief's history.
+   */
+  private syncHomeTask(plan: Plan): void {
+    if (!plan.home.startsWith(WS) || plan.status === 'done') return;
+    const body = plan.body ?? plan.draft;
+    if (!body) return;
+    const board = this.deps.board.board;
+    const issue = issueForWorkspace(board.state(), plan.home.slice(WS.length));
+    if (!issue || issue.plan?.id === plan.id || issue.status === 'canceled' || issue.status === 'done') return;
+    const by: Actor = { kind: 'beluga' };
+    const reason = `kept in step with the plan “${body.title}”`;
+    try {
+      if (body.goal.trim()) board.editBrief(issue.id, 'goal', body.goal, by, { reason });
+      const decided = activeDecisions(body);
+      if (decided.length) board.editBrief(issue.id, 'decisions', [`From the plan “${body.title}” (its decisions live there; Beluga keeps this in step):`, ...decided.map((d) => `- ${decisionText(d)}`)].join('\n'), by, { reason });
+    } catch {
+      // The task went: nothing to keep in step.
+    }
   }
 
   /**
@@ -371,6 +447,7 @@ export class PlansWork {
     }
     const direct = Boolean(plan.body) && !plan.draft;
     const next = this.plans.editDraft(id, ops, this.me());
+    this.syncHomeTask(next);
     return direct && next.draft ? this.approve(id) : next;
   }
 
@@ -517,6 +594,9 @@ export class PlansWork {
     const me = this.deps.board.me();
     if (me.kind !== 'person' || from !== me.id) return undefined;
     // A milestone's checker: its brief, and only plan_get and plan_gate.
+    // A draft's reviewer: its brief, and only plan_get and plan_review.
+    const reviewing = reviewerOf(this.plans.state(), channel);
+    if (reviewing) return reviewing.status === 'draft' && reviewing.draft ? { tools: this.reviewerTools(reviewing.id), brief: reviewerBrief(reviewing), checker: true } : undefined;
     const checking = checkerOf(this.plans.state(), channel);
     if (checking) {
       if (checking.plan.status !== 'active' || !checking.plan.body) return undefined;
@@ -757,19 +837,41 @@ export class PlansWork {
     };
   }
 
+  /** A draft's reviewer: it reads the draft and records what it found, nothing more. */
+  private reviewerTools(planId: string): PlanTools {
+    const full = this.toolsFor(planId);
+    const refuse = (): never => {
+      throw new Error('You review this draft: only plan_get and plan_review are yours here');
+    };
+    return {
+      only: ['plan_get', 'plan_review'],
+      get: full.get,
+      write: refuse,
+      update: refuse,
+      gate: refuse,
+      start: async () => refuse(),
+      message: refuse,
+      review: (findings) => this.reviewer.record(planId, findings),
+    };
+  }
+
   private toolsFor(planId: string): PlanTools {
     const plans = this.plans;
     const after = (change: () => Plan): string => {
-      const was = planTitle(plans.need(planId));
+      const before = plans.need(planId);
+      const was = planTitle(before);
       const plan = change();
       this.nameHome(plan, was);
+      this.syncHomeTask(plan);
       if (!plan.draft) return 'The plan is unchanged.';
+      // What this change left behind, said next to "Saved" (BLG-772).
+      const warn = (body: Plan['draft']): string => (body ? warningsText(coherenceWarnings(body, before.draft ?? before.body)) : '');
       // On autopilot, the head Claude's changes to a running plan apply at once.
       if (plan.body && plan.autonomy === 'autopilot') {
         const applied = this.approve(plan.id, this.claude());
-        return `Applied at once (the plan runs on autopilot): ${sizeWords(applied.body)}.`;
+        return `Applied at once (the plan runs on autopilot): ${sizeWords(applied.body)}.${warn(applied.body)}`;
       }
-      return plan.body ? `Proposed (${sizeWords(plan.draft)}): the user reviews the changes and applies them.` : `Saved the draft (${sizeWords(plan.draft)}). The user reviews it and clicks Approve; nothing is on the board until then.`;
+      return (plan.body ? `Proposed (${sizeWords(plan.draft)}): the user reviews the changes and applies them.` : `Saved the draft (${sizeWords(plan.draft)}). The user reviews it and clicks Approve; nothing is on the board until then.`) + warn(plan.draft);
     };
     return {
       get: () => describePlan(this.pilot.view(plans.need(planId))),

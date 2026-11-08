@@ -1,6 +1,7 @@
 import type { LinkTarget } from './links.js';
 import { type AppState, type LogItem, type ReviewState, type SharedTab, type WorkspaceTab, newShares } from '../core/store.js';
 import type { TrustLevel } from '../core/settings.js';
+import { notOnPr, notOnPrLabel } from '../core/branch-state.js';
 import { describePr } from '../shared/format.js';
 import { COMPUTER, type ComputerKind, FILE_MANAGER } from '../shared/assistant.js';
 import { formatBytes } from '../shared/format.js';
@@ -227,6 +228,9 @@ export function stateOf(state: AppState, ws: Workspace, frame: number, now = Dat
   if (ws.archived) return { label: 'Archived', color: theme.muted, icon: glyph.ring, tone: 'muted' };
   if (ws.kind === 'chat') return { label: act.lastTs ? `Chat · ${ago(act.lastTs, now)}` : 'New chat', color: theme.muted, icon: '◇', tone: 'muted' };
   const st = ws.status;
+  // Committed here but not on its open PR (BLG-840): Merge on GitHub would leave it out, so it says so first.
+  const gap = ws.kind === 'worktree' ? notOnPr(state.prs[ws.id], ws) : undefined;
+  if (gap) return { label: `${notOnPrLabel(gap)}${st?.changed ? ` · ${st.changed} uncommitted change${st.changed > 1 ? 's' : ''}` : ''}`, color: theme.info, icon: glyph.dot, tone: 'info' };
   // Work in progress, not a problem: quiet, like the branch pill (no warning dot on the row).
   if (st?.changed) return { label: `${st.changed} uncommitted change${st.changed > 1 ? 's' : ''}`, color: theme.muted, icon: glyph.dot, tone: 'muted' };
   if (ws.kind === 'worktree' && state.prs[ws.id]?.state === 'MERGED') return { label: 'Merged on GitHub', color: theme.ok, icon: glyph.dot, tone: 'ok' };

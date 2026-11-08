@@ -1,4 +1,5 @@
 import type { AppState } from '../core/store.js';
+import type { ThreadChildren } from '../shared/threads.js';
 import { worktreeOrigin } from '../workspaces/origin.js';
 import { clearMenu, invitePersonMenu, sharedMenu, wsShareMenu } from './collab-menus.js';
 import { shareFolderMenu, shareWhoMenu } from './share-menus.js';
@@ -38,7 +39,7 @@ export type MenuKind =
   | WorkMenuKind
   | InviteMenuKind
   | { readonly kind: 'person'; readonly index: number }
-  | { readonly kind: 'confirm'; readonly action: 'archive' | 'delete'; readonly id: string }
+  | { readonly kind: 'confirm'; readonly action: 'archive' | 'delete'; readonly id: string; readonly children?: ThreadChildren }
   | { readonly kind: 'project'; readonly id: string }
   | { readonly kind: 'archived'; readonly id: string }
   | { readonly kind: 'agents'; readonly projectId: string }

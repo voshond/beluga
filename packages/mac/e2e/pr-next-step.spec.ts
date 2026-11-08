@@ -6,7 +6,8 @@ import { expect, test, type Page } from './fixtures.js';
 /**
  * The toolbar says what a pull request really needs next (BLG-753): Resolve Conflicts (never a bare
  * "Resolve"), Checks running while they run, Fix Checks with Re-run Failed Checks beside it, and Push
- * when this worktree has commits the PR doesn't (GitHub's checks and conflicts are for an older one).
+ * when this worktree has commits the PR doesn't (GitHub's checks and conflicts are for an older one,
+ * and merging would leave them out: BLG-840).
  * GitHub is the demo's stand-in (e2e/fake-gh.mjs); add-auth's PR is #7.
  */
 
@@ -92,10 +93,21 @@ test('the toolbar names the PR’s real next step: conflicts, running, failed, n
     await lookAgain(page);
     const notPushed = toolbar(page).locator('[data-branch-state="not_pushed"]');
     await expect(notPushed).toBeVisible({ timeout: 20_000 });
-    await expect(branchGroup(page)).toHaveAttribute('aria-label', 'Branch: Not pushed');
-    await expect(mainStep(page)).toHaveText('Push 1 Commit');
+    await expect(branchGroup(page)).toHaveAttribute('aria-label', 'Branch: 1 commit not on PR');
+    await expect(mainStep(page)).toHaveText(/^Push 1 Commit to PR #\d+$/);
     await expect(toolbar(page).locator('[data-branch-step="fix_checks"]')).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath('04-not-pushed.png') });
+    // The sidebar row says it too (BLG-840), and the PR sheet won't merge without it: Push and Merge.
+    await expect(sidebar(page).locator('[data-not-on-pr="1"]')).toHaveAttribute('aria-label', '1 commit not on PR #7');
+    // The pill (first; the step's "Push 1 Commit to PR #7" ends in #7 too).
+    await branchGroup(page).getByRole('button', { name: /#7$/ }).first().click();
+    const sheet = page.getByRole('dialog', { name: /Pull Request/ });
+    await expect(sheet.getByRole('button', { name: 'Push and Merge' })).toHaveAttribute('data-push-first', '1');
+    await expect(sheet).toContainText('1 commit not on it yet');
+    await expect(sheet).toContainText('so merging it as it is would leave it out');
+    await page.screenshot({ path: test.info().outputPath('05-pr-sheet-push-and-merge.png') });
+    await page.keyboard.press('Escape');
+    await expect(sheet).toHaveCount(0);
 
     // Folded (a narrow window), the words still say it.
     await page.setViewportSize({ width: 1040, height: 760 });

@@ -77,6 +77,11 @@
 .sectionHead:hover .sectionChevron {
   opacity: 1;
 }
+.sectionCount {
+  margin-left: 5px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
 .sectionAction {
   opacity: 0;
   transition: opacity var(--dur-fast);
@@ -312,6 +317,18 @@
   width: 22px;
   opacity: 1;
 }
+/* A category row's status gives its room to the tools. */
+.rowStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.row:hover .rowStatus,
+.row:focus-visible .rowStatus,
+.row:has(:focus-visible) .rowStatus,
+.row:has(.hoverTools button[data-state='open']) .rowStatus {
+  display: none;
+}
 /* A status dot in a row's trailing tools: always the last thing, at the right edge. */
 .status {
   display: inline-grid;
@@ -459,6 +476,17 @@
 .agentDisclosureOpen {
   transform: rotate(90deg);
 }
+/* The harness of a chat, at the row's edge: one width, so nothing beside it moves. */
+.harnessMark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  /* One quiet tone in each theme, as the Scratch panel's beluga: never the makers' own colors (BLG-345). */
+  color: var(--text-3);
+  opacity: 0.8;
+}
 .agentCount {
   display: inline-flex;
   align-items: center;
@@ -471,4 +499,19 @@
 .agentCount svg {
   color: var(--claude);
   opacity: 0.7;
+}
+/* Commits its open PR doesn't have (BLG-840): a soft blue chip, "↑3". */
+.notOnPr {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-right: 4px;
+  padding: 0 5px 0 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+  color: var(--info);
+  font-size: 0.78em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 15px;
 }

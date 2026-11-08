@@ -1,6 +1,6 @@
 import type { BoardState } from '../../../../src/core/board/model.js';
 import type { Actor } from '../../../../src/core/board/model.js';
-import { AUTONOMY_INFO, type Autonomy, MAX_PLAN_REPOS, type Plan, type PlanBody, type PlanEvent, type PlanMilestone, type PlanPr, type PlansState, diffBodies, draftRepoPlan, isMultiRepo, milestoneDeps, milestoneRepos, planBranchFor, planRepos, planTitle, prRef, shownBody } from '../../../../src/core/plans/model.js';
+import { AUTONOMY_INFO, type Autonomy, MAX_PLAN_REPOS, type Plan, type PlanBody, type PlanEvent, type PlanMilestone, type PlanPr, type PlansState, diffBodies, draftRepoPlan, isMultiRepo, milestoneDeps, milestoneRepos, planBranchFor, planRepos, planTitle, prRef, reviewState, shownBody } from '../../../../src/core/plans/model.js';
 import { type MilestoneState, type MilestoneView, type NextStep, type PlanView, type ShipRepo, type TaskState, type TaskView, agentNowWords } from '../../../../src/core/plans/progress.js';
 import { pulseWords } from '../../../../src/core/plans/watchdog.js';
 
@@ -302,6 +302,12 @@ export function headline(view: PlanView, nameOf?: (projectId: string) => string)
   // Questions still open (BLG-8): answering them comes before approving.
   const open = plan.draft?.openQuestions?.length ?? 0;
   if (open && view.milestones.length) return { who: 'you', text: `Answer ${open === 1 ? 'the open question' : `${open} open questions`} in the conversation, then approve the plan` };
+  if (!plan.body && view.milestones.length) {
+    // The draft's review before approval (BLG-772).
+    const review = reviewState(plan);
+    if (review === 'reviewing') return { who: 'claude', text: plan.review?.thenApprove ? 'A fresh agent is verifying the plan; it’s approved once nothing needs fixing' : 'A fresh agent is verifying the plan' };
+    if (review === 'findings' && !plan.review?.fixAsked) return { who: 'you', text: `Verifying found ${count(plan.review!.findings.length, 'thing')} to fix in the plan: Fix, or approve anyway` };
+  }
   if (!plan.body) return view.milestones.length ? { who: 'you', text: `Approve the plan: ${count(view.milestones.length, 'milestone')} · ${count(view.total, 'task')} · a draft, not on the board yet` } : { who: 'claude', text: 'Your agent is writing the plan' };
   if (plan.draft) return { who: 'you', text: `Review your agent’s changes: ${changeWords(plan)}` };
   if (next.kind !== 'done' && next.kind !== 'answer' && next.kind !== 'failed') {

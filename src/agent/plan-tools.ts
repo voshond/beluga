@@ -1,7 +1,8 @@
 import { tool, toolSuite } from './tool-kit.js';
 import { z } from 'zod';
 import { DEFAULT_LABELS } from '../core/board/labels.js';
-import type { BodyInput, MilestoneInput, PlanOp, TaskInput } from '../core/plans/edit.js';
+import type { BodyInput, DecisionInput, MilestoneInput, PlanOp, TaskInput } from '../core/plans/edit.js';
+import { FINDING_KINDS, type ReviewFinding } from '../core/plans/model.js';
 import type { PlanTools } from './types.js';
 
 /**
@@ -10,7 +11,7 @@ import type { PlanTools } from './types.js';
  * task, and talk to a task's Claude. Starting and passing go through Beluga's scheduler.
  */
 
-export const PLAN_TOOL_NAMES = ['plan_get', 'plan_write', 'plan_update', 'plan_gate', 'plan_start_task', 'plan_message_task', 'plan_stop_task', 'plan_pause', 'plan_ask', 'plan_handback'].map((n) => `mcp__beluga_plan__${n}`);
+export const PLAN_TOOL_NAMES = ['plan_get', 'plan_write', 'plan_update', 'plan_gate', 'plan_review', 'plan_start_task', 'plan_message_task', 'plan_stop_task', 'plan_pause', 'plan_ask', 'plan_handback'].map((n) => `mcp__beluga_plan__${n}`);
 
 /** A milestone's Claude's tools (BLG-6, BLG-7): only it has them, and it has only them. */
 const WORKER_TOOLS: readonly string[] = ['plan_ask', 'plan_handback'];
@@ -76,13 +77,19 @@ const MILESTONE = z.object({
   tasks: z.array(TASK),
 });
 
-/** One thing settled while planning (BLG-8): the user's answer, or a default you chose without asking. */
+const TERMS = z.array(z.string().min(2).max(60)).max(8);
+
+/** One thing settled (BLG-8): the user's answer, or a default you chose without asking; one that replaces another says so (BLG-772). */
 const DECISION = z.object({
+  id: id.optional(),
   question: z.string().min(1).max(400).describe('What was settled, as a question'),
   answer: z.string().min(1).max(400).describe('What was decided'),
   why: z.string().max(400).optional().describe('One sentence on why (for a default: why it’s the sensible one)'),
   by: z.enum(['user', 'default']).optional().describe('user: they answered it; default (the default): you chose it without asking'),
   tasks: z.array(z.string().max(40)).max(20).optional().describe('Ids of the tasks it bears on: their briefs get it'),
+  terms: TERMS.optional().describe('The few words that mark text following it ("New Window"): once it is superseded, tasks still using them are listed'),
+  retires: TERMS.optional().describe('Words it retires (an old name: "machine"): tasks still using them are listed'),
+  supersedes: z.string().max(40).optional().describe('The id of the decision it replaces (a new answer to the same question replaces the old one anyway)'),
 });
 
 /** A repo in or out of the plan (BLG-29): applied when the user approves it. */
@@ -90,6 +97,25 @@ const REPO_CHANGE = z.object({
   repo: z.string().min(1).max(200).describe('The project’s name (or id): one of the plan’s, or one listed as near it'),
   on: z.boolean().describe('true: the plan covers it; false: drop it (not the primary)'),
   why: z.string().min(1).max(400).describe('One line on what links it to the work (or why it isn’t needed), naming a file when you can'),
+});
+
+const FINDING = z.object({
+  kind: z.enum(FINDING_KINDS as [ReviewFinding['kind'], ...ReviewFinding['kind'][]]),
+  text: z.string().min(1).max(1000).describe('The problem and what to change, naming tasks or milestones'),
+  ids: z.array(z.string().max(40)).max(12).optional().describe('The task or milestone ids it is about'),
+});
+
+/** A tool's decision → the plan's. */
+const decisionInput = (d: z.infer<typeof DECISION>): DecisionInput => ({
+  question: d.question,
+  answer: d.answer,
+  ...(d.id ? { id: d.id } : {}),
+  ...(d.why ? { why: d.why } : {}),
+  ...(d.by ? { by: d.by } : {}),
+  ...(d.tasks ? { tasks: d.tasks } : {}),
+  ...(d.terms ? { terms: d.terms } : {}),
+  ...(d.retires ? { retires: d.retires } : {}),
+  ...(d.supersedes ? { supersedes: d.supersedes } : {}),
 });
 
 type Task = z.infer<typeof TASK>;
@@ -133,6 +159,17 @@ const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('decide'), decision: DECISION }),
   z.object({ op: z.literal('open_question'), question: z.string().min(1).max(400), on: z.boolean().describe('true: still to settle; false: settled or dropped') }),
   z.object({ op: z.literal('block'), id: z.string().max(40), by: z.string().max(40), on: z.boolean() }),
+  z.object({
+    op: z.literal('update_decision'),
+    id: z.string().max(40),
+    question: z.string().max(400).optional(),
+    answer: z.string().max(400).optional(),
+    why: z.string().max(400).optional(),
+    tasks: z.array(z.string().max(40)).max(20).optional(),
+    terms: TERMS.optional(),
+    retires: TERMS.optional(),
+  }),
+  z.object({ op: z.literal('remove_decision'), id: z.string().max(40) }),
   REPO_CHANGE.extend({ op: z.literal('repo') }),
 ]);
 
@@ -150,6 +187,8 @@ export function toOps(ops: ReadonlyArray<z.infer<typeof OP>>): PlanOp[] {
         return { op: 'add_task', milestone: o.milestone, task: taskInput(o.task) as TaskInput, ...(o.after ? { after: o.after } : {}) };
       case 'update_task':
         return { op: 'update_task', id: o.id, patch: taskInput(o.patch) };
+      case 'decide':
+        return { op: 'decide', decision: decisionInput(o.decision) };
       default:
         return o as PlanOp;
     }
@@ -167,23 +206,23 @@ function guarded(fn: () => string | Promise<string>): Promise<{ content: Array<{
 
 export function createPlanToolDefs(plan: PlanTools) {
   const defs = [
-    tool('plan_get', 'The plan: milestones with their pass criteria, tasks with ids, what waits on what, and (once approved) each task’s state: who’s working, in review, done.', {}, () => guarded(() => plan.get())),
+    tool('plan_get', 'The plan: its decisions, milestones with their pass criteria, tasks with ids, what waits on what, warnings about the draft, and (once approved) each task’s state: who’s working, in review, done.', {}, () => guarded(() => plan.get())),
     tool(
       'plan_write',
-      'Write the whole plan (replaces the draft). Milestones in order, each with pass criteria and its tasks; milestones run side by side unless depends_on (or a task’s blocked_by) ties them to an earlier one. Keep ids you used before. Nothing reaches the board until the user approves.',
+      'Write the whole plan (replaces the draft). Milestones in order, each with pass criteria and its tasks; milestones run side by side unless depends_on (or a task’s blocked_by) ties them to an earlier one. Keep ids you used before; two items with one id are refused. Nothing reaches the board until the user approves. The answer lists warnings to fix.',
       {
         title: z.string().min(1).max(200),
         goal: z.string().max(4000),
         milestones: z.array(MILESTONE).min(1),
-        decisions: z.array(DECISION).max(40).optional().describe('What was settled while planning: the user’s answers (by user) and every default you chose without asking (by default)'),
+        decisions: z.array(DECISION).max(60).optional().describe('What was settled: the user’s answers (by user) and every default you chose without asking (by default). Left out, they stay as they were'),
         open_questions: z.array(z.string().min(1).max(400)).max(40).optional().describe('What is still to settle: the plan can’t be approved while one is open'),
         repo_changes: z.array(REPO_CHANGE).max(8).optional().describe('Repos the plan should cover or drop (applied with approval): before milestones name a repo, it must be in the plan'),
       },
-      (a) => guarded(() => plan.write({ title: a.title, goal: a.goal, milestones: a.milestones.map(milestoneInput), ...(a.decisions ? { decisions: a.decisions } : {}), ...(a.open_questions ? { openQuestions: a.open_questions } : {}), ...(a.repo_changes ? { repoEdits: a.repo_changes } : {}) } as BodyInput)),
+      (a) => guarded(() => plan.write({ title: a.title, goal: a.goal, milestones: a.milestones.map(milestoneInput), ...(a.decisions ? { decisions: a.decisions.map(decisionInput) } : {}), ...(a.open_questions ? { openQuestions: a.open_questions } : {}), ...(a.repo_changes ? { repoEdits: a.repo_changes } : {}) } as BodyInput)),
     ),
     tool(
       'plan_update',
-      'Change the plan with ops, applied in order: retitle, add_milestone, update_milestone, remove_milestone, add_task, update_task (patch), remove_task, move_task, block (id waits on by; on false removes it), decide (record a decision: it closes the open question it answers), open_question (on: a question still to settle; off: drop it), repo (on: the plan covers that repo, off: drop it, with why; the user approves it with the plan). On an approved plan the changes are proposed for the user to approve (applied at once on autopilot).',
+      'Change the plan with ops, applied in order: retitle, add_milestone, update_milestone, remove_milestone, add_task, update_task (patch), remove_task, move_task, block (id waits on by; on false removes it), decide (record a decision: it closes the open question it answers, and replaces the one in force for that question; supersedes: the id it replaces), update_decision, remove_decision, open_question (on: a question still to settle; off: drop it), repo (on: the plan covers that repo, off: drop it, with why; the user approves it with the plan). An add whose id is taken is refused: update that item, or remove it first. On an approved plan the changes are proposed for the user to approve (applied at once on autopilot). The answer lists warnings to fix: duplicates, shared files, stale references and decisions.',
       { ops: z.array(OP).min(1).max(40), reason: z.string().max(200).optional().describe('Why, in a few words (shown in the plan’s history)') },
       (a) => guarded(() => plan.update(toOps(a.ops), a.reason)),
     ),
@@ -192,6 +231,12 @@ export function createPlanToolDefs(plan: PlanTools) {
       'Record your check of a milestone whose tasks are finished: pass or fail, with notes saying per criterion what you checked and found.',
       { milestone: z.string().min(1).max(200), verdict: z.enum(['pass', 'fail']), notes: z.string().min(1).max(8000) },
       (a) => guarded(() => plan.gate(a.milestone, a.verdict, a.notes)),
+    ),
+    tool(
+      'plan_review',
+      'Record your review of the draft (you are its reviewer): every real problem you found, or none. The user sees them before approving, and Fix sends them to the plan’s agent.',
+      { findings: z.array(FINDING).max(20) },
+      (a) => guarded(() => (plan.review ? plan.review(a.findings.map((f) => ({ kind: f.kind, text: f.text, ...(f.ids?.length ? { ids: f.ids } : {}) }))) : 'Reviewing isn’t yours here')),
     ),
     tool('plan_start_task', 'Start a ready task now (a worktree with Claude on it). Only when the user asks: Beluga starts ready tasks by itself unless the plan goes step by step.', { task: z.string().min(1).max(40).describe('Its id in the plan, or its board key') }, (a) => guarded(() => plan.start(a.task))),
     tool(
@@ -237,8 +282,10 @@ export function createPlanToolDefs(plan: PlanTools) {
       (a) => guarded(() => (plan.handback ? plan.handback(a.what, a.why) : 'Handing work back isn’t available here: note it with task_note')),
     ),
   ];
-  const shown = plan.only ?? (plan.worker ? WORKER_TOOLS : defs.map((d) => d.name).filter((n) => !WORKER_TOOLS.includes(n)));
-  return defs.filter((d) => shown.includes(d.name));
+  // plan_review is the draft's reviewer's alone; plan_ask and plan_handback a milestone's Claude's.
+  const mine = defs.filter((d) => d.name !== 'plan_review' || plan.review);
+  const shown = plan.only ?? (plan.worker ? WORKER_TOOLS : mine.map((d) => d.name).filter((n) => !WORKER_TOOLS.includes(n)));
+  return mine.filter((d) => shown.includes(d.name));
 }
 
 export function createPlanTools(plan: PlanTools) {

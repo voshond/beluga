@@ -81,7 +81,7 @@ function Row({ r, state, scale, color, measured, now }: { r: WsRow; state: AppSt
   };
   const main = w.kind === 'main';
   return (
-    <ActionsContext items={() => workspaceItems(client.store.getState(), w, actions.run)}>
+    <ActionsContext items={() => workspaceItems(client.store.getState(), w, actions.run, client)}>
       <div role="row" tabIndex={0} aria-label={main ? 'Main folder' : w.name} className={s.row} onClick={open} onKeyDown={onKey}>
         <span role="cell" className={s.nameCell}>
           <span className={s.kind}>

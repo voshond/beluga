@@ -2,11 +2,11 @@ import { type KeyboardEvent, type RefObject, useEffect, useLayoutEffect, useMemo
 import type { Location } from '@beluga/core/store.js';
 import { shareNameOf } from '@beluga/shared/share-names.js';
 import { activeAssistantChannel, assistantChannel } from '@beluga/shared/assistant.js';
-import { SHOWN_SCRATCH_DIRS } from '@beluga/shared/scratch-dir.js';
+import { SENT_DIR, SHOWN_SCRATCH_DIRS, isSentPath } from '@beluga/shared/scratch-dir.js';
 import { formatBytes } from '@beluga/shared/format.js';
 import { joinPath } from '@beluga/shared/os-path.js';
 import { Icon, type IconName } from '../../components/Icon.js';
-import { Empty, IconButton, cx } from '../../components/ui.js';
+import { Empty, IconButton, Segmented, cx } from '../../components/ui.js';
 import { ActionsDropdown } from '../../components/SpecMenu.js';
 import { useApi, useApp, useBeluga } from '../../lib/beluga.js';
 import { openWithDefaultApp, revealInFinder } from '../../lib/files.js';
@@ -18,7 +18,7 @@ import { ChangedFileView } from '../../views/ChangedFile.js';
 import { signalOf } from '../attention-model.js';
 import { ResizeHandle } from './ResizeHandle.js';
 import { NextFileRow, ScratchEmpty, ScratchSkeleton } from './ScratchSkeleton.js';
-import { type ScratchEntry, type ScratchKind, type ScratchSort, type ScratchTotal, atEnd, fileKind, followed, foldersWithFiles, isFresh, isViewable, scratchBytes, scratchCount, scratchPlace, scratchState, sortScratch, timeAgo } from './scratch-model.js';
+import { type ScratchEntry, type ScratchKind, type ScratchSort, type ScratchTotal, type ScratchView, atEnd, fileKind, followed, foldersWithFiles, isFresh, isViewable, scratchBytes, scratchCount, scratchPlace, scratchState, sortScratch, splitSent, timeAgo, viewTotal } from './scratch-model.js';
 import s from './panel.module.css';
 import k from './scratch.module.css';
 import { everyWhileShown } from '../../lib/window-active.js';
@@ -34,6 +34,9 @@ import { revealLabel } from '../../lib/os-words.js';
  *
  * Whose folder: a worktree's (yours, or a friend's over the link, BLG-259), or Your Mac's (BLG-704),
  * which all its chats share and which tidies itself (core/assistant).
+ *
+ * What you sent Claude with your messages is copied into `sent/` (core/sent-files.ts): listed apart,
+ * behind "Sent by You", never mixed in with what the agent saves (and never the new-file dot's).
  */
 export type ScratchOf = { readonly wsId: string; readonly owner?: string } | { readonly assistant: true };
 
@@ -118,7 +121,7 @@ export function useScratchNewest(of: ScratchOf | undefined): number | undefined 
     const look = (): void => {
       if (document.visibilityState !== 'visible') return;
       lookIn(api, of).then(
-        (res) => alive && setNewest(Math.max(0, ...(res?.files ?? []).map((f) => f.mtime))),
+        (res) => alive && setNewest(Math.max(0, ...(res?.files ?? []).filter((f) => !isSentPath(f.path)).map((f) => f.mtime))),
         () => undefined,
       );
     };
@@ -250,10 +253,12 @@ export function ScratchTab({ of }: { of: ScratchOf }) {
   const [closed, setClosed] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const files = list?.files ?? [];
+  const [wanted, setWanted] = useState<ScratchView>('claude');
+  const split = useMemo(() => splitSent(list?.files ?? [], wanted, isSentPath), [list, wanted]);
+  const files = split.shown;
   const sort: ScratchSort = prefs.scratchSort === 'viewable' ? 'viewable' : 'newest';
   // The list in the order picked (the preview still follows the newest file until you pick one).
-  const rows = useMemo(() => sortScratch(files, sort), [list, sort]);
+  const rows = useMemo(() => sortScratch(files, sort), [files, sort]);
   // Nothing picked: the newest file, as each lands. Picked: that one, while it's there.
   const shown = closed ? undefined : followed(files, !picked, picked);
   const file = files.find((f) => f.path === shown);
@@ -289,16 +294,35 @@ export function ScratchTab({ of }: { of: ScratchOf }) {
   if (state === 'loading') return <ScratchSkeleton />;
   if (state === 'missing' || !list) return <Empty icon="alert" title="No folder to look in" detail="This workspace’s folder is missing." />;
   if (state === 'empty') return <ScratchEmpty working={working} off={!owner && !on} dir={list.dir} {...(owner ? {} : { onReveal: () => void revealInFinder(client, list.dir) })} />;
-  const split = clampShare(prefs.panelSplit, SPLIT_MIN, SPLIT_MAX);
-  const bytes = scratchBytes(files, list.total);
+  const share = clampShare(prefs.panelSplit, SPLIT_MIN, SPLIT_MAX);
+  const total = viewTotal(split, list.total);
+  const bytes = scratchBytes(files, total);
+  const sentView = split.view === 'sent';
+  const pickView = (view: ScratchView): void => {
+    setWanted(view);
+    setPicked(undefined);
+  };
   return (
     <div ref={box} className={s.stack}>
-      <div className={s.top} style={file ? { flex: `0 0 ${Math.round(split * 100)}%` } : undefined}>
+      <div className={s.top} style={file ? { flex: `0 0 ${Math.round(share * 100)}%` } : undefined}>
+        {split.sent.length ? (
+          <div className={k.views}>
+            <Segmented
+              label="Show"
+              value={split.view}
+              onChange={pickView}
+              options={[
+                { value: 'claude', label: 'From Your Agent', icon: 'bot', hint: 'What your agent saved while it worked', ...(split.mine.length ? { count: split.mine.length } : {}) },
+                { value: 'sent', label: 'Sent by You', icon: 'send', hint: 'Copies of the images and files you sent your agent', count: split.sent.length },
+              ]}
+            />
+          </div>
+        ) : null}
         <div className={s.summary}>
           <div className={s.summaryRow}>
-            <span className={s.summaryTitle}>{scratchCount(files.length, list.total)}</span>
+            <span className={s.summaryTitle}>{scratchCount(files.length, total)}</span>
             {bytes !== undefined ? <span className={s.dim}>{formatBytes(bytes)}</span> : null}
-            <span className={s.dim}>{foldersWithFiles(files, SHOWN_SCRATCH_DIRS).join(' · ')}</span>
+            <span className={s.dim}>{sentView ? SENT_DIR : foldersWithFiles(files, SHOWN_SCRATCH_DIRS).join(' · ')}</span>
             <span className={s.flex} />
             <ActionsDropdown
               items={[
@@ -308,13 +332,13 @@ export function ScratchTab({ of }: { of: ScratchOf }) {
             >
               <IconButton icon={sort === 'viewable' ? 'eye' : 'clock'} label={sort === 'viewable' ? 'Sorted: viewable first' : 'Sorted: newest first'} />
             </ActionsDropdown>
-            {owner ? null : <IconButton icon="folder" label={revealLabel('Folder')} onClick={() => void revealInFinder(client, list.dir)} />}
+            {owner ? null : <IconButton icon="folder" label={revealLabel('Folder')} onClick={() => void revealInFinder(client, sentView ? joinPath(list.root, SENT_DIR) : list.dir)} />}
           </div>
         </div>
-        {working ? <NextFileRow /> : null}
-        <div ref={listRef} className={s.list} role="listbox" aria-label="Scratch files" tabIndex={0} onKeyDown={onKey}>
+        {working && !sentView ? <NextFileRow /> : null}
+        <div ref={listRef} className={s.list} role="listbox" aria-label={sentView ? 'Files you sent' : 'Scratch files'} tabIndex={0} onKeyDown={onKey}>
           {rows.map((f) => {
-            const { root: folder, dir, name } = scratchPlace(f.path, SHOWN_SCRATCH_DIRS);
+            const { root: folder, dir, name } = scratchPlace(f.path, sentView ? [SENT_DIR] : SHOWN_SCRATCH_DIRS);
             const sel = f.path === shown;
             const fresh = isFresh(f.mtime, Math.max(now, Date.now()));
             return (
@@ -332,7 +356,7 @@ export function ScratchTab({ of }: { of: ScratchOf }) {
                   {name}
                   {dir ? <span className={s.rowDir}>{dir}</span> : null}
                 </span>
-                {folder !== SHOWN_SCRATCH_DIRS[0] ? <span className={k.folder}>{folder}</span> : null}
+                {!sentView && folder !== SHOWN_SCRATCH_DIRS[0] ? <span className={k.folder}>{folder}</span> : null}
                 {fresh ? <span className={s.freshDot} aria-label="new" /> : null}
                 <span className={s.size}>{f.size < 1024 ? `${f.size} B` : formatBytes(f.size)}</span>
                 <span className={s.ago}>{timeAgo(f.mtime, Math.max(now, Date.now()))}</span>
@@ -351,7 +375,7 @@ export function ScratchTab({ of }: { of: ScratchOf }) {
               if (r) setPrefs({ panelSplit: clampShare((y - r.top) / r.height, SPLIT_MIN, SPLIT_MAX) });
             }}
             onReset={() => setPrefs({ panelSplit: SPLIT_DEFAULT })}
-            onStep={(dir) => setPrefs({ panelSplit: clampShare(split - dir * 0.04, SPLIT_MIN, SPLIT_MAX) })}
+            onStep={(dir) => setPrefs({ panelSplit: clampShare(share - dir * 0.04, SPLIT_MIN, SPLIT_MAX) })}
           />
           <Preview of={of} file={file} list={list} onClose={() => setClosed(true)} />
         </>

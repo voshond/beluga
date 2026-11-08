@@ -140,3 +140,25 @@ export function cleanWords(raw: string): string {
 export function spoken(before: string, words: string): string {
   return before && !/\s$/.test(before) ? ` ${words}` : words;
 }
+
+/* ---------- The microphone (Settings › Voice › Microphone) ---------- */
+
+export interface Microphone {
+  readonly id: string;
+  readonly label: string;
+}
+
+/**
+ * The microphones on this computer, from enumerateDevices: each once ('default' and 'communications'
+ * are macOS's own pointing at one of them), and a name for the ones WebKit doesn't name yet.
+ */
+export function microphonesOf(all: readonly { readonly kind: string; readonly deviceId: string; readonly label: string }[]): Microphone[] {
+  return all
+    .filter((d) => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications')
+    .map((d, i) => ({ id: d.deviceId, label: d.label || `Microphone ${i + 1}` }));
+}
+
+/** What dictation asks the microphone for: the one picked ('' : macOS's own), or macOS's own when it's unplugged. */
+export function dictationAudio(mic: string): MediaTrackConstraints {
+  return { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true, ...(mic ? { deviceId: { ideal: mic } } : {}) };
+}

@@ -70,6 +70,10 @@ export interface AutoContinueDeps {
   readonly ask: (prompt: string, channel: string) => string | undefined;
   readonly now?: () => number;
   readonly warn?: (text: string) => void;
+  /** A chat not to send on (a child thread that a stop reached, core/threads). */
+  readonly skip?: (channel: string) => boolean;
+  /** It sent on `channel` under `requestId` (a child thread owes that turn to its parent). */
+  readonly sent?: (channel: string, requestId: string) => void;
 }
 
 /**
@@ -116,13 +120,15 @@ export class AutoContinue {
     for (const stop of limitStops(state.log, state.selfId)) {
       if (this.sent.has(stop.requestId) || now < stop.at) continue;
       if (autoContinueFor(state.prefs, stop.channel, stop.at, now).kind !== 'scheduled') continue;
-      if (!stillThere(state, stop.channel) || sentinelRunChat(state, stop.channel)) continue;
+      if (!stillThere(state, stop.channel) || sentinelRunChat(state, stop.channel) || this.deps.skip?.(stop.channel)) continue;
       const plan = planOfChannel(state, stop.channel)?.plan;
       if (plan?.status === 'active') continue;
       const last = this.sentAt.get(stop.channel);
       if (last !== undefined && (!stop.known || stop.at <= last)) continue;
       this.sent.add(stop.requestId);
-      if (this.deps.ask(CONTINUE_PROMPT, stop.channel) === undefined) continue;
+      const requestId = this.deps.ask(CONTINUE_PROMPT, stop.channel);
+      if (requestId === undefined) continue;
+      this.deps.sent?.(stop.channel, requestId);
       this.sentAt.set(stop.channel, now);
       this.deps.store.dispatch({ type: 'system', channel: stop.channel, text: `Your usage limit reset: Beluga told your agent to continue at ${hhmm(now)}.`, level: 'info' });
     }

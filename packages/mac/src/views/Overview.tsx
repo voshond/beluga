@@ -8,6 +8,7 @@ import { useActions } from '../lib/actions.js';
 import { toast, useApp, useBeluga } from '../lib/beluga.js';
 import { sameDeep } from '../lib/stable.js';
 import { ConversationPeek, DeleteArchivedAlert } from './overview/ConversationPeek.js';
+import type { ThreadChildren } from '@beluga/shared/threads.js';
 import { FilterBar } from './overview/FilterBar.js';
 import { ActiveRow, type ArchivedActions, ArchivedRow } from './overview/OverviewRows.js';
 import { type OverviewGroup, type OverviewItem, emptyText, filterCounts, groupItems, inFilter, narrow, overviewItems, rowOrder, stepRow } from './overview/overview-model.js';
@@ -88,10 +89,10 @@ export function OverviewView() {
     remove: (item) => setDeleting(item.ws.id),
   };
   const open = (item: OverviewItem): void => (item.archived ? act.read(item) : item.plan ? actions.run({ type: 'view', view: { kind: 'plan', id: item.plan.plan.id } }) : actions.run({ type: 'open_ws', id: item.ws.id }));
-  const remove = (item: OverviewItem): void => {
+  const remove = (item: OverviewItem, children?: ThreadChildren): void => {
     setDeleting(undefined);
     setPeek(undefined);
-    api.workspaces.remove(item.ws.id).catch((err: unknown) => toast(client, `Couldn’t delete ${item.ws.name}: ${errorText(err)}`, 'error'));
+    (children ? api.workspaces.remove(item.ws.id, { children }) : api.workspaces.remove(item.ws.id)).catch((err: unknown) => toast(client, `Couldn’t delete ${item.ws.name}: ${errorText(err)}`, 'error'));
   };
 
   const onListKey = (e: KeyboardEvent): void => {
@@ -146,7 +147,7 @@ export function OverviewView() {
         )}
       </div>
       {peekItem ? <ConversationPeek item={peekItem} onClose={() => setPeek(undefined)} onRestore={() => act.restore(peekItem)} onDelete={() => act.remove(peekItem)} /> : null}
-      {deleteItem ? <DeleteArchivedAlert item={deleteItem} onCancel={() => setDeleting(undefined)} onDelete={() => remove(deleteItem)} /> : null}
+      {deleteItem ? <DeleteArchivedAlert item={deleteItem} onCancel={() => setDeleting(undefined)} onDelete={(children) => remove(deleteItem, children)} /> : null}
     </div>
   );
 }

@@ -37,6 +37,8 @@ const PATHS = {
   alert: 'M8 2.5l6 10.5H2z M8 6.5v3 M8 11.3v.01',
   play: 'M5 3.5l7 4.5-7 4.5z',
   stop: 'M4.5 4.5h7v7h-7z',
+  /** Experimental features: a flask. */
+  flask: 'M6 2.5h4 M6.75 2.5v4.2L3.2 12.4a1 1 0 0 0 .85 1.6h7.9a1 1 0 0 0 .85-1.6L9.25 6.7V2.5 M4.6 10.2h6.8',
   archive: 'M2.5 3.5h11v3h-11z M3.5 6.5v6h9v-6 M6.5 9h3',
   share: 'M8 2.5v8 M5 5.5l3-3 3 3 M3.5 8.5v4.5h9V8.5',
   plug: 'M6 2v3 M10 2v3 M4.5 5h7v2.2a3.5 3.5 0 0 1-7 0z M8 10.7V14',

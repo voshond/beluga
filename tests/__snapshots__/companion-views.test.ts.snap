@@ -255,6 +255,17 @@ here",
           {
             "args": [
               "pl_auth",
+              {
+                "thenApprove": true,
+              },
+            ],
+            "label": "Verify, then approve",
+            "method": "plans.verify",
+            "tone": "plain",
+          },
+          {
+            "args": [
+              "pl_auth",
             ],
             "label": "Discard",
             "method": "plans.discard",
@@ -1077,6 +1088,17 @@ Then protect \`/api/payments\`.",
           {
             "args": [
               "pl_auth",
+              {
+                "thenApprove": true,
+              },
+            ],
+            "label": "Verify, then approve",
+            "method": "plans.verify",
+            "tone": "plain",
+          },
+          {
+            "args": [
+              "pl_auth",
             ],
             "label": "Discard",
             "method": "plans.discard",
@@ -1473,6 +1495,17 @@ Pull request #53",
             "label": "Approve",
             "method": "plans.approve",
             "tone": "main",
+          },
+          {
+            "args": [
+              "pl_auth",
+              {
+                "thenApprove": true,
+              },
+            ],
+            "label": "Verify, then approve",
+            "method": "plans.verify",
+            "tone": "plain",
           },
           {
             "args": [

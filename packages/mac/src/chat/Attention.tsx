@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PendingQuestion } from '@beluga/core/collab-store.js';
 import { channelOf } from '@beluga/core/store.js';
 import { currentQuestion } from '@beluga/ui/collab-actions.js';
@@ -6,9 +6,9 @@ import { isDecisionQid } from '@beluga/core/plans/decisions.js';
 import { TRUST_INFO } from '@beluga/core/trust.js';
 import { defaultAgentOf } from '@beluga/protocol.js';
 import { Icon } from '../components/Icon.js';
-import { Button, Dot, Tip } from '../components/ui.js';
+import { Button, Dot, Tip, cx } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
-import { useApi, useApp, useBeluga } from '../lib/beluga.js';
+import { useApi, useApp, useBeluga, useUi } from '../lib/beluga.js';
 import { agentName } from '../lib/agent-words.js';
 import { brandText } from '../lib/brand.js';
 import { sameDeep, sameFields } from '../lib/stable.js';
@@ -138,18 +138,24 @@ function Question({ channel }: { channel?: string }) {
     const peer = q ? st.peers.find((p) => p.peerId === q.owner) : undefined;
     return { q, owner: peer?.name, agent: agentName(peer ? defaultAgentOf(peer) : defaultAgentOf(st.self)), selfId: st.selfId };
   }, sameFields);
+  // Read in full: the card grows up over the chat, the plan from its first line (no sheet on top of it).
+  const full = useUi((u) => Boolean(q && u.planFull === q.qid));
+  const planRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (planRef.current) planRef.current.scrollTop = 0;
+  }, [full, q?.qid]);
   if (!q) return null;
   if (q.question.kind === 'plan') {
     return (
-      <div className={s.card}>
+      <div className={cx(s.card, full && s.cardFull)}>
         <div className={s.head}>
           <Icon name="wand" size={13} className={s.claude} />
           <span className={s.title}>{owner && q.owner !== selfId ? `${owner}'s ${agent}` : agent} has a plan</span>
-          <Button size="small" variant="quiet" onClick={() => ui.patch({ planFull: q.qid })}>
-            Read in full
+          <Button size="small" variant="quiet" icon={full ? 'chevronDown' : 'chevronUp'} aria-expanded={full} onClick={() => ui.patch({ planFull: full ? undefined : q.qid })}>
+            {full ? 'Show less' : 'Read in full'}
           </Button>
         </div>
-        <div className={s.plan}>
+        <div ref={planRef} className={cx(s.plan, full && s.planFull, 'selectable')} role="region" aria-label="The plan">
           <Markdown text={q.question.plan} />
         </div>
         <div className={s.actions}>

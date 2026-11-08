@@ -42,6 +42,8 @@ import { PersonButton } from '../network/PersonProfile.js';
 import { KnockCard } from '../team/Team.js';
 import { useChatReactions } from './ChatReactions.js';
 import r from '../network/reactions.module.css';
+import { threadSender } from '../threads/threads-model.js';
+import l from '../threads/threads.module.css';
 import s from './chat.module.css';
 import { shortcutKeys } from '../lib/shortcuts.js';
 import { revealTerminal } from '../lib/panel.js';
@@ -189,6 +191,8 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
   const [editing, setEditing] = useState(false);
   // Emoji reactions (BLG-702): the button a hover shows, and the chips under the message.
   const reactions = useChatReactions(item, own);
+  // A task or a message from the agent that started this thread: its words, not yours and not this chat's agent's.
+  const sender = useApp((st) => threadSender(st, item));
   // Your own words: a tinted bubble on the right, no name or picture (it's plainly you).
   if (own)
     return (
@@ -262,14 +266,20 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
     <ActionsContext items={() => messageItems({ ...menu, text, images, openImage: (img) => openLightbox(images, images.indexOf(img)) })}>
       <div ref={row} className={cx(s.message, r.reactable, continued && s.continued, steer && s.unread)} data-steer={steer ? 'waiting' : undefined} data-chat={item.id}>
         {reactions.button}
-        <div className={s.gutter}>{continued ? null : <Avatar name={item.name} id={item.from} claude={item.byAgent} agent={item.agent} size={26} />}</div>
+        <div className={s.gutter}>{continued ? null : sender ? <Icon name="up" size={15} /> : <Avatar name={item.name} id={item.from} claude={item.byAgent} agent={item.agent} size={26} />}</div>
         <div className={s.body}>
           {continued ? null : (
             <div className={s.meta}>
-              <span className={cx(s.author, item.byAgent && s.claudeName)} style={item.byAgent && claudeColor(item.from) ? { color: claudeColor(item.from) } : undefined}>
-                {item.name}
-              </span>
-              {item.byAgent ? <AgentBadge agent={item.agent} /> : null}
+              {sender ? (
+                <span className={l.sentBy} data-sent-by="">{`Sent by ${sender}’s agent`}</span>
+              ) : (
+                <>
+                  <span className={cx(s.author, item.byAgent && s.claudeName)} style={item.byAgent && claudeColor(item.from) ? { color: claudeColor(item.from) } : undefined}>
+                    {item.name}
+                  </span>
+                  {item.byAgent ? <AgentBadge agent={item.agent} /> : null}
+                </>
+              )}
               {prefs.timestamps ? <span className={s.time}>{time(item.ts)}</span> : null}
             </div>
           )}

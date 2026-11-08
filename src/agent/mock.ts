@@ -1,4 +1,4 @@
-import type { AgentBackend, AgentRunInput, FollowUp, RoomBridge } from './types.js';
+import type { AgentBackend, AgentRunInput, FollowUp, RoomBridge, ThreadTools } from './types.js';
 import type { McpServerRow } from '../shared/mcp.js';
 import { demoAnswerFromPrompt } from '../core/chat/demo-answers.js';
 import { cleanPlanTitle, slugify } from './namer.js';
@@ -126,6 +126,25 @@ const SCRIPTS: readonly Script[] = [
       'src/auth.ts:1-3',
       'highlight: 2',
       'note: requireUser throws without a session',
+      '```',
+    ].join('\n'),
+  },
+  {
+    // Two components in one file: the preview's picker and All Components.
+    match: /\bbadges?\b/i,
+    steps: ['Read src/components/Badges.tsx'],
+    answer: ['Badges.tsx has two small pieces, a Badge and a Stat:', '', '```beluga-preview', 'src/components/Badges.tsx', '```'].join('\n'),
+  },
+  {
+    // A component drawn live in the answer (Settings › Experimental › Live previews).
+    match: /\bpreview\b|show (me )?the hero/i,
+    steps: ['Read src/components/Hero.tsx', 'Edit src/components/Hero.tsx'],
+    answer: [
+      'The new hero takes a tone, the faces of people already in, and weekly sign-ups as bars. Here it is, live:',
+      '',
+      '```beluga-preview',
+      'src/components/Hero.tsx',
+      'props: {"title": "Build together", "subtitle": "You, your friends, and everyone’s Claude.", "cta": "Start free"}',
       '```',
     ].join('\n'),
   },
@@ -265,6 +284,30 @@ async function mockPlan(input: AgentRunInput, pace: number): Promise<string> {
 const ASKS_FIRST = /\bask me\b|\bclarify\b/i;
 
 async function mockPlanning(input: AgentRunInput, plan: NonNullable<AgentRunInput['planTools']>, pace: number): Promise<string> {
+  // Verifying a draft (BLG-772): it reads the plan and finds one thing to fix (an empty plan: nothing).
+  if (plan.review && /Review the draft|changed since your last review/.test(input.prompt)) {
+    input.onEvent('tool', 'plan_get');
+    const shown = plan.get();
+    await sleep(900 * pace, input.signal);
+    const ids = [...shown.matchAll(/- \[([\w-]+)\]/g)].map((m) => m[1]!);
+    // Each check in turn, named as it starts (what the plan's page shows while it works).
+    for (const line of [
+      `Contradictions: reading every task against the plan’s goal and its decisions.`,
+      `Duplicates: comparing the ${ids.length} tasks’ titles and goals, across milestones.`,
+      'Stale: looking for text written for an idea the plan dropped.',
+      'Order: checking what each task builds on, and which milestones run side by side.',
+    ]) {
+      input.onEvent('text', line);
+      await sleep(1100 * pace, input.signal);
+    }
+    input.onEvent('tool', 'plan_review');
+    if (ids.length < 2 || /Rate limits/i.test(shown) === false) {
+      plan.review([]);
+      return 'The plan holds together: nothing to fix.';
+    }
+    plan.review([{ kind: 'order', text: `“Rate limits on the export endpoint” changes the export route that [${ids[0]}] builds, in a milestone that runs beside it: make it wait on [${ids[0]}], or move it into the same milestone.`, ids: [ids[0]!] }]);
+    return 'One thing to fix before it’s approved.';
+  }
   const check = /milestone “([^”]+)” is finished/i.exec(input.prompt) ?? /Every task of milestone “([^”]+)”/i.exec(input.prompt);
   if (check) {
     for (const step of ['task_get', 'Bash git diff main...HEAD --stat', 'Bash npm test']) {
@@ -795,6 +838,19 @@ export function mockBtw(question: string): string {
   return `Short answer: yes. For “${q.slice(0, 80)}”, what I’ve done so far keeps the change inside \`src/core\`, and the tests I ran passed. I haven’t touched the phone app yet, so nothing there depends on it.`;
 }
 
+/** The demo's agent starting child threads through the real tools: `title=runtime:task`, split by semicolons. */
+async function mockStartThreads(input: AgentRunInput, tools: ThreadTools, list: string, pace: number): Promise<string> {
+  const answers: string[] = [];
+  for (const item of list.split(';')) {
+    const m = /^\s*(.+?)=(\w+):(.+?)\s*$/.exec(item);
+    if (!m) continue;
+    await sleep(200 * pace, input.signal);
+    input.onEvent('tool', 'thread_start');
+    answers.push(await tools.start({ title: m[1]!, agent: { runtime: m[2]! }, task: m[3]! }));
+  }
+  return answers.join('\n');
+}
+
 export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
   const context = new MockContext();
   let mcp = DEMO_MCP;
@@ -877,8 +933,8 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
     if (/^\/compact/.test(input.prompt.trim())) return context.compact(input, (ms) => sleep(ms * pace, input.signal));
     // Claude Code's sign-in ran out mid-run (BLG-589): the failed card offers Sign In's choices.
     if (/^sign-in expired$/i.test(input.prompt.trim())) throw new RunFailedError(classifyRun({ result: 'Failed to authenticate: Auth session expired and could not be refreshed', apiError: 'authentication_failed' }));
-    // Your plan's usage limit (BLG-757): the card says when Beluga continues it, two hours from now.
-    if (/^usage limit$/i.test(input.prompt.trim())) throw new RunFailedError({ kind: 'usage_limit', resetsAt: Date.now() + 2 * 60 * 60_000, detail: 'You’ve hit your limit' });
+    // Your plan's usage limit (BLG-757): the card says when Beluga continues it, two hours from now. Also a child thread's task (its last line).
+    if (/(^|\n)usage limit$/i.test(input.prompt.trim())) throw new RunFailedError({ kind: 'usage_limit', resetsAt: Date.now() + 2 * 60 * 60_000, detail: 'You’ve hit your limit' });
     // Updating main (the one thing a main-folder run may change): what real Claude would report.
     if (input.place?.syncMain) return mockSyncMain(input, input.place.syncMain, pace);
     // A sentinel's run (core/sentinel): its brief, before the main folder's "move it to a worktree".
@@ -899,6 +955,11 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
       await input.continueInWorktree(input.prompt.trim());
       return 'Moving this to a new worktree; I’ll continue there.';
     }
+    // The demo's agent as a parent: "start threads: Login tests=codex:finish; Docs=claude:keep working".
+    const kids = /^start threads: (.+)$/im.exec(input.prompt);
+    if (kids && input.threadTools) return mockStartThreads(input, input.threadTools, kids[1]!, pace);
+    // A child told to keep working (a run with thread tools): it works until someone stops it.
+    if (input.threadTools && /\bkeep working$/i.test(input.prompt.trim())) await sleep(3_600_000, input.signal);
     // Plan mode, and questions back to you, work in the demo too.
     if (input.plan) return mockPlan(input, pace);
     // A friend's Claude answered after this conversation's turn ended: carry on with it.

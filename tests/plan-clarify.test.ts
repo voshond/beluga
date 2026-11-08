@@ -90,7 +90,7 @@ describe('decisions and open questions are part of the plan (BLG-8)', () => {
     const body = normalizeBody(BODY);
     const answered = applyOps(body, [{ op: 'decide', decision: { question: 'Do refunds send a receipt too?', answer: 'No', by: 'user' } }]);
     expect(answered.openQuestions).toBeUndefined();
-    expect(answered.decisions?.at(-1)).toEqual({ question: 'Do refunds send a receipt too?', answer: 'No', by: 'user' });
+    expect(answered.decisions?.at(-1)).toEqual({ id: 'do-refunds-send-a-receipt-too', question: 'Do refunds send a receipt too?', answer: 'No', by: 'user' });
     const reopened = applyOps(answered, [{ op: 'open_question', question: 'Is tax in scope?', on: true }]);
     expect(reopened.openQuestions).toEqual(['Is tax in scope?']);
     expect(applyOps(reopened, [{ op: 'open_question', question: 'is tax in scope?', on: false }]).openQuestions).toBeUndefined();
@@ -159,7 +159,7 @@ describe('the agents hear it (BLG-8)', () => {
     t.work.approve(t.plan.id, undefined, { anyway: true });
     await tick(10);
     const view = t.work.pilot.view(t.plans.need(t.plan.id));
-    expect(describePlan(view)).toContain('- Which payment provider? → Stripe (user) [tasks retries]');
+    expect(describePlan(view)).toContain('- [which-payment-provider] Which payment provider? → Stripe (the user · tasks: retries)');
     const m = view.milestones[0]!;
     const brief = milestonePrompt(view, m, m.tasks);
     expect(brief).toContain('Decided while planning (hold to these;');

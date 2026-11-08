@@ -1,6 +1,6 @@
 import { expect, test, type Page } from './fixtures.js';
 
-/** Remind Me Later on a worktree, from its right-click menu (BLG-748): folded under Later until then, or Show Again Now. */
+/** Remind Me Later on a worktree with the sidebar categories off, from its right-click menu (BLG-748, BLG-770): folded under Later until then, or Show Again Now. */
 
 const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' });
 
@@ -19,9 +19,10 @@ test('put a worktree off for an hour, then show it again', async ({ page }) => {
   await expect(page.getByText('What do you want to do in bob-api?')).toBeVisible();
   await row.click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Remind Me Later' }).hover();
-  const hour = page.getByRole('menuitem', { name: 'In 1 Hour' });
+  const hour = page.getByRole('menuitem', { name: /^In 1 Hour/ });
   await expect(hour).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: 'Next Week' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /^Next Week/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /^Custom/ })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('remind-menu.png') });
   await hour.click();
   // Out of the way: folded under Later at the bottom of the project.
@@ -33,8 +34,11 @@ test('put a worktree off for an hour, then show it again', async ({ page }) => {
   // Unfolded: a quiet clock, and the tooltip says when it reminds you.
   await later.click();
   await expect(row.locator('[data-signal="later"]')).toBeVisible();
-  await expect(row).toHaveAttribute('title', /Reminds you at \d\d:\d\d/);
+  await expect(row).toHaveAttribute('title', /Reminds you (tomorrow )?at \d\d:\d\d/);
   await page.screenshot({ path: test.info().outputPath('later-open.png') });
+  // In it, the line above the message box says when.
+  await row.click();
+  await expect(page.getByRole('status', { name: 'Chat category' })).toContainText(/Reminds you (tomorrow )?at \d\d:\d\d/);
   await row.click({ button: 'right' });
   await page.getByRole('menuitem', { name: /Show Again Now/ }).click();
   // Back in its place.

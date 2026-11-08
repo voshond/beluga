@@ -1,9 +1,9 @@
 import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '../components/Icon.js';
 import { cx } from '../components/ui.js';
-import type { SettingsPane } from '../lib/beluga.js';
+import { type SettingsPane, useApp } from '../lib/beluga.js';
 import { type PaneResults, SETTINGS_FIND_EVENT, type SettingHit, flatHits, hitAnchors, searchSettings } from '../lib/settings-search.js';
-import { PANES, SETTINGS } from './settings-index.js';
+import { PANES, SETTINGS, THREAD_LIMITS_GROUP } from './settings-index.js';
 import s from './settings.module.css';
 
 type Pane = (typeof PANES)[number];
@@ -43,7 +43,9 @@ export function useSettingsSearch(panes: readonly Pane[], pane: SettingsPane, op
   const [browsing, setBrowsing] = useState(false);
   const [active, setActive] = useState(0);
   const [jump, setJump] = useState<{ hit: Hit; at: number }>();
-  const results = useMemo(() => searchSettings(query, SETTINGS, panes), [query, panes]);
+  // Thread limits show with agent threads on, in the pane and here.
+  const threadsOn = useApp((st) => st.prefs.agentThreads ?? false);
+  const results = useMemo(() => searchSettings(query, threadsOn ? SETTINGS : SETTINGS.filter((e) => e.group !== THREAD_LIMITS_GROUP), panes), [query, panes, threadsOn]);
   const hits = useMemo(() => flatHits(results), [results]);
   const matched = useMemo(() => new Set(results.map((r) => r.pane.id)), [results]);
 

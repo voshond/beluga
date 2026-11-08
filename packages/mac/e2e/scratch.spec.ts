@@ -231,3 +231,46 @@ test('Scratch beside Your Mac: its folder, live, with how much it holds, and a p
   await expect(panel(page).getByRole('region', { name: 'desktop.png' }).locator('img')).toBeVisible();
   await page.screenshot({ path: '../../.beluga/scratch/01-your-mac-scratch.png' });
 });
+
+test('Scratch: what you sent the agent is listed apart, behind Sent by You (BLG-771)', async ({ page }) => {
+  await page.goto('/');
+  await expect(sidebar(page).getByRole('button', { name: 'bob-api' }).first()).toBeVisible();
+  const row = sidebar(page).getByRole('button', { name: 'webhook-retries', exact: true });
+  if (!(await row.isVisible())) await sidebar(page).getByRole('button', { name: 'bob-api' }).first().click({ position: { x: 60, y: 10 } });
+  await row.click();
+  await page.keyboard.press('Meta+Alt+6');
+  test.skip(!retriesDir, 'needs the first test’s folder (run the whole file)');
+  const list = panel(page).getByRole('listbox', { name: 'Scratch files' });
+  await expect(list.getByRole('option').first()).toBeVisible();
+  // No switch until you've sent something.
+  await expect(panel(page).getByRole('tablist', { name: 'Show' })).toHaveCount(0);
+
+  // You sent a mockup and a spec with a message: Beluga copied them into sent/ (core/sent-files.ts).
+  const sent = path.join(retriesDir!, 'sent');
+  mkdirSync(sent, { recursive: true });
+  const t0 = Date.now() / 1000 + 120;
+  writeFileSync(path.join(sent, 'checkout-mockup.png'), await page.screenshot({ clip: { x: 0, y: 0, width: 720, height: 450 } }));
+  writeFileSync(path.join(sent, 'retry-spec.pdf'), demoPdf());
+  utimesSync(path.join(sent, 'retry-spec.pdf'), t0, t0);
+  utimesSync(path.join(sent, 'checkout-mockup.png'), t0 + 1, t0 + 1);
+
+  // The agent's files stay as they were; yours wait behind the switch.
+  const views = panel(page).getByRole('tablist', { name: 'Show' });
+  await expect(views).toBeVisible();
+  await expect(views.getByRole('tab', { name: /From Your Agent/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(views.getByRole('tab', { name: /Sent by You/ })).toContainText('2');
+  await expect(list).not.toContainText('checkout-mockup.png');
+  await panel(page).screenshot({ path: path.join(SHOTS, 'scratch-sent-switch.png') });
+
+  await views.getByRole('tab', { name: /Sent by You/ }).click();
+  const mine = panel(page).getByRole('listbox', { name: 'Files you sent' });
+  expect(await mine.getByRole('option').allTextContents()).toEqual([expect.stringContaining('checkout-mockup.png'), expect.stringContaining('retry-spec.pdf')]);
+  await expect(panel(page).getByText('.beluga/scratch/sent', { exact: true })).toBeVisible();
+  await expect(panel(page).getByRole('region', { name: 'checkout-mockup.png' }).locator('img')).toBeVisible();
+  await page.waitForTimeout(400); // the picture fades in
+  await panel(page).screenshot({ path: path.join(SHOTS, 'scratch-sent-view.png') });
+
+  // Back: the agent's files, without yours.
+  await views.getByRole('tab', { name: /From Your Agent/ }).click();
+  await expect(list).not.toContainText('retry-spec.pdf');
+});

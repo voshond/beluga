@@ -169,3 +169,10 @@
 :root[data-motion='reduce'] .arrived {
   animation: none;
 }
+
+/* What Claude saved, or what you sent it (BLG-771): a choice above the list, only once you sent something. */
+.views {
+  flex: none;
+  display: flex;
+  padding: 10px 10px 0 16px;
+}

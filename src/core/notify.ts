@@ -1,7 +1,6 @@
 import type { NotifySettings } from './settings.js';
 import { type DomainState, type LogItem, type Store, isRunning } from './store.js';
 import { dndActive } from '../shared/quiet.js';
-import { remindPending } from '../shared/remind.js';
 import { isSentinelChat } from './sentinel/model.js';
 import { loudestKind, type SoundChoice, type SoundPrefs, soundFor, volumeOf } from '../shared/notify-sound.js';
 import { type Issue, issueForWorkspace } from './board/model.js';
@@ -12,12 +11,13 @@ import { ASSISTANT_TITLE, isAssistant } from '../shared/assistant.js';
 import { allNeeds, needMatches } from '../companion/needs-you.js';
 import { type AgentRef, defaultAgentOf } from '../protocol.js';
 import { agentLabel, agentName } from '../shared/agent-label.js';
+import { laterUntil } from './triage/facts.js';
 
 /** The groups you can switch on or off in Settings → Notifications. */
 export type NoticeKind = 'done' | 'needsYou' | 'problems' | 'people' | 'pr' | 'mentions' | 'background';
 
 /** What exactly happened, when the kind alone doesn't say (screens pick an icon by it). */
-export type NoticeTag = 'approval' | 'question' | 'plan' | 'milestone' | 'conflict' | 'joined' | 'left' | 'invited' | 'mention' | 'message' | 'task' | 'test' | 'sentinel';
+export type NoticeTag = 'approval' | 'question' | 'plan' | 'milestone' | 'conflict' | 'joined' | 'left' | 'invited' | 'mention' | 'message' | 'task' | 'test' | 'sentinel' | 'woke';
 
 export interface NoticeEvent {
   readonly kind: NoticeKind;
@@ -81,13 +81,12 @@ export function presenceQuiet(state: Pick<DomainState, 'network'>): boolean {
 }
 
 /**
- * About a conversation you put off (Remind Me Later, BLG-748), and not something your agent asks
- * you: it goes into the inbox already read, with no sound or banner; the reminder brings it back.
+ * About a conversation you put off (Remind Me Later, BLG-748, BLG-770), and not something your agent
+ * asks you: it goes into the inbox already read, with no sound or banner; the reminder brings it back.
  */
-export function remindLaterNotice(state: Pick<DomainState, 'projects'>, e: Pick<NoticeEvent, 'kind' | 'channel'>, now = Date.now()): boolean {
-  if (e.kind === 'needsYou' || !e.channel?.startsWith('ws:')) return false;
-  const id = e.channel.slice(3);
-  return state.projects.some((p) => p.workspaces.some((w) => w.id === id && remindPending(w, now)));
+export function remindLaterNotice(state: DomainState, e: Pick<NoticeEvent, 'kind' | 'channel'>, now = Date.now()): boolean {
+  if (e.kind === 'needsYou' || !e.channel) return false;
+  return laterUntil(state, e.channel, now) !== undefined;
 }
 
 /** Where what waits for you lives (companion/needs-you.ts reads these). */
@@ -308,6 +307,9 @@ function finishedSetups(prev: DomainState, next: DomainState): NoticeEvent[] {
 
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** How a message says your name: "@name", not inside a longer word or handle. */
+export const mentionOf = (name: string): RegExp => new RegExp(`(^|[^\\w@])@${escapeRe(name)}(?![\\w-])`, 'i');
+
 /** Someone mentions you by name, or writes in the room when it's just the two of you. */
 function messagesForYou(prev: DomainState, next: DomainState): NoticeEvent[] {
   const self = next.self;
@@ -315,7 +317,7 @@ function messagesForYou(prev: DomainState, next: DomainState): NoticeEvent[] {
   const seen = new Set(prev.log.slice(-RECENT_LOG).map((l) => l.id));
   const fresh = next.log.slice(-RECENT_LOG).filter((l): l is ChatItem => l.type === 'chat' && !seen.has(l.id));
   if (!fresh.length || fresh.length > MESSAGE_BURST) return [];
-  const mention = new RegExp(`(^|[^\\w@])@${escapeRe(self.name)}(?![\\w-])`, 'i');
+  const mention = mentionOf(self.name);
   const others = next.peers.filter((p) => p.peerId !== self.peerId);
   const out: NoticeEvent[] = [];
   for (const m of fresh) {

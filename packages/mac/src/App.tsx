@@ -11,7 +11,6 @@ import { Icon } from './components/Icon.js';
 import { MenuSheet } from './dialogs/MenuSheet.js';
 import { Palette } from './dialogs/Palette.js';
 import { Settings } from './dialogs/Settings.js';
-import { PlanSheet } from './dialogs/PlanSheet.js';
 import type { SettingsPane } from './lib/beluga.js';
 import { RightPanel } from './layout/RightPanel.js';
 import { Main } from './layout/Main.js';
@@ -39,6 +38,7 @@ import { useRequestNative } from './gateway/request-native.js';
 import { SupportSheets } from './dialogs/SupportSheets.js';
 import { useIdleAway, useTrayPresence } from './network/net-native.js';
 import { useUpdateActivity } from './lib/updates.js';
+import { useChunkCare } from './lib/lazy-view.js';
 import { useState } from 'react';
 import { Onboarding, useOnboarding } from './onboarding/Onboarding.js';
 import { Lightbox } from './chat/ChatImages.js';
@@ -207,6 +207,8 @@ export function App() {
   useDictationSetup(client);
   useRememberProject();
   useSettingsWindow();
+  // The views fetched early, and any that don't load noted in the black box (#370).
+  useChunkCare();
   useNative(client, ui, actions, setJoining);
   useTrayStatus(client);
   useTraySpout();
@@ -235,7 +237,6 @@ export function App() {
       <NativeSheets />
       <Palette />
       <Settings />
-      <PlanSheet />
       <NetworkSheets />
       <RequestSheet />
       {welcome.open ? null : <SupportSheets />}

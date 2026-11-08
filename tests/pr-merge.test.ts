@@ -3,12 +3,17 @@ import { Store, initialState } from '../src/core/store.js';
 import type { PullRequest } from '../src/core/work-store.js';
 import type { NoticeEvent } from '../src/core/notify.js';
 import type { WorkspaceController } from '../src/core/workspace-controller.js';
-import { NO_CHECKS_GRACE_MS, Workbench } from '../src/core/workbench.js';
+import { NO_CHECKS_GRACE_MS, PUSHED_HEAD_WAIT_MS, Workbench } from '../src/core/workbench.js';
 
 const flush = async (): Promise<void> => {
   for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
 };
 import type { MergeOptions } from '../src/workspaces/pr.js';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import type { Session } from '../src/core/session.js';
+import { branchStep } from '../src/companion/branch-steps.js';
 
 type ExecCb = (err: Error | null, stdout: string, stderr: string) => void;
 const exec = vi.hoisted(() => ({ impl: undefined as undefined | ((cmd: string, args: string[]) => { err?: Error; stdout?: string; stderr?: string }), calls: [] as Array<{ cmd: string; args: string[]; cwd?: string }> }));
@@ -96,9 +101,11 @@ describe('parsePr: merge fields', () => {
 });
 
 /** A Workbench with one worktree whose PR lives in a stubbed GitHub: merging changes what gh pr view says next. */
-function bench(start: PullRequest | undefined, answer: (opts: MergeOptions) => PullRequest | Error, unpushed = 0, pushFails?: Error) {
+function bench(start: PullRequest | undefined, answer: (opts: MergeOptions) => PullRequest | Error, unpushed = 0, pushFails?: Error, at = '/code/auth') {
   const store = new Store(initialState('t', 'ask'));
-  const ws: Record<string, unknown> = { id: 'auth', name: 'auth', kind: 'worktree', branch: 'klaud/auth', path: '/code/auth', projectId: 'p1', status: { changed: 0, ahead: 2, behind: 0 } };
+  const ws: Record<string, unknown> = { id: 'auth', name: 'auth', kind: 'worktree', branch: 'klaud/auth', path: at, projectId: 'p1', status: { changed: 0, ahead: 2, behind: 0 } };
+  // Whether the PR's head holds HEAD's commits (pr.ts headCarries): unknown unless a test says.
+  let carries: { head?: string; carries?: boolean } = {};
   const manager = { list: [{ id: 'p1', workspaces: [ws] }], find: (id: string) => (id === ws.id ? ws : undefined), setMergeWait: (_id: string, wait: unknown) => void (ws.mergeWhenReady = wait) };
   let clock = 1_000_000;
   let github = start;
@@ -121,6 +128,7 @@ function bench(start: PullRequest | undefined, answer: (opts: MergeOptions) => P
     findPr: async (_dir, branch) => (views.push(branch), github),
     remoteRef: () => undefined,
     unpushedCommits: async () => unpushed,
+    headCarries: async () => carries,
     pushForPr: async (_dir, head) => {
       if (pushFails) throw pushFails;
       pushes.push(head);
@@ -139,7 +147,8 @@ function bench(start: PullRequest | undefined, answer: (opts: MergeOptions) => P
   if (start) store.dispatch({ type: 'pr', id: 'auth', pr: start });
   const github$ = (next: PullRequest | undefined): void => void (github = next);
   const later = (ms: number): void => void (clock += ms);
-  return { wb, store, ws, merges, pushes, deleted, toasts, notices, views, github: github$, later, pr: () => store.getState().prs.auth };
+  const here = (next: typeof carries): void => void (carries = next);
+  return { wb, store, ws, merges, pushes, deleted, toasts, notices, views, github: github$, later, here, pr: () => store.getState().prs.auth };
 }
 
 describe('Workbench.mergePr', () => {
@@ -233,9 +242,11 @@ describe('Workbench.mergePr', () => {
     expect(b.merges).toHaveLength(1);
     expect(b.toasts.some((t) => /^Pushing 5 commits to klaud\/auth before merging PR #42/.test(t.text))).toBe(true);
     const auto = bench(pr({ checks: 'pending' }), () => pr({ state: 'MERGED' }), 1);
+    auto.here({ head: 'fff6666', carries: false });
     expect(await auto.wb.mergePr('auth', { method: 'squash', auto: true })).toMatchObject({ ok: true, result: 'queued' });
     expect(auto.pushes).toEqual(['klaud/auth']);
-    expect(auto.ws.mergeWhenReady).toBeDefined();
+    // Push and Merge When Ready: it waits for the commit it pushed, not GitHub's view of an older one.
+    expect(auto.ws.mergeWhenReady).toMatchObject({ number: 42, head: 'fff6666' });
   });
 
   it('won’t merge when that push fails: the commits would be left out', async () => {
@@ -247,6 +258,119 @@ describe('Workbench.mergePr', () => {
       expect(b.ws.mergeWhenReady).toBeUndefined();
       expect(b.toasts.at(-1)?.level).toBe('error');
     }
+  });
+
+  describe('BLG-840: never a merge without the work it should carry', () => {
+    it('merges only the head that has every commit here (--match-head-commit)', async () => {
+      const b = bench(pr({ head: 'aaa1111' }), () => pr({ state: 'MERGED' }));
+      b.here({ head: 'aaa1111', carries: true });
+      expect(await b.wb.mergePr('auth', { method: 'squash' })).toMatchObject({ ok: true, result: 'merged' });
+      expect(b.pushes).toEqual([]);
+      expect(b.merges.map((m) => m.opts)).toEqual([{ method: 'squash', matchHead: 'aaa1111' }]);
+    });
+
+    it('pushes when the PR’s head lacks commits here, even if origin/<branch> looks current, then merges what it pushed', async () => {
+      const b = bench(pr({ head: 'aaa1111' }), () => pr({ state: 'MERGED' }));
+      b.ws.status = { changed: 0, ahead: 11, behind: 0, unpushed: 3 };
+      b.here({ head: 'bbb2222', carries: false });
+      expect(await b.wb.mergePr('auth', { method: 'squash' })).toMatchObject({ ok: true, result: 'merged' });
+      expect(b.pushes).toEqual(['klaud/auth']);
+      // Counted as the chip counts them: main merged in here isn't three more commits.
+      expect(b.toasts.some((t) => t.text === 'Pushing 3 commits to klaud/auth before merging PR #42…')).toBe(true);
+      expect(b.merges.map((m) => m.opts)).toEqual([{ method: 'squash', matchHead: 'bbb2222' }]);
+    });
+
+    it('a caller’s own head (a sentinel’s checked commit) wins', async () => {
+      const b = bench(pr({ head: 'aaa1111' }), () => pr({ state: 'MERGED' }));
+      b.here({ head: 'aaa1111', carries: true });
+      await b.wb.mergePr('auth', { method: 'squash', matchHead: 'ccc3333' });
+      expect(b.merges.map((m) => m.opts.matchHead)).toEqual(['ccc3333']);
+    });
+
+    it('Merge When Ready that has to push first waits for the new commits’ checks, then merges them', async () => {
+      const b = bench(pr({ checks: 'pending', head: 'aaa1111' }), () => pr({ state: 'MERGED' }));
+      b.here({ head: 'aaa1111', carries: true });
+      await b.wb.mergePr('auth', { method: 'squash', auto: true });
+      // The agent commits twice more here while the checks run; then the old commit's checks pass.
+      b.ws.status = { changed: 0, ahead: 4, behind: 0, unpushed: 2 };
+      b.here({ head: 'ddd4444', carries: false });
+      b.later(1000);
+      b.github(pr({ checks: 'passing', head: 'aaa1111' }));
+      await b.wb.refreshPrs('auth');
+      await flush();
+      expect(b.pushes).toEqual(['klaud/auth']);
+      expect(b.merges).toEqual([]);
+      expect(b.ws.mergeWhenReady).toMatchObject({ number: 42, method: 'squash', since: 1_001_000, head: 'ddd4444' });
+      expect(b.toasts.at(-1)).toEqual({ text: 'Pushed 2 commits to PR #42: it merges once their checks pass', level: 'success' });
+      expect(b.notices.filter((n) => /merged|didn’t merge/.test(n.title))).toEqual([]);
+      // GitHub hasn't caught up with the push: an older commit's failed checks don't stop the wait.
+      b.ws.status = { changed: 0, ahead: 4, behind: 0 };
+      b.github(pr({ checks: 'failing', head: 'aaa1111' }));
+      await b.wb.refreshPrs('auth');
+      await flush();
+      expect(b.ws.mergeWhenReady).toMatchObject({ head: 'ddd4444' });
+      expect(b.notices.filter((n) => /not merging/.test(n.title))).toEqual([]);
+      // Now it has: the new head's checks pass.
+      b.here({ head: 'ddd4444', carries: true });
+      b.github(pr({ checks: 'passing', head: 'ddd4444' }));
+      await b.wb.refreshPrs('auth');
+      await flush();
+      expect(b.merges.map((m) => m.opts)).toEqual([{ method: 'squash', matchHead: 'ddd4444' }]);
+      expect(b.notices.map((n) => n.title)).toContain('PR #42 merged: its checks passed');
+    });
+
+    it('a pushed commit GitHub never shows stops the wait, and says so, instead of waiting forever', async () => {
+      const b = bench(pr({ checks: 'pending', head: 'aaa1111' }), () => pr({ state: 'MERGED' }), 1);
+      b.here({ head: 'bbb2222', carries: false });
+      await b.wb.mergePr('auth', { method: 'squash', auto: true });
+      expect(b.ws.mergeWhenReady).toMatchObject({ head: 'bbb2222' });
+      b.github(pr({ checks: 'passing', head: 'aaa1111' }));
+      await b.wb.refreshPrs('auth');
+      await flush();
+      expect(b.ws.mergeWhenReady).toBeDefined();
+      b.later(PUSHED_HEAD_WAIT_MS);
+      await b.wb.refreshPrs('auth');
+      await flush();
+      expect(b.merges).toEqual([]);
+      expect(b.ws.mergeWhenReady).toBeUndefined();
+      expect(b.notices.at(-1)).toMatchObject({ kind: 'problems', title: 'PR #42 still doesn’t have the commits pushed for it: not merging it' });
+    });
+
+    it('overlapping looks at a waiting PR merge it once, with no “didn’t merge” on top', async () => {
+      const b = bench(pr({ checks: 'pending', head: 'aaa1111' }), () => pr({ state: 'MERGED' }));
+      b.here({ head: 'aaa1111', carries: true });
+      await b.wb.mergePr('auth', { method: 'squash', auto: true });
+      b.github(pr({ checks: 'passing', head: 'aaa1111' }));
+      await Promise.all([b.wb.refreshPrs('auth'), b.wb.refreshPrs('auth'), b.wb.refreshPrs('auth')]);
+      await flush();
+      expect(b.merges).toHaveLength(1);
+      expect(b.notices.filter((n) => /didn’t merge/.test(n.title))).toEqual([]);
+    });
+
+    it('won’t merge someone’s fork PR that lacks commits here: it can’t push there, and says so', async () => {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'beluga-forkpr-'));
+      mkdirSync(path.join(dir, '.git'));
+      writeFileSync(path.join(dir, '.git', 'config'), '[branch "klaud/auth"]\n\tmerge = refs/pull/7/head\n');
+      const b = bench(pr({ head: 'aaa1111' }), () => pr({ state: 'MERGED' }), 1, undefined, dir);
+      const out = await b.wb.mergePr('auth', { method: 'squash' });
+      expect(out).toMatchObject({ ok: false, reason: 'unpushed', message: expect.stringMatching(/^PR #42 is from someone’s fork, so Beluga can’t push 1 commit here to it, and merging it would leave it out/) });
+      expect(b.pushes).toEqual([]);
+      expect(b.merges).toEqual([]);
+    });
+
+    it('the phone’s Merge goes through the same guard: pushed first, then that head merged', async () => {
+      const b = bench(pr({ head: 'aaa1111' }), () => pr({ state: 'MERGED' }));
+      b.ws.status = { changed: 0, ahead: 3, behind: 0, unpushed: 1 };
+      b.here({ head: 'eee5555', carries: false });
+      const phone = { store: b.store, workspaces: { manager: { find: (id: string) => (id === 'auth' ? b.ws : undefined) } }, workbench: b.wb } as unknown as Session;
+      expect(await branchStep(phone, 'conv:ws:auth', 'merge_pr')).toEqual({ ok: true, message: 'Merged PR #42' });
+      expect(b.pushes).toEqual(['klaud/auth']);
+      expect(b.merges.map((m) => m.opts)).toEqual([{ method: 'squash', matchHead: 'eee5555' }]);
+    });
+
+    it('GitHub refusing because the head moved says so plainly', () => {
+      expect(explainMergeError('GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)')).toEqual({ reason: 'other', message: 'The pull request changed on GitHub since Beluga looked (a new push), so nothing merged. Look at it again, then merge.' });
+    });
   });
 
   it('does nothing without an open PR, or while one merge is under way', async () => {

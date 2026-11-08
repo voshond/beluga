@@ -107,6 +107,12 @@ describe('parsePr', () => {
     expect(parsePr(JSON.stringify({ number: 1, url: 'u', state }))?.state).toBe(state);
   });
 
+  it('keeps when a merged PR merged, and only for a merged one', () => {
+    expect(parsePr(JSON.stringify({ number: 1, url: 'u', state: 'MERGED', mergedAt: '2026-11-08T10:00:00Z' }))?.mergedAt).toBe(Date.parse('2026-11-08T10:00:00Z'));
+    expect(parsePr(JSON.stringify({ number: 1, url: 'u', state: 'MERGED', mergedAt: 'nope' }))?.mergedAt).toBeUndefined();
+    expect(parsePr(JSON.stringify({ number: 1, url: 'u', state: 'OPEN', mergedAt: '2026-11-08T10:00:00Z' }))?.mergedAt).toBeUndefined();
+  });
+
   it('maps unknown states to OPEN', () => {
     expect(parsePr(JSON.stringify({ number: 1, url: 'u', state: 'WEIRD' }))?.state).toBe('OPEN');
   });
@@ -250,7 +256,7 @@ describe('hasGh / findPr (gh mocked)', () => {
     const m = await load();
     expect(await m.findPr('/repo', 'feat/x')).toEqual({ number: 5, url: 'u', state: 'OPEN', title: 'T', draft: false, checks: 'passing', checkRuns: [{ name: 'check', state: 'completed', conclusion: 'success' }], review: 'APPROVED' });
     const view = exec.calls.find((c) => c.args[0] === 'pr');
-    expect(view).toEqual({ cmd: 'gh', args: ['pr', 'view', 'feat/x', '--json', 'number,url,state,title,isDraft,statusCheckRollup,reviewDecision,mergeable,mergeStateStatus,autoMergeRequest,headRefOid'], cwd: '/repo' });
+    expect(view).toEqual({ cmd: 'gh', args: ['pr', 'view', 'feat/x', '--json', 'number,url,state,title,isDraft,statusCheckRollup,reviewDecision,mergeable,mergeStateStatus,autoMergeRequest,headRefOid,mergedAt'], cwd: '/repo' });
   });
 
   it('findPr returns undefined when there is no PR for the branch', async () => {

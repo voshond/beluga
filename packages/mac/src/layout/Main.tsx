@@ -1,7 +1,8 @@
-import { Component, type ReactNode, lazy, Suspense, useRef } from 'react';
+import { Suspense, useRef } from 'react';
 import { findWorkspace } from '@beluga/ui/workspace-models.js';
-import { Button, Empty } from '../components/ui.js';
+import { Empty } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
+import { ViewBoundary, lazyView } from '../lib/lazy-view.js';
 import { useMaking } from '../lib/making.js';
 import { ChatView } from '../views/ChatView.js';
 import { ChatLog } from '../chat/ChatLog.js';
@@ -15,32 +16,32 @@ import side from './Sidebar.module.css';
 import { SharedPlanPage } from '../team/SharedPlans.js';
 import { CallRoom } from '../call/CallRoom.js';
 
-const OverviewView = lazy(() => import('../views/OverviewView.js').then((m) => ({ default: m.OverviewView })));
-const SearchView = lazy(() => import('../views/SearchView.js').then((m) => ({ default: m.SearchView })));
-const UsageView = lazy(() => import('../views/UsageView.js').then((m) => ({ default: m.UsageView })));
-const FilesView = lazy(() => import('../views/FilesView.js').then((m) => ({ default: m.FilesView })));
-const DiffView = lazy(() => import('../views/DiffView.js').then((m) => ({ default: m.DiffView })));
-const ConversationView = lazy(() => import('../network/ConversationView.js').then((m) => ({ default: m.ConversationView })));
-const TerminalView = lazy(() => import('../views/TerminalView.js').then((m) => ({ default: m.TerminalView })));
-const ActivityView = lazy(() => import('../claude-code/ActivityView.js').then((m) => ({ default: m.ActivityView })));
-const ProjectHome = lazy(() => import('../views/ProjectHome.js').then((m) => ({ default: m.ProjectHome })));
-const HistoryView = lazy(() => import('../views/history/HistoryView.js').then((m) => ({ default: m.HistoryView })));
-const WorktreesView = lazy(() => import('../views/worktrees/WorktreesView.js').then((m) => ({ default: m.WorktreesView })));
-const NotificationsView = lazy(() => import('./NotificationsView.js').then((m) => ({ default: m.NotificationsView })));
-const RequestsView = lazy(() => import('../gateway/RequestsView.js').then((m) => ({ default: m.RequestsView })));
-const TasksView = lazy(() => import('../tasks/TasksView.js').then((m) => ({ default: m.TasksView })));
-const TaskPage = lazy(() => import('../tasks/TaskPage.js').then((m) => ({ default: m.TaskPage })));
-const IssuesView = lazy(() => import('../issues/IssuesView.js').then((m) => ({ default: m.IssuesView })));
-const IssuePage = lazy(() => import('../issues/IssuePage.js').then((m) => ({ default: m.IssuePage })));
-const ActionsView = lazy(() => import('../ci/ActionsView.js').then((m) => ({ default: m.ActionsView })));
-const PullsView = lazy(() => import('../issues/PullsView.js').then((m) => ({ default: m.PullsView })));
-const RunPage = lazy(() => import('../ci/RunPage.js').then((m) => ({ default: m.RunPage })));
-const PlansView = lazy(() => import('../plans/PlansView.js').then((m) => ({ default: m.PlansView })));
-const PlanPage = lazy(() => import('../plans/PlanPage.js').then((m) => ({ default: m.PlanPage })));
-const SentinelPage = lazy(() => import('../sentinel/SentinelPage.js').then((m) => ({ default: m.SentinelPage })));
-const SentinelRunPage = lazy(() => import('../sentinel/RunPage.js').then((m) => ({ default: m.RunPage })));
-const SentinelHome = lazy(() => import('../sentinel/SentinelHome.js').then((m) => ({ default: m.SentinelHome })));
-const PhoneView = lazy(() => import('../phone/PhoneView.js').then((m) => ({ default: m.PhoneView })));
+const OverviewView = lazyView('views/OverviewView', () => import('../views/OverviewView.js').then((m) => m.OverviewView));
+const SearchView = lazyView('views/SearchView', () => import('../views/SearchView.js').then((m) => m.SearchView));
+const UsageView = lazyView('views/UsageView', () => import('../views/UsageView.js').then((m) => m.UsageView));
+const FilesView = lazyView('views/FilesView', () => import('../views/FilesView.js').then((m) => m.FilesView));
+const DiffView = lazyView('views/DiffView', () => import('../views/DiffView.js').then((m) => m.DiffView));
+const ConversationView = lazyView('network/ConversationView', () => import('../network/ConversationView.js').then((m) => m.ConversationView));
+const TerminalView = lazyView('views/TerminalView', () => import('../views/TerminalView.js').then((m) => m.TerminalView));
+const ActivityView = lazyView('claude-code/ActivityView', () => import('../claude-code/ActivityView.js').then((m) => m.ActivityView));
+const ProjectHome = lazyView('views/ProjectHome', () => import('../views/ProjectHome.js').then((m) => m.ProjectHome), 'first');
+const HistoryView = lazyView('views/history/HistoryView', () => import('../views/history/HistoryView.js').then((m) => m.HistoryView));
+const WorktreesView = lazyView('views/worktrees/WorktreesView', () => import('../views/worktrees/WorktreesView.js').then((m) => m.WorktreesView));
+const NotificationsView = lazyView('layout/NotificationsView', () => import('./NotificationsView.js').then((m) => m.NotificationsView));
+const RequestsView = lazyView('gateway/RequestsView', () => import('../gateway/RequestsView.js').then((m) => m.RequestsView));
+const TasksView = lazyView('tasks/TasksView', () => import('../tasks/TasksView.js').then((m) => m.TasksView));
+const TaskPage = lazyView('tasks/TaskPage', () => import('../tasks/TaskPage.js').then((m) => m.TaskPage));
+const IssuesView = lazyView('issues/IssuesView', () => import('../issues/IssuesView.js').then((m) => m.IssuesView));
+const IssuePage = lazyView('issues/IssuePage', () => import('../issues/IssuePage.js').then((m) => m.IssuePage));
+const ActionsView = lazyView('ci/ActionsView', () => import('../ci/ActionsView.js').then((m) => m.ActionsView));
+const PullsView = lazyView('issues/PullsView', () => import('../issues/PullsView.js').then((m) => m.PullsView));
+const RunPage = lazyView('ci/RunPage', () => import('../ci/RunPage.js').then((m) => m.RunPage));
+const PlansView = lazyView('plans/PlansView', () => import('../plans/PlansView.js').then((m) => m.PlansView));
+const PlanPage = lazyView('plans/PlanPage', () => import('../plans/PlanPage.js').then((m) => m.PlanPage));
+const SentinelPage = lazyView('sentinel/SentinelPage', () => import('../sentinel/SentinelPage.js').then((m) => m.SentinelPage));
+const SentinelRunPage = lazyView('sentinel/RunPage', () => import('../sentinel/RunPage.js').then((m) => m.RunPage));
+const SentinelHome = lazyView('sentinel/SentinelHome', () => import('../sentinel/SentinelHome.js').then((m) => m.SentinelHome));
+const PhoneView = lazyView('phone/PhoneView', () => import('../phone/PhoneView.js').then((m) => m.PhoneView));
 
 /**
  * A worktree being made: its page shows at once with what you asked (BLG-531), and becomes its
@@ -154,33 +155,6 @@ function Route() {
           <ProjectHome id={view.id} />
         </ProjectCenter>
       );
-  }
-}
-
-/** A view that breaks shows what happened and a way back, instead of blanking the window. */
-class ViewBoundary extends Component<{ children: ReactNode; at: string }, { error?: Error }> {
-  override state: { error?: Error } = {};
-  static getDerivedStateFromError(error: Error): { error: Error } {
-    return { error };
-  }
-  override componentDidUpdate(prev: { at: string }): void {
-    // Going somewhere else tries again.
-    if (prev.at !== this.props.at && this.state.error) this.setState({ error: undefined });
-  }
-  override render(): ReactNode {
-    if (!this.state.error) return this.props.children;
-    return (
-      <Empty
-        icon="alert"
-        title="This view ran into a problem"
-        detail={this.state.error.message}
-        action={
-          <Button size="small" onClick={() => this.setState({ error: undefined })}>
-            Try Again
-          </Button>
-        }
-      />
-    );
   }
 }
 

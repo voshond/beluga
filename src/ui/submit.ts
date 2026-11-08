@@ -20,6 +20,15 @@ export interface SubmitContext {
 }
 
 /**
+ * How a new worktree starts, from the mode picked on its page: Plan with Tasks plans in the chat
+ * (never its terminal, and no plan mode: a plan's own conversation has none).
+ */
+export function worktreeMode(picked: { readonly terminal: boolean; readonly plan: boolean; readonly tasks: boolean }): { terminal?: true; plan?: true; tasks?: true } {
+  if (picked.tasks) return { tasks: true };
+  return { ...(picked.terminal ? { terminal: true as const } : {}), ...(picked.plan ? { plan: true as const } : {}) };
+}
+
+/**
  * Send what was typed in the box, wherever it belongs: an answer to Claude's question, a
  * command for a shared workspace's shell, the first message of a new chat or worktree, a name
  * the box asked for, a search, or a message in the conversation on screen.
@@ -67,8 +76,8 @@ export function submitTyped(c: SubmitContext, typed: string, urgent = false): vo
     }
   }
   if (latest.view.kind === 'draft_worktree' && !text.startsWith('/')) {
-    const plan = latest.planMode.draft === true;
-    void api.workspaces.startWorktree(latest.view.projectId, text, terminal || plan ? { ...(terminal ? { terminal } : {}), ...(plan ? { plan } : {}) } : undefined);
+    const mode = worktreeMode({ terminal, plan: latest.planMode.draft === true, tasks: false });
+    void api.workspaces.startWorktree(latest.view.projectId, text, Object.keys(mode).length ? mode : undefined);
     return;
   }
   const pending = ui.pending;

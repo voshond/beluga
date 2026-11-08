@@ -135,6 +135,28 @@ describe('a smart archive', () => {
     expect(sh(repo, 'for-each-ref', 'refs/klaud/')).toBe('');
   });
 
+  it('throws away the copies of what you sent Claude, keeps the rest of Beluga’s folder, and only when archiving (BLG-771)', async () => {
+    put(path.join(repo, '.git/info/exclude'), '.beluga/\n');
+    put(path.join(wt, '.beluga/scratch/sent/shot.png'), 'png');
+    put(path.join(wt, '.beluga/scratch/sent/mac-assistant/a.pdf'), 'pdf');
+    put(path.join(wt, '.beluga/scratch/log.txt'), 'Claude’s');
+    put(path.join(wt, '.beluga/reports/r.md'), '# report');
+    // Freeing space keeps the worktree, and what you sent it.
+    expect((await planArchive(wt)).keep).toContain('.beluga/');
+    await freeSpace(wt);
+    expect(existsSync(path.join(wt, '.beluga/scratch/sent/shot.png'))).toBe(true);
+    const plan = await planArchive(wt, { archiving: true });
+    expect(plan.drop.map((d) => d.path)).toContain('.beluga/scratch/sent/');
+    expect(plan.drop.find((d) => d.path === '.beluga/scratch/sent/')?.rule.what).toBe('copies of files you sent Claude');
+    expect(plan.keep.filter((k) => k.startsWith('.beluga/')).sort()).toEqual(['.beluga/reports/', '.beluga/scratch/log.txt']);
+    const m = await archiveWorktree({ repo, dir: wt, id: 'w-sent', archivesDir: archives });
+    expect(m.dropped.map((d) => d.path)).toContain('.beluga/scratch/sent/');
+    await restoreWorktree({ repo, dir: wt, id: 'w-sent', archivesDir: archives });
+    expect(readFileSync(path.join(wt, '.beluga/scratch/log.txt'), 'utf8')).toBe('Claude’s');
+    expect(existsSync(path.join(wt, '.beluga/reports/r.md'))).toBe(true);
+    expect(existsSync(path.join(wt, '.beluga/scratch/sent'))).toBe(false);
+  });
+
   it('in a folder the project ignores whole, build output goes and the rest stays (BLG-612)', async () => {
     put(path.join(wt, '.gitignore'), `${readFileSync(path.join(wt, '.gitignore'), 'utf8')}mobile/\n`);
     put(path.join(wt, 'mobile/settings.gradle'), '');

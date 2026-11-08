@@ -51,10 +51,10 @@ describe('an open PR’s blocker', () => {
 describe('branchState: the PR’s next step in plain words', () => {
   it('not pushed: a calm state that says GitHub’s view is old, with Push first and no stale Resolve or Fix', () => {
     const b = at(fixedHere, pr({ conflicts: true, checks: 'failing' }));
-    expect([b.kind, b.label, b.tone]).toEqual(['not_pushed', 'Not pushed', 'info']);
-    expect(b.detail).toBe('2 commits here aren’t on PR #366 yet, so what GitHub says it conflicts with main is for an older commit: push to run its checks again');
-    expect(b.steps.map((s) => s.id)).toEqual(['push', 'open_pr']);
-    expect(b.steps[0]).toMatchObject({ label: 'Push 2 Commits' });
+    expect([b.kind, b.label, b.tone]).toEqual(['not_pushed', '2 commits not on PR', 'info']);
+    expect(b.detail).toBe('2 commits here aren’t on PR #366 yet: merging it now would leave them out, and what GitHub says it conflicts with main is for an older commit');
+    expect(b.steps.map((s) => s.id)).toEqual(['push', 'merge_auto', 'open_pr']);
+    expect(b.steps[0]).toMatchObject({ label: 'Push 2 Commits to PR #366' });
     expect(b.steps[0]?.claude).toBeUndefined();
     expect(b.pr).toEqual({ number: 366, state: 'OPEN' });
   });
@@ -62,9 +62,9 @@ describe('branchState: the PR’s next step in plain words', () => {
   it('not pushed after failing checks says so, in the singular for one commit, and keeps Commit for what’s left', () => {
     const one = ws({ status: { changed: 3, ahead: 1, behind: 0, unpushed: 1 } });
     const b = at(one, pr({ checks: 'failing' }));
-    expect(b.detail).toContain('1 commit here isn’t on PR #366 yet, so what GitHub says its checks failed is for an older commit');
-    expect(b.steps.map((s) => s.id)).toEqual(['push', 'commit', 'open_pr']);
-    expect(b.steps[0]?.label).toBe('Push 1 Commit');
+    expect(b.detail).toContain('1 commit here isn’t on PR #366 yet: merging it now would leave it out, and what GitHub says its checks failed is for an older commit');
+    expect(b.steps.map((s) => s.id)).toEqual(['push', 'merge_auto', 'commit', 'open_pr']);
+    expect(b.steps[0]?.label).toBe('Push 1 Commit to PR #366');
     expect(b.steps[0]?.hint).toContain('the 3 uncommitted changes stay here');
   });
 

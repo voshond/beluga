@@ -183,7 +183,8 @@ export function PlanRepos({ repos, changes = [] }: { readonly repos: readonly st
 
 /**
  * What was settled while planning (BLG-8): what's still open first (approving waits on it), then
- * each decision, marked You (you answered it) or Default (the agent chose it without asking).
+ * each decision, marked You (you answered it) or Default (the agent chose it without asking), and
+ * last the ones a later decision replaced, crossed out (1.49, BLG-772).
  */
 export function PlanDecisions({ decisions, open }: { readonly decisions: NonNullable<PlanView['decisions']>; readonly open: readonly string[] }) {
   if (!decisions.length && !open.length) return null;
@@ -199,16 +200,16 @@ export function PlanDecisions({ decisions, open }: { readonly decisions: NonNull
             <T v="body">{q}</T>
           </View>
         ))}
-        {decisions.map((d) => (
-          <View key={d.question} style={{ gap: 4 }}>
+        {[...decisions.filter((d) => !d.replaced), ...decisions.filter((d) => d.replaced)].map((d, i) => (
+          <View key={i} style={{ gap: 4 }}>
             <T v="caption" c={color.text2}>
               {d.question}
             </T>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <T v="body" style={{ flexShrink: 1 }}>
+              <T v="body" c={d.replaced ? color.text3 : undefined} style={{ flexShrink: 1, ...(d.replaced ? { textDecorationLine: 'line-through' as const } : {}) }}>
                 {d.answer}
               </T>
-              <Pill label={d.by === 'user' ? 'You' : 'Default'} tone={d.by === 'user' ? 'lavender' : 'plain'} />
+              <Pill label={d.replaced ? 'Replaced' : d.by === 'user' ? 'You' : 'Default'} tone={d.by === 'user' && !d.replaced ? 'lavender' : 'plain'} />
             </View>
             {d.why ? (
               <T v="caption" c={color.text3}>
