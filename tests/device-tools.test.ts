@@ -144,3 +144,13 @@ describe('device steps in words', () => {
     expect(humanizeTool('mcp__beluga__list_devices', {}).done).toBe('Looked at your connected devices');
   });
 });
+
+describe('the demo Claude and client devices', () => {
+  it('reads which device tool a prompt asks for', async () => {
+    const { deviceTarget } = await import('../src/agent/mock.js');
+    expect(deviceTarget('run `uname -a` on device arch')).toEqual({ tool: 'run_on_device', device: 'arch', command: 'uname -a' });
+    expect(deviceTarget('get `~/notes.txt` from device arch')).toEqual({ tool: 'get_device_file', device: 'arch', path: '~/notes.txt' });
+    expect(deviceTarget('take a screenshot of device arch')).toEqual({ tool: 'device_screenshot', device: 'arch' });
+    expect(deviceTarget("run `ls` on bob's computer")).toBeUndefined();
+  });
+});
