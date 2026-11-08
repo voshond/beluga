@@ -13,12 +13,6 @@ export { bootMode, inShell, native, remoteApp, appInvoke };
 /** The app with its own Beluga on this computer (otherwise: the app as a client, or a browser). */
 export const inApp = (): boolean => bootMode() === 'app';
 
-/**
- * What the app as a client says it is in its hello. 'remote-app' once the server's hello accepts it
- * (BLG-54, src/ipc/protocol.ts); until then the web port names it a browser.
- */
-const REMOTE_APP_HELLO = 'mac' as const;
-
 export interface Endpoint {
   readonly url: string;
   readonly token: string;
@@ -146,5 +140,5 @@ export const APP_VERSION: string = version;
 /** Attach to Beluga. */
 export async function connect(caps: Capabilities): Promise<SocketClient> {
   const { url, token } = await endpoint();
-  return SocketClient.connect({ url, token, kind: remoteApp() ? REMOTE_APP_HELLO : 'mac', version: APP_VERSION, caps });
+  return SocketClient.connect({ url, token, kind: remoteApp() ? 'remote-app' : 'mac', version: APP_VERSION, caps });
 }
