@@ -48,7 +48,7 @@ export interface UiPrefs {
   readonly openProjects: readonly string[];
   /** The sidebar's Unread section: conversations that finished or need you, at the top (only while there are some). */
   readonly unreadSection: boolean;
-  /** The sidebar's Friends and Channels sections. Off: they're gone from the sidebar (the network keeps running). */
+  /** The sidebar's Friends and Channels sections, the room status and Invite in its footer, and your own status bar. Off: they're gone from the sidebar (the network keeps running). */
   readonly friendsSidebar: boolean;
   /** Enter sends and Shift+Enter makes a new line, or the other way round with ⌘Enter. */
   readonly sendWith: 'enter' | 'cmd-enter';

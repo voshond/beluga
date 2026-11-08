@@ -71,7 +71,7 @@ export const SETTINGS: readonly Entry[] = [
     ['Density', 'Comfortable or compact.', 'compact comfortable spacing'],
     ['Conversation width', 'Narrow, wide or the full window.', 'chat width narrow wide full'],
     ['Unread in the sidebar', 'Conversations that finished or need you, at the top.', 'unread finished section'],
-    ['Friends in the sidebar', 'The Friends and Channels sections.', 'friends channels hide network sidebar section'],
+    ['Friends in the sidebar', 'The Friends and Channels sections, the room and Invite bar, and your status.', 'friends channels invite room just you status online presence hide network sidebar section footer'],
     ['Sidebar width', undefined, 'sidebar size'],
     ['Reduce motion', undefined, 'animation motion accessibility'],
     ['Reduce transparency', 'A solid sidebar, with no blur behind the window.', 'blur vibrancy translucent solid accessibility'],

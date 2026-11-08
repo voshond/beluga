@@ -212,7 +212,7 @@ export function Sidebar() {
       <CallPill />
       <UpdatePill />
       <SidebarFooter />
-      <SelfBar />
+      {friendsSidebar && <SelfBar />}
       <SidebarEdge />
     </nav>
     </SidebarChatSelection>
@@ -288,14 +288,17 @@ function SidebarFooter() {
   const room = useApp((st) => st.room);
   const ready = useApp((st) => st.hosting?.phase === 'ready');
   const reconnecting = useApp((st) => st.connection?.state === 'reconnecting');
+  const { friendsSidebar } = usePrefs();
   const { label, tone } = footerStatus({ status, room, people, ready, reconnecting });
   return (
     <div className={s.footer}>
-      <RoomStatus label={label} tone={tone} />
+      {friendsSidebar && <RoomStatus label={label} tone={tone} />}
       <PhoneMark />
-      <button type="button" className={s.invite} onClick={() => document.dispatchEvent(new CustomEvent('beluga:invite'))}>
-        Invite
-      </button>
+      {friendsSidebar && (
+        <button type="button" className={s.invite} onClick={() => document.dispatchEvent(new CustomEvent('beluga:invite'))}>
+          Invite
+        </button>
+      )}
     </div>
   );
 }

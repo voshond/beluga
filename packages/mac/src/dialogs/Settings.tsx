@@ -280,7 +280,7 @@ function Appearance() {
         <Row label="Unread in the sidebar" detail="Conversations that finished or need you, listed at the top while there are any.">
           <Switch label="Unread in the sidebar" on={prefs.unreadSection} onChange={(v) => setPrefs({ unreadSection: v })} />
         </Row>
-        <Row label="Friends in the sidebar" detail="The Friends and Channels sections. Off, they’re hidden; your friends and channels stay as they are.">
+        <Row label="Friends in the sidebar" detail="The Friends and Channels sections, the room and Invite bar, and your name and status at the bottom. Off, they’re hidden; your friends and channels stay as they are.">
           <Switch label="Friends in the sidebar" on={prefs.friendsSidebar} onChange={(v) => setPrefs({ friendsSidebar: v })} />
         </Row>
         <Row label="Sidebar width">
