@@ -330,7 +330,9 @@ pub fn run() {
             remote::client_use_local,
             remote::client_change_server,
             remote::client_set_device_name,
-            device::device_run
+            device::device_run,
+            device::device_file,
+            device::device_screenshot
         ]))
         .manage(updater::Updates::default())
         .manage(requests::TrayState::default())

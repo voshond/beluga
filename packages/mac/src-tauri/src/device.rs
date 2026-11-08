@@ -1,11 +1,13 @@
-//! Device reach (BLG-56): a Beluga server's agent asks this computer, the client, to run a shell
-//! command, and the person here approves it first. The approval lives here, never in the server's
-//! page: `device_run` (the `beluga` plugin, so the page may call it) always opens a window of the
-//! app's own, and only that window can answer it (`device_prompt_answer`, an app command the
+//! Device reach (BLG-56, BLG-57): a Beluga server's agent asks this computer, the client, to run a
+//! shell command, send a file or take a screenshot, and the person here approves it first. The
+//! approval lives here, never in the server's page: `device_run`, `device_file` and
+//! `device_screenshot` (the `beluga` plugin, so the page may call them) always open a window of
+//! the app's own, and only that window can answer (`device_prompt_answer`, an app command the
 //! server's origin can't reach, which also checks the window asking).
 //!
 //! One prompt at a time: the others wait their turn. Deny is the default button; closing the
-//! window, or no answer in time, is a no. Secrets are refused before anyone is asked.
+//! window, or no answer in time, is a no. Secrets are refused before anyone is asked. A file or
+//! a screenshot comes back to the page as bytes, which it uploads to the server (lib/device-bridge.ts).
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -13,6 +15,7 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tauri::ipc::Response;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::sync::oneshot;
@@ -33,6 +36,11 @@ const APPROVAL: Duration = Duration::from_secs(25);
 /// After the command ends, how long output still left in its pipes (a process it left running
 /// in the background) is waited for.
 const DRAIN: Duration = Duration::from_secs(2);
+/// The biggest file sent (the server's own upload limit, src/daemon/web-files.ts: MAX_UPLOAD_BYTES).
+pub const FILE_CAP: u64 = 512 * 1024 * 1024;
+/// The prompt window closes before the screen is captured, so it isn't in the picture.
+const SETTLE: Duration = Duration::from_millis(400);
+const CAPTURE: Duration = Duration::from_secs(30);
 
 const SECRET_DIRS: &[&str] = &[".ssh", ".aws", ".gnupg", ".kube", ".docker", ".azure", ".gcloud", ".beluga"];
 const SECRET_FILES: &[&str] = &[
@@ -62,12 +70,16 @@ pub struct RunPayload {
     pub cwd: Option<String>,
 }
 
-/// The daemon's `device_request` frame for a command (shared/devices.ts), as the page forwards it.
 #[derive(Clone, Debug, Deserialize)]
+pub struct FilePayload {
+    pub path: String,
+}
+
+/// Who asked and why: the part of every `device_request` frame (shared/devices.ts) that isn't the ask.
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RunRequest {
+pub struct Meta {
     pub id: String,
-    pub payload: RunPayload,
     #[serde(default)]
     pub timeout_sec: Option<u64>,
     #[serde(default)]
@@ -78,19 +90,47 @@ pub struct RunRequest {
     pub why: String,
 }
 
+/// The daemon's frame for a command, as the page forwards it.
+#[derive(Clone, Debug, Deserialize)]
+pub struct RunRequest {
+    #[serde(flatten)]
+    pub meta: Meta,
+    pub payload: RunPayload,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct FileRequest {
+    #[serde(flatten)]
+    pub meta: Meta,
+    pub payload: FilePayload,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ScreenshotRequest {
+    #[serde(flatten)]
+    pub meta: Meta,
+}
+
+/// What is asked, as the prompt window shows it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase", rename_all_fields = "camelCase")]
+pub enum Detail {
+    Run { cwd: String, command: String, timeout_sec: u64 },
+    File { path: String, size: u64 },
+    Screenshot,
+}
+
 /// What the prompt window shows.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Prompt {
     pub id: String,
-    pub kind: &'static str,
     pub device: String,
     pub conversation: Option<String>,
     pub agent: Option<String>,
     pub why: String,
-    pub cwd: String,
-    pub command: String,
-    pub timeout_sec: u64,
+    #[serde(flatten)]
+    pub detail: Detail,
     /// When the prompt gives up by itself (ms since the epoch).
     pub expires_at: u64,
 }
@@ -280,7 +320,7 @@ pub fn resolve_cwd(cwd: Option<&str>) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// What a request can't do whatever the answer: a secret, a missing folder, no command.
+/// What a command request can't do whatever the answer: a secret, a missing folder, no command.
 pub fn check(request: &RunRequest) -> Result<PathBuf, DeviceResult> {
     let command = request.payload.command.trim();
     if command.is_empty() {
@@ -291,6 +331,52 @@ pub fn check(request: &RunRequest) -> Result<PathBuf, DeviceResult> {
         return Err(DeviceResult::refused("This device never runs commands that touch secrets (.env files, keys, credentials)."));
     }
     resolve_cwd(cwd).map_err(DeviceResult::error)
+}
+
+fn too_big() -> DeviceResult {
+    DeviceResult::refused(format!("Files over {} MB are refused.", FILE_CAP / 1024 / 1024))
+}
+
+/// A file to send, before anything is read: a secret (by its name, or where a link leads) is
+/// refused, so is a folder or one over FILE_CAP. → where it really is, and its size.
+pub fn check_file(raw: &str) -> Result<(PathBuf, u64), DeviceResult> {
+    let raw = raw.trim();
+    let secret = || DeviceResult::refused("This device never sends secrets (.env files, keys, credentials).");
+    if raw.is_empty() {
+        return Err(DeviceResult::error("There's no file to send."));
+    }
+    if is_secret_path(raw) {
+        return Err(secret());
+    }
+    let home = dirs::home_dir().ok_or_else(|| DeviceResult::error("This device has no home folder."))?;
+    let path = match raw.strip_prefix('~') {
+        Some(rest) if rest.is_empty() || rest.starts_with(['/', '\\']) => home.join(rest.trim_start_matches(['/', '\\'])),
+        _ => PathBuf::from(raw),
+    };
+    if !path.is_absolute() {
+        return Err(DeviceResult::error("Give the file's full path (or one from ~)."));
+    }
+    let real = std::fs::canonicalize(&path).map_err(|_| DeviceResult::error(format!("There's no file at {} on this device.", path.display())))?;
+    if is_secret_path(&real.to_string_lossy()) {
+        return Err(secret());
+    }
+    let meta = std::fs::metadata(&real).map_err(|e| DeviceResult::error(format!("{} can't be read: {e}", path.display())))?;
+    if !meta.is_file() {
+        return Err(DeviceResult::error(format!("{} isn't a file.", path.display())));
+    }
+    if meta.len() > FILE_CAP {
+        return Err(too_big());
+    }
+    Ok((real, meta.len()))
+}
+
+/// The file's bytes, once approved (refused again if it grew past FILE_CAP since).
+pub async fn read_file(path: &Path) -> Result<Vec<u8>, DeviceResult> {
+    let bytes = tokio::fs::read(path).await.map_err(|e| DeviceResult::error(format!("{} can't be read: {e}", path.display())))?;
+    if bytes.len() as u64 > FILE_CAP {
+        return Err(too_big());
+    }
+    Ok(bytes)
 }
 
 /// The login shell, as you'd open a terminal: $SHELL, else the account's, else sh.
@@ -434,9 +520,55 @@ fn epoch_ms(after: Duration) -> u64 {
         .unwrap_or_default()
 }
 
-fn open_window(app: &AppHandle, label: &str) -> Result<(), String> {
+/// The screen as a png: xdg-desktop-portal's Screenshot on Linux (GNOME on Wayland too, with no
+/// dialog). The portal saves it in ~/Pictures; that copy is removed once read, the server keeps its own.
+#[cfg(target_os = "linux")]
+async fn capture() -> Result<Vec<u8>, String> {
+    use ashpd::desktop::screenshot::Screenshot;
+    let failed = |e: ashpd::Error| format!("The screenshot didn't work: {e}");
+    let shot = Screenshot::request().interactive(false).modal(false).send().await.map_err(failed)?.response().map_err(failed)?;
+    let path = shot.uri().to_file_path().map_err(|_| "The screenshot didn't come back as a file.".to_string())?;
+    let png = tokio::fs::read(&path).await.map_err(|e| format!("The screenshot can't be read: {e}"))?;
+    let _ = tokio::fs::remove_file(&path).await;
+    Ok(png)
+}
+
+/// The screen as a png, through macOS's own screencapture (silent; needs Screen Recording).
+#[cfg(target_os = "macos")]
+async fn capture() -> Result<Vec<u8>, String> {
+    let file = std::env::temp_dir().join(format!("beluga-device-{}-{}.png", std::process::id(), epoch_ms(Duration::ZERO)));
+    let status = tokio::process::Command::new("/usr/sbin/screencapture")
+        .args(["-x", "-t", "png"])
+        .arg(&file)
+        .status()
+        .await
+        .map_err(|e| format!("screencapture couldn't start: {e}"))?;
+    let bytes = tokio::fs::read(&file).await;
+    let _ = tokio::fs::remove_file(&file).await;
+    match (status.success(), bytes) {
+        (true, Ok(bytes)) if !bytes.is_empty() => Ok(bytes),
+        _ => Err("The screenshot didn't work. Is Screen Recording on for Beluga (System Settings › Privacy & Security)?".into()),
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+async fn capture() -> Result<Vec<u8>, String> {
+    Err(SCREENSHOT_UNSUPPORTED.into())
+}
+
+const SCREENSHOT_UNSUPPORTED: &str = "Screenshots of this device aren't supported on Windows yet.";
+
+fn title(detail: &Detail) -> &'static str {
+    match detail {
+        Detail::Run { .. } => "Beluga: run a command?",
+        Detail::File { .. } => "Beluga: send a file?",
+        Detail::Screenshot => "Beluga: send a screenshot?",
+    }
+}
+
+fn open_window(app: &AppHandle, label: &str, title: &str) -> Result<(), String> {
     let window = WebviewWindowBuilder::new(app, label, WebviewUrl::App(PAGE.into()))
-        .title("Beluga: approve a command?")
+        .title(title)
         .inner_size(560.0, 480.0)
         .min_inner_size(420.0, 360.0)
         .minimizable(false)
@@ -471,39 +603,91 @@ fn device_name(state: &ClientState) -> String {
     state.config().device_name.unwrap_or_else(remote::hostname)
 }
 
-/// Run a command the server asked for, once the person here approves it. Only in server mode.
-#[tauri::command]
-pub async fn device_run(app: AppHandle, request: RunRequest) -> DeviceResult {
-    let deadline = Instant::now() + APPROVAL;
-    let client = app.state::<ClientState>();
-    if client.mode() != Some(Mode::Server) {
-        return DeviceResult::refused("This app isn't connected to a Beluga server.");
+/// Device reach is for the app connected to a server, never the one running Beluga here.
+fn connected(app: &AppHandle) -> Result<(), DeviceResult> {
+    match app.state::<ClientState>().mode() {
+        Some(Mode::Server) => Ok(()),
+        _ => Err(DeviceResult::refused("This app isn't connected to a Beluga server.")),
     }
-    let cwd = match check(&request) {
-        Ok(cwd) => cwd,
-        Err(refusal) => return refusal,
-    };
-    let limit = clamp_timeout(request.timeout_sec);
+}
+
+/// Ask the person here about this request, in the prompt window; anything but Approve is refused.
+async fn approve(app: &AppHandle, meta: &Meta, detail: Detail, deadline: Instant) -> Result<(), DeviceResult> {
+    let title = title(&detail);
     let prompt = Prompt {
-        id: request.id.clone(),
-        kind: "run",
-        device: device_name(&client),
-        conversation: request.conversation.clone(),
-        agent: request.agent.clone(),
-        why: request.why.clone(),
-        cwd: cwd.display().to_string(),
-        command: request.payload.command.clone(),
-        timeout_sec: limit.as_secs(),
-        expires_at: epoch_ms(APPROVAL),
+        id: meta.id.clone(),
+        device: device_name(&app.state::<ClientState>()),
+        conversation: meta.conversation.clone(),
+        agent: meta.agent.clone(),
+        why: meta.why.clone(),
+        detail,
+        expires_at: epoch_ms(deadline.saturating_duration_since(Instant::now())),
     };
     let answer = app
         .state::<Prompts>()
-        .ask(prompt, deadline, |label| open_window(&app, label), |label| close_window(&app, label))
+        .ask(prompt, deadline, |label| open_window(app, label, title), |label| close_window(app, label))
         .await;
     match answer {
-        Answer::Approved => run(request.payload.command.trim(), &cwd, limit).await,
-        Answer::Denied => DeviceResult::refused("Denied at the device."),
-        Answer::TimedOut => DeviceResult::refused("Nobody approved it at the device in time."),
+        Answer::Approved => Ok(()),
+        Answer::Denied => Err(DeviceResult::refused("Denied at the device.")),
+        Answer::TimedOut => Err(DeviceResult::refused("Nobody approved it at the device in time.")),
+    }
+}
+
+/// Run a command the server asked for, once the person here approves it.
+#[tauri::command]
+pub async fn device_run(app: AppHandle, request: RunRequest) -> DeviceResult {
+    let deadline = Instant::now() + APPROVAL;
+    let checked = connected(&app).and_then(|()| check(&request));
+    let cwd = match checked {
+        Ok(cwd) => cwd,
+        Err(refusal) => return refusal,
+    };
+    let limit = clamp_timeout(request.meta.timeout_sec);
+    let detail = Detail::Run {
+        cwd: cwd.display().to_string(),
+        command: request.payload.command.clone(),
+        timeout_sec: limit.as_secs(),
+    };
+    match approve(&app, &request.meta, detail, deadline).await {
+        Ok(()) => run(request.payload.command.trim(), &cwd, limit).await,
+        Err(refusal) => refusal,
+    }
+}
+
+/// Send one file to the server: its path and size are shown before anything is read. The bytes
+/// go back to the page, which uploads them; a refusal comes back as the error.
+#[tauri::command]
+pub async fn device_file(app: AppHandle, request: FileRequest) -> Result<Response, DeviceResult> {
+    let deadline = Instant::now() + APPROVAL;
+    connected(&app)?;
+    let (path, size) = check_file(&request.payload.path)?;
+    let detail = Detail::File {
+        path: path.display().to_string(),
+        size,
+    };
+    approve(&app, &request.meta, detail, deadline).await?;
+    Ok(Response::new(read_file(&path).await?))
+}
+
+/// Send a screenshot of this computer's screens to the server, once approved: a png, as bytes.
+#[tauri::command]
+pub async fn device_screenshot(app: AppHandle, request: ScreenshotRequest) -> Result<Response, DeviceResult> {
+    let deadline = Instant::now() + APPROVAL;
+    connected(&app)?;
+    if cfg!(windows) {
+        return Err(DeviceResult::error(SCREENSHOT_UNSUPPORTED));
+    }
+    let allowed = tauri::async_runtime::spawn_blocking(crate::privacy::screen_capture_allowed).await.unwrap_or(false);
+    if !allowed {
+        return Err(DeviceResult::error("Beluga needs Screen Recording for that: turn it on in System Settings › Privacy & Security, then ask again."));
+    }
+    approve(&app, &request.meta, Detail::Screenshot, deadline).await?;
+    tokio::time::sleep(SETTLE).await;
+    match timeout(CAPTURE, capture()).await {
+        Ok(Ok(png)) => Ok(Response::new(png)),
+        Ok(Err(e)) => Err(DeviceResult::error(e)),
+        Err(_) => Err(DeviceResult::error("The screenshot took too long.")),
     }
 }
 
@@ -526,30 +710,111 @@ mod tests {
     fn prompt(id: &str) -> Prompt {
         Prompt {
             id: id.into(),
-            kind: "run",
             device: "arch".into(),
             conversation: None,
             agent: None,
             why: "test".into(),
-            cwd: "/".into(),
-            command: "true".into(),
-            timeout_sec: 1,
+            detail: Detail::Screenshot,
             expires_at: 0,
         }
     }
 
     fn request(command: &str, cwd: Option<&str>) -> RunRequest {
         RunRequest {
-            id: "r1".into(),
+            meta: Meta {
+                id: "r1".into(),
+                ..Meta::default()
+            },
             payload: RunPayload {
                 command: command.into(),
                 cwd: cwd.map(str::to_owned),
             },
-            timeout_sec: None,
-            conversation: None,
-            agent: None,
-            why: String::new(),
         }
+    }
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("beluga-device-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn the_daemon_frames_come_through_as_sent() {
+        let run: RunRequest = serde_json::from_value(serde_json::json!({ "t": "device_request", "id": "r1", "kind": "run", "payload": { "command": "uname -a", "cwd": "~" }, "timeoutSec": 20, "agent": "claude", "why": "which kernel" })).unwrap();
+        assert_eq!((run.meta.id.as_str(), run.meta.timeout_sec, run.meta.agent.as_deref(), run.payload.command.as_str()), ("r1", Some(20), Some("claude"), "uname -a"));
+        let file: FileRequest = serde_json::from_value(serde_json::json!({ "t": "device_request", "id": "r2", "kind": "file", "payload": { "path": "~/notes.txt" }, "timeoutSec": 120, "why": "read" })).unwrap();
+        assert_eq!(file.payload.path, "~/notes.txt");
+        let shot: ScreenshotRequest = serde_json::from_value(serde_json::json!({ "t": "device_request", "id": "r3", "kind": "screenshot", "payload": {}, "timeoutSec": 120, "why": "see" })).unwrap();
+        assert_eq!(shot.meta.why, "see");
+    }
+
+    #[test]
+    fn the_prompt_shows_a_files_path_and_size() {
+        let shown = Prompt {
+            detail: Detail::File {
+                path: "/home/me/notes.txt".into(),
+                size: 5,
+            },
+            ..prompt("f1")
+        };
+        assert_eq!(
+            serde_json::to_value(shown).unwrap(),
+            serde_json::json!({ "id": "f1", "device": "arch", "conversation": null, "agent": null, "why": "test", "kind": "file", "path": "/home/me/notes.txt", "size": 5, "expiresAt": 0 })
+        );
+        let run = serde_json::to_value(Detail::Run { cwd: "/".into(), command: "ls".into(), timeout_sec: 9 }).unwrap();
+        assert_eq!(run, serde_json::json!({ "kind": "run", "cwd": "/", "command": "ls", "timeoutSec": 9 }));
+    }
+
+    #[test]
+    fn a_file_is_measured_before_it_is_read_and_big_or_secret_ones_are_refused() {
+        let dir = scratch("file");
+        let notes = dir.join("notes.txt");
+        std::fs::write(&notes, "hello").unwrap();
+        let (path, size) = check_file(&notes.to_string_lossy()).unwrap();
+        assert_eq!((path, size), (std::fs::canonicalize(&notes).unwrap(), 5));
+
+        let big = dir.join("big.bin");
+        std::fs::File::create(&big).unwrap().set_len(FILE_CAP + 1).unwrap();
+        let refusal = check_file(&big.to_string_lossy()).unwrap_err();
+        assert_eq!(refusal.outcome, Outcome::Refused);
+        assert_eq!(refusal.error.as_deref(), Some("Files over 512 MB are refused."));
+
+        let env = dir.join(".env");
+        std::fs::write(&env, "TOKEN=x").unwrap();
+        assert_eq!(check_file(&env.to_string_lossy()).unwrap_err().outcome, Outcome::Refused);
+        #[cfg(unix)]
+        {
+            let link = dir.join("innocent.txt");
+            std::os::unix::fs::symlink(&env, &link).unwrap();
+            assert_eq!(check_file(&link.to_string_lossy()).unwrap_err().outcome, Outcome::Refused);
+        }
+        assert_eq!(check_file("~/.ssh/id_ed25519").unwrap_err().outcome, Outcome::Refused);
+        assert_eq!(check_file(&dir.to_string_lossy()).unwrap_err().outcome, Outcome::Error);
+        assert_eq!(check_file("notes.txt").unwrap_err().outcome, Outcome::Error);
+        assert_eq!(check_file(&dir.join("gone.txt").to_string_lossy()).unwrap_err().outcome, Outcome::Error);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[tokio::test]
+    async fn an_approved_file_is_read_whole() {
+        let dir = scratch("read");
+        let notes = dir.join("notes.txt");
+        std::fs::write(&notes, "hello").unwrap();
+        assert_eq!(read_file(&notes).await.unwrap(), b"hello");
+        assert_eq!(read_file(&dir.join("gone")).await.unwrap_err().outcome, Outcome::Error);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Takes a real screenshot: run by hand in a desktop session (`cargo test -- --ignored screenshot`).
+    #[tokio::test]
+    #[ignore]
+    async fn screenshot_comes_back_as_a_png() {
+        let png = capture().await.unwrap();
+        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+        let out = std::env::temp_dir().join("beluga-device-screenshot.png");
+        std::fs::write(&out, &png).unwrap();
+        println!("{} bytes, saved to {}", png.len(), out.display());
     }
 
     #[test]
