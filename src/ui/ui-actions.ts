@@ -62,12 +62,14 @@ export function runUiActionWith(c: UiActionContext, action: UiAction): void {
     case 'trust_later':
       void api.people.dismissPrompt(action.peerId);
       return;
-    case 'search_hit':
+    case 'search_hit': {
+      const hit = store.getState().search.hits[action.index];
       store.dispatch({ type: 'search_cursor', cursor: action.index });
       void api.workbench.openHit(action.index);
       // The box shows that chat's own unsent words (the Mac's Composer keeps each chat's).
-      patchUi({ focus: 'chat' });
+      patchUi({ focus: 'chat', ...(hit ? { chatJump: { channel: hit.channel, ...(hit.id ? { id: hit.id } : {}), ts: hit.ts, at: Date.now() } } : {}) });
       return;
+    }
     case 'ws_more':
       patchUi({ menu: { menu: { kind: 'ws_more', id: action.id, actions: action.actions }, selected: 0 } });
       return;

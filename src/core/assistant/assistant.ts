@@ -219,6 +219,19 @@ export class MacAssistant {
     this.saver.loaded(channel);
   }
 
+  /** What the chats outside `loaded` said, from disk (a search reads them; the log stays as it is). */
+  savedChats(loaded: ReadonlySet<string>): ReadonlyArray<{ readonly channel: string; readonly items: readonly LogItem[] }> {
+    return this.list.chats.flatMap((c) => {
+      const channel = assistantChannel(c.id);
+      return loaded.has(channel) ? [] : [{ channel, items: readJson<LogItem[]>(this.chatFile(c.id, 'history.json'), []).map((l) => ({ ...l, channel })) }];
+    });
+  }
+
+  /** Bring a chat's saved messages back into the log when it has none there (a search hit opens it). */
+  loadSaved(id: string): void {
+    if (this.has(id) && !this.deps.store.getState().log.some((l) => l.channel === assistantChannel(id))) this.load(id);
+  }
+
   /** The chats, as the screens see them (the shared state's `assistant`). */
   chats(): AssistantChats {
     return { chats: this.list.chats.map((c) => ({ id: c.id, channel: assistantChannel(c.id), createdAt: c.createdAt, ...(c.auto ? { auto: true as const } : {}) })), active: this.list.active };

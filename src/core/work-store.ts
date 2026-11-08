@@ -134,6 +134,8 @@ export interface SearchHit {
   /** Where the match starts in `text`. */
   readonly at: number;
   readonly ts: number;
+  /** The item it was found in: the row a chat opens at, whatever time it draws that row at. */
+  readonly id?: string;
   readonly archived?: boolean;
 }
 

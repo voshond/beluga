@@ -15,7 +15,7 @@ test('groups line up with projects, and wear the icon you pick', async ({ page }
   await sidebar.getByRole('button', { name: 'landing', exact: true }).first().click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Move to Group' }).click();
   await page.getByRole('menuitem', { name: 'New Group…' }).click();
-  const field = sidebar.getByRole('textbox');
+  const field = sidebar.getByRole('textbox', { name: 'Name of the new group for landing' });
   await expect(field).toBeFocused();
   await field.fill('Look Group');
   await field.press('Enter');
@@ -43,7 +43,7 @@ test('groups line up with projects, and wear the icon you pick', async ({ page }
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await group.dblclick();
-  const rename = sidebar.getByRole('textbox');
+  const rename = sidebar.getByRole('textbox', { name: 'New name for the group Look Group' });
   await rename.fill('Renamed Group');
   await rename.press('Enter');
   const renamed = sidebar.getByRole('button', { name: 'Group Renamed Group' });
