@@ -137,7 +137,8 @@ first launch): it opens the server's page in its window. There the window's own 
 app's path and anything about files takes the browser's, since the files are the server's. Each
 row's choice is a key of `REMOTE_APP_PATHS` in `lib/boot-mode.ts` (`native('<key>')` asks it);
 the app commands the server's page may call go through the shell's `beluga` plugin
-(`CLIENT_COMMANDS`, `src-tauri/src/remote.rs`), and only the saved server's origin gets IPC.
+(`CLIENT_COMMANDS`, `src-tauri/src/remote.rs`), and only the saved server's origin gets IPC. How
+to set one up, and what the server's agents may ask of it (device reach): [docs/thin-client.md](thin-client.md).
 
 | Where (`packages/mac/src/…`) | In the app | In a served browser | In the Beluga app as a client |
 | --- | --- | --- | --- |
