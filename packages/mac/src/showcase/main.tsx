@@ -16,6 +16,7 @@ import { SentinelUses } from '../onboarding/scenes/SentinelUses.js';
 import o from '../onboarding/onboarding.module.css';
 import { STAGING, Staged } from './staging.js';
 import { TablesTour } from './TablesTour.js';
+import { RunAskDemo } from './RunAskDemo.js';
 import '../styles/tokens.css';
 import '../styles/base.css';
 
@@ -54,6 +55,7 @@ const SCENES: Record<string, () => ReactNode> = {
   sentinel: () => <Sentinel />,
   uses: () => <SentinelUses />,
   archive: () => <Archive />,
+  runask: () => <RunAskDemo />,
 };
 
 const params = new URLSearchParams(location.search);
