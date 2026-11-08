@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { inApp } from './boot.js';
+import { native } from './boot.js';
 import { beat, usePowerSaving } from './power.js';
 
 /**
@@ -41,7 +41,7 @@ export function watchWindow(): void {
   document.documentElement.dataset.window = active ? 'active' : 'idle';
   // The web view's focus events can lag the window's own (a click into Beluga from another app): Tauri says it first.
   // A focused window is in front, so it's seen even when the web view's visibility is stale.
-  if (inApp())
+  if (native('windowActive'))
     void import('@tauri-apps/api/window')
       .then(({ getCurrentWindow }) => getCurrentWindow().onFocusChanged(({ payload }) => set(payload)))
       .catch(() => undefined);

@@ -15,15 +15,44 @@ export function scrollParent(el: HTMLElement): HTMLElement | undefined {
   return undefined;
 }
 
+/** How long a jump keeps its target at the top while what's above it still lays out (a diagram drawn on the way). */
+const SETTLE_MS = 1500;
+/** Your own scrolling ends that: the page is yours again. */
+const YOURS = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const;
+
+/** While the page's content changes size, put `el` back where the jump left it, until SETTLE_MS or you scroll. */
+function keepInPlace(root: HTMLElement, again: () => void): void {
+  const content = root.firstElementChild;
+  if (!content || typeof ResizeObserver === 'undefined') return;
+  let first = true;
+  const observer = new ResizeObserver(() => {
+    if (first) return void (first = false);
+    again();
+  });
+  const stop = (): void => {
+    observer.disconnect();
+    clearTimeout(timer);
+    for (const type of YOURS) root.removeEventListener(type, stop);
+  };
+  const timer = setTimeout(stop, SETTLE_MS);
+  observer.observe(content);
+  for (const type of YOURS) root.addEventListener(type, stop, { passive: true });
+}
+
 /**
  * Bring `el` to the top of the page that scrolls it (a little below the edge). Only that page
- * moves: scrollIntoView would also nudge the window's own clipped containers.
+ * moves: scrollIntoView would also nudge the window's own clipped containers. Content that grows
+ * above it just after (a diagram or an image drawn as it scrolls by) doesn't push it away.
  */
 export function scrollToElement(el: HTMLElement, opts: { smooth?: boolean; offset?: number } = {}): void {
   const root = scrollParent(el);
   if (!root) return;
-  const top = root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - (opts.offset ?? 16);
-  root.scrollTo({ top: Math.max(0, top), behavior: opts.smooth && !reducedMotion() ? 'smooth' : 'auto' });
+  const place = (behavior: ScrollBehavior): void => {
+    const top = root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - (opts.offset ?? 16);
+    root.scrollTo({ top: Math.max(0, top), behavior });
+  };
+  place(opts.smooth && !reducedMotion() ? 'smooth' : 'auto');
+  keepInPlace(root, () => place('auto'));
 }
 
 /** The heading or footnote a `#hash` names in this document, if it has one. */

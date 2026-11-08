@@ -60,7 +60,8 @@ test('the palette goes anywhere', async ({ page }) => {
   await page.keyboard.press('Meta+K');
   await page.keyboard.type('usage');
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { level: 1 }).or(page.getByText('in worktrees'))).toBeVisible();
+  // Usage has its heading and its hero line both now: either one says the palette got there.
+  await expect(page.getByRole('heading', { level: 1 }).or(page.getByText('in worktrees')).first()).toBeVisible();
 });
 
 test('switches to dark from Settings', async ({ page }) => {

@@ -2,7 +2,7 @@ import { ActionsDropdown, type ActionItem } from '../components/SpecMenu.js';
 import { IconButton } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
 import { APP_MENU, type AppMenuRow, appearanceOf } from '../lib/app-menu-model.js';
-import { inApp } from '../lib/boot.js';
+import { native } from '../lib/boot.js';
 import { useBeluga } from '../lib/beluga.js';
 import { runMenuItem } from '../lib/native.js';
 import { usePrefs } from '../lib/prefs.js';
@@ -17,7 +17,7 @@ export function AppMenu() {
   const actions = useActions();
   const keysOf = useShortcutKeys();
   const { appearance } = usePrefs();
-  if (inApp()) return null;
+  if (native('appMenu')) return null;
   const toItem = (r: AppMenuRow): ActionItem => {
     const picks = appearanceOf(r.id);
     const keys = r.id ? keysOf(r.id) : undefined;

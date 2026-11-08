@@ -54,10 +54,10 @@ export interface JoinLink {
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 const token = (bytes: number): string => randomBytes(bytes).toString('base64url');
 
-/** "Chrome", "macOS" from a User-Agent: enough to tell your browsers apart. */
+/** "Chrome", "macOS" from a User-Agent: enough to tell your browsers apart. The desktop app as a client says BelugaApp/<version> (BLG-52). */
 export function describeBrowser(ua: string | undefined): { browser: string; os: string } {
   const u = ua ?? '';
-  const browser = /Edg\//.test(u) ? 'Edge' : /OPR\//.test(u) ? 'Opera' : /Firefox\/|FxiOS\//.test(u) ? 'Firefox' : /Chrome\/|CriOS\//.test(u) ? 'Chrome' : /Safari\//.test(u) ? 'Safari' : 'Browser';
+  const browser = /BelugaApp\//.test(u) ? 'Beluga app' : /Edg\//.test(u) ? 'Edge' : /OPR\//.test(u) ? 'Opera' : /Firefox\/|FxiOS\//.test(u) ? 'Firefox' : /Chrome\/|CriOS\//.test(u) ? 'Chrome' : /Safari\//.test(u) ? 'Safari' : 'Browser';
   const os = /iPhone/.test(u) ? 'iPhone' : /iPad/.test(u) ? 'iPad' : /Android/.test(u) ? 'Android' : /CrOS/.test(u) ? 'ChromeOS' : /Mac OS X|Macintosh/.test(u) ? 'macOS' : /Windows/.test(u) ? 'Windows' : /Linux/.test(u) ? 'Linux' : 'a computer';
   return { browser, os };
 }

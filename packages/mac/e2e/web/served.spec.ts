@@ -50,7 +50,10 @@ test('joins by a link, chats, uses a terminal, and locks at once when revoked', 
   await page.goto(web.link);
   await expect(sidebar(page)).toBeVisible({ timeout: 30_000 });
   // The secret left the address bar, and the session cookie is out of scripts' reach.
-  expect(page.url()).toBe(`${web.url}/`);
+  // (The page keeps where you are in its hash, #/room: that's no secret.)
+  const shown = new URL(page.url());
+  expect(`${shown.origin}${shown.pathname}`).toBe(`${web.url}/`);
+  expect(page.url()).not.toContain(new URL(web.link).hash.slice(1));
   expect(await page.evaluate(() => document.cookie)).toBe('');
 
   // A chat: send, and see the agent's answer.

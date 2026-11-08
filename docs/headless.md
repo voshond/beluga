@@ -202,6 +202,13 @@ Keep join links to yourself, and `beluga web sessions` shows who came in. Run
 The address changes when the tunnel restarts; `beluga status` shows the current one. A domain of
 your own that stays the same: [docs/web.md](web.md#your-own-domain).
 
+### In the desktop app
+
+Instead of a browser tab, the Beluga desktop app can open the server in its own window, with its
+notifications, clipboard and tray: pick **Connect to a server** on its first launch and enter your
+server's https address. The server's agents can then ask that computer for a command, a file or a
+screenshot, each approved there. How: [docs/thin-client.md](thin-client.md).
+
 ## Updating
 
 ```sh

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { unreachableDetail } from '../packages/mac/src/lib/boot.js';
+import { unreachableDetail } from '../packages/mac/src/lib/unreachable.js';
 
 describe('unreachableDetail', () => {
   it('says the server is restarting when a proxy answers 502, 503 or 504', () => {

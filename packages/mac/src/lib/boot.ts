@@ -5,9 +5,15 @@ import type { SoundChoice } from '@beluga/shared/notify-sound.js';
 import { MESSAGE_BANNER, NOTIFICATION_TAP } from './notices.js';
 import { REQUEST_NOTIFICATION, notificationActions } from '../gateway/request-actions.js';
 import { version } from '../../src-tauri/tauri.conf.json';
+import { unreachableDetail } from './unreachable.js';
+import { bootMode, inShell, native, remoteApp, appInvoke } from './boot-mode.js';
+import { deviceReach } from './device-bridge.js';
+import { uploadFile } from './web-files.js';
 
-/** Running inside the Tauri shell (otherwise: a browser, while developing). */
-export const inApp = (): boolean => '__TAURI_INTERNALS__' in globalThis;
+export { bootMode, inShell, native, remoteApp, appInvoke };
+
+/** The app with its own Beluga on this computer (otherwise: the app as a client, or a browser). */
+export const inApp = (): boolean => bootMode() === 'app';
 
 export interface Endpoint {
   readonly url: string;
@@ -31,14 +37,6 @@ export const WEB_HELLO_TOKEN = 'browser-session-cookie';
 export const webSocketUrl = (loc: Pick<Location, 'protocol' | 'host'>): string => `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/ws`;
 
 export class Unreachable extends Error {}
-
-const RESTARTING = new Set([502, 503, 504]);
-
-export const unreachableDetail = (status: number, statusText: string): string => {
-  const code = `${status}${statusText ? ` ${statusText}` : ''}`;
-  if (RESTARTING.has(status)) return `The server is restarting (${code}). Beluga reconnects by itself.`;
-  return `The server answered with a page Beluga didn’t expect (${code}).`;
-};
 
 /**
  * Where the daemon is: the app's own sidecar (asked through Tauri), the daemon's web port that
@@ -74,7 +72,7 @@ export async function endpoint(): Promise<Endpoint> {
 export function capabilities(setZoom: (dir: 'in' | 'out' | 'reset') => { ok: boolean; message: string }): Capabilities {
   return {
     copyText: async (text: string) => {
-      if (inApp()) {
+      if (native('clipboard')) {
         const { writeText } = await import('@tauri-apps/plugin-clipboard-manager');
         await writeText(text);
       } else await navigator.clipboard.writeText(text);
@@ -102,7 +100,7 @@ export function capabilities(setZoom: (dir: 'in' | 'out' | 'reset') => { ok: boo
         void playSound(n.tone ?? (n.sound ? DEFAULT_SOUND : NO_SOUND), n.volume ?? DEFAULT_VOLUME).catch(() => undefined);
         return;
       }
-      if (inApp()) {
+      if (native('notify')) {
         // No permission check here: the plugin answers "granted" on every Mac whatever System
         // Settings says. Settings › Notifications asks macOS itself (lib/sounds/access.ts).
         const { sendNotification } = await import('@tauri-apps/plugin-notification');
@@ -124,7 +122,7 @@ export function capabilities(setZoom: (dir: 'in' | 'out' | 'reset') => { ok: boo
       };
     },
     openExternal: async (target: string) => {
-      if (inApp()) {
+      if (native('openExternal')) {
         const { openUrl } = await import('@tauri-apps/plugin-opener');
         await openUrl(target);
       } else window.open(target, '_blank', 'noopener');
@@ -132,10 +130,8 @@ export function capabilities(setZoom: (dir: 'in' | 'out' | 'reset') => { ok: boo
     zoom: (dir: 'in' | 'out' | 'reset') => setZoom(dir),
     // "Open on your Mac" from the phone: the window comes back (unminimized, shown, focused); where to go comes as a navigate intent.
     raise: async () => {
-      if (inApp()) {
-        const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('focus_window');
-      } else window.focus();
+      if (native('raise')) await appInvoke('focus_window');
+      else window.focus();
     },
   };
 }
@@ -146,5 +142,6 @@ export const APP_VERSION: string = version;
 /** Attach to Beluga. */
 export async function connect(caps: Capabilities): Promise<SocketClient> {
   const { url, token } = await endpoint();
-  return SocketClient.connect({ url, token, kind: 'mac', version: APP_VERSION, caps });
+  const device = await deviceReach(uploadFile);
+  return SocketClient.connect({ url, token, kind: remoteApp() ? 'remote-app' : 'mac', version: APP_VERSION, caps, ...(device ? { device } : {}) });
 }
