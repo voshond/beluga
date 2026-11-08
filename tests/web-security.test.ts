@@ -132,7 +132,7 @@ describe('the served app', () => {
     const index = await get(port, '/', { cookie });
     const csp = String(index.headers['content-security-policy']);
     expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'");
-    expect(csp).toContain(`connect-src 'self' ws://127.0.0.1:${port}`);
+    expect(csp).toContain(`connect-src 'self' ws://127.0.0.1:${port} ipc: http://ipc.localhost`);
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(String((await get(port, '/assets/index-Ab12Cd34.js', { cookie })).headers['cache-control'])).toMatch(/^private,/);

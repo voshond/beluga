@@ -260,11 +260,14 @@ pub fn run() {
     // Run here or connect to a server: anything but Run here opens the connect page first.
     let client = remote::ClientState::new(remote::config_dir(&context.config().identifier));
     let run_here = client.starting_mode() == Some(remote::Mode::Local);
-    if !run_here {
-        for w in &mut context.config_mut().app.windows {
-            if w.label == "main" {
-                w.url = tauri::WebviewUrl::App(remote::PAGE.into());
-            }
+    let agent = remote::user_agent(context.config().version.as_deref().unwrap_or("0"));
+    for w in &mut context.config_mut().app.windows {
+        if w.label != "main" {
+            continue;
+        }
+        w.user_agent = agent.clone();
+        if !run_here {
+            w.url = tauri::WebviewUrl::App(remote::PAGE.into());
         }
     }
     let window_state = if background {
@@ -295,6 +298,28 @@ pub fn run() {
         )
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        // What the server's page may call in server mode (its capability: remote.rs), and where the window may go.
+        .plugin(remote::plugin(tauri::generate_handler![
+            focus_window,
+            set_tray_status,
+            set_tray_presence,
+            set_menu_state,
+            set_menu_keys,
+            take_pending_links,
+            system_idle_seconds,
+            sounds::sound_play_system,
+            sounds::notification_access,
+            sounds::open_notification_settings,
+            updater::update_state,
+            updater::update_check,
+            updater::update_set_mode,
+            updater::update_choose,
+            updater::update_activity,
+            updater::update_dismiss_news,
+            remote::client_config,
+            remote::client_use_local,
+            remote::client_change_server
+        ]))
         .manage(updater::Updates::default())
         .manage(requests::TrayState::default())
         .manage(popup::PopupState::default())
@@ -338,6 +363,7 @@ pub fn run() {
             remote::client_use_server,
             remote::client_open,
             remote::client_use_local,
+            remote::client_change_server,
             export::save_export,
             sounds::sound_install,
             sounds::sound_prune,

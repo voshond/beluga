@@ -1,16 +1,54 @@
 //! Run Beluga here, or connect to a Beluga server: which one, the server's address and this
 //! device's name, kept in the app's config dir (client.json). Server mode starts no daemon; the
 //! window opens connect.html, which reaches the server or says why it can't.
+//!
+//! The server's page gets IPC through a capability added at runtime for its origin alone, with a
+//! short list of native powers (BLG-52). Leaving that origin opens the link in your browser.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::net::{Ipv4Addr, Ipv6Addr, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{AppHandle, Manager, Url};
+use tauri::ipc::CapabilityBuilder;
+use tauri::plugin::TauriPlugin;
+use tauri::{AppHandle, Manager, Url, Wry};
+use tauri_plugin_opener::OpenerExt;
 
 pub const PAGE: &str = "connect.html";
 const FILE: &str = "client.json";
 const NAME_MAX: usize = 64;
+
+/// What the server's page may do in this window. App commands it needs go through the `beluga`
+/// plugin (lib.rs), never the app's own command list, which stays local-only.
+const REMOTE_PERMISSIONS: &[&str] = &[
+    "core:event:default",
+    "core:app:default",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-unminimize",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-title",
+    "notification:default",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-write-html",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-read-image",
+    "opener:allow-open-url",
+    "opener:allow-default-urls",
+    "deep-link:default",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "beluga:default",
+];
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Navigation {
+    Stay,
+    External,
+    Block,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -47,6 +85,7 @@ pub struct ClientView {
 
 pub struct ClientState {
     dir: PathBuf,
+    granted: Mutex<HashSet<String>>,
 }
 
 /// Where Tauri keeps this app's config (its `app_config_dir`), known before the app is built.
@@ -72,7 +111,10 @@ pub fn save(dir: &Path, config: &ClientConfig) -> Result<(), String> {
 
 impl ClientState {
     pub fn new(dir: PathBuf) -> Self {
-        Self { dir }
+        Self {
+            dir,
+            granted: Mutex::new(HashSet::new()),
+        }
     }
 
     pub fn config(&self) -> ClientConfig {
@@ -204,6 +246,98 @@ pub async fn reachable(origin: &str) -> Result<(), String> {
     .map_err(|e| e.to_string())?
 }
 
+/// The page agent string: the engine's own, plus BelugaApp/<version> so the server's web sessions
+/// name this app (src/daemon/web-sessions.ts). Windows' WebView2 keeps its own: no stand-in there.
+pub fn user_agent(version: &str) -> Option<String> {
+    let engine = if cfg!(target_os = "macos") {
+        "Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)"
+    } else if cfg!(target_os = "linux") {
+        "X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
+    } else {
+        return None;
+    };
+    Some(format!("Mozilla/5.0 ({engine} BelugaApp/{version}"))
+}
+
+/// Where the main window may go: the app's own pages and the saved server stay in it; any other
+/// web address opens in your browser. Only in server mode; Run here is left as it was.
+pub fn navigation(config: &ClientConfig, url: &Url, app_page: bool) -> Navigation {
+    if app_page || config.mode != Some(Mode::Server) || matches!(url.scheme(), "about" | "data" | "blob") {
+        return Navigation::Stay;
+    }
+    if config.server_url.as_deref() == Some(url.origin().ascii_serialization().as_str()) {
+        return Navigation::Stay;
+    }
+    if matches!(url.scheme(), "http" | "https" | "mailto" | "tel") {
+        return Navigation::External;
+    }
+    Navigation::Block
+}
+
+fn dev_url(app: &AppHandle) -> Option<Url> {
+    app.config().build.dev_url.clone().filter(|_| cfg!(dev))
+}
+
+fn is_app_page(app: &AppHandle, url: &Url) -> bool {
+    url.scheme() == "tauri"
+        || url.host_str() == Some("tauri.localhost")
+        || dev_url(app).is_some_and(|dev| dev.origin() == url.origin())
+}
+
+/// One of the app's own pages, wherever the window is now.
+fn app_url(app: &AppHandle, path: &str) -> Result<Url, String> {
+    let base = match dev_url(app) {
+        Some(dev) => dev,
+        None if cfg!(windows) => Url::parse("http://tauri.localhost/").map_err(|e| e.to_string())?,
+        None => Url::parse("tauri://localhost/").map_err(|e| e.to_string())?,
+    };
+    base.join(path).map_err(|e| e.to_string())
+}
+
+/// The `beluga` plugin: the app commands the server's page may call, and the window's navigation rule.
+pub fn plugin<F>(commands: F) -> TauriPlugin<Wry>
+where
+    F: Fn(tauri::ipc::Invoke<Wry>) -> bool + Send + Sync + 'static,
+{
+    tauri::plugin::Builder::new("beluga")
+        .invoke_handler(commands)
+        .on_navigation(|webview, url| {
+            if webview.label() != "main" {
+                return true;
+            }
+            let app = webview.app_handle();
+            let config = app.state::<ClientState>().config();
+            match navigation(&config, url, is_app_page(app, url)) {
+                Navigation::Stay => true,
+                Navigation::External => {
+                    let _ = app.opener().open_url(url.as_str(), None::<&str>);
+                    false
+                }
+                Navigation::Block => false,
+            }
+        })
+        .build()
+}
+
+/// IPC for the server's origin, in the main window only; every other remote page has none.
+fn grant(app: &AppHandle, origin: &str) -> Result<(), String> {
+    let state = app.state::<ClientState>();
+    let mut granted = crate::daemon::locked(&state.granted);
+    if granted.contains(origin) {
+        return Ok(());
+    }
+    let capability = REMOTE_PERMISSIONS.iter().fold(
+        CapabilityBuilder::new(format!("remote-server-{}", granted.len()))
+            .remote(format!("{origin}/*"))
+            .local(false)
+            .window("main"),
+        |capability, permission| capability.permission(*permission),
+    );
+    app.add_capability(capability).map_err(|e| e.to_string())?;
+    granted.insert(origin.to_string());
+    Ok(())
+}
+
 fn main_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
     app.get_webview_window("main")
         .ok_or_else(|| "Beluga's window is gone.".to_string())
@@ -211,6 +345,7 @@ fn main_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
 
 fn open(app: &AppHandle, url: &str) -> Result<(), String> {
     let url = Url::parse(url).map_err(|e| e.to_string())?;
+    grant(app, &url.origin().ascii_serialization())?;
     main_window(app)?.navigate(url).map_err(|e| e.to_string())
 }
 
@@ -266,16 +401,22 @@ pub async fn client_open(app: AppHandle) -> Result<(), String> {
 pub async fn client_use_local(app: AppHandle) -> Result<(), String> {
     app.state::<ClientState>()
         .update(|config| config.mode = Some(Mode::Local))?;
-    let window = main_window(&app)?;
-    let mut home = window.url().map_err(|e| e.to_string())?;
-    home.set_path("/");
-    home.set_query(None);
-    window.navigate(home).map_err(|e| e.to_string())?;
+    main_window(&app)?
+        .navigate(app_url(&app, "/")?)
+        .map_err(|e| e.to_string())?;
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         let _ = crate::daemon::ensure(&handle, &[]).await;
     });
     Ok(())
+}
+
+/// Back to the connect page to pick another server (or Run here), from the server's Settings.
+#[tauri::command]
+pub fn client_change_server(app: AppHandle) -> Result<(), String> {
+    main_window(&app)?
+        .navigate(app_url(&app, &format!("/{PAGE}?change=1"))?)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -304,6 +445,36 @@ mod tests {
         assert!(check_url("https://me:pw@box.example.com").unwrap_err().contains("sign in"));
         assert!(check_url("").unwrap_err().contains("Enter"));
         assert!(check_url("https://").is_err());
+    }
+
+    #[test]
+    fn the_window_keeps_to_the_server_and_sends_the_rest_to_the_browser() {
+        let url = |u: &str| Url::parse(u).unwrap();
+        let server = ClientConfig {
+            mode: Some(Mode::Server),
+            server_url: Some("https://box.example.com".into()),
+            device_name: None,
+        };
+        assert_eq!(navigation(&server, &url("https://box.example.com/join/x"), false), Navigation::Stay);
+        assert_eq!(navigation(&server, &url("tauri://localhost/connect.html"), true), Navigation::Stay);
+        assert_eq!(navigation(&server, &url("https://github.com/x"), false), Navigation::External);
+        assert_eq!(navigation(&server, &url("https://box.example.com:8443/"), false), Navigation::External);
+        assert_eq!(navigation(&server, &url("file:///etc/passwd"), false), Navigation::Block);
+        let here = ClientConfig {
+            mode: Some(Mode::Local),
+            ..ClientConfig::default()
+        };
+        assert_eq!(navigation(&here, &url("https://github.com/x"), false), Navigation::Stay);
+    }
+
+    #[test]
+    fn the_app_names_itself_to_the_server() {
+        let ua = user_agent("2.3.2");
+        if cfg!(windows) {
+            assert!(ua.is_none());
+        } else {
+            assert!(ua.unwrap().ends_with("BelugaApp/2.3.2"));
+        }
     }
 
     #[test]

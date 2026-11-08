@@ -1,6 +1,31 @@
 fn main() {
     widgets_shim();
-    tauri_build::build()
+    // The `beluga` plugin (src/remote.rs): the app commands a Beluga server's page may call in server mode.
+    let client = tauri_build::InlinedPlugin::new()
+        .commands(&[
+            "focus_window",
+            "set_tray_status",
+            "set_tray_presence",
+            "set_menu_state",
+            "set_menu_keys",
+            "take_pending_links",
+            "system_idle_seconds",
+            "sound_play_system",
+            "notification_access",
+            "open_notification_settings",
+            "update_state",
+            "update_check",
+            "update_set_mode",
+            "update_choose",
+            "update_activity",
+            "update_dismiss_news",
+            "client_config",
+            "client_use_local",
+            "client_change_server",
+        ])
+        .default_permission(tauri_build::DefaultPermissionRule::AllowAllCommands);
+    tauri_build::try_build(tauri_build::Attributes::new().plugin("beluga", client))
+        .expect("failed to run tauri-build")
 }
 
 /// The desktop widgets' reload (src/widgets.rs): WidgetCenter is Swift only, so a tiny Swift file
