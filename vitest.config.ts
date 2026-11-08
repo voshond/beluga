@@ -14,7 +14,7 @@ export default defineConfig({
     // Ten worktrees testing at once leave the Mac usable: half the cores per run (KLAUD_TEST_WORKERS
     // overrides it), and a few runs at a time machine-wide (scripts/test-lock.mjs, KLAUD_TEST_SLOTS).
     maxWorkers: workerCount(),
-    globalSetup: ['scripts/test-lock.mjs'],
+    globalSetup: ['scripts/test-lock.mjs', 'tests/temp-root.global.ts'],
     // The whole suite passing on a Mac prints a "Tested-on: macOS <tree>" line for the commit, and CI
     // skips its macOS run for it (scripts/local-pass.mjs).
     reporters: ['default', './scripts/local-pass.mjs'],
