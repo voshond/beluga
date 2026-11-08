@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -120,6 +120,32 @@ describe('reading the stats', () => {
     expect(a).toEqual(demoStats([p], NOW));
     expect(Object.keys(a.days).length).toBeGreaterThan(150);
     expect(Object.keys(a.prs).length).toBeGreaterThan(5);
+  });
+});
+
+describe('the stats file', () => {
+  it('keeps the days when one figure is a hair out of range', () => {
+    const file = path.join(mkdtempSync(path.join(os.tmpdir(), 'stats-')), 'stats.json');
+    const saved = { ...emptyStats(NOW - DAY), days: { [statDay(NOW)]: { [ROOT]: { claude: { tokens: 500, cost: -1e-17 } } } }, plan: [{ runtime: 'codex', kind: 'week', resetsAt: NOW, peak: 104 }] };
+    writeFileSync(file, JSON.stringify(saved));
+    const loaded = loadStats(file, NOW);
+    expect(loaded.startedAt).toBe(NOW - DAY);
+    expect(loaded.days[statDay(NOW)]![ROOT]!.claude).toEqual({ tokens: 500, cost: 0 });
+    expect(loaded.plan[0]!.peak).toBe(100);
+  });
+
+  it('copies one it can’t read aside before starting over', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'stats-'));
+    const file = path.join(dir, 'stats.json');
+    writeFileSync(file, '{"v":1,"days":');
+    expect(loadStats(file, NOW).startedAt).toBe(NOW);
+    expect(readFileSync(`${file}.unreadable-${NOW}`, 'utf8')).toBe('{"v":1,"days":');
+  });
+
+  it('starts a new one quietly when there is none', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'stats-'));
+    expect(loadStats(path.join(dir, 'stats.json'), NOW).startedAt).toBe(NOW);
+    expect(readdirSync(dir)).toEqual([]);
   });
 });
 

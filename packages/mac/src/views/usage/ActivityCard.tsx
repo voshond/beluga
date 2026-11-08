@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import type { AppState } from '@beluga/core/store.js';
-import { type DayTotal, dailyTotals, tokensOf } from '@beluga/workspaces/usage-days.js';
+import { type StatsSnapshot, dailySeries, dayStart, totalsOf } from '@beluga/shared/stats.js';
+import type { DayTotal } from '@beluga/workspaces/usage-days.js';
 import { cx } from '../../components/ui.js';
-import { Card, slotColor } from './parts.js';
-import { compact, formatCost, slotOf } from './usage-model.js';
+import { Card } from './parts.js';
+import { groupOf } from './stats-model.js';
+import { compact, formatCost } from './usage-model.js';
 import s from './usage.module.css';
 
 /** Two weeks of days: this week stands out against the one before. */
@@ -86,44 +88,40 @@ function DayChart({ days, stacks }: { days: readonly DayTotal[]; stacks: readonl
   );
 }
 
-/** Claude tokens and cost this week, against the week before, with a bar per day. */
-export function ActivityCard({ state, now }: { state: AppState; now: number }) {
-  const usages = state.projects.flatMap((p) => p.workspaces.map((w) => w.usage));
-  const days = dailyTotals(usages, now, DAYS);
+const dayTotals = (stats: StatsSnapshot, now: number, project?: string): DayTotal[] =>
+  dailySeries(stats, 'tokens', now, DAYS).map(({ key }) => {
+    const counts = Object.entries(stats.days[key] ?? {})
+      .filter(([root]) => project === undefined || root === project)
+      .flatMap(([, agents]) => Object.values(agents));
+    return { key, date: dayStart(key), tokens: counts.reduce((n, c) => n + (c.tokens ?? 0), 0), cost: counts.reduce((n, c) => n + (c.cost ?? 0), 0) };
+  });
+
+/**
+ * Claude tokens and cost this week, against the week before, with a bar per day. Read from the
+ * daemon's stats, which keep counting what deleted worktrees and chats spent.
+ */
+export function ActivityCard({ state, stats, now }: { state: AppState; stats: StatsSnapshot | undefined; now: number }) {
+  if (!stats) return <Card label="Agent activity" title="Agents this week">{null}</Card>;
+  const days = dayTotals(stats, now);
+  const roots = [...new Set(days.flatMap((d) => Object.keys(stats.days[d.key] ?? {})))];
   // Biggest project first: it sits at the bottom of each column.
-  const stacks: Stack[] = state.projects
-    .map((p) => ({
-      key: p.id,
-      name: p.root ? p.name : 'Chats',
-      color: slotColor(slotOf(state.projects, p)),
-      days: dailyTotals(
-        p.workspaces.map((w) => w.usage),
-        now,
-        DAYS,
-      ),
-    }))
+  const stacks: Stack[] = roots
+    .map((root) => {
+      const { name, color } = groupOf(root, 'project', state.projects);
+      return { key: root, name, color, days: dayTotals(stats, now, root) };
+    })
     .filter((st) => st.days.some((d) => d.tokens))
     .sort((a, b) => sum(b.days, 'tokens') - sum(a.days, 'tokens'));
   const week = days.slice(-WEEK);
   const before = days.slice(0, DAYS - WEEK);
   const today = days.at(-1)!;
-  const allTokens = usages.reduce((n, u) => n + tokensOf(u), 0);
-  const allCost = usages.reduce((n, u) => n + (u?.cost ?? 0), 0);
-  const hasDays = usages.some((u) => u?.days && Object.keys(u.days).length);
+  const all = totalsOf(stats, '');
   const weekTokens = sum(week, 'tokens');
   const change = delta(weekTokens, sum(before, 'tokens'));
   return (
-    <Card label="Agent activity" title="Agents this week" aside={allTokens ? <span className={s.updated}>{`${compact(allTokens)} · ${formatCost(allCost)} all time`}</span> : undefined}>
-      {!allTokens ? (
+    <Card label="Agent activity" title="Agents this week" aside={all.tokens ? <span className={s.updated}>{`${compact(all.tokens)} · ${formatCost(all.cost)} all time`}</span> : undefined}>
+      {!all.tokens ? (
         <p className={s.quiet}>Nothing yet. Tokens and cost add up here as your agent works in your projects.</p>
-      ) : !hasDays ? (
-        <>
-          <div className={s.hero}>
-            <span className={s.heroValue}>{compact(allTokens)}</span>
-            <span className={s.heroUnit}>tokens · {formatCost(allCost)}</span>
-          </div>
-          <p className={s.quiet}>All time so far. A day-by-day chart starts with your agent’s next run.</p>
-        </>
       ) : (
         <>
           <div className={s.hero}>

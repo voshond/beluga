@@ -2,18 +2,20 @@
  * ~/.beluga/stats.json: your stats (shared/stats.ts), plus what the counter needs to count only
  * what's new: each workspace's tokens when last seen, and what was already backfilled.
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { STAT_KEYS, type StatsSnapshot, dayStart } from '../../shared/stats.js';
 import { belugaHome } from '../home.js';
 
-const Counts = z.object(Object.fromEntries(STAT_KEYS.map((k) => [k, z.number().min(0).optional()])) as Record<(typeof STAT_KEYS)[number], z.ZodOptional<z.ZodNumber>>);
+/** A count that's off by a hair (float drift, a runtime's odd reading) is clamped, never a reason to drop the whole file. */
+const clamped = (max = Infinity) => z.number().transform((n) => Math.min(max, Math.max(0, n)));
+const Counts = z.object(Object.fromEntries(STAT_KEYS.map((k) => [k, clamped().optional()])) as Record<(typeof STAT_KEYS)[number], z.ZodOptional<ReturnType<typeof clamped>>>);
 const Day = z.record(z.string(), z.record(z.string(), Counts));
-const Pr = z.object({ project: z.string(), agent: z.string(), number: z.number().int(), title: z.string().optional(), opened: z.number(), merged: z.number().optional(), added: z.number().min(0), removed: z.number().min(0) });
-const PlanWindowSchema = z.object({ runtime: z.string(), kind: z.enum(['session', 'week']), resetsAt: z.number(), peak: z.number().min(0).max(100), open: z.literal(true).optional() });
+const Pr = z.object({ project: z.string(), agent: z.string(), number: z.number().int(), title: z.string().optional(), opened: z.number(), merged: z.number().optional(), added: clamped(), removed: clamped() });
+const PlanWindowSchema = z.object({ runtime: z.string(), kind: z.enum(['session', 'week']), resetsAt: z.number(), peak: clamped(100), open: z.literal(true).optional() });
 /** A workspace as last counted: its tokens and cost then, and whether it was archived. */
-const Seen = z.object({ t: z.number().min(0), c: z.number().min(0), a: z.literal(1).optional() });
+const Seen = z.object({ t: clamped(), c: clamped(), a: z.literal(1).optional() });
 
 export const StatsFileSchema = z.object({
   v: z.literal(1),
@@ -40,14 +42,24 @@ export const statsPath = (): string => path.join(belugaHome(), 'stats.json');
 
 export const emptyStats = (now: number): StatsFile => ({ v: 1, startedAt: now, days: {}, prs: {}, hours: Array.from({ length: 168 }, () => 0), seen: {}, history: false, prsAt: {}, plan: [] });
 
-/** The file, or a new one starting now when there's none (or it can't be read). */
+/**
+ * The file, or a new one starting now when there's none (or it can't be read). One there that
+ * can't be read is copied aside first: the next save replaces it.
+ */
 export function loadStats(file: string, now: number): StatsFile {
+  if (!existsSync(file)) return emptyStats(now);
   try {
     const parsed = StatsFileSchema.safeParse(JSON.parse(readFileSync(file, 'utf8')));
-    return parsed.success ? parsed.data : emptyStats(now);
+    if (parsed.success) return parsed.data;
   } catch {
-    return emptyStats(now);
+    // Not JSON: kept aside below.
   }
+  try {
+    copyFileSync(file, `${file}.unreadable-${now}`);
+  } catch {
+    // Nothing more to keep: a new file it is.
+  }
+  return emptyStats(now);
 }
 
 export function saveStats(data: StatsFile, file: string): void {
