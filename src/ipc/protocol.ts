@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Intent } from '../core/intents.js';
 import type { Action, DomainState } from '../core/store.js';
 import { decode, encode } from '../shared/codec.js';
+import { DEVICE_CAPS, DEVICE_OS, type DeviceRequestFrame } from '../shared/devices.js';
 
 /**
  * How screens talk to the beluga daemon on this computer: one WebSocket on 127.0.0.1, a token
@@ -24,10 +25,12 @@ export const ClientFrame = z.discriminatedUnion('t', [
     t: z.literal('hello'),
     token: z.string().min(16).max(200),
     ipc: z.number().int(),
-    kind: z.enum(['mac', 'cli', 'test']),
+    kind: z.enum(['mac', 'cli', 'test', 'remote-app']),
     version: z.string().max(40),
     launchDir: z.string().max(4096).optional(),
     caps: z.array(z.enum(CAPS)).max(CAPS.length).default([]),
+    // A remote app offering its own machine to the server's agents (shared/devices.ts).
+    device: z.object({ name: z.string().trim().min(1).max(100), os: z.enum(DEVICE_OS), caps: z.array(z.enum(DEVICE_CAPS)).max(DEVICE_CAPS.length) }).optional(),
   }),
   z.object({ t: z.literal('call'), id, method: z.string().max(100), args: z.array(z.unknown()).max(20) }),
   z.object({
@@ -35,6 +38,16 @@ export const ClientFrame = z.discriminatedUnion('t', [
     attention: z.object({ shown: z.array(z.string().max(200)).max(50), visible: z.array(z.string().max(200)).max(50), files: z.boolean(), front: z.boolean().optional() }),
   }),
   z.object({ t: z.literal('cap_result'), id, ok: z.boolean(), value: z.unknown().optional(), error: z.string().max(2000).optional() }),
+  z.object({
+    t: z.literal('device_result'),
+    id,
+    outcome: z.enum(['ok', 'refused', 'error']),
+    exitCode: z.number().int().nullable().optional(),
+    stdout: z.string().max(1_000_000).optional(),
+    stderr: z.string().max(1_000_000).optional(),
+    path: z.string().max(4096).optional(),
+    error: z.string().max(2000).optional(),
+  }),
   z.object({ t: z.literal('term_attach'), term }),
   z.object({ t: z.literal('term_detach'), term }),
   z.object({ t: z.literal('term_input'), term, data: z.string().max(1_000_000), reply: z.boolean().optional() }),
@@ -66,6 +79,8 @@ export type DaemonFrame =
   | { readonly t: 'phone_touch'; readonly device: string; readonly touch: PhoneTouchData }
   // How the mirror is doing: streaming (with its route, and whether video is asked for or flowing), or stopped with a reason.
   | { readonly t: 'phone_mirror'; readonly device: string; readonly on: boolean; readonly route?: string; readonly error?: string; readonly video?: 'asking' | 'on'; readonly note?: string }
+  // Run a command, send a file or take a screenshot on a client device, once its person approves.
+  | DeviceRequestFrame
   | { readonly t: 'clients'; readonly count: number }
   | { readonly t: 'pong' }
   | { readonly t: 'bye'; readonly reason: string };
