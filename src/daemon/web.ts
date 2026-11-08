@@ -67,10 +67,12 @@ const SECURITY_HEADERS: Readonly<Record<string, string>> = {
  * The app's own policy (the Mac app's, tauri.conf.json, without Tauri's parts): only its own
  * scripts, its own socket. On the web port a single injected script would be a shell, so it's sent
  * with every file. The socket's origin is named too, for browsers whose 'self' doesn't cover ws:.
+ * Tauri's IPC (ipc:, http://ipc.localhost) is let through for the desktop app as a client (BLG-52):
+ * a browser has neither, and the app grants IPC to the server's origin alone (remote.rs).
  */
 export function appCsp(host: string, https: boolean): string {
   const socket = `${https ? 'wss' : 'ws'}://${host}`;
-  return `default-src 'self'; connect-src 'self' ${socket}; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+  return `default-src 'self'; connect-src 'self' ${socket} ipc: http://ipc.localhost; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 }
 
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);

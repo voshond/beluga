@@ -130,47 +130,54 @@ loopback, so they share one count): keep the proxy for yourself.
 
 A page served by the web port knows it (`webServed()` in `lib/boot.ts`); one from the development
 server (vite, the e2e demo) is a plain browser and keeps its development behaviour. Every
-`inApp()` branch, and what a served page does instead:
+`inApp()` branch, and what a served page does instead.
 
-| Where (`packages/mac/src/…`) | In the app | In a served browser |
-| --- | --- | --- |
-| `main.tsx`, `popup/main.tsx`: `data-app="tauri"` | the window's own look (vibrancy, title bar) | a plain page (`data-web="true"`) |
-| `lib/boot.ts` `endpoint()` | asks Tauri for the daemon's port and token | `/__beluga/endpoint` says `{ web: true }`; the socket is this origin's `/ws`, its session cookie lets it in |
-| `lib/boot.ts` `copyText` cap, `lib/copy.ts` | the app's clipboard | `navigator.clipboard` (needs https or localhost) |
-| `lib/term-clipboard.ts` a terminal's paste | the app's clipboard | `navigator.clipboard.readText()`; over plain http Ctrl+Shift+V is left to the browser, whose own paste reaches the terminal (right-click › Paste is off there), and an OSC 52 copy from a program only lands over https |
-| `lib/boot.ts` `notify` cap | macOS banners with actions, the pop-up for requests | Web Notifications (asked once; needs https or localhost), clicking one goes to its chat or request; a friend's message is the in-window banner as in the app |
-| `layout/NotificationCenter.tsx` the bell's list | a popover under the toolbar bell | the same; in a window too narrow to show the bell (a phone's browser) it opens as the Notifications page instead (`layout/NotificationsView.tsx`) |
-| `lib/boot.ts` `openExternal`, `lib/system.ts` | the default browser | a new tab |
-| `lib/boot.ts` `raise` | brings the window forward | `window.focus()` |
-| `lib/projects.ts` `pickFolders` (Add Project › Choose Folders…, New Project › Change…, Share a Folder, `FormSheet` folders, Settings › People & access › Add Folder…) | the Open panel | Beluga's own folder picker over the server's folders (`dialogs/FolderBrowser.tsx`, `local.browse`) |
-| `lib/projects.ts` `pickImage` (a project's Change Icon…) | the Open panel | the browser's file picker; the image is uploaded and used from there |
-| `dialogs/AddProjectSheet.tsx` folder drop | folders dropped on the window are added | not offered (your computer's folders aren't the server's): "Choose a project folder where Beluga runs" with Choose Folders… |
-| `chat/use-attachments.tsx` Finder drop | files dropped on a conversation attach by their path | files dropped on the message box are uploaded (`/upload`, into `~/.beluga/uploads`) and attach by their path there; images attach as pictures as before |
-| `chat/paste-paths.ts` Paste as Plain Text | the app's clipboard | `navigator.clipboard.readText()` |
-| `network/NetComposer.tsx` paper clip | the Open panel | the browser's file picker, sent as data |
-| `network/ConversationView.tsx` drop | the app's drop event | the browser's drop event, sent as data |
-| `network/ChatFiles.tsx` Open, Show in Finder, Save As… | open, reveal, the Save panel | Download (a one-time `/download/<token>` link, `web.download`) |
-| `lib/files.ts` `revealInFinder`, `openWithDefaultApp`, `saveFile` | Finder, the default app, the Save panel | a file is downloaded; a folder's path is copied and said |
-| `lib/save-text.ts` Save As… (tables) | the Save panel | a browser download |
-| `tasks/TaskSections.tsx` Add Files, Proof › Picture or File… | the Open panel | the browser's file picker, uploaded |
-| `tasks/use-task-drop.tsx` | Finder drops on a task, its card or row | the browser's drop on the same places, uploaded |
-| `layout/Sidebar.tsx` folder drop | folders dropped on the sidebar become projects | not offered (as Add Project) |
-| `network/AddFriendSheet.tsx` paste a code | the app's clipboard | `navigator.clipboard.readText()` |
-| `network/net-native.ts` idle, your status | the Mac's idle time; the menu bar | the page's own input; nothing |
-| `lib/native.ts` tray, Dock badge, deep links, window focus, notification taps | the menu bar icon, the Dock, `beluga://` links | hidden: the page's title and in-window banners only |
-| `lib/updates.ts`, `dialogs/UpdateSettings.tsx` | checks, downloads and installs updates | hidden: the server's Beluga updates, not the page |
-| `dialogs/Settings.tsx` Menu Bar pane, Reduce transparency | the menu bar icon, vibrancy | hidden |
-| `dialogs/VoiceSettings.tsx` From any app, `lib/dictation.ts` global shortcut | a shortcut that works in any app | hidden: the shortcut works while the page has focus |
-| `layout/AppMenu.tsx`, `lib/app-menu-model.ts` the menu bar | the menu bar: Settings… (⌘,) and the rest | a gear button at the sidebar's top left (in the toolbar while the sidebar is hidden): Settings…, Keys and Commands, Everything You Can Do…, then File, View and Go, run as the menu bar's items are. Left out: what does nothing in a browser (updates, Window, Quit, Open the Log) and the Conversation and Workspace menus, which the toolbar shows |
-| `lib/web-history.ts`, `layout/WebBack.tsx` where you are | the window remembers nothing across a reload; each page's own Back | the address follows the view (`#/task?id=BLG-12`, `lib/web-history-model.ts`; drafts are left out), so a reload or a shared address opens the same place; the browser's Back and Forward step through the views, and a Back button sits beside the gear (greyed out when there's nowhere to go back to) |
-| `lib/shortcuts.ts` menu keys | the app's menu shows your shortcuts | nothing to send (the page has no menu bar) |
-| `lib/sounds/*` | macOS sounds, installed for banners | Beluga's own sounds in the page; macOS system sounds are left out |
-| `lib/sounds/access.ts`, `lib/privacy.ts` | asks macOS about notifications, the screen, the microphone | the browser's permissions |
-| `lib/window-active.ts` | the window's focus | the page's visibility and focus |
-| `gateway/popup-bridge.ts`, `gateway/request-native.ts` | the floating request pop-up, notification buttons | requests in the window (NeedsYou and the Requests view) |
-| `gateway/AccessSettings.tsx` Add Folder… | the Open panel | Beluga's folder picker |
-| `layout/ProjectTree.tsx` Change Icon… | the Open panel | the browser's file picker, uploaded |
-| `lib/native-routes.ts` Share a Folder… | the Open panel, then who | the Share a Folder sheet with Choose… (Beluga's folder picker) |
+The Beluga app can also be a client of a server (Settings › Server, or "Connect to a server" on
+first launch): it opens the server's page in its window. There the window's own bits take the
+app's path and anything about files takes the browser's, since the files are the server's. Each
+row's choice is a key of `REMOTE_APP_PATHS` in `lib/boot-mode.ts` (`native('<key>')` asks it);
+the app commands the server's page may call go through the shell's `beluga` plugin
+(`CLIENT_COMMANDS`, `src-tauri/src/remote.rs`), and only the saved server's origin gets IPC.
+
+| Where (`packages/mac/src/…`) | In the app | In a served browser | In the Beluga app as a client |
+| --- | --- | --- | --- |
+| `main.tsx`, `popup/main.tsx`: `data-app="tauri"` | the window's own look (vibrancy, title bar) | a plain page (`data-web="true"`) | `look` the app's: the window's own look |
+| `lib/boot.ts` `endpoint()` | asks Tauri for the daemon's port and token | `/__beluga/endpoint` says `{ web: true }`; the socket is this origin's `/ws`, its session cookie lets it in | `endpoint` the browser's: `/__beluga/endpoint` on the server, its session cookie |
+| `lib/boot.ts` `copyText` cap, `lib/copy.ts` | the app's clipboard | `navigator.clipboard` (needs https or localhost) | `clipboard` the app's clipboard |
+| `lib/term-clipboard.ts` a terminal's paste | the app's clipboard | `navigator.clipboard.readText()`; over plain http Ctrl+Shift+V is left to the browser, whose own paste reaches the terminal (right-click › Paste is off there), and an OSC 52 copy from a program only lands over https | `terminalPaste` the app's (copies through the app's clipboard) |
+| `lib/boot.ts` `notify` cap | macOS banners with actions, the pop-up for requests | Web Notifications (asked once; needs https or localhost), clicking one goes to its chat or request; a friend's message is the in-window banner as in the app | `notify` the app's banners (sounds as in the app); requests show in the window, not the pop-up |
+| `layout/NotificationCenter.tsx` the bell's list | a popover under the toolbar bell | the same; in a window too narrow to show the bell (a phone's browser) it opens as the Notifications page instead (`layout/NotificationsView.tsx`) | `noticeList` the same |
+| `lib/boot.ts` `openExternal`, `lib/system.ts` | the default browser | a new tab | `openExternal` the app's: the default browser |
+| `lib/boot.ts` `raise` | brings the window forward | `window.focus()` | `raise` the app's: brings the window forward |
+| `lib/projects.ts` `pickFolders` (Add Project › Choose Folders…, New Project › Change…, Share a Folder, `FormSheet` folders, Settings › People & access › Add Folder…) | the Open panel | Beluga's own folder picker over the server's folders (`dialogs/FolderBrowser.tsx`, `local.browse`) | `pickFolders` the browser's: Beluga's folder picker over the server's folders |
+| `lib/projects.ts` `pickImage` (a project's Change Icon…) | the Open panel | the browser's file picker; the image is uploaded and used from there | `pickImage` the browser's: uploaded to the server |
+| `dialogs/AddProjectSheet.tsx` folder drop | folders dropped on the window are added | not offered (your computer's folders aren't the server's): "Choose a project folder where Beluga runs" with Choose Folders… | `addProjectDrop` the browser's: not offered |
+| `chat/use-attachments.tsx` Finder drop | files dropped on a conversation attach by their path | files dropped on the message box are uploaded (`/upload`, into `~/.beluga/uploads`) and attach by their path there; images attach as pictures as before | `chatDrop` the browser's: uploaded to the server |
+| `chat/paste-paths.ts` Paste as Plain Text | the app's clipboard | `navigator.clipboard.readText()` | `pastePlain` the app's clipboard |
+| `network/NetComposer.tsx` paper clip | the Open panel | the browser's file picker, sent as data | `netAttach` the browser's file picker |
+| `network/ConversationView.tsx` drop | the app's drop event | the browser's drop event, sent as data | `netDrop` the browser's drop event |
+| `network/ChatFiles.tsx` Open, Show in Finder, Save As… | open, reveal, the Save panel | Download (a one-time `/download/<token>` link, `web.download`) | `chatFiles` the browser's: Download |
+| `lib/files.ts` `revealInFinder`, `openWithDefaultApp`, `saveFile` | Finder, the default app, the Save panel | a file is downloaded; a folder's path is copied and said | `files` the browser's: downloaded from the server |
+| `lib/save-text.ts` Save As… (tables) | the Save panel | a browser download | `saveText` the browser's: a download |
+| `tasks/TaskSections.tsx` Add Files, Proof › Picture or File… | the Open panel | the browser's file picker, uploaded | `taskFiles` the browser's: uploaded |
+| `tasks/use-task-drop.tsx` | Finder drops on a task, its card or row | the browser's drop on the same places, uploaded | `taskDrop` the browser's: uploaded |
+| `layout/Sidebar.tsx` folder drop | folders dropped on the sidebar become projects | not offered (as Add Project) | `sidebarDrop` the browser's: not offered |
+| `network/AddFriendSheet.tsx` paste a code | the app's clipboard | `navigator.clipboard.readText()` | `friendPaste` the app's clipboard |
+| `network/net-native.ts` idle, your status | the Mac's idle time; the menu bar | the page's own input; nothing | `idle` the app's: this computer's idle time; the menu bar |
+| `lib/native.ts` tray, Dock badge, deep links, window focus, notification taps | the menu bar icon, the Dock, `beluga://` links | hidden: the page's title and in-window banners only | `tray` the app's: menu bar icon, badge, focus, taps and widget or network links; room invites aren't (they restart a local Beluga) |
+| `lib/updates.ts`, `dialogs/UpdateSettings.tsx` | checks, downloads and installs updates | hidden: the server's Beluga updates, not the page | `updates` the app's: the client app updates itself, never the server |
+| `dialogs/Settings.tsx` Menu Bar pane, Reduce transparency | the menu bar icon, vibrancy | hidden | `menuBarPane` the app's |
+| `dialogs/VoiceSettings.tsx` From any app, `lib/dictation.ts` global shortcut | a shortcut that works in any app | hidden: the shortcut works while the page has focus | `globalShortcut` the app's: a shortcut that works in any app |
+| `layout/AppMenu.tsx`, `lib/app-menu-model.ts` the menu bar | the menu bar: Settings… (⌘,) and the rest | a gear button at the sidebar's top left (in the toolbar while the sidebar is hidden): Settings…, Keys and Commands, Everything You Can Do…, then File, View and Go, run as the menu bar's items are. Left out: what does nothing in a browser (updates, Window, Quit, Open the Log) and the Conversation and Workspace menus, which the toolbar shows | `appMenu` the app's menu bar |
+| `lib/web-history.ts`, `layout/WebBack.tsx` where you are | the window remembers nothing across a reload; each page's own Back | the address follows the view (`#/task?id=BLG-12`, `lib/web-history-model.ts`; drafts are left out), so a reload or a shared address opens the same place; the browser's Back and Forward step through the views, and a Back button sits beside the gear (greyed out when there's nowhere to go back to) | `webHistory` the browser's: a reload keeps your place |
+| `lib/shortcuts.ts` menu keys | the app's menu shows your shortcuts | nothing to send (the page has no menu bar) | `menuKeys` the app's |
+| `lib/sounds/*` | macOS sounds, installed for banners | Beluga's own sounds in the page; macOS system sounds are left out | `sounds` the app's |
+| `lib/sounds/access.ts`, `lib/privacy.ts` | asks macOS about notifications, the screen, the microphone | the browser's permissions | `access` the app's: asks this computer's OS |
+| `lib/window-active.ts` | the window's focus | the page's visibility and focus | `windowActive` the app's: the window's focus |
+| `gateway/popup-bridge.ts`, `gateway/request-native.ts` | the floating request pop-up, notification buttons | requests in the window (NeedsYou and the Requests view) | `requestPopup` the browser's: requests in the window |
+| `gateway/AccessSettings.tsx` Add Folder… | the Open panel | Beluga's folder picker | `accessFolder` the browser's: Beluga's folder picker |
+| `layout/ProjectTree.tsx` Change Icon… | the Open panel | the browser's file picker, uploaded | `projectIcon` the browser's: uploaded |
+| `lib/native-routes.ts` Share a Folder… | the Open panel, then who | the Share a Folder sheet with Choose… (Beluga's folder picker) | `shareFolder` the browser's: the Share a Folder sheet |
 
 Uploads (`src/daemon/web-files.ts`) go to `~/.beluga/uploads/<day>/<random>/<name>` (0600 files in
 0700 folders), up to 512 MB each, only from the page's own origin and a browser that's let in.
