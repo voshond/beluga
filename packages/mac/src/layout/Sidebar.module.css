@@ -355,6 +355,9 @@
   color: var(--text-2);
   font-size: 0.92rem;
 }
+.footer:empty {
+  display: none;
+}
 .footerLabel {
   flex: 1;
   overflow: hidden;

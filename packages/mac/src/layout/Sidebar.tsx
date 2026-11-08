@@ -100,6 +100,7 @@ function useFolderDrop(): { ref: React.RefObject<HTMLElement | null>; over: bool
 export function Sidebar() {
   const actions = useActions();
   const drop = useFolderDrop();
+  const { friendsSidebar } = usePrefs();
   // Only what the sidebar itself shows: drawn again when that changes, not on every streamed event (KLD-48).
   const { tabs, liveChats, view, badges } = useApp((state) => {
     const news = overviewNews(state);
@@ -197,8 +198,12 @@ export function Sidebar() {
         {/* What friends shared with you: a section each, "Ata's conversations", apart from your own. */}
         <SharedProjects />
 
-        <FriendsSection />
-        <GroupsSection />
+        {friendsSidebar && (
+          <>
+            <FriendsSection />
+            <GroupsSection />
+          </>
+        )}
       </div>
       </SidebarSearch>
       {/* Below the lists, so the rows being Shift-clicked stay where they are as it opens. */}
@@ -207,7 +212,7 @@ export function Sidebar() {
       <CallPill />
       <UpdatePill />
       <SidebarFooter />
-      <SelfBar />
+      {friendsSidebar && <SelfBar />}
       <SidebarEdge />
     </nav>
     </SidebarChatSelection>
@@ -283,14 +288,17 @@ function SidebarFooter() {
   const room = useApp((st) => st.room);
   const ready = useApp((st) => st.hosting?.phase === 'ready');
   const reconnecting = useApp((st) => st.connection?.state === 'reconnecting');
+  const { friendsSidebar } = usePrefs();
   const { label, tone } = footerStatus({ status, room, people, ready, reconnecting });
   return (
     <div className={s.footer}>
-      <RoomStatus label={label} tone={tone} />
+      {friendsSidebar && <RoomStatus label={label} tone={tone} />}
       <PhoneMark />
-      <button type="button" className={s.invite} onClick={() => document.dispatchEvent(new CustomEvent('beluga:invite'))}>
-        Invite
-      </button>
+      {friendsSidebar && (
+        <button type="button" className={s.invite} onClick={() => document.dispatchEvent(new CustomEvent('beluga:invite'))}>
+          Invite
+        </button>
+      )}
     </div>
   );
 }
