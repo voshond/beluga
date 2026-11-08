@@ -17,6 +17,7 @@ import { keepLogSmall } from './log-size.js';
 import type { Readable } from 'node:stream';
 import { stopWhenInputEnds } from './stop-on-input.js';
 import { DaemonServer } from './server.js';
+import { ownTempRoot } from './temp-root.js';
 import { type WebArgs, sshWords } from './web.js';
 import { WebAccess, attachWebAccess, readWebConfig } from './web-access.js';
 import { publicWords } from './reach/public.js';
@@ -188,6 +189,7 @@ export async function runDaemon(config: Config, opts: DaemonOptions): Promise<vo
   // Unheard, each failed write was an uncaught error whose log line failed again, spinning a core (BLG-365).
   process.stderr.on('error', () => {});
   const box = startBlackbox({ version: opts.version });
+  const demoTemp = config.mode === 'demo' ? ownTempRoot('demo') : undefined;
   const daemon = await startDaemon(config, { ...opts, log, record: blackbox });
   keepLogSmall(opts.logFd ?? 2, log);
   if (opts.web && opts.announce && daemon.webUrl) {
@@ -238,6 +240,7 @@ export async function runDaemon(config: Config, opts: DaemonOptions): Promise<vo
   process.once('exit', (code) => {
     clearDaemonInfo();
     box.saveNow(`exit ${code}`);
+    demoTemp?.remove();
   });
   await daemon.done;
   process.exit(0);

@@ -121,7 +121,7 @@ describe('MainSync.githubInfo', () => {
     // Another remote is looked at again right away.
     remote = '/tmp/x.git';
     expect(await sync.githubInfo('p')).toEqual({ kind: 'none' });
-    const dir = mkdtempSync('/tmp/klaud-gh-');
+    const dir = mkdtempSync(`${(await import('node:os')).tmpdir()}/klaud-gh-`);
     writeFileSync(`${dir}/hosts.yml`, 'github.com:\n    user: kay\nghe.acme.com:\n    user: kay\n');
     expect(ghHosts(`${dir}/hosts.yml`)).toEqual(['github.com', 'ghe.acme.com']);
     expect(ghHosts(`${dir}/missing.yml`)).toEqual([]);
