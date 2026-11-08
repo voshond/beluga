@@ -5,6 +5,7 @@ import type { SoundChoice } from '@beluga/shared/notify-sound.js';
 import { MESSAGE_BANNER, NOTIFICATION_TAP } from './notices.js';
 import { REQUEST_NOTIFICATION, notificationActions } from '../gateway/request-actions.js';
 import { version } from '../../src-tauri/tauri.conf.json';
+import { unreachableDetail } from './unreachable.js';
 
 /** Running inside the Tauri shell (otherwise: a browser, while developing). */
 export const inApp = (): boolean => '__TAURI_INTERNALS__' in globalThis;
@@ -31,14 +32,6 @@ export const WEB_HELLO_TOKEN = 'browser-session-cookie';
 export const webSocketUrl = (loc: Pick<Location, 'protocol' | 'host'>): string => `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/ws`;
 
 export class Unreachable extends Error {}
-
-const RESTARTING = new Set([502, 503, 504]);
-
-export const unreachableDetail = (status: number, statusText: string): string => {
-  const code = `${status}${statusText ? ` ${statusText}` : ''}`;
-  if (RESTARTING.has(status)) return `The server is restarting (${code}). Beluga reconnects by itself.`;
-  return `The server answered with a page Beluga didn’t expect (${code}).`;
-};
 
 /**
  * Where the daemon is: the app's own sidecar (asked through Tauri), the daemon's web port that
