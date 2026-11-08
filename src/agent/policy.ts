@@ -35,6 +35,8 @@ const ALWAYS_OK = new Set([
   'mcp__beluga__set_project_setup',
   // end_dialogue: only a chaired dialogue's turn has it (core/dialogues); it only ends that dialogue.
   'mcp__beluga__end_dialogue',
+  // Which of the user's client devices are connected (core/devices); asking one for anything is never auto-approved.
+  'mcp__beluga__list_devices',
   // The gateway's look-and-wait tools (core/gateway); ask_person and run_on ask, and the gateway checks trust itself.
   ...['who_can', 'wait_for', 'check', 'cancel', 'answer_question'].map((n) => `mcp__beluga__${n}`),
   // The task board: your own runs, and a friend's you trust (BLG-701: only its repo's board, and a
@@ -219,6 +221,9 @@ function decideToolPlain(toolName: string, input: Record<string, unknown>, ctx: 
   }
   // Commands on a friend's computer: their Beluga decides; secrets are refused on both ends.
   if (toolName === 'mcp__beluga__run_on_peer' || toolName === 'mcp__beluga__run_on') return typeof input.command === 'string' && mentionsSecret(input.command) ? 'deny' : 'ask';
+  // The user's own client devices: the person there approves each request; secrets are refused here first.
+  if (toolName === 'mcp__beluga__run_on_device') return (typeof input.command === 'string' && mentionsSecret(input.command)) || (typeof input.cwd === 'string' && isSecretPath(input.cwd)) ? 'deny' : 'ask';
+  if (toolName === 'mcp__beluga__get_device_file') return typeof input.path === 'string' && isSecretPath(input.path) ? 'deny' : 'ask';
   if (toolName === 'Bash') return typeof input.command === 'string' && mentionsSecret(input.command) && !dotenv ? 'deny' : 'ask';
   if (toolName === 'mcp__beluga_view__show') return decideShow(input, ctx);
   const readField = READ_TOOLS[toolName];

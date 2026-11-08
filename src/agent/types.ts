@@ -597,6 +597,8 @@ export interface RoomBridge {
   sendFile(peerName: string, path: string, note?: string): Promise<string>;
   /** Tasks between Claudes (the Beluga app only; see agent/gateway-tools.ts). */
   readonly gateway?: import('./gateway-tools.js').GatewayBridge;
+  /** The user's own client devices connected to this server (the daemon only; see agent/device-tools.ts). */
+  readonly devices?: import('./device-tools.js').DeviceBridge;
   /** The same tools bound to one conversation (a run's: chat, asks and their answers go there). */
   inChannel?(channel: string): RoomBridge;
 }
