@@ -95,6 +95,7 @@ export const CLIENT_COMMANDS = [
   'client_use_local',
   'client_change_server',
   'client_set_device_name',
+  'device_run',
 ] as const;
 
 export type ClientCommand = (typeof CLIENT_COMMANDS)[number];

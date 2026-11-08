@@ -6,6 +6,7 @@
 //! keeping Beluga's daemon running. Everything Beluga does happens in the daemon.
 
 mod daemon;
+mod device;
 mod export;
 mod focus;
 mod menu;
@@ -294,6 +295,7 @@ pub fn run() {
                 .with_state_flags(window_state)
                 // The request pop-up places itself (and is never restored visible).
                 .with_denylist(&[popup::LABEL, call_float::LABEL, call_overlay::LABEL])
+                .with_filter(|label| !device::is_prompt_window(label))
                 .build(),
         )
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -327,7 +329,8 @@ pub fn run() {
             remote::client_config,
             remote::client_use_local,
             remote::client_change_server,
-            remote::client_set_device_name
+            remote::client_set_device_name,
+            device::device_run
         ]))
         .manage(updater::Updates::default())
         .manage(requests::TrayState::default())
@@ -335,6 +338,7 @@ pub fn run() {
         .manage(call_float::CallFloatState::default())
         .manage(call_overlay::CallOverlayState::default())
         .manage(client)
+        .manage(device::Prompts::default())
         .manage(AppState {
             lock: tokio::sync::Mutex::new(()),
             child: Mutex::new(None),
@@ -374,6 +378,8 @@ pub fn run() {
             remote::client_use_local,
             remote::client_change_server,
             remote::client_set_device_name,
+            device::device_prompt,
+            device::device_prompt_answer,
             export::save_export,
             sounds::sound_install,
             sounds::sound_prune,
