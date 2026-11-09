@@ -8,7 +8,7 @@
   padding: 10px 12px;
   border-radius: var(--radius-l);
   background: color-mix(in srgb, var(--info) 8%, transparent);
-  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--info) 22%, transparent);
+  box-shadow: 0 0 0 var(--hair) color-mix(in srgb, var(--info) 22%, transparent);
   animation: settle var(--dur) var(--ease-out);
 }
 @keyframes settle {

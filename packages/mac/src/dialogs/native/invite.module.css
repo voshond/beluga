@@ -6,7 +6,7 @@
   padding: 11px 12px;
   border-radius: 9px;
   background: color-mix(in srgb, var(--accent) 7%, var(--bg-sunken));
-  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--accent) 18%, var(--hairline));
+  box-shadow: 0 0 0 var(--hair) color-mix(in srgb, var(--accent) 18%, var(--hairline));
   list-style: none;
   color: var(--text-2);
   font-size: 0.92rem;
@@ -37,7 +37,7 @@
   border-radius: 6px;
   background: var(--bg-raised);
   color: var(--accent);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
 }
 .status {
   margin: 4px 0 0 104px;

@@ -237,7 +237,7 @@
   border-radius: 16px;
   background: var(--cell-bg);
   box-shadow:
-    0 0 0 0.5px var(--hairline),
+    0 0 0 var(--hair) var(--hairline),
     0 1px 2px rgba(0, 0, 0, 0.04);
   touch-action: none;
 }
@@ -800,7 +800,7 @@
   font-weight: 500;
   white-space: nowrap;
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong), 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong), 0 2px 6px rgba(0, 0, 0, 0.08);
   color: var(--text-2);
   pointer-events: none;
 }
@@ -912,7 +912,7 @@
 .cell[data-tinted] {
   --cell-bg: color-mix(in srgb, var(--tint) 3.5%, var(--bg-raised));
   box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--tint) 12%, var(--hairline)),
+    0 0 0 var(--hair) color-mix(in srgb, var(--tint) 12%, var(--hairline)),
     0 1px 2px rgba(0, 0, 0, 0.04);
 }
 .cell[data-tinted] .areaFillArea {

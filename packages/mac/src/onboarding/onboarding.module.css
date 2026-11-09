@@ -92,7 +92,7 @@
   letter-spacing: 0.02em;
   color: var(--claude);
   background: color-mix(in srgb, var(--claude) 11%, transparent);
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--claude) 30%, transparent);
+  box-shadow: inset 0 0 0 var(--hair) color-mix(in srgb, var(--claude) 30%, transparent);
 }
 .title {
   margin: 14px 0 0;
@@ -187,7 +187,7 @@
 .quietButton {
   color: var(--text);
   background: color-mix(in srgb, var(--bg-raised) 70%, transparent);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   backdrop-filter: blur(16px);
 }
 .quietButton:hover {
@@ -323,7 +323,7 @@
   padding: 10px 10px 12px;
   border-radius: 16px;
   background: color-mix(in srgb, var(--bg-raised) 60%, transparent);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   backdrop-filter: blur(20px);
   transition: box-shadow var(--dur), background var(--dur);
 }
@@ -369,7 +369,7 @@
   height: 108px;
   border-radius: 9px;
   overflow: hidden;
-  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 0 0 var(--hair) rgba(0, 0, 0, 0.18);
 }
 .mini[data-look='light'] {
   --m-bg: #ffffff;
@@ -435,7 +435,7 @@
   bottom: 8px;
   height: 14px;
   border-radius: 5px;
-  box-shadow: inset 0 0 0 0.5px var(--m-strong);
+  box-shadow: inset 0 0 0 var(--hair) var(--m-strong);
 }
 .split {
   position: relative;
@@ -469,7 +469,7 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 0 0 var(--hair) rgba(0, 0, 0, 0.2);
 }
 /* A theme: its background, edged by its sidebar, with its accent at the centre (BLG-696). */
 .themeSwatch {
@@ -571,13 +571,13 @@
   padding: 0 9px;
   border-radius: 6px;
   background: var(--bg);
-  box-shadow: inset 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong);
   font-size: 13px;
 }
 .input:focus {
   outline: none;
   box-shadow:
-    inset 0 0 0 0.5px var(--accent),
+    inset 0 0 0 var(--hair) var(--accent),
     0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
@@ -586,7 +586,7 @@
   padding: 2px;
   border-radius: 8px;
   background: var(--bg-hover);
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
 }
 .choiceItem {
   position: relative;
@@ -611,7 +611,7 @@
   border-radius: 6px;
   background: var(--bg-raised);
   box-shadow:
-    0 0 0 0.5px var(--hairline-strong),
+    0 0 0 var(--hair) var(--hairline-strong),
     0 1px 3px rgba(0, 0, 0, 0.12);
 }
 .choiceLabel {
@@ -820,12 +820,12 @@
   white-space: nowrap;
   color: var(--text-2);
   background: var(--bg-hover);
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
 }
 .grant[data-grant='granted'] {
   color: color-mix(in srgb, var(--ok) 80%, var(--text));
   background: color-mix(in srgb, var(--ok) 13%, transparent);
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--ok) 30%, transparent);
+  box-shadow: inset 0 0 0 var(--hair) color-mix(in srgb, var(--ok) 30%, transparent);
 }
 .accessStatus {
   margin-top: 18px;
@@ -908,7 +908,7 @@
 .accessDotOn {
   color: var(--text);
   background: color-mix(in srgb, var(--tint) 18%, transparent);
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--tint) 45%, transparent);
+  box-shadow: inset 0 0 0 var(--hair) color-mix(in srgb, var(--tint) 45%, transparent);
 }
 .accessDotCheck {
   color: var(--ok);
@@ -931,7 +931,7 @@
   color: color-mix(in srgb, var(--tint) 70%, var(--text));
   background: color-mix(in srgb, var(--tint) 22%, var(--bg-raised));
   box-shadow:
-    inset 0 0 0 0.5px color-mix(in srgb, var(--tint) 50%, transparent),
+    inset 0 0 0 var(--hair) color-mix(in srgb, var(--tint) 50%, transparent),
     0 14px 30px -18px rgba(0, 0, 0, 0.35);
 }
 .pane {
@@ -943,7 +943,7 @@
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow:
-    0 0 0 0.5px var(--hairline-strong),
+    0 0 0 var(--hair) var(--hairline-strong),
     0 30px 70px -24px rgba(0, 0, 0, 0.35);
 }
 .paneBar {
@@ -979,7 +979,7 @@
 .paneList {
   border-radius: 10px;
   background: var(--bg);
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
 }
 .paneRow {
   display: flex;
@@ -1045,7 +1045,7 @@
   padding: 4px 16px 14px;
   border-radius: 16px;
   background: color-mix(in srgb, var(--bg-raised) 80%, transparent);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
 }
 .spinning {
   animation: spin 1s linear infinite;
@@ -1062,7 +1062,7 @@
 .navNext[data-quiet] {
   color: var(--text);
   background: var(--bg-hover);
-  box-shadow: inset 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong);
 }
 .phoneStage {
   height: 100%;
@@ -1076,7 +1076,7 @@
   border-radius: 38px;
   background: #1c1d21;
   box-shadow:
-    0 0 0 0.5px rgba(255, 255, 255, 0.12) inset,
+    0 0 0 var(--hair) rgba(255, 255, 255, 0.12) inset,
     0 34px 80px -28px rgba(0, 0, 0, 0.5);
 }
 .phoneScreen {
@@ -1122,7 +1122,7 @@
   border-radius: 9px;
   overflow: hidden;
   text-align: left;
-  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 0 0 var(--hair) rgba(0, 0, 0, 0.18);
 }
 .termMini > :first-child {
   height: 100%;
@@ -1212,7 +1212,7 @@
   font-size: 11.5px;
   color: var(--text-2);
   background: var(--bg-hover);
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
   cursor: pointer;
 }
 .agentCommand code {

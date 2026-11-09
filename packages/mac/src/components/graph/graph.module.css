@@ -1343,7 +1343,7 @@
   border-radius: 16px;
   background: var(--bg);
   box-shadow:
-    0 0 0 0.5px var(--hairline-strong),
+    0 0 0 var(--hair) var(--hairline-strong),
     0 30px 80px rgba(0, 0, 0, 0.35);
   overflow: hidden;
   outline: none;

@@ -13,6 +13,7 @@
   --inspector-w: 296px;
   --titlebar-h: 52px;
   --chat-max: 100%;
+  --hair: 0.5px;
 
   --radius-s: 5px;
   --radius: 7px;
@@ -29,6 +30,12 @@
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --dur-fast: 120ms;
   --dur: 180ms;
+}
+
+@media (max-resolution: 1.99dppx), (-webkit-max-device-pixel-ratio: 1.99) {
+  :root {
+    --hair: 1px;
+  }
 }
 
 :root[data-density='compact'] {
@@ -56,7 +63,7 @@
   --text-3: #8e8e93;
   --hairline: rgba(0, 0, 0, 0.1);
   --hairline-strong: rgba(0, 0, 0, 0.17);
-  --shadow-pop: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 8px 28px rgba(0, 0, 0, 0.14);
+  --shadow-pop: 0 0 0 var(--hair) rgba(0, 0, 0, 0.12), 0 8px 28px rgba(0, 0, 0, 0.14);
   --claude: #b4693f;
   --ok: #2f8a4c;
   --merge: #1a7f37;
@@ -97,7 +104,7 @@
   --text-3: #75757c;
   --hairline: rgba(255, 255, 255, 0.075);
   --hairline-strong: rgba(255, 255, 255, 0.14);
-  --shadow-pop: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 10px 32px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 0 0 var(--hair) rgba(255, 255, 255, 0.1), 0 10px 32px rgba(0, 0, 0, 0.5);
   --claude: #df946a;
   --ok: #6cc187;
   --merge: #238636;

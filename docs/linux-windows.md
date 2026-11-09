@@ -14,7 +14,8 @@ The same Beluga runs on Linux and Windows. Some things stay Mac only.
 | Device info | sw_vers, system_profiler, pmset | os-release, /sys | PowerShell (CIM) |
 | Keeping awake for the phone | caffeinate | systemd-inhibit | SetThreadExecutionState |
 | Moving to the Trash | Finder / trash | gio trash | Recycle Bin |
-| Window | blur, traffic lights | solid, the desktop's own title bar | solid, the system title bar |
+| Window | blur, traffic lights | solid, Beluga's own title bar: close, minimize and maximize at the sidebar's top left, then the gear with the menus (no GTK menu bar); a page that doesn't draw it (an older server's) keeps the desktop's | solid, the system title bar |
+| Window size and place | saved when you quit, close the window or leave it | saved when you quit, close the window or leave it, so a logout or a kill keeps it (Wayland restores the size only) | saved when you quit, close the window or leave it |
 | Packages | .dmg | AppImage (updates itself), .deb, .rpm | installer (updates itself) |
 
 Mac only: desktop widgets, Focus, the macOS permission steps in the welcome, the Dock badge,

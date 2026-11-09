@@ -19,14 +19,14 @@
   padding: 11px 12px;
   border-radius: 9px;
   background: var(--bg-sunken);
-  box-shadow: 0 0 0 0.5px var(--hairline);
+  box-shadow: 0 0 0 var(--hair) var(--hairline);
   color: var(--accent);
   text-align: left;
   transition: background var(--dur-fast), box-shadow var(--dur-fast);
 }
 .tile:hover {
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-sunken));
-  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--accent) 40%, transparent);
+  box-shadow: 0 0 0 var(--hair) color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .tile svg {
   margin-bottom: 4px;

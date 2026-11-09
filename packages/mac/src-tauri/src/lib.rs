@@ -9,6 +9,7 @@ mod daemon;
 mod device;
 mod export;
 mod focus;
+mod frame;
 mod menu;
 mod call_float;
 mod call_overlay;
@@ -33,6 +34,7 @@ use std::sync::Mutex;
 use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_window_state::AppHandleExt;
 
 /// What the app keeps track of while it runs.
 pub struct AppState {
@@ -332,7 +334,9 @@ pub fn run() {
             remote::client_set_device_name,
             device::device_run,
             device::device_file,
-            device::device_screenshot
+            device::device_screenshot,
+            frame::own_title_bar,
+            frame::window_control
         ]))
         .manage(updater::Updates::default())
         .manage(requests::TrayState::default())
@@ -396,7 +400,9 @@ pub fn run() {
             updater::update_set_mode,
             updater::update_choose,
             updater::update_activity,
-            updater::update_dismiss_news
+            updater::update_dismiss_news,
+            frame::own_title_bar,
+            frame::window_control
         ])
         .menu(menu::build)
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -472,13 +478,22 @@ pub fn run() {
             updater::start(app.handle());
             Ok(())
         })
-        .on_window_event(|window, event| {
-            // Closing the window keeps Beluga (and your room) running in the menu bar.
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
+        .on_page_load(frame::on_page_load)
+        .on_window_event(move |window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            match event {
+                // Closing the window keeps Beluga (and your room) running in the menu bar.
+                WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
+                    let _ = window.app_handle().save_window_state(window_state);
                     let _ = window.hide();
                 }
+                WindowEvent::Focused(false) => {
+                    let _ = window.app_handle().save_window_state(window_state);
+                }
+                _ => {}
             }
         })
         .build(context)

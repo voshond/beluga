@@ -15,7 +15,7 @@
   border-radius: 9px;
   overflow: hidden;
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   color: var(--text);
   text-align: left;
   font: inherit;
@@ -23,7 +23,7 @@
   transition: box-shadow var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .card:hover {
-  box-shadow: 0 0 0 0.5px var(--hairline-strong), 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong), 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 .card:active {
   transform: scale(0.98);
@@ -92,7 +92,7 @@
 }
 /* A near-black theme's lit edges (lib/themes.ts `lit`), as its window shows them. */
 .lit .mine {
-  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.2), inset 0 0.5px 0 rgba(255, 255, 255, 0.09);
+  box-shadow: 0 0 0 var(--hair) rgba(255, 255, 255, 0.2), inset 0 0.5px 0 rgba(255, 255, 255, 0.09);
 }
 .answer {
   display: flex;

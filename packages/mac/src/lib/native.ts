@@ -18,6 +18,7 @@ import { pastePlain } from '../chat/paste-paths.js';
 import type { PlaceKind } from './go.js';
 import { throttle } from './throttle.js';
 import { fromMenu } from './shortcuts.js';
+import { nativeMenuBar } from './window-frame.js';
 import { windowActive } from './window-active.js';
 import { newChatProject } from './project-home.js';
 import { type MenuBarCounts, SPOUT_EVERY_MS, spoutStep, trayTitle } from '../menubar/menubar-look.js';
@@ -386,7 +387,7 @@ export function useNotificationTaps(client: SocketClient, ui: UiStore, actions: 
  */
 export function useMenuState(client: SocketClient): void {
   useEffect(() => {
-    if (!native('appMenu')) return;
+    if (!nativeMenuBar()) return;
     let last = '';
     let timer: ReturnType<typeof setTimeout> | undefined;
     const send = (): void => {

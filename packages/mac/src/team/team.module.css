@@ -70,7 +70,7 @@
   border-radius: 999px;
   color: color-mix(in srgb, var(--accent) 80%, var(--text));
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-raised));
-  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--accent) 35%, var(--hairline-strong));
+  box-shadow: 0 0 0 var(--hair) color-mix(in srgb, var(--accent) 35%, var(--hairline-strong));
 }
 .knockButton:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 17%, var(--bg-raised));

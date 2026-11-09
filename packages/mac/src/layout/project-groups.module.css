@@ -62,7 +62,7 @@
   pointer-events: none;
   opacity: 0.72;
   background: color-mix(in srgb, var(--bg-raised) 80%, transparent);
-  box-shadow: 0 4px 14px rgb(0 0 0 / 0.16), 0 0 0 0.5px var(--hairline);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.16), 0 0 0 var(--hair) var(--hairline);
   border-radius: 6px;
   will-change: transform;
 }

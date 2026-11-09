@@ -296,7 +296,7 @@ button.label:focus-visible {
   padding: 10px 14px 12px;
   border-radius: 10px;
   background: var(--bg-sunken);
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
   animation: rise var(--dur) var(--ease-out);
 }
 .summaryHead {

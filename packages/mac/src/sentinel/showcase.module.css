@@ -16,7 +16,7 @@
   height: 272px;
   border-radius: 18px;
   background: var(--bg-sunken);
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
   overflow: hidden;
 }
 .show:focus-visible .screen {
@@ -134,7 +134,7 @@
   border-radius: 14px;
   background: var(--bg-raised);
   box-shadow:
-    0 0 0 0.5px var(--hairline),
+    0 0 0 var(--hair) var(--hairline),
     0 10px 24px -14px rgba(0, 0, 0, 0.28);
 }
 .pop {
@@ -162,7 +162,7 @@
 .popMint {
   background: color-mix(in srgb, var(--ok) 12%, var(--bg-raised));
   box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--ok) 30%, var(--hairline)),
+    0 0 0 var(--hair) color-mix(in srgb, var(--ok) 30%, var(--hairline)),
     0 10px 24px -14px rgba(0, 0, 0, 0.28);
 }
 .popMint svg {
@@ -452,7 +452,7 @@
   padding: 10px 11px 8px;
   border-radius: 12px;
   background: var(--bg);
-  box-shadow: 0 0 0 0.5px var(--hairline);
+  box-shadow: 0 0 0 var(--hair) var(--hairline);
   animation: rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 .tile strong,
@@ -539,7 +539,7 @@
   backdrop-filter: blur(14px) saturate(1.4);
   -webkit-backdrop-filter: blur(14px) saturate(1.4);
   box-shadow:
-    0 0 0 0.5px var(--hairline),
+    0 0 0 var(--hair) var(--hairline),
     0 14px 30px -16px rgba(0, 0, 0, 0.35);
   animation: land 0.7s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }

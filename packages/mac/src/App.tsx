@@ -18,6 +18,7 @@ import { Sidebar } from './layout/Sidebar.js';
 import { useActions } from './lib/actions.js';
 import { SHORTCUTS, TALK_ID, keyPlatform, shortcutFor } from './lib/shortcuts-model.js';
 import { fromKey, getBindings, isRecording, isShortcut, useMenuKeys } from './lib/shortcuts.js';
+import { useOwnTitleBar } from './lib/window-frame.js';
 import { dialogOpen, navBack, navForward, useNavHistory } from './lib/nav.js';
 import { pageHasOwnBack } from './tasks/use-swipe-back.js';
 import { useApp, useBeluga } from './lib/beluga.js';
@@ -215,6 +216,7 @@ export function App() {
   // Low Power mode (BLG-621): the daemon says when it saves; the window follows.
   const saving = useApp((st) => st.powerSaving);
   useEffect(() => setPowerSaving(saving), [saving]);
+  useOwnTitleBar();
   useMenuState(client);
   useMenuKeys();
   useWindowFocus(client);

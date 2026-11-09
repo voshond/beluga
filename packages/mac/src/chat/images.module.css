@@ -21,12 +21,12 @@
   padding: 0;
   border-radius: 9px;
   background: var(--bg-sunken);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   cursor: zoom-in;
   transition: box-shadow var(--dur-fast), transform var(--dur-fast) var(--ease-out);
 }
 .thumb:hover {
-  box-shadow: 0 0 0 0.5px var(--hairline-strong), 0 2px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong), 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 .thumb:active {
   transform: scale(0.985);
@@ -236,7 +236,7 @@
   border-radius: 8px;
   overflow: hidden;
   background: var(--bg-sunken);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
 }
 .pendingOpen {
   display: block;

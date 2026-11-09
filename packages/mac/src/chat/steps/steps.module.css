@@ -627,7 +627,7 @@ button.head:focus-visible {
   height: 280px;
   overflow: auto;
   border-radius: 8px;
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
 }
 .watch {
   display: inline-flex;

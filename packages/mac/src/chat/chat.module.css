@@ -533,7 +533,7 @@
   padding: 1px 7px;
   border-radius: 4px;
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   color: var(--text-2);
   font-size: 0.82rem;
   opacity: 0;

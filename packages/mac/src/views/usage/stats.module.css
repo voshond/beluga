@@ -66,7 +66,7 @@
   border-radius: 18px;
   overflow: hidden;
   background: var(--card-line);
-  box-shadow: inset 0 0 0 0.5px var(--card-line);
+  box-shadow: inset 0 0 0 var(--hair) var(--card-line);
 }
 
 @container stats-strip (width < 34rem) {
@@ -432,7 +432,7 @@
   padding: 14px 16px;
   border-radius: 16px;
   background: var(--card);
-  box-shadow: inset 0 0 0 0.5px var(--card-line);
+  box-shadow: inset 0 0 0 var(--hair) var(--card-line);
   animation: rankIn 360ms var(--ease-out) both;
 }
 .badge :global(svg) {
@@ -577,7 +577,7 @@
   padding: 8px 10px;
   border-radius: var(--radius-m, 8px);
   background: var(--bg-raised, var(--card));
-  box-shadow: 0 0 0 0.5px var(--card-line), 0 6px 18px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 0 0 var(--hair) var(--card-line), 0 6px 18px rgba(0, 0, 0, 0.12);
   font-size: 0.8rem;
   pointer-events: none;
 }

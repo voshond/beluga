@@ -34,6 +34,8 @@ fn main() {
             "device_run",
             "device_file",
             "device_screenshot",
+            "own_title_bar",
+            "window_control",
         ])
         .default_permission(tauri_build::DefaultPermissionRule::AllowAllCommands);
     tauri_build::try_build(tauri_build::Attributes::new().plugin("beluga", client))

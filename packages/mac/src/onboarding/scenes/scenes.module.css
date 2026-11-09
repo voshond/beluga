@@ -20,7 +20,7 @@
   -webkit-backdrop-filter: blur(28px) saturate(1.5);
   border-radius: 14px;
   box-shadow:
-    0 0 0 0.5px var(--hairline-strong),
+    0 0 0 var(--hair) var(--hairline-strong),
     inset 0 0.5px 0 rgba(255, 255, 255, 0.12),
     0 30px 80px -20px rgba(0, 0, 0, 0.35),
     0 12px 30px -12px rgba(0, 0, 0, 0.2);
@@ -318,7 +318,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
 }
 .shotLine {
   height: 5px;
@@ -330,7 +330,7 @@
   width: 60%;
   height: 10px;
   border-radius: 3px;
-  box-shadow: inset 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong);
 }
 .shotButton {
   width: 60%;
@@ -446,7 +446,7 @@
   padding: 8px 10px;
   border-radius: 10px;
   background: color-mix(in srgb, var(--ok) 10%, transparent);
-  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--ok) 40%, transparent);
+  box-shadow: 0 0 0 var(--hair) color-mix(in srgb, var(--ok) 40%, transparent);
 }
 .result > div {
   display: flex;
@@ -538,7 +538,7 @@
   padding: 10px;
   border-radius: 10px;
   background: var(--bg-hover);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   font-size: 11px;
 }
 .requestText {
@@ -561,7 +561,7 @@
   border-radius: 6px;
   font-weight: 500;
   font-size: 11.5px;
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
 }
 .btnPrimary {
   background: var(--accent);
@@ -675,13 +675,13 @@
   font-weight: 500;
   color: var(--text-2);
   background: var(--bg-hover);
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
 }
 /* Chosen: a soft pastel blue (Postgres's own), never a glow. */
 .protocol[data-on] {
   color: #3d6fb4;
   background: color-mix(in srgb, #8fb4e8 26%, var(--bg-raised));
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, #8fb4e8 60%, transparent);
+  box-shadow: inset 0 0 0 var(--hair) color-mix(in srgb, #8fb4e8 60%, transparent);
 }
 :global(html[data-theme='dark']) .protocol[data-on] {
   color: #b4cdf2;
@@ -808,7 +808,7 @@
   flex-direction: column;
   border-radius: 12px;
   background: var(--bg);
-  box-shadow: 0 0 0 0.5px var(--hairline);
+  box-shadow: 0 0 0 var(--hair) var(--hairline);
   overflow: hidden;
 }
 .sentinelHead {
@@ -947,7 +947,7 @@
 }
 .accessPick span[data-on] {
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline);
+  box-shadow: 0 0 0 var(--hair) var(--hairline);
   color: var(--text);
   font-weight: 550;
 }
@@ -958,7 +958,7 @@
   padding: 9px 12px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--ok) 11%, var(--bg-raised));
-  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--ok) 28%, var(--hairline));
+  box-shadow: 0 0 0 var(--hair) color-mix(in srgb, var(--ok) 28%, var(--hairline));
 }
 .reportIcon {
   display: grid;
@@ -1059,7 +1059,7 @@
   height: 272px;
   border-radius: 12px;
   background: var(--bg-sunken);
-  box-shadow: inset 0 0 0 0.5px var(--hairline);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
   overflow: hidden;
 }
 .usesFoot {

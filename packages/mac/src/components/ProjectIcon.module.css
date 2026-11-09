@@ -16,7 +16,7 @@
   line-height: 1;
   color: hsl(var(--h) 45% 32%);
   background: hsl(var(--h) 55% 88%);
-  box-shadow: inset 0 0 0 0.5px hsl(var(--h) 40% 50% / 0.25);
+  box-shadow: inset 0 0 0 var(--hair) hsl(var(--h) 40% 50% / 0.25);
 }
 .tile svg {
   display: block;

@@ -7,7 +7,7 @@
   padding: 14px;
   border-radius: 12px;
   background: var(--bg-sunken);
-  box-shadow: 0 0 0 0.5px var(--hairline);
+  box-shadow: 0 0 0 var(--hair) var(--hairline);
 }
 .bar {
   display: flex;
@@ -18,12 +18,12 @@
   border-radius: 9px;
   background: #f4f4f6;
   color: #1d1d1f;
-  box-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.08);
+  box-shadow: 0 0 0 var(--hair) rgb(0 0 0 / 0.08);
 }
 .dark {
   background: #2a2b30;
   color: #f2f2f4;
-  box-shadow: 0 0 0 0.5px rgb(255 255 255 / 0.08);
+  box-shadow: 0 0 0 var(--hair) rgb(255 255 255 / 0.08);
 }
 .item {
   display: inline-flex;

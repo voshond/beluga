@@ -16,7 +16,7 @@
   border: 0;
   border-radius: 6px;
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   font-family: var(--font-mono);
   font-size: 0.86rem;
   line-height: 1.45;
@@ -52,7 +52,7 @@
   border: 0;
   border-radius: 6px;
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
   user-select: text;
 }
 .name {
@@ -109,7 +109,7 @@
   overflow: auto;
   border-radius: 6px;
   background: var(--bg-raised);
-  box-shadow: 0 0 0 0.5px var(--hairline);
+  box-shadow: 0 0 0 var(--hair) var(--hairline);
   font-family: var(--font-mono);
   font-size: 0.8rem;
   line-height: 1.45;

@@ -72,7 +72,7 @@
   padding: 7px 8px 7px 8px;
   border-radius: 9px;
   background: var(--bg-sunken);
-  box-shadow: 0 0 0 0.5px var(--hairline);
+  box-shadow: 0 0 0 var(--hair) var(--hairline);
 }
 .folderTile {
   flex: none;
