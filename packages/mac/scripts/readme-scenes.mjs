@@ -37,6 +37,8 @@ const SCENES = {
   friends: { w: 780, h: 470, loop: true, from: 10_100, ms: 10_100 },
   // Two sentinels of five: Fix the build, then Failed payments.
   sentinel: { w: 840, h: 540, loop: true, from: 7090, ms: 14_800 },
+  // One task: Runs on flips to AWS, it runs there, the lid closes and the phone keeps up.
+  machines: { w: 720, h: 460, loop: true, from: 10_300, ms: 10_300 },
   earnings: { w: 640, h: 420, loop: true, from: 5400, ms: 5400 },
   archive: { w: 680, h: 360, loop: true, from: 6600, ms: 6600 },
 };

@@ -153,13 +153,13 @@ const planRank = (p: Plan): number => (p.status === 'active' ? 0 : p.status === 
 const byRank = (a: Plan, b: Plan): number => planRank(a) - planRank(b) || b.updatedAt - a.updatedAt;
 
 export function plansOf(state: PlansState, projectId: string | undefined): Plan[] {
-  return state.plans.filter((p) => p.projectId === projectId).sort(byRank);
+  return state.plans.filter((p) => p.projectId === projectId && !p.movedTo).sort(byRank);
 }
 
 export type PlanSections = { readonly now: readonly Plan[]; readonly finished: readonly Plan[] };
 
 export function planSections(state: PlansState, projectId: string | undefined): PlanSections {
-  const shown = state.plans.filter((p) => !projectId || planRepos(p).includes(projectId)).sort(byRank);
+  const shown = state.plans.filter((p) => !p.movedTo && (!projectId || planRepos(p).includes(projectId))).sort(byRank);
   return { now: shown.filter((p) => p.status !== 'done'), finished: shown.filter((p) => p.status === 'done') };
 }
 

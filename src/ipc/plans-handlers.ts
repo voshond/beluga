@@ -40,4 +40,11 @@ export const PLANS_HANDLERS = {
   'plans.resumeTask': (s, id, task) => needPlans(s).resumeTask(id, task),
   'plans.remove': (s, id) => needPlans(s).remove(id),
   'plans.setStyle': (s, text) => needPlans(s).setStyle(text),
+  'plans.moveCheck': (s, id) => needPlans(s).mover.check(id),
+  'plans.movePack': (s, id, opts) => needPlans(s).mover.packOut(id, opts),
+  'plans.moveChunk': (s, token, n) => needPlans(s).mover.chunk(token, n),
+  'plans.moveReceive': (s, token, n, total, data) => needPlans(s).mover.receive(token, n, total, data),
+  'plans.moveLand': (s, token, projectId, from) => needPlans(s).mover.landIn(token, projectId, from),
+  'plans.moveDone': (s, id, to) => needPlans(s).mover.done(id, to),
+  'plans.moveUndo': (s, id) => needPlans(s).mover.undo(id),
 } satisfies PlansHandlers;

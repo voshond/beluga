@@ -10,6 +10,7 @@ import { quoteInBox } from '../../chat/message-menu.js';
 import { goToCode } from '../../lib/go-to-code.js';
 import { CodeLines } from './CodeLines.js';
 import s from './code.module.css';
+import { openCodeThere } from '../../lib/remote-open.js';
 
 /** "src/a.ts:12-18" for lines `from`…`to`. */
 export const where = (path: string, from?: number, to?: number): string => (from ? `${path}:${from}${to && to !== from ? `-${to}` : ''}` : path);
@@ -77,7 +78,7 @@ export function CodeRefView({ ref_: ref, wsId }: { ref_: CodeRef; wsId: string |
     if (wsId) void goToCode(client, wsId, ref.path, first);
   };
   const open = (): void => {
-    if (wsId) void api.workbench.openCode(wsId, ref.path, first);
+    if (wsId) void openCodeThere(client, wsId, ref.path, first);
   };
   const lineText = (n: number): string => excerpt?.lines[n - excerpt.from] ?? '';
   const quote = (lines: readonly number[]): void => {

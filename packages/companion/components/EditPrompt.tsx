@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { calls } from '../lib/link/calls';
 import type { TurnView } from '../lib/link/protocol';
 import { store } from '../lib/store';
+import { useOn } from '../lib/scope';
 import { color } from '../lib/theme';
 import { convHref } from './Conv';
 import { Segments } from './Segments';
@@ -23,6 +24,7 @@ let lastMode: Mode = 'here';
  * point, opened here; this one stays as it is.
  */
 export function EditPromptSheet({ turn, onClose }: { readonly turn: TurnView | undefined; readonly onClose: () => void }) {
+  const on = useOn();
   const [text, setText] = useState('');
   const [mode, setMode] = useState<Mode>(lastMode);
   const [busy, setBusy] = useState(false);
@@ -39,7 +41,7 @@ export function EditPromptSheet({ turn, onClose }: { readonly turn: TurnView | u
     haptic.commit();
     setBusy(true);
     try {
-      const went = await store.call<string>(calls.editPrompt(edit.ws, turn.id, text, mode), { queue: false });
+      const went = await store.call<string>(calls.editPrompt(edit.ws, turn.id, text, mode), { queue: false, ...(on ? { on } : {}) });
       onClose();
       // A fork opens where it went on.
       if (mode === 'fork' && went && went !== `ws:${edit.ws}`) router.replace(convHref(went) as never);

@@ -5,6 +5,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { calls } from '../lib/link/calls';
 import type { SubAgentDetailView, SubAgentView, Topic, TurnView } from '../lib/link/protocol';
 import { store } from '../lib/store';
+import { useOn } from '../lib/scope';
 import { color } from '../lib/theme';
 import { Prose } from './Conv';
 import { Breathe, StepList, ToolBadge, TypingDots, useAgentTime } from './Live';
@@ -99,6 +100,7 @@ function AgentNow({ a }: { readonly a: SubAgentView }) {
  * (each new view of it), a moment after: a running one's sheet follows it without a call per frame.
  */
 function useAgentDetail(topic: Topic, turn: string | undefined, a: SubAgentView | undefined, open: boolean): SubAgentDetailView | undefined {
+  const on = useOn();
   const [detail, setDetail] = useState<SubAgentDetailView | undefined>();
   const key = a ? `${a.id}:${a.status}:${a.count ?? 0}:${a.steps.length}:${a.step ?? ''}` : '';
   useEffect(() => {
@@ -108,7 +110,7 @@ function useAgentDetail(topic: Topic, turn: string | undefined, a: SubAgentView 
     if (!open || !a || !turn || !store.supports('subAgent')) return;
     let live = true;
     const t = setTimeout(() => {
-      store.call<SubAgentDetailView>(calls.subAgent(topic, turn, a.id), { queue: false }).then(
+      store.call<SubAgentDetailView>(calls.subAgent(topic, turn, a.id), { queue: false, ...(on ? { on } : {}) }).then(
         (d) => live && d && !d.missing && setDetail(d),
         () => undefined,
       );

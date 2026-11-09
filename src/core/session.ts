@@ -922,7 +922,7 @@ export class Session {
   }
 
   /** A project's setup and/or run command from its files (undefined without an agent to ask, or on trouble). */
-  async workOutScripts(dir: string, want: { setup: boolean; run: boolean }): Promise<WorkedOutScripts | undefined> {
+  async workOutScripts(dir: string, want: { setup: boolean; run: boolean; system?: string }): Promise<WorkedOutScripts | undefined> {
     return routeSideCall(this.sideRoute(), (on) => on.workOutScripts?.(dir, want), undefined);
   }
 

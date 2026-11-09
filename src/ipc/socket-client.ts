@@ -201,6 +201,8 @@ export class SocketClient implements BelugaClient {
   private closed = false;
   // A snapshot was asked for and hasn't come yet.
   private resyncing = false;
+  /** Pings waiting for their pong, oldest first. */
+  private readonly pongs: Array<() => void> = [];
 
   private constructor(
     private readonly socket: SocketLike,
@@ -251,6 +253,20 @@ export class SocketClient implements BelugaClient {
         client.ended(ev.reason || 'The beluga daemon went away');
       };
       socket.onerror = () => undefined;
+    });
+  }
+
+  /**
+   * One round trip to the daemon (for a computer's screen, through the door to the computer and
+   * back, BLG-792) → its ms. Never settles while the link is down; the caller times it out.
+   */
+  ping(): Promise<number> {
+    const sent = Date.now();
+    // Pings lost to a link that dropped are let go, a few at most kept waiting.
+    if (this.pongs.length >= 8) this.pongs.shift();
+    return new Promise((resolve) => {
+      this.pongs.push(() => resolve(Date.now() - sent));
+      this.send({ t: 'ping' });
     });
   }
 
@@ -369,8 +385,10 @@ export class SocketClient implements BelugaClient {
       case 'bye':
         this.ended(frame.reason);
         return;
-      case 'welcome':
       case 'pong':
+        this.pongs.shift()?.();
+        return;
+      case 'welcome':
         return;
     }
   }

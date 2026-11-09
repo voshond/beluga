@@ -33,6 +33,12 @@ const mac = path.join(root, 'packages/mac');
 const confFile = path.join(mac, 'src-tauri/tauri.conf.json');
 const pkgFile = path.join(mac, 'package.json');
 
+/** The app protocol this checkout speaks (src/ipc/protocol.ts IPC_VERSION), for latest.json's `ipc`. */
+export function ipcVersion() {
+  const m = /export const IPC_VERSION = (\d+);/.exec(readFileSync(path.join(root, 'src/ipc/protocol.ts'), 'utf8'));
+  return m ? Number(m[1]) : undefined;
+}
+
 /** "1.2.3" or "v1.2.3-mac" → [1, 2, 3]; undefined when it isn't a version. */
 export function versionParts(v) {
   const m = /^v?(\d+)\.(\d+)\.(\d+)/.exec(String(v ?? ''));
@@ -55,8 +61,10 @@ export const dmgAsset = (version, arch) => `${APP}_${version}_${arch}.dmg`;
 export const assetUrl = (tag, name) => `https://github.com/${REPO}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(name)}`;
 
 /** The file every installed copy reads to learn about this release (tauri-plugin-updater's format). */
-export function latestJson({ version, notes, pubDate, signature, url, arch }) {
-  return { version, notes, pub_date: pubDate, platforms: { [`darwin-${arch}`]: { signature: signature.trim(), url } } };
+export function latestJson({ version, notes, pubDate, signature, url, arch, ipc = ipcVersion() }) {
+  // `ipc` (BLG-777): the app protocol this release speaks, so an installed app can warn before it
+  // updates past what your computers speak.
+  return { version, notes, pub_date: pubDate, ...(ipc ? { ipc } : {}), platforms: { [`darwin-${arch}`]: { signature: signature.trim(), url } } };
 }
 
 /**

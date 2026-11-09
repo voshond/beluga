@@ -1,4 +1,5 @@
 import { type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import { MAX_STREAM_BYTES } from '@beluga/shared/text-range.js';
 import type { ViewerState } from '@beluga/core/store.js';
 import { formatBytes } from '@beluga/shared/format.js';
 import { Icon } from '../../components/Icon.js';
@@ -9,7 +10,7 @@ import { useImageUrl } from '../../components/markdown/MdImage.js';
 import { VideoPlayer } from '../../components/VideoPlayer.js';
 import { MAX_FILE_BYTES } from '@beluga/protocol.js';
 import { fileKey } from '@beluga/core/store.js';
-import { useApp } from '../../lib/beluga.js';
+import { useApi, useApp } from '../../lib/beluga.js';
 import { Bitmap } from '../FilesView.js';
 import { isImageFile, isVideoFile } from '../../components/markdown/md-paths.js';
 import { BINARY_TEXT, HTML_SANDBOX, LARGE_MARKDOWN, prettyJson, previewVersion, type ReaderMode, isHtmlFile, isMarkdownFile, isPdfFile, langOf } from './reader-model.js';
@@ -19,7 +20,9 @@ import { useDecoded } from '../../components/use-decoded.js';
 import { useEditSession } from './edit-store.js';
 import { FileEditor } from './FileEditor.js';
 import { doneRevealing, scrollToLine, useReveal } from './reveal.js';
+import { peekFirst, useRest } from './streamed.js';
 import r from './reader.module.css';
+import { useFirstPaintMark } from '../../lib/first-paint.js';
 
 /**
  * One open file, read the right way: Markdown formatted (or as source), code with line numbers and
@@ -35,6 +38,20 @@ function Notice({ children, action }: { children: ReactNode; action?: ReactNode 
       {action}
     </div>
   );
+}
+
+/** Asks for more of a big file as the reader nears the end of what it has (BLG-791). */
+function MoreWhenNear({ onNear }: { onNear: () => void }) {
+  const at = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = at.current;
+    if (!el) return;
+    // A new onNear after each piece: still in sight, the next one is asked for.
+    const seen = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && onNear(), { rootMargin: '1500px 0px' });
+    seen.observe(el);
+    return () => seen.disconnect();
+  }, [onNear]);
+  return <div ref={at} className={r.more} aria-hidden />;
 }
 
 const ZOOMS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
@@ -121,7 +138,13 @@ export interface FileContentProps {
 
 /** The file itself, under whatever header the place showing it has. */
 export function FileContent({ viewer, variant, mode, onMode, wrap, onOpenInEditor, onSaveCopy, nav, version, editable = false }: FileContentProps) {
-  const editing = useEditSession(editable ? viewer : undefined);
+  // A big file opened by its first piece isn't all here, so it isn't edited here.
+  const editing = useEditSession(editable && viewer.next === undefined ? viewer : undefined);
+  const rest = useRest(useApi(), viewer);
+  // Still opening: the first piece read ahead under the pointer shows meanwhile.
+  const ahead = viewer.loading && !viewer.content && !viewer.error ? peekFirst(viewer) : undefined;
+  const content = (ahead?.binary ? '' : (ahead?.content ?? viewer.content)) + rest.text;
+  useFirstPaintMark('beluga:file-shown', viewer.path, content.length > 0 && !viewer.error);
   const reveal = useReveal(viewer);
   const box = useRef<HTMLDivElement>(null);
   const markdown = isMarkdownFile(viewer.path);
@@ -130,13 +153,13 @@ export function FileContent({ viewer, variant, mode, onMode, wrap, onOpenInEdito
   const fresh = previewVersion(version, written);
   // A search result opened it at a line: the source, scrolled there (once it's drawn).
   useEffect(() => {
-    if (!reveal || viewer.loading || !viewer.content) return;
+    if (!reveal || viewer.loading || !content) return;
     if ((markdown || html) && mode === 'rendered' && !editing) return onMode('source');
     const frame = requestAnimationFrame(() => {
       if (box.current && scrollToLine(box.current, reveal.line, r.lineFlash!)) doneRevealing(viewer);
     });
     return () => cancelAnimationFrame(frame);
-  }, [reveal?.seq, viewer.path, viewer.loading, viewer.content.length, mode, Boolean(editing)]);
+  }, [reveal?.seq, viewer.path, viewer.loading, content.length, mode, Boolean(editing)]);
   // PDFs and pictures are read as themselves (their bytes), whatever the text read made of them.
   if (isPdfFile(viewer.path)) return <PdfView at={{ owner: viewer.owner, share: viewer.share, path: viewer.path }} controls={variant !== 'panel'} version={fresh ?? version} />;
   if (isVideoFile(viewer.path)) {
@@ -152,7 +175,7 @@ export function FileContent({ viewer, variant, mode, onMode, wrap, onOpenInEdito
     return <VideoFile viewer={viewer} fallback={out} version={fresh} />;
   }
   if (viewer.image || (isImageFile(viewer.path) && !viewer.error)) return <ImageView viewer={viewer} controls={variant !== 'panel'} version={fresh} />;
-  if (viewer.loading && !viewer.content) return <div className={r.opening}>Opening…</div>;
+  if (viewer.loading && !content) return <div className={r.opening}>Opening…</div>;
   if (viewer.error) return <Empty icon="alert" title="Can’t open this file" detail={viewer.error} />;
   const escape = onOpenInEditor ? (
     <Button size="small" variant="quiet" icon="external" onClick={onOpenInEditor}>
@@ -166,11 +189,11 @@ export function FileContent({ viewer, variant, mode, onMode, wrap, onOpenInEdito
   if (viewer.content === BINARY_TEXT) {
     return <Empty icon="file" title="No preview for this kind of file" detail="It isn’t text, a picture, a PDF or a video. Open it with its app instead." action={escape ? <EmptyActions>{escape}</EmptyActions> : undefined} />;
   }
-  const large = markdown && viewer.content.length > LARGE_MARKDOWN;
-  const json = mode === 'rendered' ? prettyJson(viewer.path, viewer.content) : undefined;
+  const large = markdown && content.length > LARGE_MARKDOWN;
+  const json = mode === 'rendered' ? prettyJson(viewer.path, content) : undefined;
   return (
     <div ref={box} className={cx(r.content, r[`v_${variant}`])}>
-      {viewer.truncated ? <Notice action={escape}>Only the first {formatBytes(MAX_FILE_BYTES)} of this file is shown.</Notice> : null}
+      {viewer.truncated || rest.capped ? <Notice action={escape}>Only the first {formatBytes(rest.capped ? MAX_STREAM_BYTES : MAX_FILE_BYTES)} of this file is shown.</Notice> : null}
       {large && mode === 'source' ? (
         <Notice
           action={
@@ -179,7 +202,7 @@ export function FileContent({ viewer, variant, mode, onMode, wrap, onOpenInEdito
             </Button>
           }
         >
-          This file is large ({formatBytes(viewer.content.length)}), so it opens as source.
+          This file is large ({formatBytes(viewer.total ?? content.length)}), so it opens as source.
         </Notice>
       ) : null}
       {editing ? (
@@ -187,14 +210,16 @@ export function FileContent({ viewer, variant, mode, onMode, wrap, onOpenInEdito
           <FileEditor session={editing} lang={markdown ? 'markdown' : langOf(viewer.path)} variant={variant} />
         </div>
       ) : html && mode === 'rendered' ? (
-        <iframe className={r.html} title={viewer.path.split('/').pop() ?? viewer.path} sandbox={HTML_SANDBOX} srcDoc={viewer.content} referrerPolicy="no-referrer" />
+        <iframe className={r.html} title={viewer.path.split('/').pop() ?? viewer.path} sandbox={HTML_SANDBOX} srcDoc={content} referrerPolicy="no-referrer" />
       ) : markdown && mode === 'rendered' ? (
-        <MarkdownDoc text={viewer.content} at={viewer} variant={variant} {...(nav ? { nav } : {})} />
+        <MarkdownDoc text={content} at={viewer} variant={variant} {...(nav ? { nav } : {})} />
       ) : (
         <div className={r.codeFile}>
-          <CodeLines text={json ?? viewer.content} lang={markdown ? 'markdown' : langOf(viewer.path)} numbers wrap={wrap || variant === 'panel'} />
+          <CodeLines text={json ?? content} lang={markdown ? 'markdown' : langOf(viewer.path)} numbers wrap={wrap || variant === 'panel'} />
         </div>
       )}
+      {rest.more && !editing ? <MoreWhenNear onNear={rest.more} /> : null}
+      {rest.error ? <Notice>The rest of this file couldn’t be read: {rest.error}</Notice> : null}
     </div>
   );
 }

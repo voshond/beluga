@@ -116,6 +116,11 @@ export class PreviewServer {
     return Boolean(this.server);
   }
 
+  /** The port it listens on now, if it does. */
+  get listening(): number | undefined {
+    return this.server ? this.port : undefined;
+  }
+
   /** The server's origin, started the first time it's needed. */
   async origin(): Promise<string> {
     return `http://${PREVIEW_HOST}:${await this.start()}`;

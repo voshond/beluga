@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { watch, type FSWatcher } from 'chokidar';
 import { type FsEntry, MAX_DOWNLOAD_BYTES, MAX_FILE_BYTES, type ShareInfo } from '../protocol.js';
+import { MAX_RANGE, type TextRange, textEnd } from '../shared/text-range.js';
 import { belugaEnv } from './beluga-env.js';
 import type { SecretKind } from './gateway/model.js';
 
@@ -305,6 +306,30 @@ export class ShareService {
     } finally {
       await handle.close();
     }
+  }
+
+  /**
+   * One piece of a file's text (BLG-791): `length` bytes from `offset`, ended on a line or at least
+   * a whole character, with where the next piece starts. The same files are refused as for read().
+   */
+  async readRange(shareName: string, relPath: string, offset: number, length: number, owner = false): Promise<TextRange> {
+    const file = resolveInShare(this.find(shareName), relPath, owner);
+    const stat = await fs.stat(file);
+    if (stat.isDirectory()) throw new ShareError('That is a directory');
+    const mtime = Math.round(stat.mtimeMs);
+    const start = Math.min(offset, stat.size);
+    const size = Math.min(length, MAX_RANGE, stat.size - start);
+    const buf = Buffer.alloc(size);
+    const handle = await fs.open(file, 'r');
+    try {
+      if (size > 0) await handle.read(buf, 0, size, start);
+    } finally {
+      await handle.close();
+    }
+    if (start === 0 && buf.includes(0)) return { content: '[binary file]', offset: 0, total: stat.size, mtime, binary: true };
+    const end = textEnd(buf, start + size >= stat.size);
+    const next = start + end < stat.size ? start + end : undefined;
+    return { content: buf.subarray(0, end).toString('utf8'), offset: start, ...(next !== undefined ? { next } : {}), total: stat.size, mtime };
   }
 
   /** A file's size and when it last changed (ms), without reading it: a picture's cache asks whether it was rewritten. */

@@ -3,6 +3,7 @@ import { ScrollView, View } from 'react-native';
 import { calls } from '../lib/link/calls';
 import type { AgentPickerView, Topic } from '../lib/link/protocol';
 import { store } from '../lib/store';
+import { useOn } from '../lib/scope';
 import { color } from '../lib/theme';
 import { AgentMarkIcon, modelMark, runtimeMark } from './AgentMark';
 import { Sheet } from './Sheet';
@@ -18,13 +19,14 @@ type Group = AgentPickerView['groups'][number];
  * runtime's own (a local runtime running an OpenAI model).
  */
 export function AgentPickerSheet({ topic, picker, visible, onClose }: { readonly topic: Topic; readonly picker: AgentPickerView | undefined; readonly visible: boolean; readonly onClose: () => void }) {
+  const on = useOn();
   const pick = (g: Group, value: string, label: string): void => {
     if (!picker) return;
     const call =
       g.runtime === picker.runtime
         ? calls.setModel(topic, value, label)
         : calls.setAgent(topic, g.isDefault && !value ? null : { runtime: g.runtime, label: g.label, ...(value ? { model: value } : {}) }, `${g.label} ${label}`);
-    void store.call(call).catch((e: Error) => store.toast({ text: e.message, tone: 'error' }));
+    void store.call(call, on ? { on } : {}).catch((e: Error) => store.toast({ text: e.message, tone: 'error' }));
   };
   return <AgentChoiceSheet title="Agent" caption="For this conversation, from your next message" picker={picker} visible={visible} onClose={onClose} onPick={pick} />;
 }

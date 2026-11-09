@@ -1,6 +1,6 @@
 import type { View } from '../../../../src/core/store.js';
 
-type LinkedKind = Exclude<View['kind'], 'draft' | 'draft_worktree'>;
+type LinkedKind = Exclude<View['kind'], 'draft' | 'draft_worktree' | 'machine'>;
 
 const REQUIRED: Record<LinkedKind, readonly string[]> = {
   room: [],

@@ -153,6 +153,7 @@ const PANE_SOURCES: Record<string, string> = {
   environment: read('dialogs/EnvironmentSettings.tsx'),
   people: [s('People'), read('network/NetworkSettings.tsx'), read('gateway/AccessSettings.tsx')].join('\n'),
   phone: read('phone/Phone.tsx'),
+  computers: read('dialogs/MachinesSettings.tsx'),
   voice: read('dialogs/VoiceSettings.tsx'),
   keyboard: read('dialogs/KeyboardSettings.tsx'),
   advanced: [read('dialogs/WebAccessSettings.tsx'), fn(read('dialogs/AgentThreadsSettings.tsx'), 'AgentThreadsSettings')].join('\n'),

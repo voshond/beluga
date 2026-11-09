@@ -31,6 +31,7 @@ import {
   type PlanEventKind,
   type PlanMainMerge,
   type PlanMerge,
+  type PlanMove,
   type PlanPr,
   type PlanShipped,
   type PlansState,
@@ -531,6 +532,29 @@ export class Plans {
   note(id: string, kind: PlanEventKind, text: string, by: Actor): Plan {
     const plan = this.need(id);
     return this.change(plan, {}, [event(by, kind, text.replace(/\s+/g, ' ').trim().slice(0, 300), this.now())]);
+  }
+
+  /** A plan that moved here from another computer (BLG-806), as move.ts made it ready: in place of the record of an earlier move away. */
+  adopt(plan: Plan): Plan {
+    const there = this.get(plan.id);
+    if (there && !there.movedTo) throw new PlanError('A plan with that id is here already');
+    const next = { ...plan, updatedAt: this.now() };
+    this.plans = [...this.plans.filter((p) => p.id !== plan.id), next];
+    this.publish(next);
+    return next;
+  }
+
+  /** It moved to another computer: this copy is its record from now on, paused, off the lists. */
+  movedAway(id: string, to: PlanMove, by: Actor): Plan {
+    const plan = this.need(id);
+    return this.change(plan, { movedTo: to, paused: true }, [event(by, 'note', `moved the plan to ${to.name}: it runs there now`, to.at)]);
+  }
+
+  /** A moved milestone's next agent started from its branch: it isn't resumed from there again. */
+  resumed(id: string, milestone: string): Plan {
+    const plan = this.need(id);
+    const { resumeFrom: was, ...rest } = plan.runs[milestone] ?? {};
+    return was ? this.change(plan, { runs: { ...plan.runs, [milestone]: rest } }, []) : plan;
   }
 
   remove(id: string): void {

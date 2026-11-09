@@ -13,6 +13,7 @@ import { chordLabel } from '../lib/shortcuts-model.js';
 import { agoWords } from '../issues/issues-model.js';
 import type { ConversationItem } from './use-pr-conversation.js';
 import s from './pr-conversation.module.css';
+import { openCodeThere } from '../lib/remote-open.js';
 
 /**
  * The pieces a PR's conversation is drawn with: someone's words, a review's verdict, and a thread
@@ -207,7 +208,7 @@ export function ThreadCard({ wsId, thread, folded = thread.resolved, children }:
           <span className={s.grow} />
         )}
         <span className={s.count}>{thread.comments.length > 1 ? `${thread.comments.length} comments` : ''}</span>
-        <IconButton icon="external" label="Open in Editor" className={s.small} onClick={() => void api.workbench.openCode(wsId, thread.path, line)} />
+        <IconButton icon="external" label="Open in Editor" className={s.small} onClick={() => void openCodeThere(client, wsId, thread.path, line)} />
       </header>
       {open ? (
         <>

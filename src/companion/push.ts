@@ -20,6 +20,50 @@ export interface Nudge {
   readonly collapse?: string;
   /** Only for a phone linked with the app in the background (Stay connected), never pushed: the Mac's own "finished" notices. */
   readonly away?: boolean;
+  /**
+   * From your friends network (a message, a request to join): told by the install that runs it,
+   * your Always On when you have one, never also by a Mac that only shows it (BLG-850).
+   */
+  readonly friends?: boolean;
+}
+
+/** What `newMessages` reads of the friends network (DomainState['network']). */
+export interface FriendsMessages {
+  readonly messages: Readonly<Record<string, ReadonlyArray<{ readonly id: string; readonly name: string; readonly text: string; readonly ts: number; readonly mine: boolean; readonly status?: string }>>>;
+  readonly friends: ReadonlyArray<{ readonly peerId: string; readonly name: string }>;
+  readonly groups: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+}
+
+const clipped = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+
+/**
+ * A friend's new message, each a `mentions` nudge on its chat (BLG-850): ones that weren't there
+ * before, not yours, readable, and sent since `since` (a history arriving at once isn't news).
+ * One per chat at a time (collapsed by chat), the newest's words.
+ */
+export function newMessages(prev: FriendsMessages, next: FriendsMessages, since: number, topicOf: (conversation: string) => Topic | undefined): Nudge[] {
+  const out: Nudge[] = [];
+  for (const [conversation, list] of Object.entries(next.messages)) {
+    if (list === prev.messages[conversation]) continue;
+    const before = new Set((prev.messages[conversation] ?? []).map((m) => m.id));
+    const fresh = list.filter((m) => !m.mine && !before.has(m.id) && m.ts >= since && m.status !== 'locked' && m.text.trim());
+    const last = fresh.at(-1);
+    if (!last) continue;
+    const group = conversation.startsWith('group:') ? next.groups.find((g) => `group:${g.id}` === conversation) : undefined;
+    const friend = conversation.startsWith('dm:') ? next.friends.find((f) => `dm:${f.peerId}` === conversation) : undefined;
+    const topic = topicOf(conversation);
+    const more = fresh.length > 1 ? ` (+${fresh.length - 1})` : '';
+    out.push({
+      kind: 'mentions',
+      title: clipped(group?.name ?? friend?.name ?? last.name, 200),
+      body: clipped(`${group ? `${last.name}: ` : ''}${last.text.replace(/```[\s\S]*?(```|$)/g, '(code)')}${more}`, 300),
+      ...(topic ? { topic } : {}),
+      priority: 'normal',
+      collapse: `chat:${conversation}`,
+      friends: true,
+    });
+  }
+  return out;
 }
 
 /** A phone that can be pushed to (its token and relay key, from its `push` frame). */

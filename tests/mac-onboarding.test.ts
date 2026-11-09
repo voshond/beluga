@@ -192,3 +192,23 @@ describe('Sentinel in the tour (BLG-362)', () => {
     }
   });
 });
+
+describe('Your computers in the tour (BLG-813)', () => {
+  it('shows your computers after the tables, just before friends', () => {
+    expect(TOUR).toContain('machines');
+    expect(stepBy('tables', 1)).toBe('machines');
+    expect(stepBy('machines', 1)).toBe('friends');
+    expect(tourPlace('machines')).toEqual({ at: 4, of: TOUR.length });
+  });
+
+  it('says what your computers are in one or two sentences, with an icon and no emoji', () => {
+    const copy = TOUR_COPY.machines;
+    expect(copy?.title).toBeTruthy();
+    const sentences = copy!.body.split(/(?<=[.!?])\s+/).filter(Boolean);
+    expect(sentences.length).toBeGreaterThanOrEqual(1);
+    expect(sentences.length).toBeLessThanOrEqual(2);
+    expect(copy!.body).toMatch(/Always On/);
+    expect(copy!.icon).toBe('server');
+    for (const line of [copy!.eyebrow, copy!.title, copy!.body, ...copy!.points]) expect(line).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+});

@@ -184,3 +184,16 @@ Uploads (`src/daemon/web-files.ts`) go to `~/.beluga/uploads/<day>/<random>/<nam
 0700 folders), up to 512 MB each, only from the page's own origin and a browser that's let in.
 Downloads are one-time links, good for a minute; a friend's shared file is fetched to the server
 first and deleted once it's sent.
+
+## The same bits on one of your computers' pages
+
+A page of one of your computers (BLG-784) draws in your own app, so the app's native bits work, but
+what they name is on this Mac while the work runs there. The same list applies, done this way
+(BLG-793):
+
+- A pasted or dropped picture goes as bytes (`attachments.add` runs on the computer), as in a browser.
+- Files dropped from Finder on the message box go there a piece at a time (`machines.upload.send`:
+  this Mac's daemon reads each piece and puts it there with `machines.upload.put`, into
+  `~/.beluga/uploads` there), with their progress in the box, then wait by their path there.
+- Folder pickers on its page (`pickFolders` with the page's computer: a form's folder, Import a
+  Conversation) walk that computer's folders with Beluga's own picker (`local.browse` there).

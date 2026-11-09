@@ -90,6 +90,16 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A file from this Mac on its way to the computer a chat runs on (BLG-793). */
+.fileSending {
+  padding-right: 8px;
+  color: var(--text-2);
+}
+.fileProgress {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
 .fileChip button {
   display: grid;
   place-items: center;

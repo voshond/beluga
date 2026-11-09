@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { IPC_VERSION } from '../src/ipc/protocol.js';
 
 /** The maintainer's Mac release script (scripts/release-mac.mjs): what it writes, not what it runs. */
 
@@ -43,6 +44,8 @@ describe('release-mac', () => {
       version: '0.5.0',
       notes: '- Faster',
       pub_date: '2026-10-18T10:00:00.000Z',
+      // The app protocol the release speaks (BLG-777): an installed app warns about computers it would leave behind.
+      ipc: IPC_VERSION,
       platforms: { 'darwin-aarch64': { signature: 'c2ln', url } },
     });
   });

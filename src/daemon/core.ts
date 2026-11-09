@@ -32,10 +32,12 @@ import { launchSupport } from '../core/merge-counter.js';
 import { launchStats } from '../core/stats/counter.js';
 import { claudeHome, launchClaudeCode } from '../core/claude-code/launch.js';
 import { launchCompanion } from '../companion/launch.js';
+import { swappableIdentity } from '../core/identity.js';
+import { identitiesAtStart } from '../machines/identity-load.js';
 import { closePreviews } from '../preview/off.js';
 import { Store, initialState, prefsFrom } from '../core/store.js';
 import { createDemoFolders, createDemoWorkspaces, seedDemoContext, startDemoFriend, startDemoGuest } from '../demo.js';
-import { type Identity, deriveKeys, generateSecret, loadIdentity } from '../net/crypto.js';
+import { type Identity, deriveKeys, generateSecret } from '../net/crypto.js';
 import { type GuestAccess, type GuestGate, type Hub, startHub } from '../net/hub.js';
 import { P2P_SCHEME, decodeInvite, encodeInvite, findInvite, isDirect, toWsUrl } from '../net/invite.js';
 import { PeerClient } from '../net/peer-client.js';
@@ -248,7 +250,10 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
   // The Mac app's first launch: fetch Claude Code now, so it's usually there before the first message (BLG-384).
   if (!demo && config.agent && !belugaEnv('CLAUDE_PATH')) void claudeCodeReady().catch(() => {});
   // Your own key, kept between runs: friends recognize you, and the trust they gave you comes back.
-  const identity = loadIdentity(path.join(belugaHome(), 'identity.json'));
+  // Rooms sign as you even after your identity moved to your Always On (BLG-846: this Mac's standby copy, never its stand-in key);
+  // who this install is on the network can move there and back (BLG-796): the parts that follow it read `you`.
+  const { local, you: identity } = identitiesAtStart(belugaHome());
+  const you = swappableIdentity(local);
   const saved = loadSettings();
   const room = config.mode === 'join' ? await joinRoom(config) : await hostRoom(config, identity);
   const shares = new ShareService(config.shares);
@@ -372,7 +377,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     session.start();
     // The Beluga network (friends, groups, presence): only the daemon runs it, and only when it's turned on.
     // It can be turned on and off later too (`network.setEnabled`).
-    if (opts.network) stopNetwork = networkSwitch({ session, store, identity, name: config.name, dir: belugaHome(), demo: Boolean(demo), warn: (text) => session.system(text, 'warn') }, saved).stop;
+    if (opts.network) stopNetwork = networkSwitch({ session, store, identity: you.identity, name: config.name, dir: belugaHome(), demo: Boolean(demo), warn: (text) => session.system(text, 'warn') }, saved).stop;
     // Merged work made in Beluga, counted once per branch: the first and fifth merge ask for a star and a coffee.
     if (opts.network) stopSupport = launchSupport({ session, store, demo: Boolean(demo), asks: belugaEnv('DEMO_ASKS') });
     // Your stats for the Usage tab: prompts, agent time, worktrees, pull requests, by project and agent.
@@ -413,7 +418,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     if (opts.network) stopThreads = launchThreads(session);
     if (opts.network) stopClaudeCode = launchClaudeCode({ session, store, demo: Boolean(demo), notify: (e) => session.notifier.notify(e) });
     // Your phone (docs/companion.md): pairing it, and its link. Its DHT node runs only while a phone is paired or a pairing is open.
-    if (opts.network) stopCompanion = launchCompanion({ session, store, identity, terminals, demo: Boolean(demo), log: (line) => console.warn(line) });
+    if (opts.network) stopCompanion = launchCompanion({ session, store, identity: you.identity, you, terminals, demo: Boolean(demo), log: (line) => console.warn(line) });
     if (config.mode === 'host' && config.inviteNow) void publish(config, room, session, () => closing);
     if (!demo) return;
     // A pretend friend and a fake invite so every part of the UI has something to show.

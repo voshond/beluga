@@ -9,6 +9,7 @@ import type { Store } from '../store.js';
 import { unexplained } from './criteria.js';
 import { LABEL_COLORS, LABEL_ICONS, LABEL_NAME, type LabelColor, type LabelDef, type LabelIcon, MAX_CUSTOM_LABELS, cleanLabelName, inSet, labelsFor } from './labels.js';
 import { dropKeptFile, dropProofFolder, keepProofFile, keepProofFiles, letGoProofFile } from './proof-files.js';
+import { landProof } from './moved.js';
 import {
   type Activity,
   type AnyAssignee,
@@ -20,6 +21,7 @@ import {
   type BoardState,
   type BriefRevision,
   type BriefSection,
+  type CarriedFile,
   ISSUE_STATUSES,
   type Issue,
   type IssueGitHub,
@@ -913,6 +915,52 @@ export class Board {
     if (issue.status === status || issue.status === 'canceled') return issue;
     const beluga: Actor = { kind: 'beluga' };
     return this.change(issue, { status, rank: this.lastRank(status) }, [this.entry(beluga, 'plan', text), this.entry(beluga, 'status', `moved this from ${STATUS_INFO[issue.status].label} to ${STATUS_INFO[status].label}`)]);
+  }
+
+  // ------------------------------------------------------------------ a plan moving between computers (BLG-806, see moved.ts)
+
+  /** A repo's board here as its tasks' keys need it: its prefix and next number. */
+  keysFor(projectId: string): { readonly prefix: string; readonly next: number } {
+    const { prefix, next } = this.projectFor(projectId);
+    return { prefix, next };
+  }
+
+  /**
+   * Tasks whose plan moved here, made ready by prepareMoved: put on their repo's board (over the
+   * record of an earlier move away, moving back), their proof files written, the board's next
+   * number past every key they keep.
+   */
+  putMoved(issues: readonly Issue[], files: Readonly<Record<string, CarriedFile>>): void {
+    const ids = new Set(issues.map((i) => i.id));
+    for (const old of this.issues.filter((i) => ids.has(i.id) && i.movedTo)) this.remove(old.id);
+    let projects = { ...this.projects };
+    for (const i of issues) {
+      const board = projects[i.projectId] ?? this.projectFor(i.projectId);
+      projects = { ...projects, [i.projectId]: i.key.startsWith(`${board.prefix}-`) ? { ...board, next: Math.max(board.next, i.number + 1) } : board };
+    }
+    this.meta(projects);
+    for (const i of issues) {
+      const issue: Issue = { ...i, rank: this.lastRank(i.status), proof: landProof(i.proof, i.id, this.deps.dir, files) };
+      this.issues = [...this.issues, issue];
+      this.deps.store.dispatch({ type: 'board_issue', issue });
+    }
+    this.save();
+  }
+
+  /** Taken off again: a move that didn't finish (the plan stays where it was). */
+  dropMoved(ids: readonly string[]): void {
+    for (const id of ids) if (this.issues.some((i) => i.id === id)) this.remove(id);
+  }
+
+  /** Their plan moved to `to`: each goes to the Archive as the record of it (the task runs there now). */
+  movedAway(ids: readonly string[], to: string, by: Actor): void {
+    const home = this.deps.dir;
+    for (const id of ids) {
+      const issue = this.issues.find((i) => i.id === id);
+      if (!issue || issue.movedTo) continue;
+      const proof = home ? issue.proof.map((p) => letGoProofFile(p, home)) : issue.proof;
+      this.change(issue, { movedTo: to, archivedAt: this.now(), proof }, [this.entry(by, 'plan', `moved with its plan to ${to}`)], false);
+    }
   }
 
   // ------------------------------------------------------------------ team boards (core/team/board-sync.ts)

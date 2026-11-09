@@ -3,6 +3,8 @@ import type { Recipe, SentinelDraft } from '@beluga/core/sentinel/model.js';
 import { Field, FormSheet, Popup, TextArea, TextInput } from '../components/FormSheet.js';
 import { Segmented } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
+import { RunsOnRow } from '../chat/RunsOn.js';
+import { type WorkToStart, sendToComputer, useStartDeps } from '../machines/start-there.js';
 import { projectOfView } from '../tasks/use-tasks.js';
 import { Icon } from '../components/Icon.js';
 import { MAC_SCOPE, describedName, iconOf, recipeWhen } from './sentinel-model.js';
@@ -26,6 +28,7 @@ const WAYS: ReadonlyArray<{ readonly value: Way; readonly label: string; readonl
  */
 export function NewSentinelSheet({ projectId, way: first = 'describe', close }: { projectId?: string; way?: Way; close: () => void }) {
   const a = useSentinelActions();
+  const startDeps = useStartDeps();
   const all = useApp((st) => st.projects);
   const inView = useApp(projectOfView);
   const projects = useMemo(() => all.filter((p) => p.root && !p.error), [all]);
@@ -47,7 +50,15 @@ export function NewSentinelSheet({ projectId, way: first = 'describe', close }: 
   }, [a]);
 
   const where = project === MAC_SCOPE ? null : project;
+  /** Runs on one of your computers (BLG-788): made there, opened at once. */
+  // Sent there: the sheet closes; held (the computer named can't take it now): it stays, nothing made.
+  const there = (what: WorkToStart): boolean => {
+    const sent = sendToComputer(startDeps, where ?? undefined, 'claude', what);
+    if (sent === 'sent') close();
+    return sent !== 'here';
+  };
   const make = async (draft: SentinelDraft): Promise<string | void> => {
+    if (there({ kind: 'sentinel', draft: { ...draft } })) return;
     const made = await a.act(() => a.create({ ...draft, projectId: where }));
     if (!made) return 'Couldn’t make it: see the message above';
     close();
@@ -57,6 +68,7 @@ export function NewSentinelSheet({ projectId, way: first = 'describe', close }: 
   const describe = async (): Promise<string | void> => {
     const text = words.trim();
     if (!text) return;
+    if (there({ kind: 'sentinel', draft: { name: describedName(text), trigger: { kind: 'manual' }, steps: [] }, ask: text })) return;
     const made = await a.act(() => a.create({ name: describedName(text), projectId: where, trigger: { kind: 'manual' }, steps: [] }));
     if (!made) return 'Couldn’t make it: see the message above';
     close();
@@ -66,6 +78,7 @@ export function NewSentinelSheet({ projectId, way: first = 'describe', close }: 
   /** A recipe: its sentinel filled in (paused), and the one that runs after it when it has one. */
   const pick = async (r: Recipe): Promise<void> => {
     if (busy) return;
+    if (there({ kind: 'sentinel', draft: { ...r.sentinel }, ...(r.then ? { then: { draft: { ...r.then.sentinel }, on: r.then.on } } : {}) })) return;
     setBusy(r.id);
     const made = await a.act(() => a.create({ ...r.sentinel, projectId: where }));
     if (made && r.then) await a.act(() => a.create({ ...r.then!.sentinel, projectId: where, trigger: { kind: 'after', sentinelId: made.id, on: r.then!.on } }));
@@ -100,6 +113,8 @@ export function NewSentinelSheet({ projectId, way: first = 'describe', close }: 
             options={[{ value: MAC_SCOPE, label: ASSISTANT_TITLE, description: `Not tied to a project: things about ${THIS_COMPUTER} itself` }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
           />
         </div>
+        {/* Which computer it runs on (BLG-786). Only with a computer paired. */}
+        <RunsOnRow project={project === MAC_SCOPE ? undefined : project} className={s.row2} labelClassName={s.label} />
         {way === 'describe' ? (
           <Field label="What should it do?" htmlFor="sentinel-words" hint={`Your agent sets it up in ${projectName ?? ASSISTANT_TITLE}, looking at the project first when that helps. It starts paused: look it over, then Turn On.`}>
             <TextArea

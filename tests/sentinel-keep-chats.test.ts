@@ -6,7 +6,7 @@ import { MacAssistant } from '../src/core/assistant/assistant.js';
 import { pretendSystem } from '../src/core/gateway/demo-system.js';
 import { ALWAYS_ASK_YOU } from '../src/agent/policy.js';
 import { SentinelChats } from '../src/core/sentinel/chat.js';
-import { type RunSummary, type Sentinel, keepsChat, sentinelChatChannel } from '../src/core/sentinel/model.js';
+import { CLAUDE_CHANGED, type RunSummary, type Sentinel, keepsChat, sentinelChatChannel } from '../src/core/sentinel/model.js';
 import { needsALook, sidebarSentinels } from '../packages/mac/src/sentinel/sentinel-model.js';
 import type { SentinelPlaces } from '../src/core/sentinel/runner.js';
 import { ToolDraftSchema, ToolPatchSchema } from '../src/core/sentinel/tool-draft.js';
@@ -251,6 +251,17 @@ describe('the sidebar’s sentinels', () => {
     const items = [item('a', 'Quiet'), item('b', 'Broke'), item('c', 'Going'), item('w', 'Waits', true)];
     const runs = [run('r1', 'a', 10, 'done'), run('r2', 'b', 20, 'failed'), run('r3', 'c', 30, 'running'), run('r4', 'w', 5, 'needs-you')];
     expect(sidebarSentinels({ items, runs }).filter(needsALook).map((x) => x.sentinel.id)).toEqual(['c', 'b', 'w']);
+  });
+
+  it('one that stopped on its own stays under the row, folded, so the problem mark has its cause', () => {
+    const stuck = { ...item('f', 'Flaky', true), pausedWhy: 'Paused after 3 failures in a row' } as Sentinel;
+    const changed = { ...item('c', 'Changed', true), pausedWhy: CLAUDE_CHANGED } as Sentinel;
+    const items = [item('a', 'Quiet'), stuck, changed, item('h', 'By hand', true)];
+    const runs = [run('r1', 'a', 30, 'done'), run('r2', 'f', 20, 'failed'), run('r3', 'c', 10, 'done'), run('r4', 'h', 5, 'done')];
+    const side = sidebarSentinels({ items, runs });
+    expect(side.map((x) => x.sentinel.id)).toEqual(['a', 'f']);
+    expect(side.filter(needsALook).map((x) => x.sentinel.id)).toEqual(['f']);
+    expect(side[1]!.broken).toBe('Paused after 3 failures in a row');
   });
 
   it('its runs (BLG-576): every one, newest first, scripts-only too, each with its chat while it’s kept', () => {

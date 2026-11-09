@@ -36,6 +36,10 @@ const ENTRIES = [
   // Its rules also run in the Mac and in the phone's views.
   'src/core/triage/model.ts',
   'src/core/triage/facts.ts',
+  // How a computer of yours is said and drawn, on the Mac and in the phone's bundle.
+  'src/machines/words.ts',
+  'src/machines/look.ts',
+  'src/shared/machine-kinds.ts',
 ];
 // Pure packages that run anywhere (string-width measures text the same way in both clients).
 const ALLOWED_PACKAGES = new Set(['zod', 'string-width']);

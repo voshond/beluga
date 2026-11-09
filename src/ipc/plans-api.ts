@@ -26,6 +26,8 @@ const task = z.object({
   assignee: z.enum(['claude', 'me']).optional(),
 });
 const autonomy = z.enum(AUTONOMIES);
+/** The computer a plan moves from or to: its device id (none: the app's own Mac) and name. */
+const move = z.object({ id: z.string().regex(/^[0-9a-f]{16}$/).optional(), name: z.string().min(1).max(80), at: z.number().int().min(0) });
 
 /** Your changes to a plan (the same ops Claude has). */
 export const PlanOpSchema = z.discriminatedUnion('op', [
@@ -91,4 +93,19 @@ export const PLANS_API = {
   'plans.remove': { args: z.tuple([id]) },
   // Your planning style (how you like plans cut), added to Claude's planning instructions.
   'plans.setStyle': { args: z.tuple([z.string().max(8000)]) },
+  // Move To another computer (BLG-806), as your app runs it (src/machines/move-plan.ts). Here: whether it
+  // can move now → { blocked?, running, dirty, paused, project }.
+  'plans.moveCheck': { args: z.tuple([id]) },
+  // Packed to go (changes not committed in its worktrees committed only with commit) → { token, chunks }.
+  'plans.movePack': { args: z.tuple([id, z.object({ commit: z.boolean().optional(), to: z.string().min(1).max(80) }).strict()]) },
+  // One piece of a packed plan (the last one lets it go here).
+  'plans.moveChunk': { args: z.tuple([z.string().uuid(), z.number().int().min(0).max(200)]) },
+  // There: one piece of it coming in (its number, how many in all, the piece).
+  'plans.moveReceive': { args: z.tuple([z.string().uuid(), z.number().int().min(0).max(200), z.number().int().min(1).max(201), z.string().max(2 * 1024 * 1024)]) },
+  // There: every piece is in, landed in that project, paused → the plan (or nothing is left there).
+  'plans.moveLand': { args: z.tuple([z.string().uuid(), z.string().min(1).max(200), move]) },
+  // Here: the copy runs there; this one becomes its record (its tasks archived, its conversations put away) → the plan.
+  'plans.moveDone': { args: z.tuple([id, move.extend({ planId: id.optional() }).strict()]) },
+  // There: a landed copy whose move didn't finish, taken back off.
+  'plans.moveUndo': { args: z.tuple([id]) },
 } as const;

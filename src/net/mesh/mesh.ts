@@ -122,6 +122,8 @@ export class Mesh extends EventEmitter<MeshEvents> {
   /** What else this Mac does now (the gateway adds its tasks while it listens). */
   private readonly offered = new Set<Feature>();
   private reads: Record<string, number>;
+  /** The newest message of each friend's that this Mac said Seen for (BLG-798): said once per message. */
+  private readonly seenSaid = new Map<string, string>();
   private allowed = new Map<string, Profile>();
   private wanted = new Map<string, Profile>();
   private byAddress = new Map<string, string>();
@@ -625,6 +627,20 @@ export class Mesh extends EventEmitter<MeshEvents> {
     this.emit('change');
   }
 
+  /**
+   * A direct conversation was on a screen of yours (BLG-798): tell that friend you saw their messages
+   * up to the newest, once per newest, only while you're linked (an older Beluga ignores it).
+   */
+  markSeen(conversation: string): void {
+    if (!conversation.startsWith('dm:')) return;
+    const peerId = conversation.slice(3);
+    const newest = [...this.dms.history(peerId)].reverse().find((m) => m.from === peerId);
+    const link = this.links.get(peerId);
+    if (!newest || !link || this.seenSaid.get(peerId) === newest.id) return;
+    this.seenSaid.set(peerId, newest.id);
+    link.send({ t: 'dm_seen', id: newest.id });
+  }
+
   /** The latest messages of every conversation (for a screen's first draw). */
   recent(limit = HISTORY_PAGE): Record<string, MessageView[]> {
     const out: Record<string, MessageView[]> = {};
@@ -928,6 +944,13 @@ export class Mesh extends EventEmitter<MeshEvents> {
       case 'f_err':
         this.emit('file', from, msg);
         return;
+      case 'dm_seen': {
+        if (!this.friends.has(from)) return;
+        const seen = this.dms.seenBy(from, msg.id);
+        for (const dm of seen) this.emit('message', this.dmViewOf(from, dm));
+        if (seen.length) this.emit('change');
+        return;
+      }
       case 'dm_ack': {
         const dm = this.dms.delivered(from, msg.id);
         if (dm) {

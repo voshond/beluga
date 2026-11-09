@@ -17,6 +17,7 @@ import { setPrefs, usePrefs } from '../lib/prefs.js';
 import { ChangedFileView, canShowFile, fileLookLabel, onlyAsFile, useChangeLocation } from './ChangedFile.js';
 import s from './diff.module.css';
 import { revealLabel } from '../lib/os-words.js';
+import { useRevealFileLabel } from '../lib/remote-open.js';
 
 /** Side by side: deletions on the left, additions on the right, aligned within each change. */
 function splitRows(lines: Line[]): Array<{ left?: Line; right?: Line; full?: Line }> {
@@ -86,6 +87,8 @@ export function useCommitItems(): (c: Commit) => ActionItem[] {
 /** A changed file's right-click menu: open it, find it in Finder, copy its path, ask Claude. */
 export function useFileItems(): (f: ChangedFile, index: number) => ActionItem[] {
   const { client, ui } = useBeluga();
+  // On a computer's page the file is downloaded instead (BLG-852).
+  const revealFile = useRevealFileLabel();
   const actions = useActions();
   const say = (text: string): void => client.store.dispatch({ type: 'toast', text, level: 'success' });
   return (f, index) => {
@@ -116,7 +119,7 @@ export function useFileItems(): (f: ChangedFile, index: number) => ActionItem[] 
     return [
       { label: 'Show Changes', icon: 'diff', onSelect: () => actions.run({ type: 'review_file', index }) },
       ...(at && f.state !== 'deleted' ? [{ label: 'Open File', icon: 'file' as const, onSelect: open }] : []),
-      ...(local ? [{ label: revealLabel(), icon: 'folder' as const, onSelect: () => void revealInFinder(client, local) }] : []),
+      ...(local ? [{ label: revealFile, icon: 'folder' as const, onSelect: () => void revealInFinder(client, local) }] : []),
       { label: 'Copy Path', icon: 'copy', separate: true, onSelect: () => void copyText(local ?? f.path).then(() => say('Copied the path')) },
       { label: 'Mention in Chat', icon: 'chat', onSelect: ask },
     ];

@@ -18,7 +18,7 @@ import { findWorkspace } from '@beluga/ui/workspace-models.js';
 import { Alert } from '../../components/Alert.js';
 import { Field, FormSheet, Popup, TextInput } from '../../components/FormSheet.js';
 import { useActions } from '../../lib/actions.js';
-import { useApi, useApp, useBeluga } from '../../lib/beluga.js';
+import { useApi, useApp, useBeluga, useMachine } from '../../lib/beluga.js';
 import { type NativeSheet, closeSheet, useSheet } from '../../lib/sheets.js';
 import { RemoteWorktreeForm } from './RemoteWorktreeSheet.js';
 import { TemplateEditorSheet } from './TemplatesSheet.js';
@@ -164,7 +164,8 @@ function OptionAlert({ sheet, close }: { sheet: Extract<NativeSheet, { kind: 'co
 
 /** Sheets this window opens instead of typing into the message box (see lib/sheets.ts). */
 export function NativeSheets() {
-  const sheet = useSheet();
+  // A computer's page draws its own (machines/MachinePane.tsx); the window's, this Mac's.
+  const sheet = useSheet(useMachine());
   if (!sheet) return null;
   const close = closeSheet;
   switch (sheet.kind) {
@@ -236,6 +237,7 @@ export function NativeSheets() {
               sheet.run();
             },
           }}
+          {...(sheet.cancel ? { cancel: sheet.cancel } : {})}
           onCancel={close}
         />
       );

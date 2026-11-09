@@ -84,6 +84,7 @@ import type { ToolDraft, ToolPatch, ToolStep } from './tool-draft.js';
 import { Triggers, isEventTrigger } from './triggers/index.js';
 import type { TriggerDeps, TriggerEvent } from './triggers/types.js';
 import { newSecret } from './triggers/webhook.js';
+import { SentinelMover, type SentinelMovePort } from './move-work.js';
 
 /**
  * Sentinels (docs/sentinel.md): the sentinels and their runs, kept in ~/.beluga/sentinel.json and
@@ -507,6 +508,48 @@ export class Sentinels {
     this.triggers?.sync(this.items);
     this.deps.store.dispatch({ type: 'sentinel_remove', id: s.id });
     this.save();
+  }
+
+  // ------------------------------------------------------------------ moving to another computer (BLG-807)
+
+  private moving: SentinelMover | undefined;
+  /** Moving a sentinel to another computer of yours: this daemon's part. */
+  get mover(): SentinelMover {
+    return (this.moving ??= new SentinelMover(this.movePort(), this.deps.store, this.now));
+  }
+
+  /** What moving a sentinel to another computer reaches inside it here (see move-work.ts). */
+  private movePort(): SentinelMovePort {
+    return {
+      get: (id) => this.items.find((i) => i.id === id),
+      count: () => this.items.length,
+      max: MAX_SENTINELS,
+      runsOf: (id) => this.runs.filter((r) => r.sentinelId === id),
+      running: (id) => this.active.has(id) || this.queued.has(id),
+      folders: this.folders,
+      metricFiles: this.metricFiles,
+      dashboards: this.dashboards,
+      cursor: (id) => this.cursors[id],
+      env: (projectId) => {
+        const own = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => typeof e[1] === 'string'));
+        return { ...own, ...(this.deps.envFor?.(this.cwdOfProject(projectId)) ?? {}), ...(this.deps.serviceEnv?.(projectId) ?? {}) };
+      },
+      adopt: (item, runs, cursor) => {
+        this.items = [...this.items, item];
+        this.runs = [...this.runs, ...runs.filter((r) => !isLive(r.state))];
+        if (cursor !== undefined) this.cursors = { ...this.cursors, [item.id]: cursor };
+        this.put(item);
+        this.loadMetrics(false);
+        this.syncOutputs(item.id);
+        this.deps.store.dispatch({ type: 'sentinel_init', state: this.state() });
+      },
+      test: (id) => this.test(id, 'you'),
+      setWhy: (id, why) => {
+        const was = this.items.find((i) => i.id === id);
+        if (was) this.replace({ ...was, pausedWhy: why, updatedAt: this.now() });
+      },
+      remove: (id) => this.remove(id),
+    };
   }
 
   // ------------------------------------------------------------------ webhooks
@@ -1429,7 +1472,7 @@ export class Sentinels {
     const tasks = st.board.enabled ? describeList(filterIssues(st.board, { scope: 'all', selfId: this.deps.selfId(), ...(projectId ? { repos: [projectId] } : {}) }).filter((i) => isOpen(i.status))) : '';
     const projects = st.projects.filter((p) => !projectId || p.id === projectId);
     const worktrees = projects.flatMap((p) => p.workspaces.filter((w) => w.kind === 'worktree' && !w.archived).map((w) => `${p.name}/${w.name}${w.branch ? ` (${w.branch})` : ''}`)).join('\n');
-    const plans = st.plans.plans.filter((p) => (!projectId || p.projectId === projectId) && p.status !== 'done').map((p) => `${planTitle(p)} · ${p.status}`).join('\n');
+    const plans = st.plans.plans.filter((p) => (!projectId || p.projectId === projectId) && p.status !== 'done' && !p.movedTo).map((p) => `${planTitle(p)} · ${p.status}`).join('\n');
     return { tasks, worktrees, plans };
   }
 

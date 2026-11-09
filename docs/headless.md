@@ -123,6 +123,41 @@ on the server. When a network blocks a direct connection, it goes through Beluga
 (a Cloudflare tunnel the server opens), still end to end encrypted: Cloudflare carries only
 ciphertext.
 
+## Your Beluga app
+
+The server can also join your devices, so the Beluga app on your Mac drives it. On the server:
+
+```sh
+beluga pair --computer
+```
+
+It prints a link, a code and a QR, good once for 10 minutes. Add the server from the app with
+either; both show the same four pictures, and once you agree the app signs the server in with
+your identity. From then on the server lets in the Beluga apps you signed, and nobody else.
+
+`beluga computers` lists your devices: who may drive this server, the computers you drive, your
+phones. `beluga computers forget <name>` forgets one, on any of them: it's cut off there at once,
+and on your other devices as soon as they hear.
+
+If you can already `ssh` into the server, you can skip all of this: Settings › Your Computers ›
+Add a Computer… › Over SSH installs Beluga there, starts it and pairs it in one step. Everything a
+computer of yours does (Run New Work On, Runs on, .env files, ports, moving work, Always On):
+[docs/machines.md](machines.md).
+
+### A computer of yours, or a browser
+
+Both show the work running on the server. They differ in what runs where:
+
+- **Your Beluga app driving the server** keeps the app on your Mac: its own windows, menus,
+  shortcuts, notifications and Dock, at native speed, and it shows this Mac's work and every
+  computer's side by side. Only what you do and what you see cross an end-to-end link, and nothing
+  of the app comes from the server. The server's dev servers open at `localhost` on your Mac. Use
+  it whenever the device in front of you has Beluga: your own Mac, or one you set up.
+- **A browser** gets the whole app served by the server. Use it where you can't or won't install
+  Beluga (a borrowed laptop, a work machine, a Chromebook, a tablet), or to reach the server for
+  a moment. A browser is let in with a join link and can be revoked from the server.
+- **Your phone** follows and answers work on the server, and starts tasks there, without your Mac.
+
 ## In a browser
 
 The whole Beluga app, the one the Mac shows, also opens in any browser. Beluga serves it on the
@@ -240,6 +275,7 @@ phone and browser gets its own way in, which you can take back.
 | Way in | Who can reach it | Who gets in | Opened on the server | Take it back |
 | --- | --- | --- | --- | --- |
 | Phone | anyone, over the internet | a phone you paired, by its own key | nothing | `beluga phones` |
+| Your Beluga app | anyone, over the internet | an app your identity signed, by its own key | nothing | `beluga computers forget` |
 | Tailscale | your tailnet only | your Tailscale login; others with a join link | nothing (Tailscale Serve) | `beluga web --off` |
 | SSH | whoever can ssh in | a browser with a join link | nothing | `beluga web revoke` |
 | Public link | anyone with the address | a browser with a join link | nothing (an outgoing tunnel) | `beluga web --off` |

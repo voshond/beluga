@@ -6,6 +6,9 @@ import { YOUR_AGENT, useAgentEntries } from '../components/agent-options.js';
 import { Icon, type IconName } from '../components/Icon.js';
 import { cx } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
+import { RunsOnRow } from '../chat/RunsOn.js';
+import { myRuntime } from '../chat/ModelPicker.js';
+import { sendToComputer, useStartDeps } from '../machines/start-there.js';
 import { useTasksPrefs } from '../tasks/use-tasks.js';
 import { firstRepos, modeChange, newPlanTitle, withPrimary, withRepo } from './plans-model.js';
 import { usePlanActions, usePlanView, usePlans } from './use-plans.js';
@@ -23,6 +26,8 @@ const AUTONOMY_ICON: Record<Autonomy, IconName> = { step: 'hand', gated: 'flag',
  * opens it with the group's projects ticked (BLG-19).
  */
 export function NewPlanSheet({ projectId, projectIds, close }: { projectId?: string; projectIds?: readonly string[]; close: () => void }) {
+  const startDeps = useStartDeps();
+  const prefsNow = () => startDeps.home.store.getState().prefs;
   const prefs = useTasksPrefs();
   const all = useApp((s) => s.projects);
   const projects = useMemo(() => all.filter((p) => p.root && !p.error), [all]);
@@ -59,8 +64,14 @@ export function NewPlanSheet({ projectId, projectIds, close }: { projectId?: str
       canSubmit={Boolean(goal.trim() && project)}
       onCancel={close}
       onSubmit={async () => {
+        const chosen = agent !== YOUR_AGENT ? agentForChoice(agent, runtimes) : undefined;
+        const input = { goal: goal.trim(), autonomy, testsAt, ...(chosen ? { agent: chosen } : {}) };
+        // Runs on one of your computers (BLG-788): the plan is made there and opens at once; held, the sheet stays.
+        const sent = repos.length > 1 ? 'here' : sendToComputer(startDeps, project, chosen?.runtime ?? myRuntime(prefsNow()), { kind: 'plan', input });
+        if (sent === 'held') return;
         close();
-        await act(() => api.create({ projectId: project, ...(repos.length > 1 ? { projectIds: [...repos] } : {}), goal: goal.trim(), autonomy, testsAt, ...(agent !== YOUR_AGENT ? { agent: agentForChoice(agent, runtimes) } : {}) }));
+        if (sent === 'sent') return;
+        await act(() => api.create({ projectId: project, ...(repos.length > 1 ? { projectIds: [...repos] } : {}), ...input }));
       }}
     >
       <div className={p.newPlan}>
@@ -97,6 +108,8 @@ export function NewPlanSheet({ projectId, projectIds, close }: { projectId?: str
             ) : null}
           </>
         ) : null}
+        {/* Where it runs (BLG-786): the plan and its worktrees. Only with a computer paired. */}
+        <RunsOnRow project={project} className={p.newPlanRow} labelClassName={p.newPlanLabel} />
         <div className={p.newPlanLabel} id="plan-runs">
           How it runs
         </div>

@@ -234,3 +234,95 @@ export async function pair(link: PairLink, io: Io, opts: PairOptions): Promise<E
   io.out(`Paired with ${phone.name}. ${how}\nSee your phones with \`beluga phones\`.\n`);
   return 0;
 }
+
+// ---- a computer (BLG-774)
+
+type ComputerPairingInfo = { readonly link: string; readonly code: string; readonly expiresAt: number; readonly waiting?: { readonly name: string; readonly fingerprint: string } };
+type ComputerPairingStatus = { readonly open?: ComputerPairingInfo; readonly last?: { readonly kind: 'joined' | 'declined' | 'expired' | 'cancelled'; readonly app?: string } };
+
+/** What `beluga pair --computer` needs from the daemon: machines.pair.*. */
+export interface ComputerPairLink {
+  start(): Promise<ComputerPairingInfo>;
+  status(): Promise<ComputerPairingStatus>;
+  cancel(): Promise<unknown>;
+}
+
+export const computerPairLinkOf = (client: SocketClient): ComputerPairLink => ({
+  start: () => client.call('machines.pair.start'),
+  status: () => client.call('machines.pair.status'),
+  cancel: () => client.call('machines.pair.cancel'),
+});
+
+export interface ComputerPairOptions {
+  readonly signal?: AbortSignal;
+  readonly tty: boolean;
+  readonly columns?: number;
+  /** One JSON line for each step (the link and code, then how it ended): what an SSH pairing reads. */
+  readonly json?: boolean;
+  /** How often the pairing is looked at. */
+  readonly pollMs?: number;
+}
+
+const pause = (ms: number, signal?: AbortSignal): Promise<void> =>
+  new Promise((resolve) => {
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', done, { once: true });
+    function done(): void {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', done);
+      resolve();
+    }
+  });
+
+/**
+ * `beluga pair --computer`, on the computer: a link, a code and a QR for your Beluga app, valid
+ * once for 10 minutes. When the app finds it, the four pictures it shows are printed here to
+ * compare; you click Join in the app, and this computer is one of your devices.
+ */
+export async function pairComputer(link: ComputerPairLink, io: Io, opts: ComputerPairOptions): Promise<Exit> {
+  const info = await link.start();
+  if (opts.json) io.out(`${JSON.stringify({ link: info.link, code: info.code, expiresAt: info.expiresAt })}\n`);
+  else {
+    const qr = qrLines(info.link, { color: opts.tty });
+    const fits = qrWidth(qr) <= (opts.columns ?? 80);
+    io.out(
+      [
+        'Add this computer to your devices.',
+        'In the Beluga app, open Settings › Your Computers › Add a Computer, and paste this link:',
+        '',
+        `  ${info.link}`,
+        '',
+        ...(fits ? ['Or scan it:', '', ...qr, ''] : []),
+        `Or type this code: ${info.code}`,
+        `It works once, for ${mmss(info.expiresAt - Date.now())}. Ctrl+C stops.`,
+        '',
+      ].join('\n'),
+    );
+  }
+  let shown = '';
+  for (;;) {
+    if (opts.signal?.aborted) {
+      await link.cancel().catch(() => undefined);
+      if (opts.json) io.out(`${JSON.stringify({ end: 'cancelled' })}\n`);
+      else io.err('Pairing cancelled. Nothing changed.\n');
+      return 130;
+    }
+    const s = await link.status();
+    if (!s.open) {
+      const end = s.last?.kind ?? 'cancelled';
+      if (opts.json) io.out(`${JSON.stringify({ end, ...(s.last?.app ? { app: s.last.app } : {}) })}\n`);
+      else if (end === 'joined') io.out(`Joined: this computer is now one of your devices, driven from ${s.last?.app ?? 'your app'}. \`beluga computers\` lists who may drive it.\n`);
+      else if (end === 'declined') io.err('The app said no. Nothing changed.\n');
+      else if (end === 'expired') io.err('The pairing expired before an app used it. Run `beluga pair --computer` again.\n');
+      else io.err('The pairing was closed. Nothing changed.\n');
+      return end === 'joined' ? 0 : 1;
+    }
+    const w = s.open.waiting;
+    if (w && w.fingerprint !== shown) {
+      shown = w.fingerprint;
+      if (opts.json) io.out(`${JSON.stringify({ waiting: w.name, fingerprint: w.fingerprint })}\n`);
+      else io.out(`“${w.name}” wants to add this computer. Check the app shows these same four pictures, then click Join there: ${w.fingerprint}\n`);
+    }
+    await pause(opts.pollMs ?? 500, opts.signal);
+  }
+}

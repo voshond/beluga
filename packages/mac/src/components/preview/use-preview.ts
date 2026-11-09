@@ -1,7 +1,8 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type PreviewProblem, type PreviewResult, renderProblem } from '@beluga/shared/preview/opened.js';
 import { type PreviewRef, previewTitle } from '@beluga/shared/preview/ref.js';
-import { useApi, useApp } from '../../lib/beluga.js';
+import { useApi, useApp, useBeluga } from '../../lib/beluga.js';
+import { forwardedUrl } from '../../machines/forwarded-url.js';
 import { useClock } from '../../lib/window-active.js';
 import { keptKey, readKept, withKept, writeKept } from './kept-props.js';
 import { type FiredEvent, RETRYING, RETRY_MS, addEvent, mergeProps, variantField } from './preview-model.js';
@@ -66,6 +67,8 @@ export interface UsePreview {
 
 export function usePreview({ wsId, ref, pick, seen, framed }: { wsId: string; ref: PreviewRef; pick: string | undefined; seen: boolean; framed: boolean }): UsePreview {
   const api = useApi();
+  // A worktree on one of your computers: its preview is served there, reached here through the app's forward.
+  const { home, machine } = useBeluga();
   const frame = useRef<HTMLIFrameElement>(null);
   const page = ref.target.kind !== 'component';
   const title = previewTitle(ref);
@@ -118,8 +121,9 @@ export function usePreview({ wsId, ref, pick, seen, framed }: { wsId: string; re
     }
     asking.current = true;
     try {
-      const out = (await api.preview.open(wsId, spec)) as PreviewResult | undefined;
-      if (!out) return;
+      const opened = (await api.preview.open(wsId, spec)) as PreviewResult | undefined;
+      if (!opened) return;
+      const out = machine && opened.ok ? { ...opened, url: await forwardedUrl(home, machine, opened.url) } : opened;
       setResult(out);
       if (!out.ok) return;
       const fresh = out.props ?? {};

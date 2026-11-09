@@ -21,7 +21,8 @@ export const COMMANDS = {
   stop: { usage: ['beluga stop'], summary: 'stop Beluga', options: {} },
   logs: { usage: ['beluga logs [-f] [-n <lines>]'], summary: "show Beluga's log (-f: keep showing new lines)", options: { follow: { type: 'boolean', short: 'f' }, lines: { type: 'string', short: 'n' } } },
   project: { usage: ['beluga project add <folder or git URL> [--into <folder>]', 'beluga project list', 'beluga project move <name> --into <folder>', 'beluga project remove <name>'], summary: 'add a project (a git URL is cloned first), list them, move one\'s folder, or remove one', options: { into: { type: 'string' } } },
-  pair: { usage: ['beluga pair'], summary: 'pair a phone: scan the QR code or type the code, then confirm', options: {} },
+  pair: { usage: ['beluga pair', 'beluga pair --computer [--json]'], summary: 'pair a phone: scan the QR code or type the code, then confirm (--computer: let your Beluga app add this computer)', options: { computer: { type: 'boolean' }, json: { type: 'boolean' } } },
+  computers: { usage: ['beluga computers', 'beluga computers add <link or code>', 'beluga computers forget <name>'], summary: 'your devices: who may drive this computer, the computers you drive; add one, or forget one everywhere', options: {} },
   phones: { usage: ['beluga phones', 'beluga phones remove <name>'], summary: 'list the paired phones, or remove one', options: {} },
   service: { usage: ['beluga service [install | remove]'], summary: 'keep Beluga running, from boot (systemd on Linux, launchd on a Mac)', options: {} },
   web: {
@@ -31,9 +32,9 @@ export const COMMANDS = {
     passThrough: true,
   },
   connect: {
-    usage: ['beluga connect <user@host> [--port <port>] [--no-open]'],
-    summary: "open a server's Beluga in this computer's browser through SSH (a host from ~/.ssh/config works); nothing to open on the server. Ctrl+C closes it",
-    options: { port: { type: 'string', short: 'p' }, 'no-open': { type: 'boolean' } },
+    usage: ['beluga connect <user@host> [--port <port>] [--no-open]', 'beluga connect <user@host> --pair'],
+    summary: "open a server's Beluga in this computer's browser through SSH (a host from ~/.ssh/config works); nothing to open on the server. Ctrl+C closes it. --pair: add it to your computers instead (Beluga is installed there if it isn't)",
+    options: { port: { type: 'string', short: 'p' }, 'no-open': { type: 'boolean' }, pair: { type: 'boolean' } },
   },
   update: { usage: ['beluga update'], summary: 'update Beluga to the latest release (the server install)', options: {} },
   version: { usage: ['beluga version'], summary: 'show the version', options: {} },

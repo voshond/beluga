@@ -23,7 +23,7 @@ export type NativeSheet =
   /** "Are you sure?" before a menu option that removes something; Confirm picks it. */
   | { readonly kind: 'confirm_option'; readonly menu: MenuKind; readonly index: number; readonly id: string }
   /** "Are you sure?" for something that isn't a menu option (from the palette). */
-  | { readonly kind: 'confirm'; readonly title: string; readonly message: string; readonly confirm: string; readonly destructive?: boolean; readonly run: () => void }
+  | { readonly kind: 'confirm'; readonly title: string; readonly message: string; readonly confirm: string; readonly cancel?: string; readonly destructive?: boolean; readonly run: () => void }
   /** What a workspace action that starts Claude or changes git will do, before it does (see work-confirm.ts). */
   | { readonly kind: 'work'; readonly wsId: string; readonly action: AskedWork }
   /** A project's worktrees made outside Beluga that can go, ticked, before removing them. */
@@ -69,10 +69,31 @@ export type NativeSheet =
 type Listener = () => void;
 
 let current: NativeSheet | undefined;
+/** The computer whose page the sheet was opened from (BLG-784): its sheets draw with that computer's state. */
+let currentMachine: string | undefined;
 const listeners = new Set<Listener>();
+
+/**
+ * The computer's page you last clicked or typed in (none: this Mac's). A menu or dialog opened
+ * from there (drawn outside it, in a portal) keeps it.
+ */
+let acting: string | undefined;
+const ATTACHED = '[data-radix-popper-content-wrapper], [role="dialog"], [role="menu"]';
+function noteActing(e: Event): void {
+  const el = e.target instanceof Element ? e.target : undefined;
+  if (!el) return;
+  const pane = el.closest('[data-machine-pane]');
+  if (pane) acting = pane.getAttribute('data-machine-pane') ?? undefined;
+  else if (!el.closest(ATTACHED)) acting = undefined;
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('pointerdown', noteActing, true);
+  document.addEventListener('keydown', noteActing, true);
+}
 
 export function openSheet(sheet: NativeSheet): void {
   current = sheet;
+  currentMachine = acting;
   for (const l of [...listeners]) l();
 }
 
@@ -82,6 +103,7 @@ export const currentSheet = (): NativeSheet | undefined => current;
 export function closeSheet(): void {
   if (!current) return;
   current = undefined;
+  currentMachine = undefined;
   for (const l of [...listeners]) l();
 }
 
@@ -90,6 +112,7 @@ const subscribe = (l: Listener): (() => void) => {
   return () => void listeners.delete(l);
 };
 
-export function useSheet(): NativeSheet | undefined {
-  return useSyncExternalStore(subscribe, () => current);
+/** The sheet showing now when it's of `machine`'s page (none: this Mac's). */
+export function useSheet(machine?: string): NativeSheet | undefined {
+  return useSyncExternalStore(subscribe, () => (currentMachine === machine ? current : undefined));
 }

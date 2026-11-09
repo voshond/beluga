@@ -9,7 +9,9 @@ import { Alert } from '../components/Alert.js';
 import { Icon, type IconName } from '../components/Icon.js';
 import { Button, Tip } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
-import { toast, useApi, useApp, useBeluga } from '../lib/beluga.js';
+import { toast, useApi, useApp, useBeluga, useMachine } from '../lib/beluga.js';
+import { showWorktreeFolder } from '../lib/remote-open.js';
+import { revealThereLabel } from '@beluga/machines/open.js';
 import { setWorktreeFlag, useWorktreeInfo } from './worktree-info-state.js';
 import s from './worktree-info.module.css';
 import { LivePanel } from '../claude-code/Live.js';
@@ -153,6 +155,8 @@ export function WorktreeInfoPage({ ws, agent, origin }: { ws: Workspace; agent?:
   const actions = useActions();
   const api = useApi();
   const { client } = useBeluga();
+  // On a computer's page, its folder's path is copied instead (BLG-794).
+  const machine = useMachine();
   const statusKey = `${ws.status?.changed ?? '-'}:${ws.status?.ahead ?? '-'}:${ws.status?.behind ?? '-'}:${ws.branch ?? ''}`;
   const { info, loading, error } = useWorktreeInfo(ws.id, statusKey);
   const hasChat = useApp((st) => st.log.some((l) => l.channel === `ws:${ws.id}`));
@@ -201,8 +205,8 @@ export function WorktreeInfoPage({ ws, agent, origin }: { ws: Workspace; agent?:
             </Button>
           ) : null}
           {!info?.missing ? (
-            <Button icon="folder" onClick={() => void api.workspaces.openInFinder(ws.id)}>
-              {openFolderLabel()}
+            <Button icon="folder" onClick={() => void showWorktreeFolder(client, ws.id)}>
+              {machine ? revealThereLabel('folder') : openFolderLabel()}
             </Button>
           ) : null}
           {!info?.missing ? (

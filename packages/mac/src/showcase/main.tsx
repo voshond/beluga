@@ -10,6 +10,7 @@ import { Mark } from '../onboarding/Mark.js';
 import { Agents } from '../onboarding/scenes/Agents.js';
 import { Archive } from '../onboarding/scenes/Archive.js';
 import { Friends } from '../onboarding/scenes/Friends.js';
+import { Machines } from '../onboarding/scenes/Machines.js';
 import { Parallel } from '../onboarding/scenes/Parallel.js';
 import { Sentinel } from '../onboarding/scenes/Sentinel.js';
 import { SentinelUses } from '../onboarding/scenes/SentinelUses.js';
@@ -53,6 +54,7 @@ const SCENES: Record<string, () => ReactNode> = {
   tables: () => <TablesTour />,
   friends: () => <Friends />,
   sentinel: () => <Sentinel />,
+  machines: () => <Machines />,
   uses: () => <SentinelUses />,
   archive: () => <Archive />,
   runask: () => <RunAskDemo />,

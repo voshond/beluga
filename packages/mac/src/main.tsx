@@ -93,7 +93,8 @@ function Root() {
     <BelugaProvider client={client}>
       <App />
       <UpdateLayer connected />
-      {inApp() ? null : <FolderBrowserHost />}
+      {/* A browser's folder picker, and in the app a computer's (BLG-793). */}
+      <FolderBrowserHost />
     </BelugaProvider>
   );
 }

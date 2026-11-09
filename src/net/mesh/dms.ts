@@ -41,6 +41,8 @@ export interface DmChange {
 const DmLine = z.union([
   z.object({ id: z.string(), from: z.string(), to: z.string(), text: z.string(), ts: z.number(), x: ExtrasSchema.optional() }),
   z.object({ ack: z.string() }),
+  /** They saw your messages up to this one (BLG-798). */
+  z.object({ seen: z.string() }),
   z.object({ expired: z.string() }),
   /** Gone from this conversation (deleted here, or by its author for both of you). */
   z.object({ del: z.string() }),
@@ -64,6 +66,8 @@ function toDm(v: { id: string; from: string; to: string; text: string; ts: numbe
 export interface DmStatus {
   readonly delivered: ReadonlySet<string>;
   readonly expired: ReadonlySet<string>;
+  /** Your messages they saw (BLG-798). */
+  readonly seen: ReadonlySet<string>;
 }
 
 interface Conversation {
@@ -71,6 +75,7 @@ interface Conversation {
   readonly ids: Set<string>;
   readonly delivered: Set<string>;
   readonly expired: Set<string>;
+  readonly seen: Set<string>;
   /** Deleted ids, so a message resent after it was deleted stays gone. */
   readonly deleted: Set<string>;
 }
@@ -133,6 +138,28 @@ export class DmBook {
     c.delivered.add(id);
     appendLine(this.file(peerId), { ack: id });
     return c.messages.find((m) => m.id === id);
+  }
+
+  /**
+   * They saw your messages up to `id` (one of yours): each of yours before it is seen too. Returns the
+   * ones that just became seen (none when `id` isn't yours here, or they all were).
+   */
+  seenBy(peerId: string, id: string): Dm[] {
+    const c = this.load(peerId);
+    const fresh = this.markSeen(c, peerId, id);
+    if (fresh.length) appendLine(this.file(peerId), { seen: id });
+    return fresh;
+  }
+
+  private markSeen(c: Conversation, peerId: string, id: string): Dm[] {
+    const at = c.messages.findIndex((m) => m.id === id);
+    if (at < 0 || c.messages[at]!.from === peerId) return [];
+    const fresh = c.messages.slice(0, at + 1).filter((m) => m.from !== peerId && !c.seen.has(m.id));
+    for (const m of fresh) {
+      c.seen.add(m.id);
+      c.delivered.add(m.id);
+    }
+    return fresh;
   }
 
   /** Drop what waited too long; returns what expired. */
@@ -264,12 +291,13 @@ export class DmBook {
   private load(peerId: string): Conversation {
     const known = this.conversations.get(peerId);
     if (known) return known;
-    const c: Conversation = { messages: [], ids: new Set(), delivered: new Set(), expired: new Set(), deleted: new Set() };
+    const c: Conversation = { messages: [], ids: new Set(), delivered: new Set(), expired: new Set(), seen: new Set(), deleted: new Set() };
     for (const raw of readLines(this.file(peerId))) {
       const line = DmLine.safeParse(raw);
       if (!line.success) continue;
       const v = line.data;
       if ('ack' in v) c.delivered.add(v.ack);
+      else if ('seen' in v) this.markSeen(c, peerId, v.seen);
       else if ('expired' in v) c.expired.add(v.expired);
       else if ('del' in v) this.drop(c, v.del);
       else if ('edit' in v) this.rewrite(c, v.edit, v.text, v.at);

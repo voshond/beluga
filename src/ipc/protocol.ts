@@ -16,6 +16,24 @@ export const IPC_VERSION = 1;
 export const CAPS = ['copyText', 'notify', 'openExternal', 'zoom', 'readClipboardImage', 'raise'] as const;
 export type Cap = (typeof CAPS)[number];
 
+/**
+ * What one of your computers may ask your app to do while you drive it (BLG-776): tell you
+ * something, copy, come to the front, read a pasted image, and open a web page (http or https
+ * only: never a file, an app's own scheme or anything else on your Mac).
+ */
+export const COMPUTER_CAPS: readonly Cap[] = ['notify', 'copyText', 'raise', 'readClipboardImage', 'openExternal'];
+
+/** A link a computer may have your app open: an absolute http(s) URL. */
+export function webUrl(value: unknown): boolean {
+  if (typeof value !== 'string' || value.length > 8192) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 const id = z.string().min(1).max(200);
 const term = z.string().min(1).max(200);
 
@@ -83,7 +101,8 @@ export type DaemonFrame =
   | DeviceRequestFrame
   | { readonly t: 'clients'; readonly count: number }
   | { readonly t: 'pong' }
-  | { readonly t: 'bye'; readonly reason: string };
+  // `update` (BLG-775): which side to update when a computer and your app speak different versions.
+  | { readonly t: 'bye'; readonly reason: string; readonly update?: 'computer' | 'app' };
 
 /** A touch as the mirror draws it (src/companion/phone-control.ts PhoneTouch). */
 export interface PhoneTouchData {

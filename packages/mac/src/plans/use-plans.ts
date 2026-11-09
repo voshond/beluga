@@ -153,6 +153,11 @@ const setStep = (planId: string, next: StepState): void => {
   stepSubs.forEach((f) => f());
 };
 const subscribeSteps = (f: () => void): (() => void) => (stepSubs.add(f), () => void stepSubs.delete(f));
+
+/** What a long step under way is doing now ("Sending it to build-box…"): the busy button says it. */
+export const stepSays = (planId: string, words: string): void => {
+  if (steps.get(planId)?.busy) setStep(planId, { busy: words });
+};
 const NO_STEP: StepState = {};
 
 export function usePlanStep(planId: string) {

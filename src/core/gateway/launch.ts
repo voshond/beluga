@@ -118,12 +118,13 @@ export function launchGateway(host: GatewayHost): () => void {
     projectRoot: (name) => projects().find((p) => p.name === name)?.root,
     board: (project, friend) => boardOf(session)?.forFriendIn(project, friend),
     projects: () => (store.getState().prefs.friendWorktrees === 'ask' ? projects().map((p) => p.name) : []),
-    loadNote: () => note,
+    // From disk each time: your Always On taking your network, or this Mac standing in, writes it (BLG-848).
+    loadNote: () => (host.demo ? note : (loadSettings().askMeFor ?? '')),
     saveNote: (text) => {
       note = text;
       if (!host.demo) saveSettings({ askMeFor: text || undefined });
     },
-    loadAskFreely: () => freely,
+    loadAskFreely: () => (host.demo ? freely : (loadSettings().askFreely ?? [])),
     saveAskFreely: (peers) => {
       freely = peers;
       if (!host.demo) saveSettings({ askFreely: peers.length ? [...peers] : undefined });

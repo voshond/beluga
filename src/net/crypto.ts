@@ -81,6 +81,14 @@ function identityFrom(privateKey: KeyObject): Identity {
   return { publicKey: pub, privateKey, peerId: peerIdFor(pub) };
 }
 
+/** An identity from its private key's PEM (as identity.json keeps it); throws when it isn't one. */
+export function identityFromPem(pem: string): Identity {
+  return identityFrom(createPrivateKey(pem));
+}
+
+/** The PEM identity.json keeps: the only form your identity ever travels in (BLG-796, over your own end-to-end link). */
+export const identityPem = (identity: Identity): string => identity.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+
 /**
  * Your long-lived identity, kept in ~/.beluga/identity.json (readable only by you). It lets
  * friends recognize you across sessions, so the trust level they gave you comes back.
@@ -96,12 +104,20 @@ export function loadIdentity(file: string): Identity {
   try {
     mkdirSync(path.dirname(file), { recursive: true });
     const tmp = `${file}.${process.pid}.tmp`;
-    writeFileSync(tmp, `${JSON.stringify({ privateKey: fresh.privateKey.export({ type: 'pkcs8', format: 'pem' }) })}\n`, { mode: 0o600 });
+    writeFileSync(tmp, `${JSON.stringify({ privateKey: identityPem(fresh) })}\n`, { mode: 0o600 });
     renameSync(tmp, file);
   } catch {
     // Can't save: this run still works, with a one-off identity.
   }
   return fresh;
+}
+
+/** Keep `identity` as identity.json (0600, written whole or not at all). */
+export function saveIdentity(file: string, identity: Identity): void {
+  mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify({ privateKey: identityPem(identity) })}\n`, { mode: 0o600 });
+  renameSync(tmp, file);
 }
 
 /**

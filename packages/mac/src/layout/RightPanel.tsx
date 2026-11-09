@@ -5,7 +5,7 @@ import { findWorkspace } from '@beluga/ui/workspace-models.js';
 import { Icon, type IconName } from '../components/Icon.js';
 import { ActionsContext } from '../components/SpecMenu.js';
 import { IconButton, Segmented, cx } from '../components/ui.js';
-import { useApp, useBeluga } from '../lib/beluga.js';
+import { useApp, useBeluga, useScopedKey } from '../lib/beluga.js';
 import { ViewBoundary, lazyView } from '../lib/lazy-view.js';
 import { currentTab, filesWsOf, focusFor, paneShowing, paneTabsOf, placeTab, resetPanelLayout, setPanelTab, setPhoneTab, showPanelTab, tabShowing, tabsOf, usePanelRuntime, useWorkspaceTabBridge } from '../lib/panel.js';
 import { PANEL_DEFAULT, PANEL_LABELS, type PaneId, type PanelTab, SPLIT_MAX, SPLIT_MIN, PANES_DEFAULT, clampPanelWidth, clampShare, paneKey, panelDigit, panelFits, slotOf, viewsOf } from '../lib/panel-model.js';
@@ -103,13 +103,15 @@ let dragged: PanelTab | undefined;
 function TabStrip({ pane, tabs, tab, open, badges, dock = false }: { pane: PaneId; tabs: readonly PanelTab[]; tab: PanelTab | undefined; open: boolean; badges: Badges; dock?: boolean }) {
   const view = useApp((st) => st.view);
   const projects = useApp((st) => st.projects);
+  // Changes' last view, per page and computer (BLG-784).
+  const lastKey = useScopedKey(paneKey(view, pane));
   const prefs = usePrefs();
   const list = useRef<HTMLDivElement>(null);
   const [drop, setDrop] = useState<number>();
   const shown = tab ? slotOf(tab) : undefined;
   const pick = (t: PanelTab): void => {
     // Changes keeps its view: History, if that's where you were.
-    const last = changesView.get(paneKey(view, pane));
+    const last = changesView.get(lastKey);
     setPanelTab(view, t === 'changes' && last && viewsOf(last, tabsOf({ view, projects })).includes(last) ? last : t);
   };
   const onKey = (e: KeyboardEvent): void => {
@@ -216,6 +218,7 @@ function TabStrip({ pane, tabs, tab, open, badges, dock = false }: { pane: PaneI
 /** Changes' second view, switched at its top: what changed, or the branch's History. */
 function ViewSwitch({ views, tab, pane }: { views: readonly PanelTab[]; tab: PanelTab; pane: PaneId }) {
   const view = useApp((st) => st.view);
+  const lastKey = useScopedKey(paneKey(view, pane));
   if (views.length < 2) return null;
   return (
     <div className={s.views}>
@@ -224,7 +227,7 @@ function ViewSwitch({ views, tab, pane }: { views: readonly PanelTab[]; tab: Pan
         label={`${PANEL_LABELS[views[0]!]} views`}
         value={tab}
         onChange={(v) => {
-          changesView.set(paneKey(view, pane), v);
+          changesView.set(lastKey, v);
           setPanelTab(view, v);
         }}
         options={views.map((v) => ({

@@ -280,6 +280,16 @@ export class PreviewManager {
     private readonly opts: { readonly idleMs?: number; readonly maxLive?: number; readonly fetcher?: typeof fetch } = {},
   ) {}
 
+  /**
+   * Where the server listens and the worktrees with a preview live now: on one of your computers,
+   * the app forwards that port to the Mac that shows them (src/machines/forward.ts).
+   */
+  serving(): { readonly port: number; readonly roots: readonly string[] } | undefined {
+    const port = this.server.listening;
+    if (port === undefined || !this.lives.size) return undefined;
+    return { port, roots: [...new Set([...this.lives.values()].map((l) => l.root))] };
+  }
+
   /** A preview of `spec`, in the worktree at `root`: built (or the one built already) and where its frame loads it. */
   async open(root: string, spec: OpenSpec): Promise<PreviewResult> {
     if (this.closed) return problem('off', 'Live previews are off', 'Turn them on in Settings › Experimental.');

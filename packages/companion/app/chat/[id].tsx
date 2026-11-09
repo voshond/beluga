@@ -439,7 +439,7 @@ function Bubble({ m, first, last, group, pics, me, chips }: { m: ChatMessageView
         {chips}
         {last || m.edited ? (
           <T v="caption" style={{ marginHorizontal: 4, fontSize: 11 }}>
-            {[m.edited ? 'Edited' : '', last ? ago(m.ts) : ''].filter(Boolean).join(' · ')}
+            {[m.edited ? 'Edited' : '', last ? ago(m.ts) : '', last && m.delivery ? (m.delivery === 'seen' ? 'Seen' : 'Delivered') : ''].filter(Boolean).join(' · ')}
           </T>
         ) : null}
       </View>

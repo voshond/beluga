@@ -25,10 +25,13 @@ class Demos {
   private current?: { demo: Demo; file: string; slot: 0 | 1 };
   private next?: { demo: Promise<Demo>; slot: 0 | 1 };
 
-  constructor(private readonly worker: number) {}
+  constructor(
+    private readonly worker: number,
+    private readonly linkMs: number,
+  ) {}
 
   private start(slot: 0 | 1): Promise<Demo> {
-    return startDemo({ ...slotHomes(run, this.worker, slot), port });
+    return startDemo({ ...slotHomes(run, this.worker, slot), port, linkMs: this.linkMs });
   }
 
   /** The daemon for a spec file: the one it already has, else the warm one (then the next one warms up). */
@@ -59,10 +62,12 @@ class Demos {
   }
 }
 
-export const test = base.extend<{ demo: Demo }, { demos: Demos }>({
+/** `demoLinkMs` (a project's option): the round trip added to the demo's computers' pages (the remote project: 80 ms). */
+export const test = base.extend<{ demo: Demo }, { demos: Demos; demoLinkMs: number }>({
+  demoLinkMs: [0, { scope: 'worker', option: true }],
   demos: [
-    async ({}, use, info) => {
-      const demos = new Demos(info.parallelIndex);
+    async ({ demoLinkMs }, use, info) => {
+      const demos = new Demos(info.parallelIndex, demoLinkMs);
       await use(demos);
       await demos.stop();
     },

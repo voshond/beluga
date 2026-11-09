@@ -23,6 +23,7 @@ import s from './panel.module.css';
 import k from './scratch.module.css';
 import { everyWhileShown } from '../../lib/window-active.js';
 import { revealLabel } from '../../lib/os-words.js';
+import { useRevealFileLabel, useRevealLabel } from '../../lib/remote-open.js';
 
 /**
  * The right panel's Scratch: what Claude saves to the workspace's `.beluga/scratch/` (or `.context/`,
@@ -190,6 +191,8 @@ function useFollowEnd(body: RefObject<HTMLDivElement | null>, content: RefObject
 function Preview({ of, file, list, onClose }: { of: ScratchOf; file: ScratchEntry; list: Listing; onClose: () => void }) {
   const api = useApi();
   const { client } = useBeluga();
+  // On a computer's page: Download for a file, Copy Path for a folder (BLG-852).
+  const revealFile = useRevealFileLabel();
   const selfId = useApp((st) => st.selfId);
   const now = useNow();
   const owner = isMac(of) ? undefined : of.owner;
@@ -218,7 +221,7 @@ function Preview({ of, file, list, onClose }: { of: ScratchOf; file: ScratchEntr
         <span className={s.flex} />
         {isViewable(file.path) ? null : <IconButton icon="toEnd" label="Follow the End" active={follow} onClick={followEnd} />}
         {owner ? null : <IconButton icon="external" label="Open With Its App" onClick={() => void openWithDefaultApp(client, local)} />}
-        {owner ? null : <IconButton icon="folder" label={revealLabel()} onClick={() => void revealInFinder(client, local)} />}
+        {owner ? null : <IconButton icon="folder" label={revealFile} onClick={() => void revealInFinder(client, local)} />}
         <IconButton icon="expand" label="Open in full" keys={chordLabel('Cmd+Enter')} onClick={openFull} />
         <IconButton icon="x" label="Close" keys="Esc" onClick={onClose} />
       </div>
@@ -243,6 +246,7 @@ function useWorking(of: ScratchOf): boolean {
 
 export function ScratchTab({ of }: { of: ScratchOf }) {
   const { client } = useBeluga();
+  const revealFolder = useRevealLabel('Folder');
   const prefs = usePrefs();
   const on = useApp((st) => st.prefs.scratchFolder);
   const owner = isMac(of) ? undefined : of.owner;
@@ -332,7 +336,7 @@ export function ScratchTab({ of }: { of: ScratchOf }) {
             >
               <IconButton icon={sort === 'viewable' ? 'eye' : 'clock'} label={sort === 'viewable' ? 'Sorted: viewable first' : 'Sorted: newest first'} />
             </ActionsDropdown>
-            {owner ? null : <IconButton icon="folder" label={revealLabel('Folder')} onClick={() => void revealInFinder(client, sentView ? joinPath(list.root, SENT_DIR) : list.dir)} />}
+            {owner ? null : <IconButton icon="folder" label={revealFolder} onClick={() => void revealInFinder(client, sentView ? joinPath(list.root, SENT_DIR) : list.dir)} />}
           </div>
         </div>
         {working && !sentView ? <NextFileRow /> : null}

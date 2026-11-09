@@ -6,6 +6,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AgentMarkIcon, agentMark } from '../../components/AgentMark';
 import { AgentDots, NotOnPrChip, convHref, notOnPrWords, statusIcon } from '../../components/Conv';
+import { ComputersWork } from '../../components/Computers';
 import { PlansList } from '../../components/Plans';
 import { type Option, Options } from '../../components/Options';
 import { Header, Screen, useScrolled } from '../../components/Screen';
@@ -147,6 +148,7 @@ export default function Work() {
             ) : (
               (work?.data.projects ?? []).map(project)
             )}
+            <ComputersWork />
           </Animated.View>
         )}
       </ScrollView>

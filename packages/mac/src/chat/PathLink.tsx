@@ -13,6 +13,7 @@ import { localPathOf, revealInFinder } from '../lib/files.js';
 import { goToCode } from '../lib/go-to-code.js';
 import { revealLabel, thisComputer } from '../lib/os-words.js';
 import s from './chat.module.css';
+import { useRevealFileLabel, useRevealLabel } from '../lib/remote-open.js';
 
 /** The worktree a relative path is in: the one on screen. */
 const worktreeOf = (state: AppState): string | undefined => (state.view.kind === 'workspace' ? state.view.id : undefined);
@@ -47,6 +48,9 @@ export function PathLink({ pathRef: ref, children }: { pathRef: PathRef; childre
   const { client } = useBeluga();
   const actions = useActions();
   const looksLikeFolder = ref.dir || !/\.[^./\\]+$/.test(baseName(ref.path));
+  // On a computer's page: Download for a file, Copy Path for a folder (BLG-852).
+  const revealFile = useRevealFileLabel();
+  const revealFolder = useRevealLabel();
   const missing = (): void => client.store.dispatch({ type: 'toast', text: `Can’t find ${ref.path} on ${thisComputer()}`, level: 'warn' });
   const open = async (): Promise<void> => {
     const found = await lookUp(client, ref);
@@ -58,7 +62,7 @@ export function PathLink({ pathRef: ref, children }: { pathRef: PathRef; childre
   };
   const items = (): readonly ActionItem[] => [
     { label: looksLikeFolder ? 'Open Folder' : 'Open', icon: looksLikeFolder ? 'folder' : 'file', onSelect: () => void open() },
-    { label: revealLabel(), onSelect: () => void lookUp(client, ref).then((found) => (found ? revealInFinder(client, found.path) : missing())) },
+    { label: looksLikeFolder ? revealFolder : revealFile, onSelect: () => void lookUp(client, ref).then((found) => (found ? revealInFinder(client, found.path) : missing())) },
     {
       label: 'Copy Path',
       icon: 'copy',

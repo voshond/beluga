@@ -165,6 +165,9 @@ export function archivedText(m: ArchiveManifest | undefined): string {
   return `Archived: everything of yours is kept, uncommitted work included.${freed}${left}`;
 }
 
+/** How long a diff worked out ahead answers a pick. */
+const AHEAD_DIFF_MS = 10_000;
+
 export class WorkspaceController {
   private readonly worktreeListeners = new Set<(event: WorktreeEvent) => void>();
   private readonly goingListeners = new Set<(ws: Workspace) => void>();
@@ -172,6 +175,8 @@ export class WorkspaceController {
   /** Conversations of worktrees deleted here: their agent's last words, echoed back late, don't land (deletedChannel). */
   private readonly deleted = new Set<string>();
   private reviewToken = 0;
+  /** Diffs worked out ahead of a click (diffAhead, BLG-853), by worktree and path: cleared when the changes are read again. */
+  private readonly aheadDiffs = new Map<string, { readonly diff: string; readonly at: number }>();
   /** Saves the loaded conversations that changed (see history-saver.ts). */
   private readonly saver: HistorySaver;
   private lastLog: readonly LogItem[] = [];
@@ -1739,6 +1744,7 @@ export class WorkspaceController {
 
   async loadReview(id: string): Promise<void> {
     const token = ++this.reviewToken;
+    this.aheadDiffs.clear();
     this.deps.store.dispatch({ type: 'review', review: { workspaceId: id, selected: 0, loading: true } });
     try {
       const data = await this.deps.manager.review(id);
@@ -1755,12 +1761,38 @@ export class WorkspaceController {
     const review = this.deps.store.getState().review;
     const file = review?.data?.files[index];
     if (!review || !file) return;
+    // Worked out ahead, under the pointer, moments ago: shown with the pick, in one step.
+    const ahead = this.aheadDiffs.get(`${review.workspaceId}\0${file.path}`);
+    if (ahead && Date.now() - ahead.at < AHEAD_DIFF_MS) {
+      this.deps.store.dispatch({ type: 'review', review: { ...review, selected: index, diff: ahead.diff } });
+      return;
+    }
     this.deps.store.dispatch({ type: 'review', review: { ...review, selected: index, diff: undefined } });
     const diff = await this.deps.manager.fileDiff(review.workspaceId, file.path).catch((err: unknown) => `Couldn't load diff: ${errorText(err)}`);
     const latest = this.deps.store.getState().review;
     if (latest?.workspaceId === review.workspaceId && latest.selected === index) {
       this.deps.store.dispatch({ type: 'review', review: { ...latest, diff } });
     }
+  }
+
+  /**
+   * Work out changed file `index`'s diff ahead of a click (the file under the pointer, BLG-853): on
+   * one of your computers the click then shows it without waiting for git. Kept a few seconds.
+   * → the diff (the app shows it on the click, before the pick comes back), or undefined.
+   */
+  async diffAhead(index: number): Promise<string | undefined> {
+    const review = this.deps.store.getState().review;
+    const file = review?.data?.files[index];
+    if (!review || !file) return undefined;
+    if (review.selected === index) return review.diff;
+    const key = `${review.workspaceId}\0${file.path}`;
+    const had = this.aheadDiffs.get(key);
+    if (had && Date.now() - had.at < AHEAD_DIFF_MS) return had.diff;
+    const diff = await this.deps.manager.fileDiff(review.workspaceId, file.path).catch(() => undefined);
+    if (diff === undefined || this.deps.store.getState().review?.data !== review.data) return undefined;
+    if (this.aheadDiffs.size >= 32) this.aheadDiffs.delete(this.aheadDiffs.keys().next().value as string);
+    this.aheadDiffs.set(key, { diff, at: Date.now() });
+    return diff;
   }
 
   // ------------------------------------------------------------- history

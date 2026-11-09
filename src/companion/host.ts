@@ -10,6 +10,7 @@ import { attachmentsDir, chipText, importImageFitting, registerAttachment } from
 import type { DomainState } from '../core/store.js';
 import type { CallOutcome } from '../daemon/dispatch.js';
 import type { Identity } from '../net/crypto.js';
+import { readJson, writeJson } from '../net/mesh/files.js';
 import { type MessageSocket, fromStream } from '../net/transport.js';
 import { phoneMay } from './coverage.js';
 import { type DeviceBook, type DeviceRecord, deviceId } from './devices.js';
@@ -25,11 +26,13 @@ import { TermRelay, isWorkspaceTerminal, keysOf, nextShellKey, terminalView, wor
 import { findByName, listFolder, readPage } from './worktree-files.js';
 import { Reach, type RelayTunnel } from './reach.js';
 import { Awake } from './awake.js';
+import { computersKey, namedPhones, setPhoneRecord } from '../machines/phones.js';
 import { detectNotices } from '../core/notify.js';
 import { pathNote } from './diagnose.js';
 import {
   COMPANION_PROTO,
   type CompanionSlice,
+  type DeviceCert,
   type DataListView,
   type DialAttempt,
   type LinkPath,
@@ -39,6 +42,7 @@ import {
   MAX_COMPANION_FRAME,
   type MergeView,
   type NeedsYou,
+  type PhoneComputer,
   type PhoneControl as PhoneControlState,
   type PhoneFrame,
   type PhoneOp,
@@ -56,7 +60,8 @@ import type { SentinelData } from '../core/sentinel/sentinels.js';
 import { type MirrorStatus, PhoneControl, type PhoneLinkHandle, type PhoneTouch, type TunnelEnd, type TunnelSide, type VideoPiece, phoneErrorText } from './phone-control.js';
 import { type Macro, PhoneMacros } from './phone-macros.js';
 import { type SystemPort, realSystem } from '../core/gateway/device.js';
-import { type Delivery, NO_PUSH, type Nudge, type Pusher, atMac, deliver } from './push.js';
+import { chatTopic } from './needs-you.js';
+import { type Delivery, NO_PUSH, type Nudge, type Pusher, atMac, deliver, newMessages } from './push.js';
 import { type ConvOutput, type ViewContext, channelOf, chatMessages, convTopic, convTurns, needsYou, phoneChannel, sentinelDone, viewOf } from './views.js';
 
 /**
@@ -86,6 +91,10 @@ const HELD_CHECK_MS = 30_000;
 
 export interface CompanionHostOptions {
   readonly identity: Identity;
+  /** Where this install's companion address is pinned once your identity can move (BLG-796, pinCompanionSeed). */
+  readonly seedFile?: string;
+  /** Why a phone can't be paired here now (your identity is on your Always On, BLG-796), or undefined. */
+  readonly cannotPair?: () => string | undefined;
   readonly store: { getState(): DomainState; subscribe(listener: () => void): () => void; dispatch(action: { type: 'companion'; companion: CompanionSlice['companion'] }): void };
   readonly devices: DeviceBook;
   /** An API call, as a screen's goes (daemon/dispatch.ts); `clientId` is the phone's. */
@@ -131,15 +140,62 @@ export interface CompanionHostOptions {
   readonly home?: string;
   /** Where saved phone flows live (BLG-175); default ~/.beluga/phone-macros.json via launch. */
   readonly macrosFile?: string;
+  /** Your other devices (BLG-774, src/machines): apps and computers of your set come in here too. */
+  readonly machines?: MachinesPort;
+  /**
+   * This install runs your friends network (BLG-850): no Always On, or it's this one. A Mac that
+   * only shows your Always On's network doesn't also tell a phone that links there what comes in.
+   */
+  readonly tellsFriends?: () => boolean;
 }
 
-/** The companion address's key pair: HKDF of your identity's seed, 'companion-v1'. */
-export async function companionKeyPair(identity: Identity): Promise<KeyPair> {
-  const DHTClass = (await import('hyperdht')).default;
+/** What the host asks of your device set (src/machines/machines.ts). */
+export interface MachinesPort {
+  /** An app or computer of yours with this link key (hex), never a phone. */
+  admit(linkHex: string): DeviceCert | undefined;
+  /** Keep the node running (a computer pairing, a join, devices to keep in step). */
+  wanted(): boolean;
+  /** A computer pairing's temporary keys (they get a relay record too). */
+  keyPairs(): readonly KeyPair[];
+  accept(stream: NoiseSocket, cert: DeviceCert, overRelay: boolean): void;
+  /** A phone of your set with this link key, paired on another device of yours (BLG-809): it comes in as a phone. */
+  phone?(linkHex: string): DeviceCert | undefined;
+  /** The phones of your set (the relay record names them too). */
+  phones?(): readonly DeviceCert[];
+  /** Your computers as phones dial them (the `computers` frame), and when they change. */
+  forPhones?(runtime?: string): PhoneComputer[];
+  onComputers?(listener: () => void): () => void;
+  /** Where to push to a phone of your set paired elsewhere (BLG-850). */
+  keepPush?(id: string, push: NonNullable<DeviceRecord['push']>): void;
+  pushOf?(id: string): DeviceRecord['push'];
+}
+
+const companionSeed = (identity: Identity): Buffer => {
   const d = identity.privateKey.export({ format: 'jwk' }).d;
   if (!d) throw new Error('Identity key has no private part');
-  const seed = Buffer.from(hkdfSync('sha256', Buffer.from(d, 'base64url'), Buffer.from('beluga-companion'), Buffer.from('companion-v1'), 32));
-  return DHTClass.keyPair(seed);
+  return Buffer.from(hkdfSync('sha256', Buffer.from(d, 'base64url'), Buffer.from('beluga-companion'), Buffer.from('companion-v1'), 32));
+};
+
+const pinnedSeed = (file: string | undefined): Buffer | undefined => {
+  const raw = file ? readJson(file) : undefined;
+  const hex = raw && typeof raw === 'object' && 'seed' in raw && typeof raw.seed === 'string' && /^[0-9a-f]{64}$/.test(raw.seed) ? raw.seed : undefined;
+  return hex ? Buffer.from(hex, 'hex') : undefined;
+};
+
+/**
+ * The companion address's key pair: HKDF of your identity's seed, 'companion-v1', or the seed pinned
+ * in `seedFile` once your identity moved (BLG-796): the address belongs to the install, so phones and
+ * computers reach it as before, and your Always On keeps its own.
+ */
+export async function companionKeyPair(identity: Identity, seedFile?: string): Promise<KeyPair> {
+  const DHTClass = (await import('hyperdht')).default;
+  return DHTClass.keyPair(pinnedSeed(seedFile) ?? companionSeed(identity));
+}
+
+/** Pin this install's companion address as `identity` makes it now (once: an address already pinned stays). */
+export function pinCompanionSeed(file: string, identity: Identity): void {
+  if (pinnedSeed(file)) return;
+  writeJson(file, { seed: companionSeed(identity).toString('hex') });
 }
 
 interface TopicState {
@@ -164,6 +220,8 @@ class PhoneLink implements PhoneLinkHandle {
   control?: PhoneControlState;
   /** The Wireless-debugging pairing code it last sent, for `adb pair`. */
   adbCode?: { code: string; at: number };
+  /** The computers list it was last told (computersKey), so it hears it again only when it changes. */
+  computersSent?: string;
   private reqId = 0;
   private readonly reqs = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
   private tunId = 0;
@@ -313,6 +371,7 @@ class PhoneLink implements PhoneLinkHandle {
       this.send({ t: 'welcome', v: { ...COMPANION_PROTO }, min: { ...COMPANION_MIN }, mac: this.host.macInfo(), me: { name: (state.self?.name ?? state.network.self?.name ?? 'me').slice(0, 64), peerId: state.selfId || 'me' }, ...(relay ? { relay } : {}) });
       this.host.helloed(this, frame.app, frame.via);
       this.subscribe(frame.topics);
+      this.host.tellComputers(this);
       return;
     }
     switch (frame.t) {
@@ -462,6 +521,8 @@ export class CompanionHost {
   private readonly awake: Awake;
   /** The state at the last notice: what finished since is told to phones away from the app (BLG-128). */
   private lastState?: DomainState;
+  /** Messages sent before this aren't news (a history that arrives at once). */
+  private readonly noticeSince = Date.now();
 
   constructor(private readonly opts: CompanionHostOptions) {
     this.awake = opts.awake ?? new Awake(opts.log ? { log: opts.log } : {});
@@ -471,7 +532,8 @@ export class CompanionHost {
       // The relay's URL goes in the pairing link (its QR redraws) and in each welcome.
       onChange: () => this.publish(),
       // The companion key's record names the phones still paired (a removed one learns it's removed).
-      phones: (key) => (this.keyPair && key.equals(this.keyPair.publicKey) ? opts.devices.all().map((r) => r.cert.link.slice(0, 16)) : undefined),
+      // A computer names the phones of your set too: they reach it by themselves (BLG-809).
+      phones: (key) => (this.keyPair && key.equals(this.keyPair.publicKey) ? namedPhones(opts.devices.all().map((r) => r.cert), opts.machines?.phones?.() ?? []) : undefined),
     });
     this.coalesceMs = opts.coalesceMs ?? VIEW_COALESCE_MS;
     this.refs = opts.refs ?? new RefTable();
@@ -516,7 +578,7 @@ export class CompanionHost {
 
   /** Start following the state and the paired phones (a DHT node only runs when there's a phone or a pairing). */
   async start(): Promise<void> {
-    this.keyPair = await companionKeyPair(this.opts.identity);
+    this.keyPair = await companionKeyPair(this.opts.identity, this.opts.seedFile);
     this.offs.push(
       this.opts.store.subscribe(() => {
         this.keepAwake();
@@ -527,6 +589,10 @@ export class CompanionHost {
         this.keepAwake();
         void this.sync();
       }),
+      // A computer joined, went, moved or was renamed: linked phones hear where your computers are now.
+      this.opts.machines?.onComputers?.(() => {
+        for (const link of this.links) this.tellComputers(link);
+      }) ?? (() => undefined),
     );
     this.publish();
     this.keepAwake();
@@ -579,12 +645,13 @@ export class CompanionHost {
   // ---- the API (companion-handlers.ts)
 
   pairStart(): Promise<PairingInfo> {
-    return this.pairing.start();
+    const why = this.opts.cannotPair?.();
+    return why ? Promise.reject(new Error(why)) : this.pairing.start();
   }
 
   /** Pair the phone on the USB cable (BLG-190): a pairing opens here and on the phone, the four pictures as ever. */
   async pairOverCable(): Promise<string> {
-    const info = await this.pairing.start();
+    const info = await this.pairStart();
     await this.control.openPairingOnCable(info.link);
     return 'The phone opened the pairing: check its four pictures match the ones here, then Pair.';
   }
@@ -644,7 +711,7 @@ export class CompanionHost {
   /** The phone a call comes from (`phone:<device id>`), if it's one that's paired. */
   private deviceOf(caller: string): string | undefined {
     const id = caller.startsWith('phone:') ? caller.slice(6) : undefined;
-    return id && this.opts.devices.get(id) ? id : undefined;
+    return id && this.phoneRecord(id) ? id : undefined;
   }
 
   private async must(caller: string, method: string, args: readonly unknown[]): Promise<unknown> {
@@ -824,7 +891,7 @@ export class CompanionHost {
 
   private deviceName(caller: string): string {
     const id = this.deviceOf(caller);
-    const name = id ? this.opts.devices.get(id)?.cert.name : undefined;
+    const name = id ? this.phoneRecord(id)?.cert.name : undefined;
     return name ? `the phone “${name}”` : 'a phone';
   }
 
@@ -886,6 +953,17 @@ export class CompanionHost {
     return data;
   }
 
+  /** Tell a phone where your computers are (BLG-809), when it can hear it and the list changed since. */
+  tellComputers(link: PhoneLink): void {
+    const list = this.opts.machines?.forPhones?.(this.state().prefs.defaultAgent?.runtime ?? 'claude');
+    const v = link.hello?.v;
+    if (!list || !v || !link.isOpen || (v.major === COMPANION_PROTO.major && v.minor < SINCE.computers)) return;
+    const key = computersKey(list);
+    if (key === link.computersSent) return;
+    link.computersSent = key;
+    link.send({ t: 'computers', list });
+  }
+
   helloed(link: PhoneLink, app: string, via?: { path: LinkPath; tried: readonly DialAttempt[] }): void {
     // How it came, in words for Settings › Phone (kept with the device until its next link).
     const path = via?.path ?? (link.overRelay ? 'relay' : undefined);
@@ -914,7 +992,9 @@ export class CompanionHost {
   }
 
   setPush(link: PhoneLink, push: NonNullable<DeviceRecord['push']>): void {
-    this.opts.devices.update(link.deviceId, { push });
+    if (this.opts.devices.get(link.deviceId)) return this.opts.devices.update(link.deviceId, { push });
+    // A phone of your set paired elsewhere: kept by your device set here (your Always On pushes to it).
+    this.opts.machines?.keepPush?.(link.deviceId, push);
   }
 
   /** The conversations phones have open (their outputs are kept fresh). */
@@ -927,15 +1007,37 @@ export class CompanionHost {
     this.opts.watching?.([...channels], [...this.links].some((l) => l.isOpen));
   }
 
+  /** The phone a Noise key belongs to: paired here, or a phone of your set paired elsewhere (BLG-809). */
+  private phoneByLink(linkHex: string): DeviceRecord | undefined {
+    const here = this.opts.devices.byLink(linkHex);
+    if (here || this.stopped) return here;
+    const cert = this.opts.machines?.phone?.(linkHex);
+    return cert ? setPhoneRecord(cert) : undefined;
+  }
+
+  /** A phone by id: paired here, or one of your set. */
+  private phoneRecord(id: string): DeviceRecord | undefined {
+    const here = this.opts.devices.get(id);
+    if (here) return here;
+    const cert = this.opts.machines?.phones?.().find((c) => deviceId(c) === id);
+    return cert ? setPhoneRecord(cert) : undefined;
+  }
+
   private accept(stream: NoiseSocket, overRelay = false): void {
+    const linkHex = stream.remotePublicKey.toString('hex');
+    const device = this.phoneByLink(linkHex);
+    // An app or computer of yours (BLG-774): its own door, never a phone's.
+    const mine = !device && !this.stopped ? this.opts.machines?.admit(linkHex) : undefined;
+    if (mine) return this.opts.machines!.accept(stream, mine, overRelay);
     const socket = fromStream(stream, { maxBytes: MAX_IN_BYTES, open: true });
     socket.on('error', () => undefined);
-    const device = this.opts.devices.byLink(stream.remotePublicKey.toString('hex'));
     if (!device || this.stopped) return socket.terminate();
     const link = new PhoneLink(device, socket, this);
     link.overRelay = overRelay;
     this.links.add(link);
     this.publish();
+    // The first phone here (one of your set, on a computer): what waits now is the baseline it hears after.
+    if (!this.seenNeeds) void this.notice();
   }
 
   // ---- the state, views and nudges
@@ -959,7 +1061,7 @@ export class CompanionHost {
 
   /** New things to tell phones about: something that needs you, or a run asked from the phone that finished. */
   private async notice(): Promise<void> {
-    if (!this.opts.devices.size) {
+    if (!this.phonesToTell().length) {
       this.seenNeeds = undefined;
       this.lastState = undefined;
       return;
@@ -973,7 +1075,7 @@ export class CompanionHost {
     const fresh = seen ? items.filter((n) => !seen.has(n.id)) : [];
     this.seenNeeds = new Set(items.map((n) => n.id));
     const nudges: Nudge[] = fresh.map((n: NeedsYou) => {
-      const nudge: Nudge = { kind: 'needsYou', title: n.title.slice(0, 200), body: (n.detail ?? n.from ?? '').slice(0, 1000), ...(n.topic ? { topic: n.topic } : {}), priority: 'high' };
+      const nudge: Nudge = { kind: 'needsYou', title: n.title.slice(0, 200), body: (n.detail ?? n.from ?? '').slice(0, 1000), ...(n.topic ? { topic: n.topic } : {}), priority: 'high', ...(n.id.startsWith('join:') ? { friends: true } : {}) };
       this.needOf.set(nudge, n.id);
       return nudge;
     });
@@ -1003,6 +1105,8 @@ export class CompanionHost {
         nudges.push({ kind: 'done', title: e.title.slice(0, 200), body: e.body.replace(/```[\s\S]*?(```|$)/g, '(code)').slice(0, 300), ...(topic ? { topic } : {}), priority: 'normal', collapse: `done:${e.channel}`, away: true });
       }
     }
+    // A friend's new message (BLG-850), on its chat.
+    if (prev && prev.network !== state.network) nudges.push(...newMessages(prev.network, state.network, this.noticeSince, chatTopic));
     if (!nudges.length) return;
     // Asked once: are you at the Mac (used it in the last five minutes)?
     const idle = await this.opts.idleMs?.().catch(() => undefined);
@@ -1015,19 +1119,44 @@ export class CompanionHost {
    * the Mac is held, and told once you step away if it's still waiting (BLG-360).
    */
   private async tell(nudges: readonly Nudge[], state: DomainState, idle: number | undefined): Promise<void> {
-    for (const record of this.opts.devices.all()) {
+    for (const record of this.phonesToTell()) {
       const id = deviceId(record.cert);
       const linked = [...this.links].filter((l) => l.deviceId === id && l.hello);
       const onScreen = new Set<string>(linked.flatMap((l) => [...l.topics.keys()]));
       const inFront = linked.some((l) => l.inFront);
+      const leaves = this.leavesFriends(linked);
       for (const nudge of nudges) {
         if (nudge.away && (!linked.length || inFront)) continue;
+        if (nudge.friends && leaves) continue;
         const how: Delivery = deliver(nudge, { linked: linked.length > 0, onScreen, inFront, macFront: state.attention.front, canPush: Boolean(record.push), ...(idle !== undefined ? { macIdleMs: idle } : {}) });
         if (how === 'nudge') for (const l of linked) l.send({ t: 'nudge', kind: nudge.kind, title: nudge.title, body: nudge.body, ...(nudge.topic ? { topic: nudge.topic } : {}) });
         else if (how === 'push' && record.push) await (this.opts.pusher ?? NO_PUSH).push({ deviceId: id, ...record.push, box: record.cert.box }, nudge).catch((err: unknown) => this.logLine(`push failed: ${String(err)}`));
         else if (how === 'held') this.hold(nudge);
       }
     }
+  }
+
+  /** The phones told what's new: those paired here, and those of your set linked here now or that left a push token here (BLG-809, BLG-850). */
+  private phonesToTell(): DeviceRecord[] {
+    const here = this.opts.devices.all();
+    const linked = new Set([...this.links].filter((l) => l.isOpen).map((l) => l.device.cert.device));
+    const others = (this.opts.machines?.phones?.() ?? []).filter((c) => !here.some((r) => r.cert.device === c.device)).flatMap((c) => {
+      const record = setPhoneRecord(c);
+      const push = this.opts.machines?.pushOf?.(deviceId(c));
+      return record && (push || linked.has(c.device)) ? [{ ...record, ...(push ? { push } : {}) }] : [];
+    });
+    return [...here, ...others];
+  }
+
+  /**
+   * A friends nudge isn't this install's to tell `linked` (BLG-850): your Always On runs your
+   * network, and this phone hears it there (one that links to your computers, or one this would
+   * push to). An older phone linked here still hears it from here.
+   */
+  private leavesFriends(linked: readonly PhoneLink[]): boolean {
+    if (this.opts.tellsFriends?.() ?? true) return false;
+    const reachesComputers = (l: PhoneLink): boolean => Boolean(l.hello && (l.hello.v.major > COMPANION_PROTO.major || l.hello.v.minor >= SINCE.computers));
+    return !linked.length || linked.some(reachesComputers);
   }
 
   /** Needs-you nudges held while you're at the Mac, by the item they're about. */
@@ -1118,7 +1247,7 @@ export class CompanionHost {
   /** Run the node and the server while there's a phone or a pairing; stop them when there's neither. */
   private async sync(): Promise<void> {
     if (this.stopped) return;
-    const wanted = this.opts.devices.size > 0 || this.pairing.isOpen;
+    const wanted = this.wanted();
     if (wanted) {
       await this.ensureNode().catch((err: unknown) => this.logLine(`could not start: ${String(err)}`));
       // A pairing that just opened gets its relay record too.
@@ -1128,9 +1257,24 @@ export class CompanionHost {
       await this.reach.publish().catch(() => undefined);
       // That put can take seconds on the real DHT: a pairing opened meanwhile (`beluga pair` again,
       // BLG-674) listens on this node, which must then stay.
-      if (this.stopped || this.opts.devices.size > 0 || this.pairing.isOpen) return;
+      if (this.stopped || this.wanted()) return;
       await this.shutdownNode();
     }
+  }
+
+  private wanted(): boolean {
+    return this.opts.devices.size > 0 || this.pairing.isOpen || Boolean(this.opts.machines?.wanted());
+  }
+
+  /** Your device set changed (a computer pairing opened, a computer joined): run or stop the node, publish again. */
+  machinesChanged(): void {
+    this.publish();
+    void this.sync();
+  }
+
+  /** The DHT node as soon as it's up (BLG-774: computer pairings listen and dial on it too). */
+  dhtNode(): Promise<DHT> {
+    return this.readyNode();
   }
 
   /** The DHT node as soon as it's up, while the companion's own server and the relay still start. */
@@ -1152,7 +1296,7 @@ export class CompanionHost {
     this.nodeUp.catch(() => undefined);
     this.starting = (async () => {
       const DHTClass = (await import('hyperdht')).default;
-      const keyPair = this.keyPair ?? (await companionKeyPair(this.opts.identity));
+      const keyPair = this.keyPair ?? (await companionKeyPair(this.opts.identity, this.opts.seedFile));
       this.keyPair = keyPair;
       const node = new DHTClass({ ...(this.opts.dht?.bootstrap ? { bootstrap: this.opts.dht.bootstrap } : {}), ...(this.opts.dht?.host ? { host: this.opts.dht.host } : {}) });
       await node.ready();
@@ -1160,13 +1304,15 @@ export class CompanionHost {
       this.node = node;
       up(node);
       // Only phones you paired (and haven't removed) get through; `true` turns a connection away.
-      const firewall = (remote: Buffer): boolean => !this.opts.devices.byLink(remote.toString('hex'));
+      // and the apps and computers of your set (BLG-774), each by its role: a phone never passes as one.
+      // and the phones of your set, paired on another device of yours (BLG-809), as phones.
+      const firewall = (remote: Buffer): boolean => !this.phoneByLink(remote.toString('hex')) && !this.opts.machines?.admit(remote.toString('hex'));
       const server = node.createServer({ firewall: this.opts.dht?.refuseDirect ? () => true : firewall }, (stream: NoiseSocket) => this.accept(stream));
       await server.listen(keyPair);
       // The same, through the relay: the companion key answers there behind the same firewall.
       this.reach.server.add({ keyPair, firewall, accept: (stream) => this.accept(stream, true) });
       await this.reach.start().catch((err: unknown) => this.logLine(`no relay: ${String(err)}`));
-      this.reach.publishOn(node, () => [keyPair, ...this.pairing.keyPairs()]);
+      this.reach.publishOn(node, () => [keyPair, ...this.pairing.keyPairs(), ...(this.opts.machines?.keyPairs() ?? [])]);
       this.server = server;
       return node;
     })()

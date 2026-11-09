@@ -52,7 +52,11 @@ export class Uploads {
   private readonly open = new Map<string, Open>();
   private readonly done = new Map<string, Upload>();
 
-  constructor(private readonly dir: string) {}
+  /** `maxBytes`: the largest file (the phone's 25 MB; your app sends a computer bigger ones, BLG-793). */
+  constructor(
+    private readonly dir: string,
+    private readonly opts: { readonly maxBytes?: number } = {},
+  ) {}
 
   /** One piece: → `{ received }`, or `{ ref }` for the last. Throws for a piece out of order or too much. */
   async piece(device: string, f: Put): Promise<{ received: number } | { ref: string }> {
@@ -61,7 +65,8 @@ export class Uploads {
     if (!up) {
       if (f.off !== 0) throw new Error('That upload has to start at 0');
       if ([...this.open.values()].filter((o) => o.device === device).length >= MAX_OPEN) throw new Error('Too many uploads at once');
-      if (f.size > MAX_UPLOAD_BYTES) throw new Error('That file is too big to send (up to 25 MB)');
+      const max = this.opts.maxBytes ?? MAX_UPLOAD_BYTES;
+      if (f.size > max) throw new Error(`That file is too big to send (up to ${Math.round(max / 1024 / 1024)} MB)`);
       mkdirSync(this.dir, { recursive: true, mode: 0o700 });
       up = { device, name: f.name, mime: f.mime, size: f.size, tmp: path.join(this.dir, `.${randomBytes(8).toString('hex')}.part`), received: 0 };
       this.open.set(key, up);
@@ -72,7 +77,8 @@ export class Uploads {
       await rm(up.tmp, { force: true });
       throw new Error('That upload went wrong; send it again');
     }
-    if (bytes.length) await appendFile(up.tmp, bytes, { mode: 0o600 });
+    // Even nothing: an empty file is still a file.
+    await appendFile(up.tmp, bytes, { mode: 0o600 });
     up.received += bytes.length;
     if (!f.eof) return { received: up.received };
     this.open.delete(key);

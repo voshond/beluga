@@ -72,12 +72,27 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
     sample: () => buildAskOnlyAppend(SAMPLE_PROJECT, true, true),
   },
   { id: 'terminal', label: 'Terminal view', when: 'The agent’s own terminal in Beluga', source: 'src/agent/terminal-prompt.ts', text: (c) => (c.input.terminal ? buildTerminalAppend() : ''), sample: () => buildTerminalAppend() },
+  { id: 'remote-client', label: 'Driven from another computer', when: 'Runs your app started from another computer', source: 'src/agent/run-instructions.ts', text: (c) => (c.input.env?.BELUGA_REMOTE_CLIENT ? buildRemoteClientAppend() : ''), sample: () => buildRemoteClientAppend() },
 ];
 
 export function runInstructions(input: AgentRunInput, ownerName: string, agent?: AgentRef): string {
   const askOnly = Boolean(input.place?.askOnly);
   const ctx: PieceContext = { input, ownerName, ...(agent ? { agent } : {}), askOnly, worktree: Boolean(input.env?.KLAUD_WORKTREE) };
   return INSTRUCTION_PIECES.map((piece) => piece.text(ctx)).join('');
+}
+
+/**
+ * A run your app started from another computer (BLG-803): the person isn't at this one. Their app
+ * forwards this computer's servers to theirs at the same port, so localhost is the address to give.
+ */
+export function buildRemoteClientAppend(): string {
+  return (
+    '\n\nThe person you work for is on another computer (their laptop or phone), driving this one through Beluga; ' +
+    "they can't see this computer's screen. Servers you start here are forwarded to them at the same port, so give " +
+    'addresses as http://localhost:<port> (never this computer’s host name or IP). Do not open browsers, apps or windows ' +
+    'on this computer (no `open`, `xdg-open` or browser launches): they would show here, where nobody is. A screenshot of ' +
+    'this screen shows this computer, not theirs.'
+  );
 }
 
 export const instructionPieces = (ownerName: string, machineNote?: string): InstructionPieceView[] =>

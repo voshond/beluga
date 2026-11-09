@@ -880,7 +880,8 @@ const planState = (plan: Plan, progress: PlanProgress): string => (plan.status =
 
 export function plansView(state: DomainState): PlansView {
   return {
-    plans: state.plans.plans.slice(0, 100).map((plan) => {
+    // One that moved to another computer runs there (BLG-806): its record here stays off the list.
+    plans: state.plans.plans.filter((p) => !p.movedTo).slice(0, 100).map((plan) => {
       const progress = progressOf(state, plan);
       const topic = planTopic(plan.id);
       return { id: clip(plan.id, 200), title: clip(planTitle(plan), 300), state: planState(plan, progress), ...(topic ? { topic } : {}), done: progress.done, total: progress.total };
@@ -1466,6 +1467,7 @@ function messageView(state: DomainState, ctx: ViewContext, m: MessageView): Chat
     ...(m.mine && !m.claude && !m.task && m.conversation.startsWith('dm:') && text === m.text && text.trim() ? { editable: true } : {}),
     ...(files.length ? { files: files.slice(0, 20) } : {}),
     ...(m.reactions?.length ? { reactions: reactionsView(state, m) } : {}),
+    ...(m.mine && (m.status === 'delivered' || m.status === 'seen') ? { delivery: m.status } : {}),
     ...(offerOf(state, m) ? { offer: offerOf(state, m) } : {}),
     ...(chatTaskOf(state, m) ? { task: chatTaskOf(state, m) } : {}),
   };

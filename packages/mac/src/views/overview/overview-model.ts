@@ -215,3 +215,34 @@ export function emptyText(filter: OverviewFilter, projectName?: string): { title
       return { title: `Nothing archived yet${where}`, detail: 'Archiving a worktree frees its folder. Its branch and conversation stay here, ready to restore.' };
   }
 }
+
+/** A worktree (or a plan) on one of your computers that needs you (BLG-843), as the Overview lists it. */
+export interface NeedsThere {
+  readonly id: string;
+  readonly title: string;
+  /** Its project there ('Chats' outside one). */
+  readonly project: string;
+  /** What it waits on, in words. */
+  readonly why: string;
+  /** Its page on that computer. */
+  readonly page: { readonly kind: 'workspace'; readonly id: string; readonly tab: 'chat' } | { readonly kind: 'plan'; readonly id: string };
+}
+
+/** What needs you among a computer's items (overviewItems of its state), for this Mac's Overview. */
+export function needsThere(items: readonly OverviewItem[]): NeedsThere[] {
+  return items
+    .filter((i) => i.needs && !i.archived)
+    .map((i) => ({
+      id: i.ws.id,
+      title: i.plan?.title ?? i.ws.name,
+      project: i.project.root ? i.project.name : 'Chats',
+      why: i.plan?.tip || (i.rank === 1 ? 'Checks failing' : 'Waiting for you'),
+      page: i.plan ? { kind: 'plan' as const, id: i.plan.plan.id } : { kind: 'workspace' as const, id: i.ws.id, tab: 'chat' as const },
+    }));
+}
+
+/** A computer's rows narrowed like this Mac's: the project picked (by name there) and the search's words. */
+export function narrowThere(rows: readonly NeedsThere[], project: string | undefined, search: string): NeedsThere[] {
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+  return rows.filter((r) => (!project || r.project === project) && words.every((w) => `${r.title}\n${r.project}`.toLowerCase().includes(w)));
+}

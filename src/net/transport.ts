@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { Duplex } from 'node:stream';
+import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import type WebSocket from 'ws';
 
 interface SocketEvents {
@@ -64,8 +65,14 @@ class WsSocket extends EventEmitter<SocketEvents> implements MessageSocket {
 
 export const fromWebSocket = (ws: WebSocket): MessageSocket => new WsSocket(ws);
 
-/** Frame kinds on a byte stream. Each frame is [u32 length][u8 kind][payload]; length counts kind + payload. */
-const KIND = { text: 0, close: 1, ping: 2, pong: 3 } as const;
+/**
+ * Frame kinds on a byte stream. Each frame is [u32 length][u8 kind][payload]; length counts kind + payload.
+ * `deflated` is a text frame compressed (raw deflate), sent only to a side that said `inflates` (BLG-792):
+ * a side that doesn't know these two kinds drops them unread, so it never hears a compressed one.
+ */
+const KIND = { text: 0, close: 1, ping: 2, pong: 3, deflated: 4, inflates: 5 } as const;
+/** Text this long or longer goes compressed, when the other side inflates. */
+export const DEFLATE_FROM = 1024;
 type Kind = (typeof KIND)[keyof typeof KIND];
 const HEADER = 5;
 /** How long to wait for the other side to finish closing before cutting the stream. */
@@ -89,14 +96,18 @@ class StreamSocket extends EventEmitter<SocketEvents> implements MessageSocket {
   private code = ABNORMAL_CLOSE;
   private pending: Buffer = Buffer.alloc(0);
   private grace?: NodeJS.Timeout;
+  /** The other side said it inflates: big text goes compressed. */
+  private peerInflates = false;
 
   constructor(
     private readonly stream: Duplex,
     private readonly maxBytes: number,
     alreadyOpen: boolean,
+    private readonly compress = false,
   ) {
     super();
     this.open = alreadyOpen;
+    if (alreadyOpen && compress) this.write(KIND.inflates);
     stream.on('data', (chunk: Buffer) => this.onData(chunk));
     stream.on('open', () => this.onOpen());
     stream.on('connect', () => this.onOpen());
@@ -113,7 +124,12 @@ class StreamSocket extends EventEmitter<SocketEvents> implements MessageSocket {
   }
 
   send(data: string): void {
-    this.write(KIND.text, Buffer.from(data, 'utf8'));
+    const bytes = Buffer.from(data, 'utf8');
+    if (this.peerInflates && bytes.length >= DEFLATE_FROM) {
+      const packed = deflateRawSync(bytes, { level: 3 });
+      if (packed.length < bytes.length) return this.write(KIND.deflated, packed);
+    }
+    this.write(KIND.text, bytes);
   }
 
   close(code = 1000, reason = ''): void {
@@ -145,6 +161,7 @@ class StreamSocket extends EventEmitter<SocketEvents> implements MessageSocket {
   private onOpen(): void {
     if (this.open || this.closing || this.closed) return;
     this.open = true;
+    if (this.compress) this.write(KIND.inflates);
     this.emit('open');
   }
 
@@ -179,6 +196,17 @@ class StreamSocket extends EventEmitter<SocketEvents> implements MessageSocket {
 
   private onFrame(kind: number, payload: Buffer): void {
     if (kind === KIND.text) this.emit('message', payload.toString('utf8'));
+    else if (kind === KIND.deflated && this.compress) {
+      let text: string;
+      try {
+        // Never more than a plain frame may be: a small frame can't unpack into a huge one.
+        text = inflateRawSync(payload, { maxOutputLength: this.maxBytes }).toString('utf8');
+      } catch {
+        this.close(TOO_BIG_CLOSE, 'bad frame');
+        return;
+      }
+      this.emit('message', text);
+    } else if (kind === KIND.inflates && this.compress) this.peerInflates = true;
     else if (kind === KIND.ping) {
       this.write(KIND.pong);
       this.emit('ping');
@@ -197,6 +225,8 @@ export interface StreamSocketOptions {
   readonly maxBytes: number;
   /** True when the stream is already connected (server side); otherwise waits for its 'open' or 'connect' event. */
   readonly open?: boolean;
+  /** Say this side inflates, and compress big text once the other side says it does too (a link to a computer, BLG-792). */
+  readonly compress?: boolean;
 }
 
-export const fromStream = (stream: Duplex, opts: StreamSocketOptions): MessageSocket => new StreamSocket(stream, opts.maxBytes, opts.open ?? false);
+export const fromStream = (stream: Duplex, opts: StreamSocketOptions): MessageSocket => new StreamSocket(stream, opts.maxBytes, opts.open ?? false, opts.compress ?? false);

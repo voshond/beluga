@@ -61,9 +61,17 @@ knows. Two Macs dialing each other at once keep the same connection (direct over
 the one dialed by the lower address); a reconnection after a restart replaces the stale link
 at once. A relayed link is retried directly now and then and replaced once that works. Each link has a heartbeat (dropped after 3 missed),
 2 MB frames and token-bucket limits on messages and bytes. Messages are versioned JSON (`hello` carries
-`proto: 1`; unknown kinds are ignored): `hello`, `presence`, `dm`/`dm_ack`,
+`proto: 1`; unknown kinds are ignored): `hello`, `presence`, `dm`/`dm_ack`/`dm_seen`,
 `av_get`/`av_data` (profile pictures), `g_heads`/`g_sync`/`g_entries`, `tun_open`/`tun_in`/`tun_data`/`tun_close`, `gw` (the gateway), `share`
 (sharing with friends), `team` (team boards: friends on the same GitHub repository, see docs/tasks-and-plans.md phase 3).
+
+**Delivered, then Seen** (BLG-798). A direct message is Delivered once the install that is them on the network
+(their Mac, or their Always On) acks it with `dm_ack`. `dm_seen { id }` says their messages up to that one were on
+a screen of theirs: a conversation visible in a Beluga window in front, or opened on their phone (`network.read`),
+said by whichever install runs their network, never by an Always On on its own (it has no screens; your Mac's
+attention reaches it through your link). Once per newest message, only while linked, and not at all when Say
+When You've Seen a Message is off (`readReceipts`, a setting that follows you to every device). An older Beluga
+ignores the frame and never sends it, so its messages stay Delivered. Seen is kept as a `{ seen }` line in the DM log.
 
 **Versions and features.** `hello` also carries the Beluga version (`app`) and what this Mac does (`can`,
 `src/net/mesh/features.ts`: `chat.*` always, `task.*` while the gateway listens, `share.*` while sharing with friends
@@ -236,7 +244,55 @@ so the person's peer id is the same in every room (`tests/multi-room.test.ts`).
 - A join request reaches the admin whose invitation was used, not every admin.
 - Groups you didn't ask for are only fetched from friends (an admin adding you directly) and
   from the admin whose invite you used; at most 500 groups and 100 people per group.
-- One Mac per identity: a second Beluga process with the same `~/.beluga` doesn't start the network.
+- Exactly one of you on the network: the install that holds your identity runs it, this Mac or the
+  computer you made your Always On (below), never both. Your other devices (apps, computers,
+  phones) show your network through their link to it. A second Beluga process with the same
+  `~/.beluga` doesn't start the network, and the lease stands this Mac in only while your Always
+  On is down. How your computers fit together: [docs/machines.md](machines.md).
+
+## Your Always On
+
+Code: `src/machines/always-on.ts` (the handover), `always-on-bundle.ts` (what moves, staged and checked),
+`always-on-state.ts` (`~/.beluga/always-on.json`: where you are), `src/core/identity.ts` (the identity the
+device set, the companion and the network read through). Settings › Your Computers › a computer › ••• ›
+Make Always On…, and Make This Mac Always On under You on the Network (BLG-796).
+
+- One of your computers can be you on the network. After one confirmation your identity, your friends
+  network's files (friends, invitations, DMs and their outbox, reactions, read marks, presence, groups
+  and their logs, avatars) and the settings that are you to friends (name, trust levels, Ask Me For,
+  what friends may ask, the mailbox) travel there over your own end-to-end device link. Friends see the
+  same peer id, name, groups and chats: nothing for them to redo.
+- Two steps, so there is never two of you and never none: the giver stops its network and sends; the
+  taker stages everything, checks each file's SHA-256 and that the identity is the one its device set
+  belongs to, and says ready; only then does the giver note where you are, wipe its copy and say commit,
+  and the taker installs it and starts the network. A link that drops before commit changes nothing; one
+  that drops after it leaves the staging, and the giver says commit again until it lands.
+- The install that gave it keeps a stand-in key of its own, never starts the network itself while
+  `always-on.json` names another device, and shows your network through the link (your Always On says
+  its friends, groups and invitations in each poll). Every device certificate stays valid; each install
+  pins its companion address (`companion-seed.json`) before its identity changes, so phones and computers
+  reach it as before. New phones and computers are signed in where your identity is.
+- Make This Mac Always On brings it back the same way; moving it to another computer goes through this
+  Mac (back here, not started, then on). Rooms keep the key they joined with until Beluga restarts.
+- Friends through it (`src/machines/friends.ts`, BLG-797): this Mac's daemon keeps a client link of its
+  own to the Always On and mirrors its network into this Mac's state (`net_mirror`, then each `net_*`
+  action), so People, chats, groups, calls and the phone work as before and notify as before. Every
+  `network.*` and `calls.*` call is forwarded there (the Friends switch too). What this Mac's screens show
+  is said there, so those conversations are read. Friends' requests run there under the same trust levels;
+  the ones waiting on you show here as `ao:<id>` and the first answer from any device counts. Call
+  signals come back to the window in the call: audio and video stay on this Mac. The last mirror is kept
+  in `friends-mirror.json`, so messages that came while this Mac was closed are news when it opens.
+- Never two of you, never none (`src/machines/lease.ts`, BLG-799): whichever install is you renews a
+  lease every minute, a DHT mutable record under a key only your identity derives (`beluga-lease-v1`).
+  The Mac that made a computer its Always On keeps its own copy of your identity
+  (`identity-standby.json`: it never leaves this Mac again) and a replica of the network files, refreshed
+  from the Always On every 10 minutes (never the identity). Once the Always On hasn't answered for 10
+  minutes, its lease is 10 minutes stale (or the DHT can't be read), and one last try over the link fails,
+  this Mac stands in from the replica and Settings › Your Computers says so. When it answers again, the
+  stand-in hands back by itself: chat logs are merged line by line, the rest is the stand-in's. A holder
+  that finds a fresher lease of another install stops at once, and an install that was your Always On
+  asks the lease before its network starts, so it never comes back as a second you. Installs that never
+  took part in an Always On never read or write the lease.
 
 ## Chats: channels, files and agents
 

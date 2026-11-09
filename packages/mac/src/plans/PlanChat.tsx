@@ -17,7 +17,7 @@ import { useAttachments } from "../chat/use-attachments.js";
 import { Icon } from "../components/Icon.js";
 import { Empty, IconButton, Tip, Working, cx } from "../components/ui.js";
 import { useActions } from "../lib/actions.js";
-import { useApi, useApp, useBeluga } from "../lib/beluga.js";
+import { useApi, useApp, useBeluga, useScopedKey } from "../lib/beluga.js";
 import { useMyAgentName } from "../lib/agent-words.js";
 import { LiveDot } from "./marks.js";
 import { PlanAsk } from "./PlanAsk.js";
@@ -69,12 +69,14 @@ export function PlanChat({
   const api = useApi();
   const { client } = useBeluga();
   const actions = useActions();
-  const [text, setTextState] = useState(() => typed.get(channel) ?? "");
+  // Unsent words and a message that didn't go, per plan chat on its computer (BLG-784).
+  const kept = useScopedKey(channel);
+  const [text, setTextState] = useState(() => typed.get(kept) ?? "");
   const words = useRef(text);
   const setText = (next: string): void => {
     words.current = next;
-    if (next) typed.set(channel, next);
-    else typed.delete(channel);
+    if (next) typed.set(kept, next);
+    else typed.delete(kept);
     setTextState(next);
   };
   const box = useRef<HTMLTextAreaElement>(null);
@@ -148,10 +150,10 @@ export function PlanChat({
   const [failed, setFailedState] = useState<{
     message: PlanMessage;
     error: string;
-  } | undefined>(() => unsent.get(channel));
+  } | undefined>(() => unsent.get(kept));
   const setFailed = (next: { message: PlanMessage; error: string } | undefined): void => {
-    if (next) unsent.set(channel, next);
-    else unsent.delete(channel);
+    if (next) unsent.set(kept, next);
+    else unsent.delete(kept);
     setFailedState(next);
   };
   const att = useAttachments({

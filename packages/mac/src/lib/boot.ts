@@ -9,6 +9,7 @@ import { unreachableDetail } from './unreachable.js';
 import { bootMode, inShell, native, remoteApp, appInvoke } from './boot-mode.js';
 import { deviceReach } from './device-bridge.js';
 import { uploadFile } from './web-files.js';
+import { machineSocketUrl } from '../machines/pane-model.js';
 
 export { bootMode, inShell, native, remoteApp, appInvoke };
 
@@ -144,4 +145,21 @@ export async function connect(caps: Capabilities): Promise<SocketClient> {
   const { url, token } = await endpoint();
   const device = await deviceReach(uploadFile);
   return SocketClient.connect({ url, token, kind: remoteApp() ? 'remote-app' : 'mac', version: APP_VERSION, caps, ...(device ? { device } : {}) });
+}
+
+/**
+ * What a computer may ask of this window (BLG-776 COMPUTER_CAPS, less): copy, open a page, read a
+ * pasted image, and notify through this Mac's one bell (BLG-790: machines/pane-clients.ts wraps it).
+ */
+const MACHINE_CAPS = ['copyText', 'openExternal', 'readClipboardImage', 'notify'] as const;
+
+/**
+ * Attach to one of your computers (BLG-784): this Mac's daemon pipes the screen there over
+ * /machine/<id>, with this daemon's own token (never sent on). Not from a browser on the web port.
+ */
+export async function connectMachine(id: string, caps: Capabilities): Promise<SocketClient> {
+  const { url, token } = await endpoint();
+  if (webServed()) throw new Error('Your computers open in the Beluga app');
+  const allowed: Capabilities = Object.fromEntries(MACHINE_CAPS.flatMap((k) => (caps[k] ? [[k, caps[k]]] : [])));
+  return SocketClient.connect({ url: machineSocketUrl(url, id), token, kind: 'mac', version: APP_VERSION, caps: allowed, timeoutMs: 20_000 });
 }

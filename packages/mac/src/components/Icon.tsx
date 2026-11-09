@@ -1,11 +1,14 @@
 import type { SVGProps } from 'react';
 import { AGENT_MARKS, AGENT_MARK_VIEWBOX, type AgentMark } from '../../../../src/shared/agent-marks.js';
+import { COMPUTER_GLYPHS } from '../../../../src/shared/computer-marks.js';
 
 /**
  * One small icon set, drawn on a 16×16 grid with 1.5 strokes (in the spirit of SF Symbols):
  * every icon in the app comes from here, so they match.
  */
 const PATHS = {
+  // Your computers' glyphs (desktop, server, cloud, Mac mini, PC…), shared with the phone.
+  ...COMPUTER_GLYPHS,
   chat: 'M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5A1.5 1.5 0 0 1 11.5 11H7l-3 2.5V11h.5A1.5 1.5 0 0 1 3 9.5z',
   folder: 'M2.5 4.5A1 1 0 0 1 3.5 3.5h3l1.5 1.5h4.5a1 1 0 0 1 1 1V11.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1z',
   file: 'M4 2.5h5l3 3v8H4z M9 2.5v3h3',
@@ -127,8 +130,6 @@ const PATHS = {
   heat: 'M2.5 2.5h11v11h-11z M2.5 8h11 M8 2.5v11 M4.5 4.5h1.5v1.5h-1.5z M10 10h1.5v1.5H10z',
   /** Your phone (the companion): the sidebar footer's mark, Settings › Phone. */
   phone: 'M5.5 1.75h5a1 1 0 0 1 1 1v10.5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V2.75a1 1 0 0 1 1-1z M7.25 12.25h1.5',
-  /** Your Mac (core/assistant): a laptop. */
-  laptop: 'M3.5 3.5h9a1 1 0 0 1 1 1v6h-11v-6a1 1 0 0 1 1-1z M1.5 10.5h13l-.75 1.5a1 1 0 0 1-.9.5H3.15a1 1 0 0 1-.9-.5z',
   /** Supporting Beluga: a star on GitHub, a coffee, and the heart that goes with them. */
   star: 'M8 2.25l1.75 3.55 3.9.57-2.83 2.76.67 3.89L8 11.18l-3.49 1.84.67-3.89L2.35 6.37l3.9-.57z',
   cup: 'M3 6.5h7.5v3a3.5 3.5 0 0 1-3.5 3.5h-.5A3.5 3.5 0 0 1 3 9.5z M10.5 7.5h.75a1.75 1.75 0 0 1 0 3.5h-1.1 M5.5 2.5c-.4.6.4 1.1 0 1.75 M8 2.5c-.4.6.4 1.1 0 1.75',
@@ -161,6 +162,8 @@ const PATHS = {
   eraser: 'M9.2 3.3l3.5 3.5a1 1 0 0 1 0 1.4L8.4 12.5H5.6l-2.3-2.3a1 1 0 0 1 0-1.4l4.5-4.5a1 1 0 0 1 1.4 0z M6.2 6.3l3.5 3.5 M8.4 12.5h5',
   square: 'M4.5 3h7A1.5 1.5 0 0 1 13 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 11.5v-7A1.5 1.5 0 0 1 4.5 3z',
   speaker: 'M2.75 6.25h2.5L8.5 3.5v9L5.25 9.75h-2.5z M10.75 5.75a3 3 0 0 1 0 4.5 M12.5 4a5.5 5.5 0 0 1 0 8',
+  // Your computers (BLG-813): a Mac mini, a server in a rack, a cloud machine, one that's always on.
+  power: 'M8 2.5v5 M5 4.25a5 5 0 1 0 6 0',
 } as const;
 
 /** Agents and model makers (BLG-497) are their makers' own logos, filled (shared/agent-marks.ts; the phone draws the same). */

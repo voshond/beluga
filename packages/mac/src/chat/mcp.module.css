@@ -23,6 +23,15 @@
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+/* A narrow box: the plug alone (and its dot); the count is in its list. */
+@container composer (max-width: 440px) {
+  .count {
+    display: none;
+  }
+  .chip {
+    padding: 0 5px;
+  }
+}
 /* One needs you: a tiny soft amber dot, no ring, no glow. */
 .needs {
   width: 5px;

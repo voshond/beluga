@@ -108,6 +108,10 @@ export interface WorkspaceRecord {
   readonly handedTo?: string;
   /** Came from a friend's handoff (their name). */
   readonly handedFrom?: string;
+  /** Continued on another computer of yours (its name, BLG-808): archived here once it ran there. */
+  readonly continuedOn?: string;
+  /** Continued here from another computer of yours (its name). */
+  readonly continuedFrom?: string;
   /** Another agent started this chat through the thread tools (core/threads). Its harness stays in `agent`. */
   readonly thread?: ThreadRecord;
   /** A conversation started for one job: 'sync_main' is Claude bringing the main folder up to date. */

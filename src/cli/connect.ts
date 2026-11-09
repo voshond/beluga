@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import net from 'node:net';
+import { INSTALL_LINE, SSH_KEEPALIVE, remoteBeluga } from '../machines/ssh-pair.js';
 import { type Exit, type Io, errorText } from './io.js';
 
 /**
@@ -10,16 +11,11 @@ import { type Exit, type Io, errorText } from './io.js';
  * users, ports and keys of ~/.ssh/config work as they do for `ssh host`.
  */
 
-/** Where the install script links `beluga` (often not on PATH for a command run over ssh). */
-const REMOTE_PATH = 'PATH="$HOME/.local/bin:$PATH"';
-const remote = (command: string): string => `sh -c '${REMOTE_PATH} exec beluga ${command}'`;
-export const REMOTE_LINK = remote('web link');
-export const REMOTE_UP = remote('up');
+export const REMOTE_LINK = remoteBeluga('web link');
+export const REMOTE_UP = remoteBeluga('up');
 
-const INSTALL = 'curl -fsSL https://github.com/kayraucklnc/beluga/releases/latest/download/install.sh | sh';
-
-/** Keeps a dead link from hanging, and has ssh notice a dead network in under a minute. */
-const KEEPALIVE = ['-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3', '-o', 'ConnectTimeout=20'];
+const INSTALL = INSTALL_LINE;
+const KEEPALIVE = SSH_KEEPALIVE;
 
 export interface ConnectOptions {
   /** As typed: `user@host`, `host` or an alias from ~/.ssh/config. */

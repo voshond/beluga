@@ -1,3 +1,6 @@
+import { RemoteList } from '../machines/RemoteList.js';
+import { remoteTasks } from '../machines/remote-work.js';
+import { useRemoteSources } from '../machines/use-remote.js';
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { PROVIDER_INFO, type ProjectSync, isOpen, showsOn, worksOn, worktreeOf } from '@beluga/core/board/model.js';
 import { Icon } from '../components/Icon.js';
@@ -299,8 +302,18 @@ export function TasksView() {
           ) : null}
         </div>
       ) : null}
+      {/* The board's projects' tasks on your computers (BLG-785). */}
+      {here ? <RemoteTasks projects={here.repos.map(repoName).filter((n): n is string => Boolean(n))} /> : null}
     </div>
   );
+}
+
+/** Tasks of these projects (by name) on your computers, tagged. */
+function RemoteTasks({ projects }: { projects: readonly string[] }) {
+  const sources = useRemoteSources();
+  const names = projects.join('\n');
+  const rows = useMemo(() => remoteTasks(sources).filter((t) => t.item.project !== undefined && names.split('\n').includes(t.item.project)).map((t) => ({ ...t, item: { id: t.item.id, title: t.item.title, sub: `${t.item.key} · ${t.item.status.replace('_', ' ')}`, page: { kind: 'task' as const, id: t.item.id } } })), [sources, names]);
+  return <RemoteList title="Tasks on your computers" rows={rows} />;
 }
 
 /** How the project syncs with Linear, in the bar: syncing, when it last did, or that it needs you. */

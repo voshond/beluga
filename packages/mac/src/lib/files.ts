@@ -5,6 +5,7 @@ import { dirName, joinPath } from '@beluga/shared/os-path.js';
 import type { SocketClient } from '@beluga/ipc/socket-client.js';
 import { inApp, webServed } from './boot.js';
 import { runsWhenOpened } from './runs-when-opened.js';
+import { openThere } from './remote-open.js';
 
 /**
  * Files you see in Beluga, the Mac way: where one is on this Mac (to show it in Finder or copy
@@ -51,6 +52,8 @@ async function downloadOrSay(client: SocketClient, path: string): Promise<void> 
 /** Show a file of yours selected in Finder (in development: open its folder; in a served page: download it). */
 export async function revealInFinder(client: SocketClient, path: string): Promise<void> {
   if (webServed()) return downloadOrSay(client, path);
+  // On a computer's page: downloaded, or its path copied (BLG-794).
+  if (await openThere(client, path, 'reveal')) return;
   if (inApp()) {
     const { revealItemInDir } = await import('@tauri-apps/plugin-opener');
     await revealItemInDir(path);
@@ -62,6 +65,8 @@ export async function revealInFinder(client: SocketClient, path: string): Promis
 /** Open a file of yours the way Finder would (its default app, usually your editor). One that runs something shows in Finder instead. */
 export async function openWithDefaultApp(client: SocketClient, path: string): Promise<void> {
   if (webServed()) return downloadOrSay(client, path);
+  // On a computer's page: your editor over Remote-SSH, else as Show in Finder there (BLG-794).
+  if (await openThere(client, path, 'open')) return;
   if (runsWhenOpened(path)) return revealInFinder(client, path);
   await client.api.local.openFolder(path);
 }

@@ -14,7 +14,7 @@ import { AwayBand, Screen, StatusShade, useScrolled } from '../../components/Scr
 import { UpdatePill, UpdateSheet } from '../../components/Update';
 import { UsageCard, UsageSheet } from '../../components/Usage';
 import { Card, IconBadge, Pill, Press, Section, StatusDot, T } from '../../components/ui';
-import { useLink, useSupports, useView, useVisibleNeeds } from '../../lib/hooks';
+import { useLink, useSupports, useView, useAllNeeds } from '../../lib/hooks';
 import type { ConvSummary, HomeView, PlansView } from '../../lib/link/protocol';
 import { displayName } from '../../lib/names';
 import { color, TAB_BAR_H } from '../../lib/theme';
@@ -34,7 +34,7 @@ export default function Home() {
   const plans = useView<PlansView>('plans');
   const sentinelOn = useSupports('sentinel');
   const h = home?.data;
-  const needs = useVisibleNeeds(h?.needsYou);
+  const needs = useAllNeeds(h?.needsYou);
   const running = plans?.data.plans.filter((p) => p.state === 'running') ?? [];
   const linked = link.phase === 'open';
   const asleep = link.phase === 'asleep';
