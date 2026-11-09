@@ -39,6 +39,15 @@ Archive has no key (it's in the menu and ⌘K).
 - The Tauri shell gates Mac-only code with `cfg(target_os = "macos")`.
   `tauri.linux.conf.json` and `tauri.windows.conf.json` set the window and the bundles.
 
+## Installing from a checkout
+
+`bash scripts/install-linux-app.sh --build` builds the app and installs it for your user, with no
+package: the binaries in `~/.local/opt/beluga-thin` (`BELUGA_APP_DIR` to change it), the icon in
+each hicolor size (32 to 512) and `io.github.kayraucklnc.beluga.desktop`, which GNOME matches to
+the window (`StartupWMClass=beluga-mac`) and which opens `beluga://` and `klaud://` links. Without
+`--build` it installs what's already built. The .deb, .rpm and AppImage get the same icon sizes
+from `tauri.linux.conf.json`.
+
 ## Checks and releases
 
 - `ci.yml` runs the tests on Ubuntu, macOS and Windows. Windows doesn't block a merge until it
