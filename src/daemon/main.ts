@@ -23,6 +23,7 @@ import { isDemoMachine } from '../machines/demo.js';
 import { demoLinkMs, withLatency } from '../machines/latency.js';
 import { type WebArgs, sshWords } from './web.js';
 import { WebAccess, attachWebAccess, readWebConfig } from './web-access.js';
+import { uploadsDir } from './web-files.js';
 import { publicWords } from './reach/public.js';
 import { tailscaleWords } from './reach/tailscale.js';
 import { dropGitLocalEnv } from '../core/git-env.js';
@@ -125,7 +126,7 @@ export async function startDaemon(config: Config, opts: DaemonOptions): Promise<
     open: (target) => openWithSystem(target),
     shutdown: () => void stop('Quit from a screen'),
   }, { network: true });
-  server = new DaemonServer({ session: core.session, token, version: opts.version, terminals: core.terminals, log, ...(opts.port ? { port: opts.port } : {}), ...(opts.allowedOrigins ? { allowedOrigins: opts.allowedOrigins } : {}) });
+  server = new DaemonServer({ session: core.session, token, version: opts.version, terminals: core.terminals, log, uploadsRoot: uploadsDir(), ...(opts.port ? { port: opts.port } : {}), ...(opts.allowedOrigins ? { allowedOrigins: opts.allowedOrigins } : {}) });
   const port = await server.listen();
   // Your computers (BLG-775): an app of yours driving this one comes in as a screen; this app's
   // screens on one of yours go out through the machines' door.

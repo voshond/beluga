@@ -2,6 +2,9 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { PeerSummary, RoomBridge } from '../agent/types.js';
 import type { GatewayBridge } from '../agent/gateway-tools.js';
+import type { DeviceBridge } from '../agent/device-tools.js';
+import { devicesOf } from './devices/index.js';
+import { agentLabel } from '../shared/agent-label.js';
 import type { TaskView } from './gateway/model.js';
 import { gatewayOf, needGateway } from './gateway/registry.js';
 import { GRANT_INFO } from './trust.js';
@@ -58,6 +61,7 @@ export function createRoomBridge(session: Session, cwd: () => string, channel?: 
     getPeerFile: (name, file, saveTo, why) => session.remote.getFile(requirePeer(name).peerId, file, saveTo, why),
     sendFile: (name, file, note) => session.remote.sendFile(requirePeer(name).peerId, file, note),
     gateway: gatewayBridge(session, channel),
+    devices: deviceBridge(session, channel),
     inChannel: (c) => createRoomBridge(session, cwd, c),
   };
 }
@@ -118,6 +122,18 @@ export function gatewayBridge(session: Session, channel?: string): GatewayBridge
     cancel: (task) => {
       const t = gw().cancel(task);
       return `Task ${t.id} is ${t.state === 'cancelled' ? 'cancelled' : `already ${t.state}`}.`;
+    },
+  };
+}
+
+/** The user's own client devices for your Claude's tools (agent/device-tools.ts); none outside the daemon. */
+export function deviceBridge(session: Session, channel?: string): DeviceBridge {
+  return {
+    list: () => devicesOf(session)?.list() ?? [],
+    request: (device, ask, meta) => {
+      const devices = devicesOf(session);
+      if (!devices) return Promise.reject(new Error('No client device is connected'));
+      return devices.request(device, ask, { ...meta, conversation: channel ?? session.host.currentChannel, agent: agentLabel(session.agentRef, undefined, true, { capital: true }) });
     },
   };
 }

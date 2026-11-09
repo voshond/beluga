@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { defineConfig, firefox, webkit } from '@playwright/test';
 import { homesFor, portFor, workerCount, worktreeOf } from '../../scripts/e2e-lock.mjs';
+import { pageUserAgent } from './e2e/platform.js';
 
 // `npm run e2e` runs through scripts/e2e-lock.mjs: one Mac e2e run at a time, nothing left behind.
 // It hands every run its worktree's own port and demo home; a bare `playwright test` gets the same ones.
@@ -38,9 +39,9 @@ export default defineConfig<object, { demoLinkMs: number }>({
   },
   projects: [
     // The app through the dev server and per-file demo daemons (e2e/fixtures.ts).
-    { name: 'app', testIgnore: ['web/**', 'remote/**'] },
+    { name: 'app', testIgnore: ['web/**', 'remote/**'], use: { userAgent: pageUserAgent() } },
     // Work on the demo's computer, 80 ms away (e2e/remote/, BLG-795): the main flows again, on a computer's page.
-    { name: 'remote', testMatch: /remote\/.*\.spec\.ts$/, use: { demoLinkMs: 80 } },
+    { name: 'remote', testMatch: /remote\/.*\.spec\.ts$/, use: { userAgent: pageUserAgent(), demoLinkMs: 80 } },
     // The real served build through the daemon's web port, joined by a link (e2e/web/, BLG-652): built once first.
     { name: 'web-build', testMatch: /web\/build\.setup\.ts$/ },
     { name: 'web', testMatch: /web\/.*\.spec\.ts$/, dependencies: ['web-build'], use: { baseURL: undefined, storageState: { cookies: [], origins: [] } } },

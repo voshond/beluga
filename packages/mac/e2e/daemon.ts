@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { SocketClient } from '../../../src/ipc/socket-client.js';
 import { alive, stopGroups } from '../../../scripts/e2e-lock.mjs';
+import { e2ePlatform } from './platform.js';
 
 // The port is checked by the lock before playwright starts (its web server is up by the time a worker starts).
 export { portProblem } from '../../../scripts/e2e-lock.mjs';
@@ -106,10 +107,11 @@ export async function startDemo({ home, claude, port, linkMs = 0 }: { home: stri
     // GitHub is a stand-in (e2e/fake-gh.mjs): its PRs are whatever a test writes to fake-gh.json. So is
     // Tailscale (e2e/fake-tailscale.mjs), and each daemon's web port is a free one (never the real 7777).
     // Under both names: the core reads BELUGA_* first, so an inherited BELUGA_HOME (the run's) must not win.
+    // COMPUTER: the daemon names this computer as the page's platform does ("Your Mac"), whatever the host (e2e/platform.ts).
     env: {
       ...process.env,
       TMPDIR: `${tmp}/`,
-      ...both({ HOME: home, CLAUDE_HOME: claude, GH: path.join(import.meta.dirname, 'fake-gh.mjs'), TAILSCALE: path.join(import.meta.dirname, 'fake-tailscale.mjs'), WEB_PORT: '0', FAKE_GH: path.join(home, 'fake-gh.json'), DEMO_PACE: process.env.E2E_DEMO_PACE ?? '0.3', ALLOW_ORIGINS: `http://localhost:${port}`, NETWORK: '', DEMO_LINK_MS: String(linkMs) }),
+      ...both({ HOME: home, CLAUDE_HOME: claude, GH: path.join(import.meta.dirname, 'fake-gh.mjs'), TAILSCALE: path.join(import.meta.dirname, 'fake-tailscale.mjs'), WEB_PORT: '0', FAKE_GH: path.join(home, 'fake-gh.json'), DEMO_PACE: process.env.E2E_DEMO_PACE ?? '0.3', ALLOW_ORIGINS: `http://localhost:${port}`, NETWORK: '', COMPUTER: e2ePlatform(), DEMO_LINK_MS: String(linkMs) }),
     },
     stdio: ['ignore', out, out],
   });

@@ -17,6 +17,7 @@ import { SUPPORT_API } from './support-api.js';
 import { STATS_API } from './stats-api.js';
 import { WEB_API } from './web-api.js';
 import { DIAGNOSTICS_API } from './diagnostics-api.js';
+import { DEVICES_API } from './devices-api.js';
 import { CLAUDE_CODE_API } from './claude-code-api.js';
 import { STEPS_API } from './steps-api.js';
 import { GATEWAY_API } from './gateway-api.js';
@@ -567,6 +568,8 @@ export const API = {
   ...AGENT_TERM_API,
   // ---- browsers on the web port: join links, the ones let in, revoking (web-api.ts)
   ...WEB_API,
+  // ---- client devices: remote apps offering their machine to the agents (devices-api.ts)
+  ...DEVICES_API,
   // ---- your agents' shared skills, the global AGENTS.md and Beluga's built-in instructions (agent-setup-api.ts)
   ...AGENT_SETUP_API,
 } as const;

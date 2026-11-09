@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { expect, test, type Page } from './fixtures.js';
+import { demoAssistantFolder, expect, test, type Page } from './fixtures.js';
 
 /**
  * BLG-66: a search hit opens its conversation at its message and marks it for a moment: in a Your
@@ -18,14 +18,6 @@ const shot = async (page: Page, name: string): Promise<void> => {
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/${name}.png` });
 };
 
-/** The demo's Your Mac folder: a temp folder of its own, in the daemon's home. */
-function macFolder(): string {
-  const tmp = path.join(process.env.BELUGA_HOME!, 'tmp');
-  const name = readdirSync(tmp).find((n) => n.startsWith('beluga-demo-assistant-'));
-  if (!name) throw new Error('the demo has no Your Mac folder');
-  return path.join(tmp, name);
-}
-
 async function searchFor(page: Page, word: string): Promise<void> {
   await page.keyboard.press('Meta+Shift+F');
   const box = page.getByPlaceholder('Search every conversation');
@@ -38,7 +30,7 @@ test('a hit in a long Your Mac chat that is not in memory opens at its message, 
   await page.goto('/');
   await sidebar(page).getByText('Your Mac', { exact: true }).click();
   await page.getByRole('button', { name: 'New chat with Your Mac' }).click();
-  const dir = macFolder();
+  const dir = demoAssistantFolder();
   let chat = '';
   await expect.poll(() => (chat = (JSON.parse(readFileSync(path.join(dir, 'chats.json'), 'utf8')) as { active: string }).active)).not.toBe('main');
   const channel = `mac:assistant:${chat}`;
@@ -98,7 +90,7 @@ test('a hit older than what the chat keeps says so, and the chat stays at its la
   await page.goto('/');
   await sidebar(page).getByText('Your Mac', { exact: true }).click();
   await page.getByRole('button', { name: 'New chat with Your Mac' }).click();
-  const dir = macFolder();
+  const dir = demoAssistantFolder();
   let chat = '';
   await expect.poll(() => (chat = (JSON.parse(readFileSync(path.join(dir, 'chats.json'), 'utf8')) as { active: string }).active)).not.toBe('main');
   const channel = `mac:assistant:${chat}`;

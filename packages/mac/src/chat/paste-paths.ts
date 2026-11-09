@@ -1,6 +1,6 @@
 import { type RefObject, useRef } from 'react';
 import type { PathInfo } from '@beluga/core/attachments.js';
-import { inApp } from '../lib/boot.js';
+import { native } from '../lib/boot.js';
 import { useApi } from '../lib/beluga.js';
 import { candidatePaths, imagePathsIn, pathsInPaste, pickPaths } from './paste-paths-model.js';
 
@@ -46,7 +46,7 @@ export async function pastePlain(): Promise<void> {
   if (plainBy === 'page' && Date.now() - plainDoneAt < ECHO_MS) return;
   const el = document.activeElement;
   if (!(el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement)) return;
-  const text = inApp() ? await (await import('@tauri-apps/plugin-clipboard-manager')).readText() : await navigator.clipboard.readText();
+  const text = native('pastePlain') ? await (await import('@tauri-apps/plugin-clipboard-manager')).readText() : await navigator.clipboard.readText();
   if (!text) return;
   plainBy = 'menu';
   plainDoneAt = Date.now();

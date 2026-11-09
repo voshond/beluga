@@ -9,6 +9,7 @@ import type { PtyProcess, TerminalManager } from '../terminal/index.js';
 import { ClientRegistry, type ConnectedClient } from './clients.js';
 import { dispatchCall } from './dispatch.js';
 import { companionOf } from '../companion/registry.js';
+import { Devices, attachDevices } from '../core/devices/index.js';
 import type { MirrorStatus, PhoneTouch, VideoPiece } from '../companion/phone-control.js';
 import type { MessageSocket } from '../net/transport.js';
 import { MACHINE_REFUSED, machineRefuses } from '../machines/coverage.js';
@@ -30,6 +31,10 @@ export interface DaemonServerOptions {
   readonly capTimeoutMs?: number;
   /** Where problems go (the daemon's log). */
   readonly log?: (line: string) => void;
+  /** Where client devices upload files and screenshots (the daemon's ~/.beluga/uploads); a path outside it is refused. */
+  readonly uploadsRoot?: string;
+  /** Time on top of a device request's timeout for its approval (default 30 s). */
+  readonly deviceGraceSec?: number;
 }
 
 /** Biggest frame: a pasted image (up to 3.7 MB, a third bigger in base64) plus room to spare. */
@@ -58,6 +63,8 @@ export const APP_ORIGINS = ['tauri://localhost', 'http://tauri.localhost', 'http
  */
 export class DaemonServer {
   readonly clients = new ClientRegistry();
+  /** Remote apps' machines, offered to the agents (core/devices). */
+  readonly devices: Devices;
   private wss?: WebSocketServer;
   private seq = 0;
   private readonly offs: Array<() => void> = [];
@@ -67,7 +74,17 @@ export class DaemonServer {
   // Which screens show each terminal (an owner who leaves hands over to one of them).
   private readonly termViewers = new Map<string, Set<string>>();
 
-  constructor(private readonly opts: DaemonServerOptions) {}
+  constructor(private readonly opts: DaemonServerOptions) {
+    this.devices = new Devices({
+      send: (clientId, frame) => {
+        if (!this.clients.get(clientId)) throw new Error('device disconnected');
+        this.clients.send(frame, clientId);
+      },
+      ...(opts.uploadsRoot ? { uploadsRoot: opts.uploadsRoot } : {}),
+      ...(opts.deviceGraceSec !== undefined ? { graceSec: opts.deviceGraceSec } : {}),
+    });
+    attachDevices(opts.session, this.devices);
+  }
 
   /** The frame just encoded, and its text: one going to every screen is encoded once, not once per screen (BLG-407). */
   private lastFrame?: DaemonFrame;
@@ -131,6 +148,7 @@ export class DaemonServer {
       c.reject(new Error('Closed'));
     }
     this.capCalls.clear();
+    this.devices.close(reason);
     this.clients.send({ t: 'bye', reason });
     const wss = this.wss;
     if (!wss) return;
@@ -269,12 +287,17 @@ export class DaemonServer {
           return ws.close(4004, 'IPC version mismatch');
         }
         // A browser from the web port is a web screen, and your app over a computer's link a machine
-        // screen, whatever their hello says (neither may manage access).
-        client = this.clients.add({ kind: preauthorized ?? frame.kind, version: frame.version, ...(frame.launchDir ? { launchDir: frame.launchDir } : {}), caps: frame.caps, send });
+        // screen, whatever their hello says (neither may manage access), unless it's the desktop app
+        // connected to this server: a remote app, under the web's limits.
+        const kind = preauthorized === 'web' && frame.kind === 'remote-app' ? 'remote-app' : (preauthorized ?? frame.kind);
+        client = this.clients.add({ kind, version: frame.version, ...(frame.launchDir ? { launchDir: frame.launchDir } : {}), caps: frame.caps, send });
+        // Only a remote app's machine is a device the agents may ask.
+        if (kind === 'remote-app' && frame.device) this.devices.offer(client.id, frame.device);
         send({ t: 'welcome', clientId: client.id, version: this.opts.version, ipc: IPC_VERSION, snapshot: this.session.store.getState(), seq: this.seq, clients: this.clients.size });
         return;
       }
       const me = client;
+      this.devices.seen(me.id);
       switch (frame.t) {
         case 'hello':
           return;
@@ -297,6 +320,11 @@ export class DaemonServer {
           clearTimeout(pending.timer);
           if (frame.ok) pending.resolve(frame.value);
           else pending.reject(new Error(frame.error ?? 'failed'));
+          return;
+        }
+        case 'device_result': {
+          const { t: _t, id: requestId, ...result } = frame;
+          this.devices.settle(me.id, requestId, result);
           return;
         }
         case 'term_attach': {
@@ -363,6 +391,7 @@ export class DaemonServer {
       detachAll();
       if (!client) return;
       this.session.detach(client.id);
+      this.devices.gone(client.id);
       this.clients.remove(client.id);
       for (const term of [...this.termViewers.keys()]) this.leaveTerm(term, client.id);
       for (const [term, owner] of this.termOwner) if (owner === client.id) this.termOwner.delete(term);
@@ -398,7 +427,7 @@ export class DaemonServer {
 
   private async call(client: ConnectedClient, id: string, method: string, raw: readonly unknown[]): Promise<DaemonFrame> {
     // A browser's session can't mint, revoke or move browser sessions: a stolen cookie can't outlive its revoke.
-    if (client.kind === 'web' && WEB_ADMIN.has(method)) return { t: 'result', id, ok: false, error: 'Browsers are let in and revoked from the Mac app or `beluga web` on the computer Beluga runs on' };
+    if ((client.kind === 'web' || client.kind === 'remote-app') && WEB_ADMIN.has(method)) return { t: 'result', id, ok: false, error: 'Browsers are let in and revoked from the Mac app or `beluga web` on the computer Beluga runs on' };
     // Your app driving this computer: what src/machines/coverage.ts refuses it (BLG-776).
     if (client.kind === 'machine' && machineRefuses(method)) return { t: 'result', id, ok: false, error: MACHINE_REFUSED };
     return { t: 'result', id, ...(await dispatchCall(this.session, client.id, method, raw)) };

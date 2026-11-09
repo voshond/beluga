@@ -327,6 +327,8 @@ export const MACHINE: Record<Method, MachineSide> = {
   'diagnostics.report': 'drive',
   // The window couldn't load a part of itself (#370): noted in that computer's black box.
   'diagnostics.windowProblem': 'drive',
+  // ---- devices
+  'devices.list': 'drive',
   // ---- agentSetup
   'agentSetup.skills': 'drive',
   'agentSetup.readSkill': 'drive',
