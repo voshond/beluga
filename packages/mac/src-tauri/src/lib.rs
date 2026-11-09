@@ -478,7 +478,10 @@ pub fn run() {
             updater::start(app.handle());
             Ok(())
         })
-        .on_page_load(frame::on_page_load)
+        .on_page_load(|webview, payload| {
+            frame::on_page_load(webview, payload);
+            remote::on_page_load(webview, payload);
+        })
         .on_window_event(move |window, event| {
             if window.label() != "main" {
                 return;
