@@ -459,6 +459,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `projects.initGit` | ✓ Add projects sheet: a plain folder’s row offers Set Up Git |
 | `projects.suggest` | ✓ "On this Mac" in the Add projects sheet |
 | `projects.github` | ✓ Add projects sheet › Clone from GitHub repository list |
+| `projects.githubCached` | ✓ Add projects sheet › Clone from GitHub shows the last list at once while it refreshes |
 | `projects.clone` | ✓ Add projects sheet › Clone from GitHub |
 | `projects.cloneProgress` | ✓ Clone progress in the Add projects sheet |
 | `projects.create` | ✓ Add projects sheet › Start new, New Project… in the Projects + menu and the palette |

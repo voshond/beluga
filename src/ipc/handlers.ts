@@ -13,7 +13,7 @@ import { existsSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { findProjects, isMainCheckout } from '../workspaces/discovery.js';
-import { githubProjects } from '../workspaces/github-projects.js';
+import { cachedGithubProjects, githubProjects } from '../workspaces/github-projects.js';
 import { cloneProject, cloneProgress } from '../workspaces/clone-project.js';
 import { createProject, defaultProjectsHome, initProject } from '../workspaces/new-project.js';
 import { projectId } from '../workspaces/manager.js';
@@ -429,6 +429,7 @@ export const HANDLERS = {
     return { id: added?.project?.id ?? projectId(dir), path: dir };
   },
   'projects.github': () => githubProjects(),
+  'projects.githubCached': () => cachedGithubProjects(),
   'projects.clone': async (s, remote, target) => {
     if (!ctl(s)) throw new Error('Projects are unavailable.');
     const dir = await cloneProject(remote, expandHome(target));
