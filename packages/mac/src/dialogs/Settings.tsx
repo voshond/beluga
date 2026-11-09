@@ -12,8 +12,7 @@ import { runtimeMark } from '@beluga/shared/agent-marks.js';
 import type { RuntimeState } from '@beluga/shared/agent-runtimes.js';
 import { CopyCommand, LOCAL_MODELS_ID, useAgents } from '../onboarding/AgentsStep.js';
 import { fixLabel } from '../onboarding/agent-setup.js';
-import { APP_VERSION, remoteApp, webServed } from '../lib/boot.js';
-import { ServerSettingsGroup } from './ServerSettings.js';
+import { APP_VERSION, webServed } from '../lib/boot.js';
 import { revealInFinder } from '../lib/files.js';
 import { type SettingsPane, useApi, useApp, useBeluga, useUi } from '../lib/beluga.js';
 import { ACCENTS, type Accent, setPrefs, useChosenPrefs, usePrefs } from '../lib/prefs.js';
@@ -133,9 +132,6 @@ async function squarePicture(file: File): Promise<string> {
   throw new Error('That picture is too big to send, even shrunk');
 }
 
-/** A browser on the server's web port (not the app as its client): the app's own bits aren't there. */
-const serverPage = (): boolean => webServed() && !remoteApp();
-
 function General() {
   const api = useApi();
   const state = useApp((st) => st);
@@ -168,9 +164,8 @@ function General() {
           />
         </Row>
       </Group>
-      <ServerSettingsGroup />
-      {/* A browser runs the build its server serves: the server's Beluga updates, not the page. The app as a client updates itself. */}
-      {serverPage() ? null : <UpdateSettingsGroup />}
+      {/* A browser runs the build its server serves: the server's Beluga updates, not the page. */}
+      {webServed() ? null : <UpdateSettingsGroup />}
       <Group title="Writing">
         <Row label="Send with" detail={prefs.sendWith === 'enter' ? 'Shift+Return makes a new line.' : 'Return makes a new line.'}>
           <Select
@@ -322,7 +317,7 @@ function Appearance() {
         <Row label="Reduce motion" {...(savingNote ? { detail: savingNote } : {})}>
           <Switch label="Reduce motion" on={prefs.reduceMotion} onChange={(v) => setPrefs({ reduceMotion: v })} />
         </Row>
-        {keyPlatform() === 'mac' && !serverPage() && (
+        {keyPlatform() === 'mac' && !webServed() && (
           <Row label="Reduce transparency" detail={savingNote ?? 'A solid sidebar, with no blur behind the window. Lighter on slower Macs.'}>
             <Switch label="Reduce transparency" on={prefs.reduceTransparency} onChange={(v) => setPrefs({ reduceTransparency: v })} />
           </Row>
@@ -626,7 +621,7 @@ function About() {
     <>
       <Group>
         <Row label="The Beluga app">{APP_VERSION}</Row>
-        {serverPage() ? null : <UpdateAboutRow />}
+        {webServed() ? null : <UpdateAboutRow />}
         <Row label="Beluga (the part that runs your room)">{client.daemonVersion}</Row>
         <Row label="Windows attached" detail="Beluga windows connected to the room right now.">
           {client.clients}
@@ -712,7 +707,7 @@ export function Settings() {
  */
 function SettingsWindow({ pane }: { pane: SettingsPane }) {
   const { ui } = useBeluga();
-  const panes = useMemo(() => (serverPage() ? PANES.filter((p) => !APP_ONLY.has(p.id)) : PANES), []);
+  const panes = useMemo(() => (webServed() ? PANES.filter((p) => !APP_ONLY.has(p.id)) : PANES), []);
   const scroll = useRef<HTMLDivElement>(null);
   const search = useSettingsSearch(panes, pane, (id) => ui.patch({ settings: id }), scroll);
   const Body = BODY[pane];

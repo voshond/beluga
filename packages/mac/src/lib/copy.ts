@@ -1,4 +1,4 @@
-import { native } from './boot.js';
+import { inApp } from './boot.js';
 
 /**
  * The browser's clipboard the old way, for a page that isn't a secure context (Beluga in a browser
@@ -39,7 +39,7 @@ function copyByCommand(text: string, html?: string): void {
 
 /** Put text on the clipboard (the app's own clipboard, or the browser's). */
 export async function copyText(text: string): Promise<void> {
-  if (native('clipboard')) {
+  if (inApp()) {
     const { writeText } = await import('@tauri-apps/plugin-clipboard-manager');
     await writeText(text);
   } else if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
@@ -51,7 +51,7 @@ export async function copyText(text: string): Promise<void> {
  * other side reads HTML (Sheets, Numbers, Docs, Notion), and as the text everywhere else.
  */
 export async function copyRich(html: string, text: string): Promise<void> {
-  if (native('clipboard')) {
+  if (inApp()) {
     const { writeHtml } = await import('@tauri-apps/plugin-clipboard-manager');
     await writeHtml(html, text);
   } else if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {

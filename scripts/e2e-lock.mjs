@@ -204,35 +204,19 @@ export function groupsUnder(root, table) {
   return groups;
 }
 
-/**
- * `ps` showing every process with its command line and environment (only the user's own processes
- * have one): BSD's -E on macOS, procps' BSD-style `e` on Linux (it refuses `-x` with -E: "must set
- * personality to get -x option").
- */
-export const psEnvArgs = (platform = process.platform) =>
-  platform === 'darwin' ? ['-axwwE', '-o', 'pid=,pgid=,command='] : ['axwwe', '-o', 'pid=,pgid=,command='];
-
-/** One row per process from psEnvArgs' output: pid, group, and the rest of the line. */
-export const parsePsEnv = (text) =>
-  text
-    .split('\n')
-    .map((l) => /^\s*(\d+)\s+(\d+)\s(.*)$/.exec(l))
-    .filter(Boolean)
-    .map((m) => ({ pid: Number(m[1]), pgid: Number(m[2]), line: m[3] }));
-
-/** Every process with its command line and environment: yours only. */
-function psEnv() {
+/** Processes whose environment carries `KEY=value` (ps -E: only the user's own processes). */
+export function processesTagged(key, value) {
+  const needle = ` ${key}=${value}`;
   try {
-    return parsePsEnv(execFileSync('ps', psEnvArgs(), { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }));
+    return execFileSync('ps', ['-axwwE', '-o', 'pid=,pgid=,command='], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
+      .split('\n')
+      .filter((l) => l.includes(needle) && (l.includes(`${needle} `) || l.endsWith(needle)))
+      .map((l) => l.trim().split(/\s+/).slice(0, 2).map(Number))
+      .filter(([pid, pgid]) => Number.isFinite(pid) && Number.isFinite(pgid))
+      .map(([pid, pgid]) => ({ pid, pgid }));
   } catch {
     return [];
   }
-}
-
-/** Processes whose environment carries `KEY=value`. */
-export function processesTagged(key, value, rows = psEnv()) {
-  const needle = ` ${key}=${value}`;
-  return rows.filter((r) => r.line.includes(`${needle} `) || r.line.endsWith(needle)).map(({ pid, pgid }) => ({ pid, pgid }));
 }
 
 const lsofListeners = (port) =>
@@ -299,6 +283,19 @@ export async function stopGroups({ groups = [], pids = [] }, { graceMs = 3000 } 
   for (let t = 0; t < graceMs && left(); t += 100) await new Promise((r) => setTimeout(r, 100));
   for (const g of gs) signal(-g, 'SIGKILL');
   for (const p of ps) signal(p, 'SIGKILL');
+}
+
+/** Every process with its command line and (ps -E) environment: yours only. */
+function psEnv() {
+  try {
+    return execFileSync('ps', ['-axwwE', '-o', 'pid=,pgid=,command='], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
+      .split('\n')
+      .map((l) => /^\s*(\d+)\s+(\d+)\s(.*)$/.exec(l))
+      .filter(Boolean)
+      .map((m) => ({ pid: Number(m[1]), pgid: Number(m[2]), line: m[3] }));
+  } catch {
+    return [];
+  }
 }
 
 /**

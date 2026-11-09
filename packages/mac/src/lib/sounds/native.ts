@@ -1,5 +1,5 @@
 import { DEFAULT_SOUND, DEFAULT_VOLUME, NO_SOUND, type SoundChoice, type SoundPrefs, volumeOf } from '../../../../../src/shared/notify-sound.js';
-import { native, appInvoke } from '../boot.js';
+import { inApp } from '../boot.js';
 import { keyPlatform } from '../shortcuts-model.js';
 import { filesInUse, playableHere, renderChoice, soundFileName, soundsInUse } from './catalog.js';
 import { playSound } from './player.js';
@@ -29,7 +29,8 @@ async function install(choice: SoundChoice, volume: number): Promise<string | nu
   const samples = renderChoice(choice, volume, SAMPLE_RATE);
   if (!name || !samples) return null;
   if (installed.has(name)) return name;
-  await appInvoke('sound_install', { name, wav: Array.from(encodeWav(samples, SAMPLE_RATE)) });
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('sound_install', { name, wav: Array.from(encodeWav(samples, SAMPLE_RATE)) });
   installed.add(name);
   return name;
 }
@@ -57,10 +58,11 @@ export async function notificationSound(n: NoteSound): Promise<{ readonly sound?
  * nobody chose any more (after a change in Settings).
  */
 export async function syncSounds(prefs: SoundPrefs): Promise<void> {
-  if (!native('sounds')) return;
+  if (!inApp()) return;
   const keep = filesInUse(prefs);
   for (const choice of soundsInUse(prefs)) await install(choice, volumeOf(prefs)).catch(() => null);
-  await appInvoke('sound_prune', { keep });
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('sound_prune', { keep });
   for (const name of [...installed]) if (!keep.includes(name)) installed.delete(name);
 }
 

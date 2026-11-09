@@ -34,8 +34,7 @@ test('a message past the limit waits for a free Claude, and says so', async ({ p
   await expect(settings).toBeHidden();
 
   await open(page, 'add-auth');
-  // A turn that runs long (the demo's full test suite), so the next message has to wait for it.
-  await composer(page).fill('Run the full test suite');
+  await composer(page).fill('Write the whole auth module with tests, slowly');
   await page.keyboard.press('Enter');
   await open(page, 'webhook-retries');
   await composer(page).fill('can you continue');

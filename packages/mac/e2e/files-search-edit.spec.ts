@@ -1,5 +1,4 @@
 import { expect, test, type Page } from './fixtures.js';
-import { MOD } from './platform.js';
 
 /**
  * Files: searching what's in the files (a line opens the file there), and a file that opens
@@ -65,7 +64,7 @@ test('a file opens read-only; Edit, type, ⌘S saves it; Done with unsaved chang
   await page.screenshot({ path: info.outputPath('04-format-off.png'), clip: (await file.boundingBox()) ?? undefined });
   await page.mouse.move(0, 0);
   await expect(area).toBeFocused();
-  await page.keyboard.press(`${MOD}+ArrowUp`);
+  await page.keyboard.press('ControlOrMeta+ArrowUp');
   await page.keyboard.type('Edited here\n');
   await expect(file.getByRole('status').filter({ hasText: 'Edited' })).toBeVisible();
   await expect(file.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();
@@ -76,7 +75,7 @@ test('a file opens read-only; Edit, type, ⌘S saves it; Done with unsaved chang
   await page.keyboard.press('Shift+Alt+ArrowRight');
   await page.screenshot({ path: info.outputPath('03-editing.png'), clip: (await file.boundingBox()) ?? undefined });
   await page.keyboard.press('ArrowRight');
-  await page.keyboard.press(`${MOD}+s`);
+  await page.keyboard.press('ControlOrMeta+s');
   await expect(file.getByRole('status').filter({ hasText: 'Editing' })).toBeVisible();
   // Saved: Done goes straight back to read-only, and the file (read again from disk) has the line.
   await file.getByRole('button', { name: 'Done', exact: true }).click();

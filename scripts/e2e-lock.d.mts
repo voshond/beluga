@@ -47,9 +47,7 @@ export function waitForLock(
 ): Promise<boolean>;
 export function processTable(): Array<{ pid: number; ppid: number; pgid: number }>;
 export function groupsUnder(root: number, table: ReadonlyArray<{ pid: number; ppid: number; pgid: number }>): Set<number>;
-export function psEnvArgs(platform?: string): string[];
-export function parsePsEnv(text: string): Array<{ pid: number; pgid: number; line: string }>;
-export function processesTagged(key: string, value: string, rows?: ReadonlyArray<{ pid: number; pgid: number; line: string }>): Array<{ pid: number; pgid: number }>;
+export function processesTagged(key: string, value: string): Array<{ pid: number; pgid: number }>;
 export function listeners(port: number): number[];
 /** Why the run's port can't be used, or undefined when it's free (checked before playwright starts). */
 export function portProblem(port: number): string | undefined;

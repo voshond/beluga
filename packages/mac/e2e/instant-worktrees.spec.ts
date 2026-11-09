@@ -52,16 +52,12 @@ test('a worktree’s right-click menu has Delete… beside Archive…; archiving
   await showProject(page, 'add-auth');
   const row = sidebar(page).getByRole('button', { name: 'add-auth', exact: true });
   await row.click({ button: 'right' });
-  await expect(page.getByRole('menuitem', { name: 'Archive…' })).toBeVisible();
   const items = await page.getByRole('menuitem').allTextContents();
   expect(items).toEqual(expect.arrayContaining(['Archive…', 'Delete…']));
   expect(items.indexOf('Delete…')).toBe(items.indexOf('Archive…') + 1);
   await page.screenshot({ path: path.join(SHOTS, '01-worktree-menu-delete.png') });
-  // A click event, not a pointer click: the demo's streaming keeps the sidebar, and so its menu, redrawing
-  // (it can even close it while the screenshot is taken: then it's opened again).
-  const archiveItem = page.getByRole('menuitem', { name: 'Archive…' });
-  if (!(await archiveItem.isVisible())) await row.click({ button: 'right' });
-  await archiveItem.dispatchEvent('click');
+  // A click event, not a pointer click: the demo's streaming keeps the sidebar, and so its menu, redrawing.
+  await page.getByRole('menuitem', { name: 'Archive…' }).dispatchEvent('click');
   const alert = page.getByRole('alertdialog', { name: /Archive “add-auth”/ });
   await alert.getByRole('button', { name: 'Archive', exact: true }).click();
   // Gone right away, not "Archiving…" for as long as the disk takes.

@@ -85,8 +85,7 @@ export default defineConfig({
     target: 'safari16',
     outDir: 'dist',
     sourcemap: true,
-    // The window, the request pop-up's own window (src-tauri/src/popup.rs), the floating call card (call_float.rs)
-    // and the page that picks Run here or a server, or says the server can't be reached (remote.rs).
-    rollupOptions: { input: { main: path.join(import.meta.dirname, 'index.html'), popup: path.join(import.meta.dirname, 'popup.html'), call: path.join(import.meta.dirname, 'call.html'), overlay: path.join(import.meta.dirname, 'overlay.html'), connect: path.join(import.meta.dirname, 'connect.html'), 'device-prompt': path.join(import.meta.dirname, 'device-prompt.html') } },
+    // The window, the request pop-up's own window (src-tauri/src/popup.rs) and the floating call card (call_float.rs).
+    rollupOptions: { input: { main: path.join(import.meta.dirname, 'index.html'), popup: path.join(import.meta.dirname, 'popup.html'), call: path.join(import.meta.dirname, 'call.html'), overlay: path.join(import.meta.dirname, 'overlay.html') } },
   },
 });

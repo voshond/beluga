@@ -1,19 +1,25 @@
 import { useEffect } from 'react';
-import { appInvoke, inShell, native } from './boot-mode.js';
 import { keyPlatform } from './shortcuts-model.js';
 
 export type WindowAction = 'minimize' | 'maximize' | 'close';
 
-export const ownTitleBar = (): boolean => inShell() && keyPlatform() === 'linux';
+const inApp = (): boolean => '__TAURI_INTERNALS__' in globalThis;
 
-export const nativeMenuBar = (): boolean => native('appMenu') && !ownTitleBar();
+const invokeApp = async (command: string, args?: Record<string, string>): Promise<void> => {
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke(command, args);
+};
 
-export const windowControl = (action: WindowAction): Promise<void> => appInvoke('window_control', { action });
+export const ownTitleBar = (): boolean => inApp() && keyPlatform() === 'linux';
+
+export const nativeMenuBar = (): boolean => inApp() && !ownTitleBar();
+
+export const windowControl = (action: WindowAction): Promise<void> => invokeApp('window_control', { action });
 
 export const useOwnTitleBar = (): void => {
   useEffect(() => {
     if (!ownTitleBar()) return;
     document.documentElement.dataset.frame = 'own';
-    void appInvoke('own_title_bar').catch(() => undefined);
+    void invokeApp('own_title_bar').catch(() => undefined);
   }, []);
 };

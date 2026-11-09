@@ -19,13 +19,8 @@ test('another project’s task is offered last, says so when picked, and goes in
 
   await box.fill('see @refund');
   await expect(list).toContainText('In other projects, not this one');
-  // Other projects' tasks come last (the demo plan's "Refunds and launch" is bob-api's too).
-  await expect(list.getByRole('option').last()).toContainText('bob-api');
-  // Held by its place in the list: its text changes once picked.
-  const at = (await list.getByRole('option').allTextContents()).findIndex((text) => text.includes('Refund endpoint'));
-  expect(at).toBeGreaterThan(-1);
-  const option = list.getByRole('option').nth(at);
-  await expect(option).toContainText('bob-api');
+  const option = list.getByRole('option').last();
+  await expect(option).toContainText('Refund endpoint');
   if (process.env.BELUGA_SHOTS) await list.screenshot({ path: `${process.env.BELUGA_SHOTS}/01-other-project-section.png` });
 
   // The first pick only says it isn't this project's.

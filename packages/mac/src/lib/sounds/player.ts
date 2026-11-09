@@ -1,5 +1,5 @@
 import type { SoundChoice } from '../../../../../src/shared/notify-sound.js';
-import { native, appInvoke } from '../boot.js';
+import { inApp } from '../boot.js';
 import { keyPlatform } from '../shortcuts-model.js';
 import { playableHere, renderChoice } from './catalog.js';
 
@@ -23,8 +23,9 @@ export async function playSound(picked: SoundChoice, volume: number): Promise<vo
   const choice = playableHere(picked, keyPlatform() === 'mac');
   if (choice.kind === 'none') return;
   if (choice.kind === 'mac') {
-    if (!native('sounds')) return;
-    await appInvoke('sound_play_system', { name: choice.id });
+    if (!inApp()) return;
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('sound_play_system', { name: choice.id });
     return;
   }
   const ctx = audio();
