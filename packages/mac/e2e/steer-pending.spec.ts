@@ -41,13 +41,12 @@ test('a steered message is sent, not read, until Claude reads it; Send now stops
   const message = page.locator('[data-index]', { hasText: 'look at the webhook retries first' }).first();
   const waiting = message.locator('[data-steer-waiting="next_step"]');
   await expect(waiting).toContainText('Sent · Claude reads it after its current step');
-  // No note card of its own. Unread, it waits below the working turn (BLG-47): the last row, the one working line just above it.
+  // No note card of its own; the one working line is the chat's last row, below your message.
   await expect(page.getByText('Your agent reads this after its current step')).toHaveCount(0);
   await expect(page.locator('[data-working]')).toHaveCount(1);
-  await expect.poll(async () => {
-    const rows = await rowsInOrder(page);
-    return Boolean(rows.at(-1)?.text.includes('look at the webhook retries first') && rows.at(-2)?.working);
-  }).toBe(true);
+  let rows = await rowsInOrder(page);
+  expect(rows.at(-1)?.working).toBe(true);
+  expect(rows.findIndex((r) => r.text.includes('look at the webhook retries first'))).toBeLessThan(rows.length - 1);
   // The box says how to send it now.
   await expect(page.locator('[class*="legend"]')).toContainText('⌥⇧↩ send now');
   await page.waitForTimeout(400);
@@ -61,19 +60,17 @@ test('a steered message is sent, not read, until Claude reads it; Send now stops
   await expect(message.locator('[data-steer-waiting]')).toHaveCount(0, { timeout: 10_000 });
   await expect(page.getByText('Interrupted to read your message')).toBeVisible();
   await expect(page.locator('[data-working]')).toHaveCount(1);
-  // Read, your message moves to where Claude read it (BLG-47): right after the interruption, with what Claude does since below it.
-  const readAfterStop = (r: Array<{ text: string }>) => r.findIndex((x) => x.text.includes('Interrupted to read your message')) < r.findIndex((x) => x.text.includes('look at the webhook retries first'));
-  await expect.poll(async () => {
-    const rows = await rowsInOrder(page);
-    return readAfterStop(rows) && Boolean(rows.at(-1)?.working);
-  }).toBe(true);
+  rows = await rowsInOrder(page);
+  expect(rows.at(-1)?.working).toBe(true);
+  // The interrupted turn's last words go below your message, and stay there once it ends.
+  const below = (r: Array<{ text: string }>) => r.findIndex((x) => x.text.includes('Interrupted to read your message')) > r.findIndex((x) => x.text.includes('look at the webhook retries first'));
+  expect(below(rows)).toBe(true);
   await page.screenshot({ path: `${OUT}/54-steer-read.png` });
   await expect(page.getByText(/Stopped the tests to look at that first/)).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('[data-working]')).toHaveCount(0);
-  await expect.poll(async () => {
-    const rows = await rowsInOrder(page);
-    return readAfterStop(rows) && Boolean(rows.at(-1)?.text.includes('Stopped the tests to look at that first'));
-  }).toBe(true);
+  rows = await rowsInOrder(page);
+  expect(rows.at(-1)?.text).toContain('Stopped the tests to look at that first');
+  expect(below(rows)).toBe(true);
   await page.screenshot({ path: `${OUT}/54-steer-answered.png` });
 });
 
@@ -121,15 +118,11 @@ test('⇧⌥↩ sends the newest steered message now', async ({ page }) => {
   await composer(page).fill('run the full test suite again');
   await composer(page).press('Enter');
   await expect(page.locator('[data-current="true"]', { hasText: /test:all/ })).toBeVisible({ timeout: 15_000 });
-  // An earlier test in this chat may have its own answer like this one: one more must come.
-  const answers = page.getByText(/Stopped the tests to look at that first/);
-  const before = await answers.count();
   await composer(page).fill('skip the e2e part');
   await composer(page).press('Alt+Enter');
   const message = page.locator('[data-index]', { hasText: 'skip the e2e part' }).first();
   await expect(message.locator('[data-steer-waiting]')).toBeVisible();
   await composer(page).press('Shift+Alt+Enter');
   await expect(message.locator('[data-steer-waiting]')).toHaveCount(0, { timeout: 10_000 });
-  await expect(answers).toHaveCount(before + 1, { timeout: 15_000 });
-  await expect(answers.last()).toBeVisible();
+  await expect(page.getByText(/Stopped the tests to look at that first/)).toBeVisible({ timeout: 15_000 });
 });

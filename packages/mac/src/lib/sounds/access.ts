@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { native, appInvoke } from '../boot.js';
+import { inApp } from '../boot.js';
 import { type AccessAction, type NotificationAccess, UNKNOWN_ACCESS } from './access-model.js';
 
 export type { NotificationAccess } from './access-model.js';
@@ -16,19 +16,20 @@ declare global {
   }
 }
 
-async function shell<T>(cmd: 'notification_access' | 'open_notification_settings' | 'open_focus_settings', fallback: T): Promise<T> {
-  if (!native('access')) {
+async function shell<T>(cmd: string, fallback: T): Promise<T> {
+  if (!inApp()) {
     (window.__BELUGA_NOTIFY_CALLS__ ??= []).push(cmd);
     return fallback;
   }
-  return appInvoke<T>(cmd);
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<T>(cmd);
 }
 
 const browserAccess = (): NotificationAccess => (typeof window !== 'undefined' && window.__BELUGA_NOTIFY_ACCESS__) || UNKNOWN_ACCESS;
 
 /** What macOS says now (`unknown` outside the app: a browser's permission isn't macOS's). */
 export async function notificationAccess(): Promise<NotificationAccess> {
-  if (!native('access')) return browserAccess();
+  if (!inApp()) return browserAccess();
   return shell<NotificationAccess>('notification_access', UNKNOWN_ACCESS).catch(() => UNKNOWN_ACCESS);
 }
 
@@ -38,7 +39,7 @@ export async function notificationAccess(): Promise<NotificationAccess> {
  * when the pop-up is off, and in Notification Center later. Resolves with what macOS says now.
  */
 export async function askNotificationPermission(): Promise<NotificationAccess> {
-  if (!native('access')) {
+  if (!inApp()) {
     (window.__BELUGA_NOTIFY_CALLS__ ??= []).push('request_permission');
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') await Notification.requestPermission().catch(() => undefined);
     return browserAccess();

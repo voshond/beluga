@@ -118,42 +118,6 @@ Accepted: no notice yet when a browser joins (the daemon log says so; Settings l
 upload quota beyond 512 MB per file and the 30-day sweep; a library's `eval` probe is blocked by
 the policy, as it is in the Mac app.
 
-## Thin client device reach
-
-The desktop app can be a client of a Beluga server ([docs/thin-client.md](thin-client.md)): it
-shows the server's page in its window, and the server's agents can ask that computer to run a
-command, send a file or take a screenshot. The server's page is code from another computer, so the
-client gives it as little as it can, and never the decision.
-
-- **One origin, a short list.** The server's page gets IPC through a capability added at runtime
-  for the saved server's origin only, in the main window only: notifications, the clipboard,
-  opening links, window focus, and the app commands of the `beluga` plugin (`CLIENT_COMMANDS`).
-  None of the app's own commands, no file system, no shell. Any other address the window is sent to
-  opens in your browser instead, without IPC.
-- **The approval is in Rust, not the page.** The page can only ask (`device_run`, `device_file`,
-  `device_screenshot`). Each one opens a window of the app's own, from the app's bundled files, and
-  waits there. Only that window can answer: its answer is an app command the server's origin can't
-  call, and it is checked against the window that is asking. A page that calls the device commands
-  directly, with any arguments, still gets the prompt.
-- **What you approve is what runs.** The window shows the exact command with its folder and time
-  limit, or the file's full path (where a link leads) and size, read before anything else is, or
-  that a screenshot of your screens goes to the server. Deny has the focus; Escape, closing the
-  window or 25 seconds without an answer deny. One prompt at a time; there is no "allow for the
-  session" and no trust level.
-- **Secrets are refused twice.** The server refuses commands, folders and files that touch `.env`
-  files, keys, `.ssh`, `.aws` and other credential stores; the app refuses them again (and
-  `~/.beluga`), also through a link with an innocent name, before you are asked.
-- **Bounded.** Commands run in your login shell with no input, in their own process group, which
-  is stopped after the time limit (120 s, at most 600 s); each output stream comes back cut at
-  64 KB. Files over 512 MB are refused. Only the app connected to a server answers at all: Run
-  Beluga here refuses every device request.
-- **A compromised server can only ask.** Whoever controls the server (or its page) can make
-  requests and show you a misleading reason, but can't approve one, can't change what the prompt
-  shows, and can't reach anything on the client without you. Read the command, not the reason.
-- **Where things land.** Files and screenshots are uploaded to the server's `~/.beluga/uploads`
-  over the page's own signed-in https session; the server takes a reported path only inside that
-  folder.
-
 ## OpenCode runs
 
 OpenCode asks before each step it takes, the way Claude Code does, once Beluga has told it to. For each run Beluga gives OpenCode settings that make every one of its permissions "ask", yours and each of its agents' (a "deny" of yours stays a deny). So every step comes to Beluga first and is checked by the same rules as Claude's, one step at a time.

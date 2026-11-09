@@ -39,27 +39,22 @@ afterEach(async () => {
   rmSync(webConfigPath(), { force: true });
 });
 
-/** A screen on the web port, signed in by its cookie: its raw socket (frames as they come). */
-async function screenIn(port: number, origin: string, cookie: string, hello: Record<string, unknown> = {}): Promise<{ ws: WebSocket; frames: Array<Record<string, unknown>>; send: (f: unknown) => void }> {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { origin, cookie } });
-  const frames: Array<Record<string, unknown>> = [];
-  ws.on('message', (raw) => frames.push(JSON.parse(raw.toString()) as Record<string, unknown>));
-  await new Promise((r) => ws.once('open', r));
-  const send = (f: unknown): void => ws.send(JSON.stringify(f));
-  send({ t: 'hello', token: WEB_HELLO_TOKEN, ipc: IPC_VERSION, kind: 'mac', version: '1', caps: [], ...hello });
-  await expect.poll(() => frames.some((f) => f.t === 'welcome')).toBe(true);
-  return { ws, frames, send };
-}
-
 /** A daemon, a browser let in, and that browser's raw socket (frames as they come). */
-async function browserIn(hello: Record<string, unknown> = {}): Promise<{ d: RunningDaemon; ws: WebSocket; frames: Array<Record<string, unknown>>; send: (f: unknown) => void; port: number; cookie: string; origin: string }> {
+async function browserIn(): Promise<{ d: RunningDaemon; ws: WebSocket; frames: Array<Record<string, unknown>>; send: (f: unknown) => void; port: number; cookie: string; origin: string }> {
   const d = await startDaemon(parseConfig(['--no-agent', '--tunnel', 'none', '--name', 'kay']), { version: '1.0.0', keepAlive: true, web: { port: 0, root: builtUi() } });
   daemons.push(d);
   const port = Number(new URL(d.webUrl!).port);
   const origin = `http://127.0.0.1:${port}`;
   const joined = await post(port, '/join', JSON.stringify({ secret: d.web.sessions.link(d.webUrl!).url.split('#')[1] }), { origin });
   const cookie = String(joined.headers['set-cookie']?.[0]).split(';')[0]!;
-  return { d, port, cookie, origin, ...(await screenIn(port, origin, cookie, hello)) };
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { origin, cookie } });
+  const frames: Array<Record<string, unknown>> = [];
+  ws.on('message', (raw) => frames.push(JSON.parse(raw.toString()) as Record<string, unknown>));
+  await new Promise((r) => ws.once('open', r));
+  const send = (f: unknown): void => ws.send(JSON.stringify(f));
+  send({ t: 'hello', token: WEB_HELLO_TOKEN, ipc: IPC_VERSION, kind: 'mac', version: '1', caps: [] });
+  await expect.poll(() => frames.some((f) => f.t === 'welcome')).toBe(true);
+  return { d, ws, frames, send, port, cookie, origin };
 }
 const resultOf = (frames: Array<Record<string, unknown>>, id: string) => frames.find((f) => f.t === 'result' && f.id === id);
 
@@ -77,18 +72,6 @@ describe('a browser can use Beluga but not decide who gets in', () => {
   it('is a web screen whatever its hello says', async () => {
     const { d, ws } = await browserIn();
     expect(d.server.clients.list().map((c) => c.kind)).toEqual(['web']);
-    ws.close();
-  });
-
-  it('keeps the desktop app as a client a remote-app, and has it show the notifications (BLG-66)', async () => {
-    const { d, ws, port, origin, cookie } = await browserIn({ kind: 'remote-app', caps: ['notify'] });
-    const browser = await screenIn(port, origin, cookie, { caps: ['notify'] });
-    expect(d.server.clients.list().map((c) => c.kind).sort()).toEqual(['remote-app', 'web']);
-    // The browser is the more recent screen; the app still shows the notifications.
-    const web = d.server.clients.list().find((c) => c.kind === 'web')!;
-    web.lastActive = Date.now() + 60_000;
-    expect(d.server.clients.pickNotifier()?.kind).toBe('remote-app');
-    browser.ws.close();
     ws.close();
   });
 });
@@ -149,7 +132,7 @@ describe('the served app', () => {
     const index = await get(port, '/', { cookie });
     const csp = String(index.headers['content-security-policy']);
     expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'");
-    expect(csp).toContain(`connect-src 'self' ws://127.0.0.1:${port} ipc: http://ipc.localhost`);
+    expect(csp).toContain(`connect-src 'self' ws://127.0.0.1:${port}`);
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(String((await get(port, '/assets/index-Ab12Cd34.js', { cookie })).headers['cache-control'])).toMatch(/^private,/);

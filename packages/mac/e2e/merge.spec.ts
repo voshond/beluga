@@ -141,11 +141,9 @@ test('Merge on GitHub: live checks, the ways to merge, GitHub saying no, then Me
     const gh = readGh();
     writeGh({ prs: { 'add-auth': openPr({ statusCheckRollup: passed(), reviewDecision: 'APPROVED' }) }, merges: gh.merges });
     await sheet.getByRole('button', { name: 'Refresh status' }).click();
-    // Merge When Checks Pass is still armed: once the checks pass Beluga may merge before the click does.
-    const merged = sheet.locator('[data-pr-state="MERGED"]');
-    await expect(merged.or(sheet.getByText('Checks passed')).first()).toBeVisible();
-    if (!(await merged.isVisible())) await merge.click({ timeout: 10_000 }).catch(() => undefined);
-    await expect(merged).toBeVisible();
+    await expect(sheet).toContainText('Checks passed');
+    await merge.click();
+    await expect(sheet.locator('[data-pr-state="MERGED"]')).toBeVisible();
     await expect(sheet.getByRole('button', { name: 'Archive Worktree' })).toBeVisible();
     await expect(sheet.getByRole('button', { name: 'Merge on GitHub' })).toHaveCount(0);
     expect(readGh().merges?.at(-1)).toEqual(['pr', 'merge', '7', '--squash']);

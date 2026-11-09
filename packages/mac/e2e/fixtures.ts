@@ -1,9 +1,6 @@
-import { readdirSync } from 'node:fs';
-import path from 'node:path';
 import { test as base } from '@playwright/test';
 import { slotHomes } from '../../../scripts/e2e-lock.mjs';
 import { type Demo, startDemo } from './daemon.js';
-import { NAVIGATOR_PLATFORMS, e2ePlatform } from './platform.js';
 
 export * from '@playwright/test';
 
@@ -76,24 +73,6 @@ export const test = base.extend<{ demo: Demo }, { demos: Demos; demoLinkMs: numb
   demo: [async ({ demos }, use, info) => use(await demos.for(info.file)), { auto: true, timeout: 120_000 }],
   context: async ({ context, demo }, use) => {
     await context.route('**/__beluga/endpoint', (route) => route.fulfill({ json: demo.endpoint }));
-    // The page's computer is the run's platform (e2e/platform.ts): the user agent is set in playwright.config.ts, this is the rest.
-    await context.addInitScript((platform: string) => Object.defineProperty(Navigator.prototype, 'platform', { get: () => platform }), NAVIGATOR_PLATFORMS[e2ePlatform()]);
     await use(context);
   },
 });
-
-/**
- * The demo's Your Mac folder (core/assistant/launch.ts): a temp folder in the daemon's own temp root
- * (daemon/temp-root.ts, beluga-run-demo-…) under the spec's daemon home, or right in its tmp.
- */
-export function demoAssistantFolder(): string {
-  const tmp = path.join(process.env.BELUGA_HOME!, 'tmp');
-  const assistantIn = (dir: string): string | undefined => {
-    const name = readdirSync(dir).find((n) => n.startsWith('beluga-demo-assistant-'));
-    return name ? path.join(dir, name) : undefined;
-  };
-  const roots = readdirSync(tmp).filter((n) => n.startsWith('beluga-run-')).map((n) => path.join(tmp, n));
-  const found = [tmp, ...roots].map(assistantIn).find(Boolean);
-  if (!found) throw new Error('the demo has no Your Mac folder');
-  return found;
-}

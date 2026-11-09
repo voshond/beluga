@@ -111,17 +111,6 @@ function belugaTool(name: string, input: Readonly<Record<string, unknown>>): Hum
       return both(str(input.app) ? `Looked at ${str(input.app)}` : 'Took a screenshot', 'Taking a screenshot');
     case 'device_info':
       return both('Looked at this Mac’s details', 'Looking at this Mac’s details');
-    case 'list_devices':
-      return both('Looked at your connected devices', 'Looking at your connected devices');
-    case 'run_on_device': {
-      const cmd = clip(str(input.command), 56);
-      const on = str(input.device) || 'your device';
-      return both(`Ran on ${on}${cmd ? `: ${cmd}` : ''}`, `Running on ${on}${cmd ? `: ${cmd}` : ''}`);
-    }
-    case 'get_device_file':
-      return both(`Got ${base(str(input.path)) || 'a file'} from ${str(input.device) || 'your device'}`, `Getting ${base(str(input.path)) || 'a file'} from ${str(input.device) || 'your device'}`);
-    case 'device_screenshot':
-      return both(`Took a screenshot of ${str(input.device) || 'your device'}`, `Taking a screenshot of ${str(input.device) || 'your device'}`);
     default:
       return undefined;
   }

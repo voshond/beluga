@@ -162,11 +162,9 @@ test('eight chats streaming: only the card an event is about draws again, and th
   // chat within 100 ms (their median), none past 150 ms: the click shows it at once, without waiting
   // on the daemon (ClientStore.openAhead). A median, as one switch can land behind a busy Mac's GC or
   // another process. (Still a development build: the shipped app is faster.)
-  // The budget is a Mac's; a Linux host runs headless Chromium without a GPU (i9arch: ~150 ms), so it gets twice that.
-  const budget = process.platform === 'darwin' ? { first: 300, median: 100, worst: 150 } : { first: 600, median: 200, worst: 400 };
-  expect(times[0], `first switch: ${times[0]} ms`).toBeLessThan(budget.first);
+  expect(times[0], `first switch: ${times[0]} ms`).toBeLessThan(300);
   const later = times.slice(1);
   const median = [...later].sort((a, b) => a - b)[Math.floor(later.length / 2)]!;
-  expect(median, `median switch: ${median} ms (${later.join(', ')})`).toBeLessThan(budget.median);
-  expect(Math.max(...later), `worst switch: ${later.join(', ')} ms`).toBeLessThan(budget.worst);
+  expect(median, `median switch: ${median} ms (${later.join(', ')})`).toBeLessThan(100);
+  expect(Math.max(...later), `worst switch: ${later.join(', ')} ms`).toBeLessThan(150);
 });

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { InvitationView } from '@beluga/net/mesh/views.js';
 import { Icon } from '../components/Icon.js';
 import { Avatar, Button, cx } from '../components/ui.js';
-import { native } from '../lib/boot.js';
+import { inApp } from '../lib/boot.js';
 import { copyText } from '../lib/copy.js';
 import { useApp, useBeluga } from '../lib/beluga.js';
 import { Sheet, useFlash } from '../dialogs/native/parts.js';
@@ -16,7 +16,7 @@ import { yourComputer } from '../lib/os-words.js';
 /** What's on the clipboard, if the window may read it (the app can; a browser may refuse). */
 async function clipboardText(): Promise<string> {
   try {
-    if (native('friendPaste')) {
+    if (inApp()) {
       const { readText } = await import('@tauri-apps/plugin-clipboard-manager');
       return (await readText()) ?? '';
     }

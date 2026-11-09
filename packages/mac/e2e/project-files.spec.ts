@@ -1,5 +1,4 @@
 import { expect, test, type Page } from './fixtures.js';
-import { MOD } from './platform.js';
 
 /**
  * A project's page has Files over its main folder: browse the tree, search names (a regular
@@ -23,7 +22,7 @@ test.beforeEach(async ({ page }) => {
 
 test('a project’s page browses and searches its main folder, and opens a file in full', async ({ page }, info) => {
   await openHome(page);
-  if (!(await panel(page).isVisible())) await page.keyboard.press(`${MOD}+Alt+0`);
+  if (!(await panel(page).isVisible())) await page.keyboard.press('ControlOrMeta+Alt+0');
   await tab(page, 'Files').click();
   const tree = panel(page).getByRole('tree', { name: 'Files' });
   await expect(tree.getByRole('treeitem', { name: 'README.md' })).toBeVisible();

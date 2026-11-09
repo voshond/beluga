@@ -8,7 +8,7 @@ set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tauri="$repo/packages/mac/src-tauri"
 id="io.github.kayraucklnc.beluga"
-opt="${BELUGA_APP_DIR:-$HOME/.local/opt/beluga-thin}"
+opt="${BELUGA_APP_DIR:-$HOME/.local/opt/beluga}"
 data="${XDG_DATA_HOME:-$HOME/.local/share}"
 icons="$data/icons/hicolor"
 apps="$data/applications"

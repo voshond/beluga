@@ -1,5 +1,4 @@
 import path from 'node:path';
-import { TEXT_END } from './platform.js';
 import { expect, test, type Page } from './fixtures.js';
 
 /**
@@ -40,7 +39,7 @@ test('query, script and command editors are colored; Tidy lays out SQL', async (
   await page.waitForTimeout(600);
   await shoot(page, measure, 'query-tidy');
   await q.click();
-  await page.keyboard.press(TEXT_END);
+  await page.keyboard.press('Meta+ArrowDown'); await page.keyboard.press('End');
   await page.keyboard.type(' -- typed');
   await expect(q).toHaveValue(/-- typed$/);
 
@@ -51,7 +50,7 @@ test('query, script and command editors are colored; Tidy lays out SQL', async (
   await script.getByRole('tab', { name: 'Its own script' }).click();
   const code = script.getByRole('textbox', { name: 'Script' });
   await code.click();
-  await page.keyboard.press(TEXT_END);
+  await page.keyboard.press('Meta+End');
   await page.keyboard.type('\nfor i in range(3):\n');
   await page.keyboard.press('Tab');
   await page.keyboard.type('print(f"run {i}", os.environ.get("SENTINEL_PREVIOUS"))  # a comment');

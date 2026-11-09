@@ -1,6 +1,6 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { demoAssistantFolder, expect, test, type Page } from './fixtures.js';
+import { expect, test, type Page } from './fixtures.js';
 
 /**
  * The search field at the top of the sidebar (BLG-67): chats at once, messages below them; Enter
@@ -46,7 +46,8 @@ test('a word in a message opens its chat at that message', async ({ page }) => {
   await page.goto('/');
   await sidebar(page).getByText('Your Mac', { exact: true }).click();
   await page.getByRole('button', { name: 'New chat with Your Mac' }).click();
-  const dir = demoAssistantFolder();
+  const tmp = path.join(process.env.BELUGA_HOME!, 'tmp');
+  const dir = path.join(tmp, readdirSync(tmp).find((n) => n.startsWith('beluga-demo-assistant-'))!);
   let chat = '';
   await expect.poll(() => (chat = (JSON.parse(readFileSync(path.join(dir, 'chats.json'), 'utf8')) as { active: string }).active)).not.toBe('main');
   const channel = `mac:assistant:${chat}`;

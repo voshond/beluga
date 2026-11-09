@@ -4,7 +4,6 @@ import type { RoomBridge, SetupTools } from './types.js';
 import { isFullPath } from '../core/home-path.js';
 import { type DialogueTurnTools, endDialogueToolDef } from './dialogue-tools.js';
 import { createGatewayToolDefs } from './gateway-tools.js';
-import { createDeviceToolDefs } from './device-tools.js';
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }>; isError?: boolean };
 
@@ -155,5 +154,5 @@ export function setProjectSetupToolDef(setup: SetupTools) {
 
 /** The Beluga tools for one run: the room's, plus continue_in_worktree in a main folder, plus set_project_setup in a worktree, plus end_dialogue in a dialogue's turn. */
 export function createRoomTools(bridge: RoomBridge, move?: (task: string) => Promise<string>, setup?: SetupTools, dialogue?: DialogueTurnTools) {
-  return toolSuite({ name: 'beluga', version: '0.1.0', tools: [...createRoomToolDefs(bridge), ...createGatewayToolDefs(bridge), ...createDeviceToolDefs(bridge), ...(move ? [continueInWorktreeToolDef(move)] : []), ...(setup ? [setProjectSetupToolDef(setup)] : []), ...(dialogue ? [endDialogueToolDef(dialogue)] : [])] });
+  return toolSuite({ name: 'beluga', version: '0.1.0', tools: [...createRoomToolDefs(bridge), ...createGatewayToolDefs(bridge), ...(move ? [continueInWorktreeToolDef(move)] : []), ...(setup ? [setProjectSetupToolDef(setup)] : []), ...(dialogue ? [endDialogueToolDef(dialogue)] : [])] });
 }

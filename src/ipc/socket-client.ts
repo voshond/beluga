@@ -6,7 +6,6 @@ import type { PtyLink } from '../terminal/emulator.js';
 import type { Args, Method } from './api.js';
 import { type ApiProxy, type ClientKind, type BelugaClient, type HelloKind, type PhoneMirror, type PhoneMirrorStatus, type PhoneTouchData, type PhoneVideoPiece, apiProxy } from './client.js';
 import type { Result } from './handlers.js';
-import type { DeviceOffer, DeviceRequestFrame, DeviceResult } from '../shared/devices.js';
 import { type Cap, type ClientFrame, type DaemonFrame, IPC_VERSION, encodeFrame, parseDaemonFrame } from './protocol.js';
 
 /** The parts of the standard WebSocket we use (the browser's, or Node's global one). */
@@ -30,8 +29,6 @@ export interface SocketClientOptions {
   readonly version: string;
   readonly launchDir?: string;
   readonly caps?: Capabilities;
-  /** A remote app offering its own machine to the server's agents, and what does each request (lib/device-bridge.ts). */
-  readonly device?: { readonly offer: DeviceOffer; readonly handle: (request: DeviceRequestFrame) => Promise<DeviceResult> };
   /** Make the socket (default: the global WebSocket). */
   readonly connect?: (url: string) => SocketLike;
   /** Give up waiting for the daemon's welcome after this long. */
@@ -229,7 +226,7 @@ export class SocketClient implements BelugaClient {
         socket.close();
       }, opts.timeoutMs ?? 10_000);
       socket.onopen = () => {
-        const hello: ClientFrame = { t: 'hello', token: opts.token, ipc: IPC_VERSION, kind: opts.kind, version: opts.version, caps: Object.keys(opts.caps ?? {}) as Cap[], ...(opts.launchDir ? { launchDir: opts.launchDir } : {}), ...(opts.device ? { device: { ...opts.device.offer, caps: [...opts.device.offer.caps] } } : {}) };
+        const hello: ClientFrame = { t: 'hello', token: opts.token, ipc: IPC_VERSION, kind: opts.kind, version: opts.version, caps: Object.keys(opts.caps ?? {}) as Cap[], ...(opts.launchDir ? { launchDir: opts.launchDir } : {}) };
         socket.send(encodeFrame(hello));
       };
       socket.onmessage = (ev) => {
@@ -358,9 +355,6 @@ export class SocketClient implements BelugaClient {
       case 'cap_call':
         void this.runCap(frame.id, frame.cap, frame.args);
         return;
-      case 'device_request':
-        void this.runDevice(frame);
-        return;
       case 'term_data':
         this.terms.get(frame.term)?.data(frame.data);
         return;
@@ -402,14 +396,6 @@ export class SocketClient implements BelugaClient {
     } catch (err) {
       this.send({ t: 'cap_result', id, ok: false, error: err instanceof Error ? err.message : String(err) });
     }
-  }
-
-  private async runDevice(request: DeviceRequestFrame): Promise<void> {
-    const handle = this.opts.device?.handle;
-    const result: DeviceResult = handle
-      ? await handle(request).catch((err: Error) => ({ outcome: 'error' as const, error: err instanceof Error ? err.message : String(err) }))
-      : { outcome: 'error', error: "This screen doesn't offer its machine" };
-    this.send({ t: 'device_result', id: request.id, ...result });
   }
 
   private ended(reason: string): void {

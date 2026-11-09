@@ -1,5 +1,4 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { appInvoke, native } from './boot-mode.js';
 import { getPrefs, subscribePrefs } from './prefs.js';
 import { nativeMenuBar } from './window-frame.js';
 import { type Bindings, type KeyPress, bindingsOf, chordOfAccel, keysLabel, menuAccel, menuKeys, pressed } from './shortcuts-model.js';
@@ -88,7 +87,7 @@ export const belugaHas = (chord: string): boolean => Object.values(getBindings()
 let sentMenu = '';
 
 function sendMenuKeys(): void {
-  if (!native('menuKeys') || !nativeMenuBar()) return;
+  if (!nativeMenuBar()) return;
   // Close Window is the menu's own item (menu.rs), with ⌘W unless the terminal has it.
   const keys: Record<string, string | null> = { ...menuKeys(getBindings()), 'close-window': 'CmdOrCtrl+W' };
   const taken = new Set([...terminalChords].map(menuAccel).filter(Boolean));
@@ -98,7 +97,7 @@ function sendMenuKeys(): void {
   const json = JSON.stringify(out);
   if (json === sentMenu) return;
   sentMenu = json;
-  void appInvoke('set_menu_keys', { keys: out }).catch(() => (sentMenu = ''));
+  void import('@tauri-apps/api/core').then(({ invoke }) => invoke('set_menu_keys', { keys: out })).catch(() => (sentMenu = ''));
 }
 
 /** Mounted once (App): the menu bar shows your keys, and follows when you change them. */

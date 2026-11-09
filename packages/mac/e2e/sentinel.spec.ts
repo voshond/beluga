@@ -197,17 +197,16 @@ test('a webhook: its URL with Copy, the signature, Rotate Secret asks first', as
   await expect(url).toHaveValue(/\/[0-9a-f]{64}$/);
 });
 
-test('a recipe: the eleven to start from, Nightly tests made with the sentinel that fixes it, turned on', async ({ page }) => {
+test('a recipe: the twelve to start from, Nightly tests made with the sentinel that fixes it, turned on', async ({ page }) => {
   await openList(page);
   const before = await main(page).locator('[data-sentinel]').count();
   await main(page).getByRole('button', { name: 'New Sentinel' }).first().click();
   const sheet = page.getByRole('dialog', { name: 'New Sentinel' });
   await sheet.getByRole('tab', { name: /Recipe/ }).click();
   const recipes = sheet.getByRole('list', { name: 'Recipes', exact: true });
-  // Eleven since the Stripe recipes went (#8).
-  await expect(recipes.getByRole('listitem')).toHaveCount(11);
-  // And five that keep numbers, apart (Stripe revenue went with the rest of Stripe).
-  await expect(sheet.getByRole('list', { name: 'Keep the numbers' }).getByRole('listitem')).toHaveCount(5);
+  await expect(recipes.getByRole('listitem')).toHaveCount(12);
+  // And six that keep numbers, apart.
+  await expect(sheet.getByRole('list', { name: 'Keep the numbers' }).getByRole('listitem')).toHaveCount(6);
   await expect(sheet.locator('[data-recipe="site-speed"]')).toContainText('Every 3 hours');
   await expect(recipes.locator('[data-recipe="fix-and-ship"]')).toContainText('When Sentry sees a new issue');
   await expect(recipes.locator('[data-recipe="review-new-prs"]')).toContainText('When a pull request opens');

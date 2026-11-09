@@ -440,9 +440,3 @@
     background: color-mix(in srgb, var(--accent) 18%, transparent);
   }
 }
-
-.mono {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  user-select: text;
-}

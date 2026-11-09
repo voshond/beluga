@@ -11,9 +11,7 @@ import {
   listeners,
   portFor,
   processesOf,
-  parsePsEnv,
   processesTagged,
-  psEnvArgs,
   stopRun,
   readLock,
   releaseLock,
@@ -51,25 +49,6 @@ afterEach(() => {
       c.kill('SIGKILL');
     }
   }
-});
-
-describe('ps with environments, on macOS and Linux', () => {
-  it('asks each ps in its own words (procps refuses -x with -E)', () => {
-    expect(psEnvArgs('darwin')).toEqual(['-axwwE', '-o', 'pid=,pgid=,command=']);
-    expect(psEnvArgs('linux')).toEqual(['axwwe', '-o', 'pid=,pgid=,command=']);
-  });
-
-  it('reads both outputs the same way, and finds the tagged ones', () => {
-    const mac = '  501   501 /usr/bin/node vite --port 14834 BELUGA_E2E_RUN=r1 HOME=/Users/me\n  502   501 node fixtures.ts PATH=/bin BELUGA_E2E_RUN=r1\n';
-    const linux = '      1       1 /usr/lib/systemd/systemd --switched-root\n   4021    4021 node vite --port 14834 BELUGA_E2E_RUN=r12 HOME=/home/me\n   4022    4021 node fixtures.ts BELUGA_E2E_RUN=r1\nerror: nothing\n';
-    expect(parsePsEnv(mac)).toEqual([
-      { pid: 501, pgid: 501, line: '/usr/bin/node vite --port 14834 BELUGA_E2E_RUN=r1 HOME=/Users/me' },
-      { pid: 502, pgid: 501, line: 'node fixtures.ts PATH=/bin BELUGA_E2E_RUN=r1' },
-    ]);
-    expect(processesTagged('BELUGA_E2E_RUN', 'r1', parsePsEnv(mac))).toEqual([{ pid: 501, pgid: 501 }, { pid: 502, pgid: 501 }]);
-    expect(parsePsEnv(linux).map((r) => r.pid)).toEqual([1, 4021, 4022]);
-    expect(processesTagged('BELUGA_E2E_RUN', 'r1', parsePsEnv(linux))).toEqual([{ pid: 4022, pgid: 4021 }]);
-  });
 });
 
 // Not on Windows: the Mac app’s e2e tooling (ps, process groups).
@@ -117,25 +96,6 @@ describe.skipIf(process.platform === 'win32')('names, ports and homes', () => {
   });
 });
 
-describe('ps with environments, on macOS and Linux', () => {
-  it('asks each ps in its own words (procps refuses -x with -E)', () => {
-    expect(psEnvArgs('darwin')).toEqual(['-axwwE', '-o', 'pid=,pgid=,command=']);
-    expect(psEnvArgs('linux')).toEqual(['axwwe', '-o', 'pid=,pgid=,command=']);
-  });
-
-  it('reads both outputs the same way, and finds the tagged ones', () => {
-    const mac = '  501   501 /usr/bin/node vite --port 14834 BELUGA_E2E_RUN=r1 HOME=/Users/me\n  502   501 node fixtures.ts PATH=/bin BELUGA_E2E_RUN=r1\n';
-    const linux = '      1       1 /usr/lib/systemd/systemd --switched-root\n   4021    4021 node vite --port 14834 BELUGA_E2E_RUN=r12 HOME=/home/me\n   4022    4021 node fixtures.ts BELUGA_E2E_RUN=r1\nerror: nothing\n';
-    expect(parsePsEnv(mac)).toEqual([
-      { pid: 501, pgid: 501, line: '/usr/bin/node vite --port 14834 BELUGA_E2E_RUN=r1 HOME=/Users/me' },
-      { pid: 502, pgid: 501, line: 'node fixtures.ts PATH=/bin BELUGA_E2E_RUN=r1' },
-    ]);
-    expect(processesTagged('BELUGA_E2E_RUN', 'r1', parsePsEnv(mac))).toEqual([{ pid: 501, pgid: 501 }, { pid: 502, pgid: 501 }]);
-    expect(parsePsEnv(linux).map((r) => r.pid)).toEqual([1, 4021, 4022]);
-    expect(processesTagged('BELUGA_E2E_RUN', 'r1', parsePsEnv(linux))).toEqual([{ pid: 4022, pgid: 4021 }]);
-  });
-});
-
 // Not on Windows: the Mac app’s e2e tooling (ps, process groups).
 
 describe.skipIf(process.platform === 'win32')('what a run costs', () => {
@@ -161,25 +121,6 @@ describe.skipIf(process.platform === 'win32')('what a run costs', () => {
     expect(meter.peak.bytes).toBe(150);
     expect(meter.peak.busiest).toEqual(['1 1.0', '4 0.5']);
     expect(usageLine(meter.peak, 150_000, 14)).toBe('e2e took 2.5 min; at most 1.5 of 14 cores and 0.00 GB of memory (busiest then: 1 1.0, 4 0.5)');
-  });
-});
-
-describe('ps with environments, on macOS and Linux', () => {
-  it('asks each ps in its own words (procps refuses -x with -E)', () => {
-    expect(psEnvArgs('darwin')).toEqual(['-axwwE', '-o', 'pid=,pgid=,command=']);
-    expect(psEnvArgs('linux')).toEqual(['axwwe', '-o', 'pid=,pgid=,command=']);
-  });
-
-  it('reads both outputs the same way, and finds the tagged ones', () => {
-    const mac = '  501   501 /usr/bin/node vite --port 14834 BELUGA_E2E_RUN=r1 HOME=/Users/me\n  502   501 node fixtures.ts PATH=/bin BELUGA_E2E_RUN=r1\n';
-    const linux = '      1       1 /usr/lib/systemd/systemd --switched-root\n   4021    4021 node vite --port 14834 BELUGA_E2E_RUN=r12 HOME=/home/me\n   4022    4021 node fixtures.ts BELUGA_E2E_RUN=r1\nerror: nothing\n';
-    expect(parsePsEnv(mac)).toEqual([
-      { pid: 501, pgid: 501, line: '/usr/bin/node vite --port 14834 BELUGA_E2E_RUN=r1 HOME=/Users/me' },
-      { pid: 502, pgid: 501, line: 'node fixtures.ts PATH=/bin BELUGA_E2E_RUN=r1' },
-    ]);
-    expect(processesTagged('BELUGA_E2E_RUN', 'r1', parsePsEnv(mac))).toEqual([{ pid: 501, pgid: 501 }, { pid: 502, pgid: 501 }]);
-    expect(parsePsEnv(linux).map((r) => r.pid)).toEqual([1, 4021, 4022]);
-    expect(processesTagged('BELUGA_E2E_RUN', 'r1', parsePsEnv(linux))).toEqual([{ pid: 4022, pgid: 4021 }]);
   });
 });
 
@@ -228,25 +169,6 @@ describe.skipIf(process.platform === 'win32')('the machine-wide lock', () => {
   });
 });
 
-describe('ps with environments, on macOS and Linux', () => {
-  it('asks each ps in its own words (procps refuses -x with -E)', () => {
-    expect(psEnvArgs('darwin')).toEqual(['-axwwE', '-o', 'pid=,pgid=,command=']);
-    expect(psEnvArgs('linux')).toEqual(['axwwe', '-o', 'pid=,pgid=,command=']);
-  });
-
-  it('reads both outputs the same way, and finds the tagged ones', () => {
-    const mac = '  501   501 /usr/bin/node vite --port 14834 BELUGA_E2E_RUN=r1 HOME=/Users/me\n  502   501 node fixtures.ts PATH=/bin BELUGA_E2E_RUN=r1\n';
-    const linux = '      1       1 /usr/lib/systemd/systemd --switched-root\n   4021    4021 node vite --port 14834 BELUGA_E2E_RUN=r12 HOME=/home/me\n   4022    4021 node fixtures.ts BELUGA_E2E_RUN=r1\nerror: nothing\n';
-    expect(parsePsEnv(mac)).toEqual([
-      { pid: 501, pgid: 501, line: '/usr/bin/node vite --port 14834 BELUGA_E2E_RUN=r1 HOME=/Users/me' },
-      { pid: 502, pgid: 501, line: 'node fixtures.ts PATH=/bin BELUGA_E2E_RUN=r1' },
-    ]);
-    expect(processesTagged('BELUGA_E2E_RUN', 'r1', parsePsEnv(mac))).toEqual([{ pid: 501, pgid: 501 }, { pid: 502, pgid: 501 }]);
-    expect(parsePsEnv(linux).map((r) => r.pid)).toEqual([1, 4021, 4022]);
-    expect(processesTagged('BELUGA_E2E_RUN', 'r1', parsePsEnv(linux))).toEqual([{ pid: 4022, pgid: 4021 }]);
-  });
-});
-
 // Not on Windows: the Mac app’s e2e tooling (ps, process groups).
 
 describe.skipIf(process.platform === 'win32')('teardown: nothing a run started survives it', () => {
@@ -277,32 +199,13 @@ describe.skipIf(process.platform === 'win32')('teardown: nothing a run started s
     expect(groupLeft).toBe(false);
   });
 
-  it.runIf(process.platform === 'darwin' || process.platform === 'linux')('finds processes by the run id in their environment', async () => {
+  it.runIf(process.platform === 'darwin')('finds processes by the run id in their environment', async () => {
     const id = `t-${Date.now()}`;
     const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { env: { ...process.env, KLAUD_E2E_RUN: id }, stdio: 'ignore', detached: true });
     children.push(child);
     await new Promise((r) => setTimeout(r, 200));
     expect(processesTagged('KLAUD_E2E_RUN', id).map((p) => p.pid)).toContain(child.pid);
     expect(processesTagged('KLAUD_E2E_RUN', `${id}x`)).toEqual([]);
-  });
-});
-
-describe('ps with environments, on macOS and Linux', () => {
-  it('asks each ps in its own words (procps refuses -x with -E)', () => {
-    expect(psEnvArgs('darwin')).toEqual(['-axwwE', '-o', 'pid=,pgid=,command=']);
-    expect(psEnvArgs('linux')).toEqual(['axwwe', '-o', 'pid=,pgid=,command=']);
-  });
-
-  it('reads both outputs the same way, and finds the tagged ones', () => {
-    const mac = '  501   501 /usr/bin/node vite --port 14834 BELUGA_E2E_RUN=r1 HOME=/Users/me\n  502   501 node fixtures.ts PATH=/bin BELUGA_E2E_RUN=r1\n';
-    const linux = '      1       1 /usr/lib/systemd/systemd --switched-root\n   4021    4021 node vite --port 14834 BELUGA_E2E_RUN=r12 HOME=/home/me\n   4022    4021 node fixtures.ts BELUGA_E2E_RUN=r1\nerror: nothing\n';
-    expect(parsePsEnv(mac)).toEqual([
-      { pid: 501, pgid: 501, line: '/usr/bin/node vite --port 14834 BELUGA_E2E_RUN=r1 HOME=/Users/me' },
-      { pid: 502, pgid: 501, line: 'node fixtures.ts PATH=/bin BELUGA_E2E_RUN=r1' },
-    ]);
-    expect(processesTagged('BELUGA_E2E_RUN', 'r1', parsePsEnv(mac))).toEqual([{ pid: 501, pgid: 501 }, { pid: 502, pgid: 501 }]);
-    expect(parsePsEnv(linux).map((r) => r.pid)).toEqual([1, 4021, 4022]);
-    expect(processesTagged('BELUGA_E2E_RUN', 'r1', parsePsEnv(linux))).toEqual([{ pid: 4022, pgid: 4021 }]);
   });
 });
 
@@ -340,25 +243,6 @@ describe.skipIf(process.platform === 'win32')('a stale lock’s cleanup only sto
     expect(alive(server.pid!)).toBe(true);
     expect(listeners(port)).toContain(server.pid);
     if (process.platform === 'darwin') expect(alive(left.pid!)).toBe(false);
-  });
-});
-
-describe('ps with environments, on macOS and Linux', () => {
-  it('asks each ps in its own words (procps refuses -x with -E)', () => {
-    expect(psEnvArgs('darwin')).toEqual(['-axwwE', '-o', 'pid=,pgid=,command=']);
-    expect(psEnvArgs('linux')).toEqual(['axwwe', '-o', 'pid=,pgid=,command=']);
-  });
-
-  it('reads both outputs the same way, and finds the tagged ones', () => {
-    const mac = '  501   501 /usr/bin/node vite --port 14834 BELUGA_E2E_RUN=r1 HOME=/Users/me\n  502   501 node fixtures.ts PATH=/bin BELUGA_E2E_RUN=r1\n';
-    const linux = '      1       1 /usr/lib/systemd/systemd --switched-root\n   4021    4021 node vite --port 14834 BELUGA_E2E_RUN=r12 HOME=/home/me\n   4022    4021 node fixtures.ts BELUGA_E2E_RUN=r1\nerror: nothing\n';
-    expect(parsePsEnv(mac)).toEqual([
-      { pid: 501, pgid: 501, line: '/usr/bin/node vite --port 14834 BELUGA_E2E_RUN=r1 HOME=/Users/me' },
-      { pid: 502, pgid: 501, line: 'node fixtures.ts PATH=/bin BELUGA_E2E_RUN=r1' },
-    ]);
-    expect(processesTagged('BELUGA_E2E_RUN', 'r1', parsePsEnv(mac))).toEqual([{ pid: 501, pgid: 501 }, { pid: 502, pgid: 501 }]);
-    expect(parsePsEnv(linux).map((r) => r.pid)).toEqual([1, 4021, 4022]);
-    expect(processesTagged('BELUGA_E2E_RUN', 'r1', parsePsEnv(linux))).toEqual([{ pid: 4022, pgid: 4021 }]);
   });
 });
 
