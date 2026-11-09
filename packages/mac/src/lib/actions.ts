@@ -21,6 +21,7 @@ import { openSheet } from './sheets.js';
 import { askBeforeWork, asksBeforeWork } from './work-confirm.js';
 import { mergeNeedsWarning } from './plan-merge.js';
 import { isPlanAction, runPlanAction } from './plan-task.js';
+import { openFolderThere } from './remote-open.js';
 
 export interface Actions {
   /** Do what a clicked row, button or card means (the shared actions, some done this window's way). */
@@ -97,7 +98,8 @@ export function makeActions(client: SocketClient, ui: UiStore): Actions {
       if (kind === 'group') newGroupFor(projectId);
       else actions.run(kind === 'worktree' ? { type: 'new_worktree', projectId } : { type: 'new_chat', projectId });
     },
-    openFolder: (dir) => void client.api.local.openFolder(dir),
+    // On a computer's page: over Remote-SSH, else its path copied (BLG-852).
+    openFolder: (dir) => void openFolderThere(client, dir),
     runUiAction: (a) => actions.run(a),
     write: () => undefined,
   };

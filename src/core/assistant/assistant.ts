@@ -575,7 +575,7 @@ export function listWork(store: Store): string {
   const repoName = (id: string): string => state.projects.find((p) => p.id === id)?.name ?? id;
   const shared = Object.keys(state.board.projects).filter((id) => reposOf(state.board, id).length > 1);
   if (shared.length) lines.push('', 'Boards covering several repos:', ...shared.map((id) => `  - "${boardName(state.board, id, (r) => state.projects.find((p) => p.id === r)?.name)}" (keys ${state.board.projects[id]!.prefix}-…): ${reposOf(state.board, id).map(repoName).join(', ')}`));
-  const plans = state.plans.plans.filter((p) => p.status !== 'done');
+  const plans = state.plans.plans.filter((p) => p.status !== 'done' && !p.movedTo);
   if (plans.length) lines.push('', 'Plans:', ...plans.slice(0, 20).map((p) => `  - "${planTitle(p)}" · id ${p.id} · ${p.status}${p.paused ? ', paused' : ''}`));
   const running = [...busy].filter((c) => c.startsWith('ws:')).length;
   lines.push('', running ? `${running} conversation${running === 1 ? '' : 's'} with an agent working now.` : 'Nothing is running right now.');

@@ -6,7 +6,7 @@ import { Field, FormSheet, TextInput } from '../../components/FormSheet.js';
 import { Icon } from '../../components/Icon.js';
 import { Button, cx } from '../../components/ui.js';
 import { tildePath } from '../../layout/outside-model.js';
-import { useApi, useApp } from '../../lib/beluga.js';
+import { useApi, useApp, useMachine } from '../../lib/beluga.js';
 import { pickFolders } from '../../lib/projects.js';
 import { agoText } from '../../views/project/home-model.js';
 import s from './import-conversation.module.css';
@@ -36,6 +36,8 @@ function whereIn(dir: string, cwd: string, home: string): string {
  */
 export function ImportConversationSheet({ projectId, close }: { projectId: string; close: () => void }) {
   const api = useApi();
+  // On a computer's page, its folders (BLG-793).
+  const machine = useMachine();
   const project = useApp((st) => st.projects.find((p) => p.id === projectId));
   const home = useApp((st) => st.home);
   const [dir, setDir] = useState<string>();
@@ -97,7 +99,7 @@ export function ImportConversationSheet({ projectId, close }: { projectId: strin
             variant="quiet"
             icon="folder"
             onClick={() =>
-              void pickFolders('Choose a folder Claude Code ran in').then((p) => {
+              void pickFolders('Choose a folder Claude Code ran in', { machine }).then((p) => {
                 if (p?.[0]) setDir(p[0]);
               })
             }

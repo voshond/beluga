@@ -204,9 +204,36 @@ pub fn busy_terminals_windows(procs: &[WinProc], daemon_pid: u32) -> usize {
         .count()
 }
 
+/// The app protocol a release speaks, from its latest.json's `ipc` (BLG-777): the update sheet
+/// asks the daemon which of your computers that version would leave unable to connect. A release
+/// from before `ipc` was written (or a number out of reason) says nothing, and nothing is warned.
+pub fn manifest_ipc(latest: &serde_json::Value) -> Option<u32> {
+    latest
+        .get("ipc")?
+        .as_u64()
+        .filter(|n| *n <= 1000)
+        .map(|n| n as u32)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_the_protocol_a_release_speaks() {
+        let with = serde_json::json!({ "version": "0.7.0", "ipc": 2, "platforms": {} });
+        assert_eq!(manifest_ipc(&with), Some(2));
+        let before = serde_json::json!({ "version": "0.6.2", "platforms": {} });
+        assert_eq!(manifest_ipc(&before), None);
+        for odd in [
+            serde_json::json!({ "ipc": "2" }),
+            serde_json::json!({ "ipc": -1 }),
+            serde_json::json!({ "ipc": 1.5 }),
+            serde_json::json!({ "ipc": 99999 }),
+        ] {
+            assert_eq!(manifest_ipc(&odd), None);
+        }
+    }
 
     fn win(pid: u32, ppid: u32, exe: &str) -> WinProc {
         WinProc {

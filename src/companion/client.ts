@@ -333,6 +333,8 @@ interface ClientEvents extends Record<string, unknown[]> {
   tun: [Extract<MacFrame, { t: 'tun_open' | 'tun_data' | 'tun_ack' | 'tun_close' }>];
   /** 1.18: the Mac took a piece of the screen's video. */
   vidAck: [Extract<MacFrame, { t: 'vid_ack' }>];
+  /** 1.46: your computers and where to dial each (BLG-809). */
+  computers: [Extract<MacFrame, { t: 'computers' }>];
   /** The link closed: its code (4002: a version this Mac or app doesn't answer; 4010: this phone was removed) and why. */
   close: [number, string];
 }
@@ -646,6 +648,8 @@ export class CompanionClient extends Emitter<ClientEvents> {
         return this.emit('req', f);
       case 'vid_ack':
         return this.emit('vidAck', f);
+      case 'computers':
+        return this.emit('computers', f);
       case 'tun_open':
       case 'tun_data':
       case 'tun_ack':

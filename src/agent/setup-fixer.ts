@@ -96,12 +96,12 @@ export async function fixRun(dir: string, failed: string, output: string, opts: 
  * A project's first new worktree, and its own files don't say how to set it up or run it: a model
  * looks (read-only) and says, for each one asked, a command or none. Undefined on any trouble.
  */
-export async function workOutScripts(dir: string, want: { setup: boolean; run: boolean }, opts: { complete: Complete; model?: string }): Promise<WorkedOutScripts | undefined> {
+export async function workOutScripts(dir: string, want: { setup: boolean; run: boolean; system?: string }, opts: { complete: Complete; model?: string }): Promise<WorkedOutScripts | undefined> {
   const parts = [want.setup && 'SETUP: the one command that installs what the project needs in a fresh checkout (dependencies, including those of sub-packages with their own manifest or lockfile, chained with &&), or none if nothing does', want.run && 'RUN: the one command that starts it for development (a dev server, the app, the CLI with no arguments), or none if it isn\'t something you run (a library, docs)'].filter(Boolean);
   if (!parts.length) return {};
   const said = await ask(
     dir,
-    `This project was just opened in a new git worktree. Work out:\n${parts.map((p) => `- ${p}`).join('\n')}`,
+    `This project was just opened in a new git worktree. Work out:\n${parts.map((p) => `- ${p}`).join('\n')}${want.system ? `\n\nIt runs on ${want.system}: pick commands that work on that system, with the tools it has.` : ''}`,
     `You work out the commands Beluga runs for a project: Setup once in every new git worktree, and Run when its Run button is pressed. ${LOOK} End with exactly one line for each asked: ${[want.setup && '\`SETUP: <one shell command>\` or \`SETUP: none\`', want.run && '\`RUN: <one shell command>\` or \`RUN: none\`'].filter(Boolean).join(', then ')}.`,
     opts,
   );

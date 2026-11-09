@@ -8,7 +8,7 @@ import { chatHref, convHref } from '../../components/Conv';
 import { answer, NeedButtons, NeedFace, plainOf, sendOwn } from '../../components/Needs';
 import { Sheet } from '../../components/Sheet';
 import { Card, Hairline, Press, Row, T } from '../../components/ui';
-import { useView } from '../../lib/hooks';
+import { useAllNeeds, useView } from '../../lib/hooks';
 import type { HomeView } from '../../lib/link/protocol';
 import { store } from '../../lib/store';
 import { color } from '../../lib/theme';
@@ -20,7 +20,11 @@ import { color } from '../../lib/theme';
 export default function Need() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const home = useView<HomeView>('home');
-  const n = home?.data.needsYou.find((x) => x.id === decodeURIComponent(id ?? ''));
+  // Your Mac's and every computer's (BLG-810): answering goes back where it came from.
+  const n = useAllNeeds(home?.data.needsYou).find((x) => x.id === decodeURIComponent(id ?? ''));
+  // One of your computers' (its conversations open over its link; its plans and sentinels, and Open on Mac, are your Mac's).
+  const on = n ? store.needOn(n.id) : undefined;
+  const opens = n?.topic && (!on || n.topic.startsWith('conv:')) ? n.topic : undefined;
   const [visible, setVisible] = useState(true);
   const [words, setWords] = useState('');
   const close = (then?: () => void) => {
@@ -45,19 +49,19 @@ export default function Need() {
             <NeedButtons item={n} onAnswer={(t) => act(t)} />
             <Card style={{ marginHorizontal: -4 }}>
               {always ? <Row first Icon={Always} tone="peach" label={always.label} sub="Don't ask again for this" onPress={() => act('plain')} chevron={false} /> : null}
-              {n.topic ? (
+              {opens ? (
                 <Row
                   first={!always}
-                  Icon={n.topic.startsWith('plan:') ? Workflow : n.topic.startsWith('sentinel:') ? Shield : MessageSquare}
+                  Icon={opens.startsWith('plan:') ? Workflow : opens.startsWith('sentinel:') ? Shield : MessageSquare}
                   tone="sky"
-                  label={n.topic.startsWith('plan:') ? 'Open the plan' : n.topic.startsWith('sentinel:') ? 'Open the sentinel' : 'Open the conversation'}
+                  label={opens.startsWith('plan:') ? 'Open the plan' : opens.startsWith('sentinel:') ? 'Open the sentinel' : 'Open the conversation'}
                   onPress={() => {
-                    const t = n.topic!;
-                    close(() => router.push(t.startsWith('plan:') ? `/plan/${t.slice(5)}` : t.startsWith('sentinel:') ? `/sentinel/${encodeURIComponent(t.slice(9))}` : t.startsWith('chat:') ? chatHref(t) : convHref(t)));
+                    const t = opens;
+                    close(() => router.push(t.startsWith('plan:') ? `/plan/${t.slice(5)}` : t.startsWith('sentinel:') ? `/sentinel/${encodeURIComponent(t.slice(9))}` : t.startsWith('chat:') ? chatHref(t) : (convHref(t, on) as never)));
                   }}
                 />
               ) : null}
-              <Row first={!always && !n.topic} Icon={Monitor} tone="plain" label="Open on your Mac" onPress={() => (void openOnMac(n.topic ? { topic: n.topic } : { need: n.id }), close())} chevron={false} />
+              {on ? null : <Row first={!always && !opens} Icon={Monitor} tone="plain" label="Open on your Mac" onPress={() => (void openOnMac(n.topic ? { topic: n.topic } : { need: n.id }), close())} chevron={false} />}
               <Row Icon={EyeOff} tone="plain" label="Dismiss" sub="Off your lists, here and on your Mac, without answering" onPress={() => (store.dismiss(n), close())} chevron={false} />
             </Card>
             {n.answer?.text ? (

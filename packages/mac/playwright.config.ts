@@ -19,7 +19,7 @@ const port = Number(process.env.E2E_PORT || portFor(worktree));
 process.env.E2E_WORKERS ||= String(workerCount());
 process.env.E2E_PORT = String(port);
 
-export default defineConfig({
+export default defineConfig<object, { demoLinkMs: number }>({
   testDir: 'e2e',
   timeout: 45_000,
   expect: { timeout: 10_000 },
@@ -39,7 +39,9 @@ export default defineConfig({
   },
   projects: [
     // The app through the dev server and per-file demo daemons (e2e/fixtures.ts).
-    { name: 'app', testIgnore: ['web/**'], use: { userAgent: pageUserAgent() } },
+    { name: 'app', testIgnore: ['web/**', 'remote/**'], use: { userAgent: pageUserAgent() } },
+    // Work on the demo's computer, 80 ms away (e2e/remote/, BLG-795): the main flows again, on a computer's page.
+    { name: 'remote', testMatch: /remote\/.*\.spec\.ts$/, use: { userAgent: pageUserAgent(), demoLinkMs: 80 } },
     // The real served build through the daemon's web port, joined by a link (e2e/web/, BLG-652): built once first.
     { name: 'web-build', testMatch: /web\/build\.setup\.ts$/ },
     { name: 'web', testMatch: /web\/.*\.spec\.ts$/, dependencies: ['web-build'], use: { baseURL: undefined, storageState: { cookies: [], origins: [] } } },

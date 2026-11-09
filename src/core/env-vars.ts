@@ -177,6 +177,8 @@ export class EnvVars {
   private kept: EnvFile;
   /** env.json's time and size when it was read or written here. */
   private stamp: string;
+  /** Told when the variables change (your secrets on your other computers follow them, machines/sync.ts). */
+  private readonly watchers = new Set<() => void>();
 
   constructor(private readonly deps: EnvVarsDeps) {
     this.stamp = stampOf(this.file);
@@ -230,6 +232,18 @@ export class EnvVars {
     const projects = Object.fromEntries(Object.entries(this.kept.projects).map(([root, p]) => [root, { keys: Object.keys(p.vars), dotenv: loadsDotenv(p) }]));
     const keys: EnvKeys = { global: Object.keys(this.kept.global), projects };
     this.deps.store.dispatch({ type: 'env_keys', keys });
+    for (const w of [...this.watchers]) w();
+  }
+
+  /** Follow changes to the variables (set here, or env.json changed on disk). */
+  watch(listener: () => void): () => void {
+    this.watchers.add(listener);
+    return () => void this.watchers.delete(listener);
+  }
+
+  /** Your own variables (no project), as they are now: names and values (only for your other computers' sync). */
+  globals(): Readonly<Record<string, string>> {
+    return { ...this.data.global };
   }
 
   /** Your variables (no project), or a project's. */

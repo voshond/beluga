@@ -21,7 +21,7 @@ import { Hello, Ready, Tour } from './Steps.js';
 import s from './onboarding.module.css';
 
 /** How lit the backdrop is on each step: bright for the welcome and the end, calm behind settings. */
-const ENERGY: Record<Step, number> = { hello: 1, yourAgents: 0.8, parallel: 0.9, agents: 0.9, tables: 0.9, friends: 0.9, sentinel: 0.9, uses: 0.9, archive: 0.9, look: 0.75, terminal: 0.7, fire: 0.7, setup: 0.65, screen: 0.6, accessibility: 0.6, disk: 0.6, automation: 0.6, popups: 0.6, phone: 0.7, ready: 1 };
+const ENERGY: Record<Step, number> = { hello: 1, yourAgents: 0.8, parallel: 0.9, agents: 0.9, tables: 0.9, machines: 0.9, friends: 0.9, sentinel: 0.9, uses: 0.9, archive: 0.9, look: 0.75, terminal: 0.7, fire: 0.7, setup: 0.65, screen: 0.6, accessibility: 0.6, disk: 0.6, automation: 0.6, popups: 0.6, phone: 0.7, ready: 1 };
 
 /** How long the app takes to settle into place as the wormhole clears (Shell.module.css, `arrive`). */
 const ARRIVE_S = 1.6;

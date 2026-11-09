@@ -6,6 +6,7 @@ import type { MenuKind } from '@beluga/ui/menus.js';
 import { onWindowActive, windowActive } from './window-active.js';
 import { SAVING_DRAW_MS, powerSaving } from './power.js';
 import type { SettingsPane } from './settings-search.js';
+import { WINDOW_UI_KEYS, scopedKey, splitUiPatch } from '../machines/pane-model.js';
 
 /**
  * This window's own UI state. It uses the shared shape (UiState) for everything the
@@ -54,13 +55,49 @@ type Listener = () => void;
 export class UiStore {
   private state: MacUi = { ...initialUi, palette: false, notices: false };
   private readonly listeners = new Set<Listener>();
+  /** A pane's (BLG-784): the window's parts read through, and the window's last state with ours on it. */
+  private seen?: { readonly window: MacUi; readonly own: MacUi; readonly merged: MacUi };
 
-  get = (): MacUi => this.state;
+  /**
+   * The window's own, or a page on one of your computers' (`outer`, the window's, set): that keeps the box's
+   * words, menus and the like for itself, and leaves the palette, Settings, the bell and the
+   * sidebar's to the window (machines/pane-model.ts WINDOW_UI_KEYS).
+   */
+  constructor(private readonly outer?: UiStore) {
+    outer?.subscribe(() => this.emit());
+  }
+
+  /** The window's own (this one, unless it's a pane's). */
+  get windowStore(): UiStore {
+    return this.outer ?? this;
+  }
+
+  get = (): MacUi => {
+    if (!this.outer) return this.state;
+    const win = this.outer.get();
+    if (this.seen?.window === win && this.seen.own === this.state) return this.seen.merged;
+    const merged = { ...this.state } as Record<string, unknown>;
+    for (const k of WINDOW_UI_KEYS) merged[k] = (win as unknown as Record<string, unknown>)[k];
+    this.seen = { window: win, own: this.state, merged: merged as unknown as MacUi };
+    return this.seen.merged;
+  };
 
   patch = (patch: Partial<MacUi>): void => {
-    this.state = { ...this.state, ...patch };
-    for (const l of [...this.listeners]) l();
+    if (!this.outer) {
+      this.state = { ...this.state, ...patch };
+      return this.emit();
+    }
+    const split = splitUiPatch(patch);
+    if (Object.keys(split.pane).length) {
+      this.state = { ...this.state, ...split.pane };
+      this.emit();
+    }
+    if (Object.keys(split.window).length) this.outer.patch(split.window);
   };
+
+  private emit(): void {
+    for (const l of [...this.listeners]) l();
+  }
 
   subscribe = (l: Listener): (() => void) => {
     this.listeners.add(l);
@@ -71,16 +108,51 @@ export class UiStore {
 }
 
 interface Beluga {
+  /** Whose state and calls the views here use: this Mac's daemon, or one of your computers'. */
   readonly client: SocketClient;
   readonly ui: UiStore;
+  /** The computer the views here are of (BLG-784); unset on this Mac. */
+  readonly machine?: string;
+  /** This window's own client (this Mac's daemon), wherever the views are. */
+  readonly home: SocketClient;
 }
 
 const Ctx = createContext<Beluga | null>(null);
 
 export function BelugaProvider({ client, children }: { client: SocketClient; children: ReactNode }) {
   const ui = useRef(new UiStore()).current;
-  const value = useMemo(() => ({ client, ui }), [client, ui]);
+  const value = useMemo(() => ({ client, ui, home: client }), [client, ui]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/**
+ * A page on one of your computers (BLG-784): the views inside draw with that computer's client
+ * and the pane's own UI state, while the window (its sidebar, sheets and history) stays this Mac's.
+ */
+export function MachineProvider({ machine, client, ui, children }: { machine: string; client: SocketClient; ui: UiStore; children: ReactNode }) {
+  const home = useBeluga().home;
+  const value = useMemo(() => ({ client, ui, machine, home }), [client, ui, machine, home]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/**
+ * Back to this Mac inside a computer's page: what's the window's own wherever you are (the bell,
+ * Search) draws with this Mac's state and the window's UI.
+ */
+export function AtHome({ children }: { children: ReactNode }) {
+  const b = useBeluga();
+  const value = useMemo(() => ({ client: b.home, ui: b.ui.windowStore, home: b.home }), [b.home, b.ui]);
+  return b.machine ? <Ctx.Provider value={value}>{children}</Ctx.Provider> : <>{children}</>;
+}
+
+/** The computer the views here are of; undefined on this Mac (and outside a provider). */
+export function useMachine(): string | undefined {
+  return useContext(Ctx)?.machine;
+}
+
+/** A window-wide memory's key for the computer the views here are of (machines/pane-model.ts scopedKey). */
+export function useScopedKey(key: string): string {
+  return scopedKey(useMachine(), key);
 }
 
 /** The same, or undefined outside a BelugaProvider (parts that also draw in previews and tests). */

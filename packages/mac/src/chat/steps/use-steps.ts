@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { StepRecord, StepSummary } from '@beluga/shared/steps.js';
-import { useApi } from '../../lib/beluga.js';
+import { useApi, useScopedKey } from '../../lib/beluga.js';
 import { useWindowActive } from '../../lib/window-active.js';
 import { beat, usePowerSaving } from '../../lib/power.js';
 
@@ -28,7 +28,8 @@ function remember(loaded: Loaded): void {
  */
 export function useAgentSteps(channel: string, itemId: string, running: boolean, change: string, enabled = true): { steps: readonly StepSummary[] | undefined; missing: boolean } {
   const api = useApi();
-  const key = `${channel}/${itemId}`;
+  // A card's steps as its computer has them (BLG-784).
+  const key = useScopedKey(`${channel}/${itemId}`);
   const [state, setState] = useState<Loaded>(() => seen.get(key) ?? { key: '', missing: false });
   const version = useRef<number | undefined>(seen.get(key)?.version);
   const busy = useRef(false);

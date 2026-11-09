@@ -194,7 +194,7 @@ const Message = memo(function Message({ m, place, dm, last, resend, me, nameOf, 
             {deliveryState ??
               (place.last || edited ? (
                 <div className={s.under}>
-                  {[edited, place.last ? time(m.ts) : null, place.last && dm && last && m.status === 'delivered' ? 'Delivered' : null]
+                  {[edited, place.last ? time(m.ts) : null, place.last && dm && last && m.status === 'seen' ? 'Seen' : place.last && dm && last && m.status === 'delivered' ? 'Delivered' : null]
                     .filter(Boolean)
                     .map((part, i) => (
                       <span key={i}>

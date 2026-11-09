@@ -1,3 +1,6 @@
+import { useRemoteAttention } from '../machines/remote-attention.js';
+import { machineClientOf } from '../machines/pane-clients.js';
+import { onMachine } from '../machines/pane-model.js';
 import * as Popover from '@radix-ui/react-popover';
 import { useEffect, useRef, useState } from 'react';
 import type { View } from '@beluga/core/store.js';
@@ -12,7 +15,7 @@ import { useActions } from '../lib/actions.js';
 import { ActionsContext, type ActionItem } from '../components/SpecMenu.js';
 import { copyText } from '../lib/copy.js';
 import { brandNotice } from '../lib/brand.js';
-import { toast, useApi, useApp, useBeluga, useUi } from '../lib/beluga.js';
+import { MachineProvider, toast, useApi, useApp, useBeluga, useUi } from '../lib/beluga.js';
 import { macNoticeTarget, openNoticeTarget } from '../lib/notices.js';
 import { sameDeep, sameFields } from '../lib/stable.js';
 import { type Waiting, type WaitingAction, bellCount, isCovered, noticeNeedView, waitingList } from './waiting-model.js';
@@ -155,7 +158,8 @@ function useGo(): (view: View) => void {
 }
 
 /** Something waiting for you: who and where, answered right here, or opened where it lives. */
-function WaitingRow({ w, now, close }: { w: Waiting; now: number; close: () => void }) {
+/** `on`: one of your computers' (BLG-790), drawn with its client: its name in the line, opened there. */
+function WaitingRow({ w, now, close, on }: { w: Waiting; now: number; close: () => void; on?: { readonly name: string; readonly open: (view: View) => void } }) {
   const { client } = useBeluga();
   const api = useApi();
   const go = useGo();
@@ -173,10 +177,10 @@ function WaitingRow({ w, now, close }: { w: Waiting; now: number; close: () => v
   };
   const open = (): void => {
     if (!w.view) return;
-    go(w.view);
+    (on?.open ?? go)(w.view);
     close();
   };
-  const meta = [...new Set([item.from ?? '', w.place ?? ''])].filter(Boolean).join(' · ');
+  const meta = [...new Set([item.from ?? '', w.place ?? '', on?.name ?? ''])].filter(Boolean).join(' · ');
   const items: ActionItem[] = [
     ...(w.view ? [{ label: w.place ? `Open in ${w.place}` : 'Open', onSelect: open }] : []),
     ...[...w.surface, ...w.more].map((a, i) => ({ label: a.label, ...(a.tone === 'danger' ? { danger: true } : {}), ...(i === 0 ? { separate: true } : {}), onSelect: () => answer(a) })),
@@ -312,6 +316,7 @@ export function Center({ close }: { close: () => void }) {
             </ul>
           </section>
         ) : null}
+        {filter === 'mentions' ? null : <RemoteWaiting close={close} now={now} />}
         {groups.length ? (
           groups.map((g) => (
             <section key={g.label} className={s.group} aria-label={g.label}>
@@ -339,6 +344,40 @@ const bellShown = (bell: HTMLElement | null): boolean => {
   return at.width > 0 && at.left >= room.left && at.right <= room.right && at.right <= window.innerWidth;
 };
 
+/**
+ * What waits for you on each of your computers (BLG-790), after this Mac's: the same rows, drawn
+ * with that computer's client so answering acts there; opening one opens its page there in the pane.
+ */
+function RemoteWaiting({ close, now }: { close: () => void; now: number }) {
+  const remote = useRemoteAttention();
+  const actions = useActions();
+  const { ui } = useBeluga();
+  return (
+    <>
+      {remote
+        .filter((r) => r.waiting.length)
+        .map((r) => {
+          const client = machineClientOf(r.machine.id);
+          if (!client) return null;
+          return (
+            <section key={r.machine.id} className={s.group} aria-label={`Waiting on ${r.machine.name}`}>
+              <h3 className={s.groupTitle}>
+                Waiting on {r.machine.name} <span className={s.count}>{r.waiting.length}</span>
+              </h3>
+              <MachineProvider machine={r.machine.id} client={client} ui={ui.windowStore}>
+                <ul className={s.list}>
+                  {r.waiting.map((w) => (
+                    <WaitingRow key={w.item.id} w={w} now={now} close={close} on={{ name: r.machine.name, open: (view) => actions.run({ type: 'view', view: onMachine(r.machine.id, view) }) }} />
+                  ))}
+                </ul>
+              </MachineProvider>
+            </section>
+          );
+        })}
+    </>
+  );
+}
+
 /** The bell in the toolbar: how many things are new, and the notification centre under it. */
 export function NotificationBell() {
   const { ui, client } = useBeluga();
@@ -355,11 +394,15 @@ export function NotificationBell() {
     return { waiting: list.length, unread: bellCount(st, list) - list.length };
   }, sameFields);
   const quiet = useApp((st) => dndActive(st.prefs.notify));
-  const label = `Notifications${waiting ? ` · ${waiting} waiting for you` : ''}${unread ? ` · ${unread} new` : ''}${quiet ? ' · Do Not Disturb' : ''}`;
+  // Every computer's too (BLG-790): what waits there and its new notices, added once each.
+  const remote = useRemoteAttention();
+  const waitingThere = remote.reduce((n, r) => n + r.waiting.length, 0);
+  const newThere = remote.reduce((n, r) => n + r.bell - r.waiting.length, 0);
+  const label = `Notifications${waiting + waitingThere ? ` · ${waiting + waitingThere} waiting for you` : ''}${unread + newThere ? ` · ${unread + newThere} new` : ''}${quiet ? ' · Do Not Disturb' : ''}`;
   return (
     <Popover.Root open={open} onOpenChange={(o) => ui.patch({ notices: o })}>
       <Popover.Trigger asChild>
-        <IconButton ref={trigger} icon="bell" label={label} active={open} badge={waiting + unread} className={cx(quiet && s.bellQuiet)} />
+        <IconButton ref={trigger} icon="bell" label={label} active={open} badge={waiting + unread + waitingThere + newThere} className={cx(quiet && s.bellQuiet)} />
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content className={s.popover} align="end" sideOffset={6} collisionPadding={12} aria-label="Notifications">

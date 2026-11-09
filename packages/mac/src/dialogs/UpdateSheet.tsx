@@ -1,10 +1,11 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Icon, type IconName } from '../components/Icon.js';
 import { UpdatePill } from '../components/UpdatePill.js';
 import { Button, cx } from '../components/ui.js';
+import { useMaybeBeluga } from '../lib/beluga.js';
 import { usePrefs } from '../lib/prefs.js';
 import { openExternal } from '../lib/system.js';
 import { idleLine, lastCheckedLabel, shortVersion } from '../lib/update-model.js';
@@ -59,6 +60,49 @@ const day = (date: string | null | undefined): string | undefined => {
   return Number.isFinite(t) ? new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : undefined;
 };
 
+type Behind = { readonly id: string; readonly name: string; readonly version?: string };
+
+/**
+ * Computers this update would leave unable to connect (BLG-777): on an older protocol than the
+ * new version's. Each gets Update … First (it updates once nothing runs there).
+ */
+function LeftBehind({ ipc }: { ipc: number | null | undefined }) {
+  const beluga = useMaybeBeluga();
+  const [behind, setBehind] = useState<readonly Behind[]>([]);
+  const [said, setSaid] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!beluga || ipc === undefined || ipc === null) return;
+    let live = true;
+    void beluga.client.call('machines.leftBehind', ipc).then(
+      (list) => live && setBehind(list as readonly Behind[]),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [beluga, ipc]);
+  if (!beluga || !behind.length) return null;
+  const update = (m: Behind): void =>
+    void beluga.client.call('machines.update', m.id, 'when-idle').then(
+      (a) => setSaid((s) => ({ ...s, [m.id]: (a as { message: string }).message })),
+      (err: unknown) => setSaid((s) => ({ ...s, [m.id]: err instanceof Error ? err.message : String(err) })),
+    );
+  return (
+    <div className={cx(s.line, s.warn)} data-left-behind>
+      {behind.map((m) => (
+        <p key={m.id}>
+          {said[m.id] ?? `${m.name} runs an older Beluga${m.version ? ` (${m.version})` : ''}: after this update your app can't work there until it's updated too.`}{' '}
+          {said[m.id] ? null : (
+            <Button size="small" onClick={() => update(m)}>
+              Update {m.name} First
+            </Button>
+          )}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 /** A downloaded update: what's in it, and when it goes in. */
 function Ready() {
   const { state, claude } = useUpdates();
@@ -69,6 +113,7 @@ function Ready() {
     <>
       <Head icon="download" title={`Beluga ${shortVersion(available.version)} is ready`} sub={`You have ${state.current}${released ? ` · released ${released}` : ''}`} />
       <Notes text={available.notes} />
+      {!installing ? <LeftBehind ipc={available.ipc} /> : null}
       {claude > 0 && !installing ? (
         <p className={cx(s.line, s.warn)}>
           Your agent is working ({claude} {claude === 1 ? 'run' : 'runs'}). Restart Now stops it; Update When Idle waits until it’s done.

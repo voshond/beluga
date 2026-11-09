@@ -1,0 +1,60 @@
+/* Runs on [icon] [name] (RunsOn.tsx): beside the mode and model, and its menu. */
+
+.chip {
+  gap: 4px;
+}
+.words {
+  color: var(--text-3);
+  font-weight: 400;
+}
+/* A box short of room (a chat in the side panel): the computer's mark and name say it alone. */
+@container composer (max-width: 600px) {
+  .words {
+    display: none;
+  }
+}
+/* In a chat that already runs somewhere: a label, not a button. */
+.label {
+  cursor: default;
+}
+.label:hover {
+  background: none;
+  color: var(--text-2);
+}
+.menu {
+  min-width: 260px;
+}
+.head {
+  padding: 4px 9px 3px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.mark {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  color: var(--text-2);
+}
+.mark > span {
+  margin-top: 0;
+}
+.line {
+  padding-left: 24px;
+}
+/* In a sheet's row, its label beside it: the chip alone, outlined like the sheet's other pickers. */
+.bare {
+  align-self: flex-start;
+  border: 1px solid var(--hairline-strong);
+}
+/* The computer named can't take it now (BLG-841): said on the chip, in the warning tone. */
+.held {
+  color: var(--warn);
+}
+.why {
+  color: var(--warn);
+  font-weight: 400;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

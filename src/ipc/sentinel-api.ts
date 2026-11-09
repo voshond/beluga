@@ -27,6 +27,19 @@ export const SENTINEL_API = {
   'sentinel.stop': { args: z.tuple([id]) },
   // Pause it, or turn it on (Turn On, Resume).
   'sentinel.pause': { args: z.tuple([id, z.boolean()]) },
+  // Move To another computer (BLG-807), as your app runs it (src/machines/move-sentinel.ts). Here: whether
+  // it runs now, whether it's paused, its project → SentinelMoveCheck.
+  'sentinel.moveCheck': { args: z.tuple([id]) },
+  // Packed to go: its steps, runs, kept numbers and tiles (not while it runs) → { token, chunks }.
+  'sentinel.movePack': { args: z.tuple([id]) },
+  // One piece of a packed sentinel (the last one lets it go here).
+  'sentinel.moveChunk': { args: z.tuple([z.string().uuid(), z.number().int().min(0).max(200)]) },
+  // There: one piece coming in (its number, how many in all, the piece).
+  'sentinel.moveReceive': { args: z.tuple([z.string().uuid(), z.number().int().min(0).max(200), z.number().int().min(1).max(201), z.string().max(2 * 1024 * 1024)]) },
+  // There: every piece is in, landed paused in that project (null: none), its sources checked there → SentinelLanding.
+  'sentinel.moveLand': { args: z.tuple([z.string().uuid(), z.string().min(1).max(200).nullish(), z.string().min(1).max(80)]) },
+  // Gone from here with the tiles that showed only it: the copy runs on the other computer (or, there, a copy whose move didn't finish).
+  'sentinel.moveDrop': { args: z.tuple([id]) },
   // Its whole index (the last 200 runs), newest first, without outputs.
   'sentinel.runs': { args: z.tuple([id]) },
   // Delete what a run left (BLG-577): `chat` its agents' conversations, `run` those and the run itself

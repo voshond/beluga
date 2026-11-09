@@ -52,6 +52,8 @@ export const LinkMessage = z.discriminatedUnion('t', [
   z.object({ t: z.literal('av_get'), sha: hex64 }),
   z.object({ t: z.literal('av_data'), sha: hex64, d: z.string().max(Math.ceil(AVATAR_MAX / 3) * 4) }),
   z.object({ t: z.literal('dm_ack'), id: msgId }),
+  /** BLG-798: their direct messages up to this one were on your screen (on a device of yours, never sent by an Always On on its own). Older Macs ignore it. */
+  z.object({ t: z.literal('dm_seen'), id: msgId }),
   /** The author deleted (no `text`) or edited one of their direct messages; `at` orders edits (BLG-425). */
   z.object({ t: z.literal('dm_change'), id: msgId, text: z.string().max(8_000).optional(), at: z.number().int().min(0) }),
   z.object({ t: z.literal('dm_change_ack'), id: msgId, at: z.number().int().min(0) }),

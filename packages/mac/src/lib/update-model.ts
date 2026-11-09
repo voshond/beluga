@@ -19,7 +19,8 @@ export interface UpdateState {
   /** When Beluga last looked successfully (ms since the epoch). */
   readonly lastCheck?: number | null;
   /** A downloaded update, ready to install. */
-  readonly available?: { readonly version: string; readonly notes?: string | null; readonly date?: string | null } | null;
+  /** `ipc` (BLG-777): the app protocol the new version speaks, when its release says. */
+  readonly available?: { readonly version: string; readonly notes?: string | null; readonly date?: string | null; readonly ipc?: number | null } | null;
   /** 0–1 while downloading. */
   readonly progress?: number | null;
   /** When the downloaded update goes in: when you're idle, or when you quit. */

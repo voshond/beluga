@@ -18,6 +18,9 @@ import { Button, Dot, Empty, Segmented, Tip, cx } from "../components/ui.js";
 import { useActions } from "../lib/actions.js";
 import { toast, useApi, useApp, useBeluga } from "../lib/beluga.js";
 import { useMyAgentName } from "../lib/agent-words.js";
+import { RunsOnPicker } from "../chat/RunsOn.js";
+import { type WorkToStart, sendToComputer, useStartDeps } from "../machines/start-there.js";
+import { myRuntime } from "../chat/ModelPicker.js";
 import { useStartWith } from "../components/agent-options.js";
 import { SplitButton } from "../components/SplitButton.js";
 import type { AgentRef } from "@beluga/protocol.js";
@@ -285,6 +288,7 @@ function HomeComposer({ project }: { project: Project }) {
   const box = useBoxSuggestions({ text, setText, filesOf: mainId });
   // Create Worktree's ▾ (BLG-506): the same worktree, worked by another agent.
   const startWith = useStartWith();
+  const startDeps = useStartDeps();
 
   /** `agent`: who works the new worktree (Start with…); none: your default. */
   const send = async (agent?: AgentRef): Promise<void> => {
@@ -325,6 +329,21 @@ function HomeComposer({ project }: { project: Project }) {
         return;
       }
     }
+    // Runs on one of your computers (BLG-788): the plan, worktree or chat is made there and opens at once.
+    const named = name.trim();
+    const there: WorkToStart = plan
+      ? { kind: "plan", input: { goal: message, autonomy } }
+      : worktree
+        ? { kind: "worktree", text: message, opts: { ...(base ? { base } : {}), ...(named ? { name: named } : {}), ...(agent ? { agent } : {}) } }
+        : { kind: "chat", text: message };
+    const sent = sendToComputer(startDeps, project.id, agent?.runtime ?? myRuntime(client.store.getState().prefs), there);
+    // Held (the computer Runs on names can't take it now): nothing starts, the words stay.
+    if (sent === "held") return putBack();
+    if (sent === "sent") {
+      setText("");
+      setName("");
+      return;
+    }
     if (plan) {
       // The plan's page and chat open on their own; Claude starts planning from the text.
       setBusy(true);
@@ -338,7 +357,6 @@ function HomeComposer({ project }: { project: Project }) {
     }
     if (worktree) {
       // The worktree is made in the background (it opens when ready): you can go on right away.
-      const named = name.trim();
       setText("");
       setName("");
       void api.workspaces
@@ -539,6 +557,8 @@ function HomeComposer({ project }: { project: Project }) {
               anything.
             </span>
           )}
+          {/* Where it runs (BLG-786): a worktree, a question or a plan alike. Only with a computer paired. */}
+          <RunsOnPicker project={project.id} />
           <span className={s.flex} />
           {plan ? (
             <label className={d.field}>

@@ -84,6 +84,17 @@ Installing restarts Beluga's engine, the daemon that the Mac app bundles. The ne
 
 That is why *Update When Idle* waits for the agent, the terminals and the room.
 
+## Your other computers
+
+Your app and each computer you added speak the same app protocol. A computer on another version
+is still listed, read-only, with a line saying which side to update: **Update It** when the
+computer is the older one. Update It runs `beluga update` there, which restarts that computer's
+Beluga, so it never stops work by surprise: when something runs there (an agent working, a program
+in a terminal) it says what, and you choose to update once that's done or now.
+
+Each release's `latest.json` says which protocol it speaks (`ipc`). When an update would leave a
+computer unable to connect, the update sheet names it and offers **Update … First**.
+
 ## Releasing
 
 Releases are made from the maintainer's Mac, not CI: there's no workflow that publishes anything.

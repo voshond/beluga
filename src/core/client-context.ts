@@ -13,3 +13,6 @@ export const currentClient = (): string | undefined => current.getStore();
 
 /** The phone's link calls as `phone:<device>` (companion/host.ts): whether this request is the phone's. */
 export const fromPhone = (): boolean => currentClient()?.startsWith('phone:') ?? false;
+
+/** Your app on another computer driving this one (daemon/clients.ts, BLG-803): whether this request is its. */
+export const fromMachine = (): boolean => currentClient()?.startsWith('machine:') ?? false;

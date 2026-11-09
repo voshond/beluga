@@ -20,7 +20,8 @@ import { Card, IconBadge, Press, T, type Tone, toneInk } from './ui';
 
 /** Pieces of a conversation: Claude's prose (code folded), the live step, sub-agents. */
 
-export const convHref = (topic: string): string => `/conv/${encodeURIComponent(topic.replace(/^conv:/, ''))}`;
+/** A conversation's screen; `on`: one of your computers', opened over its own link (BLG-810). */
+export const convHref = (topic: string, on?: string): string => `/conv/${encodeURIComponent(topic.replace(/^conv:/, ''))}${on ? `?on=${encodeURIComponent(on)}` : ''}`;
 export const chatHref = (topic: string): string => `/chat/${encodeURIComponent(topic.replace(/^chat:/, ''))}`;
 
 /** Base text style the inline pieces build on. */

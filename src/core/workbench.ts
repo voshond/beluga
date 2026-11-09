@@ -118,7 +118,7 @@ export interface WorkbenchDeps {
   /** What a project's run command should be after it failed in `dir` (a model looks). */
   readonly fixRun?: (dir: string, failed: string, output: string) => Promise<ScriptFix | undefined>;
   /** A project's setup and/or run worked out from its files (a model looks); undefined when no Claude can. */
-  readonly workOutScripts?: (dir: string, want: { setup: boolean; run: boolean }) => Promise<WorkedOutScripts | undefined> | undefined;
+  readonly workOutScripts?: (dir: string, want: { setup: boolean; run: boolean; system?: string }) => Promise<WorkedOutScripts | undefined> | undefined;
   /** Whether your Claude is on (it can be asked to fix a setup or run that failed). */
   readonly hasClaude?: () => boolean;
 }
@@ -1614,7 +1614,22 @@ export class Workbench {
    * What it says is kept as yours, marked as Claude's. Undefined when there's nothing to look at.
    */
   private workOut(ws: Workspace): Promise<void> | undefined {
-    const project = this.manager.list.find((p) => p.id === ws.projectId);
+    return this.workOutIn(ws.projectId, ws.path);
+  }
+
+  /**
+   * A project just made ready on this computer (BLG-787): its setup worked out for this system
+   * (`system`, said to the setup agent) in its main folder and kept here, like a first worktree's.
+   * → the setup new worktrees run here (none: it needs none, or it couldn't be told).
+   */
+  async workOutFor(projectId: string, system: string): Promise<string | undefined> {
+    const project = this.manager.list.find((p) => p.id === projectId);
+    if (project?.root) await this.workOutIn(projectId, project.root, system);
+    return this.manager.yourScripts(projectId).skipSetup ? undefined : this.manager.scripts(projectId).setup?.command;
+  }
+
+  private workOutIn(projectId: string, dir: string, system?: string): Promise<void> | undefined {
+    const project = this.manager.list.find((p) => p.id === projectId);
     if (!project?.root || !this.deps.workOutScripts) return undefined;
     const pending = this.workingOut.get(project.id);
     if (pending) return pending;
@@ -1626,7 +1641,7 @@ export class Workbench {
     const guessed = now.setup?.source === 'detected' && !/^(make|just) /.test(now.setup.command) ? now.setup.command : undefined;
     const want = { setup: (!now.setup || Boolean(guessed)) && !yours.skipSetup, run: !now.run };
     if (!want.setup && !want.run) return undefined;
-    const asked = this.deps.workOutScripts(ws.path, want);
+    const asked = this.deps.workOutScripts(dir, { ...want, ...(system ? { system } : {}) });
     if (!asked) return undefined;
     this.deps.toast(`Working out how to ${want.setup && want.run ? 'set up and run' : want.setup ? 'set up' : 'run'} ${project.name}…`);
     const done = asked

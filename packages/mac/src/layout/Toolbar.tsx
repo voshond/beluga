@@ -7,12 +7,14 @@ import { agentOfWorktree, agentTitle, isAgentWorktree } from '../claude-code/sub
 import { activityOf, findWorkspace, stateOf } from '@beluga/ui/workspace-models.js';
 import { describePr } from '@beluga/shared/format.js';
 import { Icon } from '../components/Icon.js';
+import { useContinueOn } from '../machines/continue-on.js';
 import { ActionsDropdown } from '../components/SpecMenu.js';
 import { Button, Dot, IconButton, Segmented, Tip, cx } from '../components/ui.js';
 import { ConvoSwitch, SWITCH_ICONS_W, SWITCH_W } from '../agent-term/ConvoSwitch.js';
 import { terminalCapable } from '../lib/convo-mode.js';
 import { useActions } from '../lib/actions.js';
-import { toast, useApp, useBeluga } from '../lib/beluga.js';
+import { AtHome, toast, useApp, useBeluga } from '../lib/beluga.js';
+import { MachineTag } from '../machines/MachineTag.js';
 import { sameDeep, sameFields } from '../lib/stable.js';
 import type { AppState } from '@beluga/core/store.js';
 import { type ToolAction, isPrStep, shortOf, toolbarActions } from './toolbar-actions.js';
@@ -101,7 +103,10 @@ function Shell({ title, subtitle, center, right, headerRef }: { title: ReactNode
       )}
       <NavButtons />
       <div className={s.titles} data-tauri-drag-region>
-        <div className={s.title}>{title}</div>
+        <div className={s.title}>
+          <MachineTag />
+          {title}
+        </div>
         {subtitle ? <div className={s.subtitle}>{subtitle}</div> : null}
       </div>
       <div className={s.center} data-tauri-drag-region>
@@ -110,8 +115,11 @@ function Shell({ title, subtitle, center, right, headerRef }: { title: ReactNode
       <div className={s.right}>
         {/* Whatever still doesn't fit is cut here, never the window buttons: the panel's toggle always shows where there's a panel. */}
         {right ? <div className={s.extra}>{right}</div> : null}
-        <SearchButton />
-        <NotificationBell />
+        {/* The window's own wherever you are: this Mac's search and one bell (BLG-790 brings every computer's). */}
+        <AtHome>
+          <SearchButton />
+          <NotificationBell />
+        </AtHome>
         {/* No panel here, no button for it: a button that can only say so is nothing to click. */}
         {fits ? (
           <IconButton
@@ -169,6 +177,8 @@ export function Toolbar() {
   const { client } = beluga;
   const state = useApp(toolbarPick, sameToolbar);
   const view = state.view;
+  // Continue On ▸ another computer of yours (BLG-808).
+  const continueItem = useContinueOn(view.kind === 'workspace' ? state.ws : undefined);
 
   if (view.kind === 'workspace') {
     const ws = state.ws;
@@ -277,8 +287,8 @@ export function Toolbar() {
               {icons.slice(0, fit).map((a) => (
                 <IconButton key={a.id} icon={a.icon} label={a.disabled ? `${a.label}: ${a.hint}` : (a.tip ?? `${a.label} · ${a.hint}`)} keys={a.keys} aria-disabled={a.disabled} data-tool={a.action} data-tool-ws={ws.id} className={cx(a.disabled && s.off, a.tone === 'error' && s.toolError)} onClick={() => run(a)} />
               ))}
-              {overflow.length || teamItems.length ? (
-                <ActionsDropdown items={[...menu.map(({ a, separate }) => ({ label: a.label, icon: a.icon, hint: a.disabled ? a.hint : undefined, keys: a.keys, disabled: a.disabled, danger: a.danger, separate, onSelect: () => requestAnimationFrame(() => run(a)) })), ...teamItems]}>
+              {overflow.length || teamItems.length || continueItem ? (
+                <ActionsDropdown items={[...menu.map(({ a, separate }) => ({ label: a.label, icon: a.icon, hint: a.disabled ? a.hint : undefined, keys: a.keys, disabled: a.disabled, danger: a.danger, separate, onSelect: () => requestAnimationFrame(() => run(a)) })), ...teamItems, ...(continueItem ? [continueItem] : [])]}>
                   <IconButton icon="more" label="More for this workspace" data-tool="more" data-tool-ws={ws.id} />
                 </ActionsDropdown>
               ) : null}

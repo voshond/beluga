@@ -41,7 +41,7 @@ const reactionFields = (reactions: readonly Reaction[] | undefined): { reactions
 
 export function dmView(ctx: ViewContext, peerId: string, dm: Dm, status: DmStatus, reactions?: readonly Reaction[]): MessageView {
   const mine = dm.from === ctx.me;
-  const state = !mine ? undefined : status.delivered.has(dm.id) ? 'delivered' : status.expired.has(dm.id) ? 'expired' : 'waiting';
+  const state = !mine ? undefined : status.seen.has(dm.id) ? 'seen' : status.delivered.has(dm.id) ? 'delivered' : status.expired.has(dm.id) ? 'expired' : 'waiting';
   return { id: dm.id, conversation: dmConversation(peerId), from: dm.from, name: mine ? 'you' : ctx.nameOf(dm.from), text: dm.text, ts: dm.ts, mine, ...extrasFields(dm.x), ...(state ? { status: state } : {}), ...(dm.edited ? { edited: dm.edited } : {}), ...reactionFields(reactions) };
 }
 

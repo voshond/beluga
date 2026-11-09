@@ -35,8 +35,9 @@ test('the room lists each agent by name with its mark, and @bob:codex runs bobâ€
   await composer(page).pressSequentially('check the webhook retries');
   await composer(page).press('Enter');
 
-  // bob's demo Mac says yes after a moment, and his Codex answers: labelled with its name.
-  const turn = page.locator('[data-turn-part="head"]').filter({ hasText: "bob's Codex" }).last();
+  // bob's demo Mac says yes after a moment, and his Codex answers: labelled with its name. Its turn is
+  // drawn whole, or split around the room's chatter when that lands while it runs (live-tail.ts): either.
+  const turn = page.locator('[data-turn]').filter({ hasText: "bob's Codex" }).last();
   await expect(turn).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('[data-turn="done"]').last()).toBeVisible({ timeout: 30_000 });
   if (shots) await page.screenshot({ path: `${shots}/03-bob-codex-answered.png` });

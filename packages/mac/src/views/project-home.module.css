@@ -146,11 +146,12 @@ button.stat:disabled {
 .input::placeholder {
   color: var(--text-3);
 }
+/* One line: the fields give way (the name first) before anything wraps (BLG-786 added Runs on). */
 .bar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px 14px;
+  gap: 6px 12px;
   padding: 6px 8px 8px 14px;
 }
 .note {
@@ -166,6 +167,8 @@ button.stat:disabled {
 /* Narrower than the draft's: the box's button stays on the same line. */
 .nameInput {
   width: 130px;
+  min-width: 88px;
+  flex: 0 1 130px;
 }
 .bar > label,
 .bar > span,
@@ -173,12 +176,36 @@ button.stat:disabled {
   flex-shrink: 0;
   white-space: nowrap;
 }
+/* Only the name (it's optional) gives way, down to a short box; the branch, the chips and the button keep their shape. */
+.bar > label:has(.nameInput) {
+  flex-shrink: 1;
+  min-width: 0;
+}
+/* Just Ask's and New Plan's line of words: it takes two lines before it pushes anything off. */
+.bar > .note {
+  flex-shrink: 1;
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.3;
+}
 .bar [role='combobox'] {
   max-width: 180px;
 }
-/* Narrow: the button goes under the fields, still on the right. */
 .bar > :last-child {
   margin-left: auto;
+}
+/* A narrow page: the fields' words step aside (each says what it is in its tooltip and placeholder). */
+@container (max-width: 760px) {
+  .bar > label > span:first-child,
+  .bar [data-runs-on-words] {
+    display: none;
+  }
+}
+/* Too narrow for one line: the button goes under the fields, still on the right. */
+@container (max-width: 520px) {
+  .bar {
+    flex-wrap: wrap;
+  }
 }
 
 /* ---- lists */

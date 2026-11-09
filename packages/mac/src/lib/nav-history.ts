@@ -57,6 +57,8 @@ export const EMPTY_HISTORY: NavHistory = { back: [], forward: [] };
  */
 export function pageKey(view: View): string {
   if (view.kind === 'workspace') return JSON.stringify(['workspace', view.id]);
+  // A page on one of your computers (BLG-784) is that page there: never the same as this Mac's.
+  if (view.kind === 'machine') return JSON.stringify(['machine', view.machine, pageKey(view.view)]);
   const params = Object.entries(view)
     .filter(([k, v]) => k !== 'kind' && k !== 'back' && v !== undefined)
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
@@ -66,7 +68,7 @@ export function pageKey(view: View): string {
 export const samePage = (a: View, b: View): boolean => pageKey(a) === pageKey(b);
 
 /** A new chat or worktree not started yet isn't a page to come back to. */
-export const recordable = (view: View): boolean => view.kind !== 'draft' && view.kind !== 'draft_worktree';
+export const recordable = (view: View): boolean => (view.kind === 'machine' ? recordable(view.view) : view.kind !== 'draft' && view.kind !== 'draft_worktree');
 
 const sameSnapshot = (a: PanelSnapshot, b: PanelSnapshot): boolean =>
   a.sidebar === b.sidebar && a.inspector === b.inspector && a.bottomOpen === b.bottomOpen && a.drawer === b.drawer && a.topTab === b.topTab && a.bottomTab === b.bottomTab;

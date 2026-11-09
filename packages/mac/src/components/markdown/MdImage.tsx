@@ -3,6 +3,7 @@ import type { Location } from '@beluga/core/store.js';
 import type { SocketClient } from '@beluga/ipc/socket-client.js';
 import { Icon } from '../Icon.js';
 import { useBeluga } from '../../lib/beluga.js';
+import { sourceTag } from '../../machines/pane-model.js';
 import { resolveImage } from './md-paths.js';
 import m from './markdown.module.css';
 
@@ -18,7 +19,8 @@ const keyOf = (at: Location, version?: string | number): string => `${at.owner}\
 
 /** An object URL for an image file, read once and kept for a while (the oldest are let go); a new `version` reads it again. */
 export function imageUrl(client: SocketClient, at: Location, version?: string | number): Promise<string> {
-  const key = keyOf(at, version);
+  // Whose file: the same path on two of your computers is two files (BLG-784).
+  const key = `${sourceTag(client)}\0${keyOf(at, version)}`;
   const hit = urls.get(key);
   if (hit) return hit;
   const p = client.api.files.readImageFile(at).then(({ mediaType, data }) => {

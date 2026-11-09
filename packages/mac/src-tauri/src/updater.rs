@@ -124,6 +124,8 @@ struct Available {
     version: String,
     notes: Option<String>,
     date: Option<String>,
+    /// The app protocol it speaks (BLG-777), for the sheet to warn about computers left behind.
+    ipc: Option<u32>,
 }
 
 /// What the window shows (lib/updates.ts › UpdateState).
@@ -232,6 +234,7 @@ fn view(app: &AppHandle, i: &Inner) -> View {
             version: p.version.clone(),
             notes: p.notes.clone(),
             date: p.date.clone(),
+            ipc: crate::update_rules::manifest_ipc(&p.raw),
         }),
         progress: i.progress,
         choice: i.saved.pending.as_ref().map(|p| p.choice),

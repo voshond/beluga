@@ -64,7 +64,16 @@ export async function run(cmd: ParsedCommand, io: Io): Promise<Exit> {
       return update(io);
     }
     case 'pair':
-      return pairHere(io);
+      if (cmd.flags.json === true && cmd.flags.computer !== true) throw new UsageError('--json goes with --computer.', 'pair');
+      return cmd.flags.computer === true ? pairComputerHere(io, cmd.flags.json === true) : pairHere(io);
+    case 'computers': {
+      const [sub = 'list', ...rest] = cmd.positionals;
+      const { addComputer, computersLinkOf, forgetDevice, listComputers } = await import('./computers.js');
+      if (sub === 'list') return attached(io, (client) => listComputers(computersLinkOf(client), io));
+      if (sub === 'forget') return attached(io, (client) => forgetDevice(computersLinkOf(client), rest.join(' ') || undefined, io));
+      if (sub === 'add') return withCtrlC((ctrlC) => attached(io, (client) => addComputer(computersLinkOf(client), rest.join(' ') || undefined, io, { ask: asker(ctrlC), signal: ctrlC.signal })));
+      throw new UsageError(`\`beluga computers\` lists them, adds one or forgets one; there's no \`${sub}\`.`, 'computers');
+    }
     case 'phones': {
       const [sub, ...rest] = cmd.positionals;
       if (sub !== undefined && sub !== 'remove' && sub !== 'list') throw new UsageError(`\`beluga phones\` lists them; \`beluga phones remove <name>\` removes one.`, 'phones');
@@ -129,10 +138,33 @@ async function pairHere(io: Io): Promise<Exit> {
   }
 }
 
+/** Run with Ctrl+C turned into an abort signal for as long as it takes. */
+async function withCtrlC<T>(use: (ctrlC: AbortController) => Promise<T>): Promise<T> {
+  const ctrlC = new AbortController();
+  const onSigint = (): void => ctrlC.abort();
+  process.on('SIGINT', onSigint);
+  try {
+    return await use(ctrlC);
+  } finally {
+    process.off('SIGINT', onSigint);
+  }
+}
+
+/** `beluga pair --computer` against the running daemon, on this terminal (BLG-774). */
+async function pairComputerHere(io: Io, json: boolean): Promise<Exit> {
+  const { pairComputer, computerPairLinkOf } = await import('./pair.js');
+  return withCtrlC((ctrlC) => attached(io, (client) => pairComputer(computerPairLinkOf(client), io, { signal: ctrlC.signal, tty: Boolean(process.stdout.isTTY) && !json, columns: process.stdout.columns ?? 80, json })));
+}
+
 /** `beluga connect user@host` on this terminal, until Ctrl+C. */
 async function connectHere(cmd: ParsedCommand, io: Io): Promise<Exit> {
   const [host, ...extra] = cmd.positionals;
   if (!host || extra.length) throw new UsageError('`beluga connect` takes one host: user@host, or a Host from ~/.ssh/config.', 'connect');
+  if (cmd.flags.pair === true) {
+    // Add it to your computers (BLG-781): your daemon does the ssh, with your keys and agent.
+    const { addOverSsh, computersLinkOf } = await import('./computers.js');
+    return withCtrlC((ctrlC) => attached(io, (client) => addOverSsh(computersLinkOf(client), host, io, { ask: asker(ctrlC), signal: ctrlC.signal })));
+  }
   const port = cmd.flags.port === undefined ? undefined : countFlag(cmd.flags.port, 'port', 0, 'connect');
   if (port !== undefined && (port < 1 || port > 65535)) throw new UsageError('--port takes a port, like --port 7778.', 'connect');
   const { connect } = await import('./connect.js');

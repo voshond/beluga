@@ -14,7 +14,8 @@ import { type WebRoute, json, sameOrigin } from './web.js';
  * session is checked) and only from the page's own origin.
  */
 
-export const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
+export { MAX_UPLOAD_BYTES } from '../shared/uploads.js';
+import { MAX_UPLOAD_BYTES } from '../shared/uploads.js';
 /** How long a download link works. */
 export const DOWNLOAD_TTL_MS = 60_000;
 

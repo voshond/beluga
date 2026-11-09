@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import type { PrConversation, PrThread } from '@beluga/core/work-store.js';
-import { useApi, useApp } from '../lib/beluga.js';
+import { useApi, useApp, useScopedKey } from '../lib/beluga.js';
 import { everyWhileShown } from '../lib/window-active.js';
 import { openFocus } from '../lib/panel.js';
 
@@ -36,15 +36,16 @@ export function openPrPage(wsId: string): void {
 
 type Fetch = (wsId: string) => Promise<{ ok: true; conversation: PrConversation } | { ok: false; message: string } | undefined>;
 
-async function load(fetch: Fetch, wsId: string, key: string): Promise<void> {
-  const had = entries.get(wsId);
-  entries.set(wsId, { ...had, loading: true, key });
+/** `at`: where it's kept (the worktree, on its computer: BLG-784). */
+async function load(fetch: Fetch, wsId: string, key: string, at: string): Promise<void> {
+  const had = entries.get(at);
+  entries.set(at, { ...had, loading: true, key });
   emit();
   const out = await fetch(wsId).catch((err: unknown) => ({ ok: false as const, message: err instanceof Error ? err.message : String(err) }));
-  const now = entries.get(wsId);
-  if (!out) entries.set(wsId, { ...now, loading: false, key });
-  else if (out.ok) entries.set(wsId, { data: out.conversation, loading: false, key });
-  else entries.set(wsId, { ...(now?.data ? { data: now.data } : {}), error: out.message, loading: false, key });
+  const now = entries.get(at);
+  if (!out) entries.set(at, { ...now, loading: false, key });
+  else if (out.ok) entries.set(at, { data: out.conversation, loading: false, key });
+  else entries.set(at, { ...(now?.data ? { data: now.data } : {}), error: out.message, loading: false, key });
   emit();
 }
 
@@ -58,23 +59,24 @@ export function conversationCounts(c: PrConversation | undefined): { said: numbe
 export function usePrConversation(wsId: string, opts: { readonly live?: boolean } = {}): { data?: PrConversation; error?: string; loading: boolean; refresh: () => void } {
   const api = useApi();
   const pr = useApp((st) => st.prs[wsId]);
+  const at = useScopedKey(wsId);
   useSyncExternalStore(subscribe, () => version);
   const fetch: Fetch = useCallback((id) => api.workbench.prConversation(id) as ReturnType<Fetch>, [api]);
   const key = pr ? `${pr.number}/${pr.head ?? ''}/${pr.review ?? ''}/${pr.state}` : undefined;
   const live = Boolean(opts.live);
   useEffect(() => {
     if (!key) return;
-    const had = entries.get(wsId);
-    if (had?.key !== key && !had?.loading) void load(fetch, wsId, key);
-  }, [wsId, key, fetch]);
+    const had = entries.get(at);
+    if (had?.key !== key && !had?.loading) void load(fetch, wsId, key, at);
+  }, [wsId, at, key, fetch]);
   useEffect(() => {
     if (!key || !live) return;
-    return everyWhileShown(() => void load(fetch, wsId, key), 120_000);
-  }, [wsId, key, live, fetch]);
-  const entry = entries.get(wsId);
+    return everyWhileShown(() => void load(fetch, wsId, key, at), 120_000);
+  }, [wsId, at, key, live, fetch]);
+  const entry = entries.get(at);
   const refresh = useCallback(() => {
-    if (key) void load(fetch, wsId, key);
-  }, [fetch, wsId, key]);
+    if (key) void load(fetch, wsId, key, at);
+  }, [fetch, wsId, at, key]);
   return { ...(entry?.data ? { data: entry.data } : {}), ...(entry?.error ? { error: entry.error } : {}), loading: entry?.loading ?? Boolean(key), refresh };
 }
 

@@ -273,6 +273,21 @@ export interface MilestoneRun {
   readonly checker?: string;
   /** Passing it couldn't merge its tasks into the plan's branch (not a conflict: a dirty checkout, no git identity): why, until it's passed again. */
   readonly mergeFailed?: { readonly at: number; readonly reason: string };
+  /**
+   * The plan moved here from another computer (BLG-806) with this milestone under way: its next
+   * agent starts from the branch its agent there left (its work so far), not from the plan's.
+   */
+  readonly resumeFrom?: string;
+}
+
+/** Where a plan went, or came from, when it moved between your computers (BLG-806). */
+export interface PlanMove {
+  /** The computer's device id (none: this Mac, as your app names it). */
+  readonly id?: string;
+  readonly name: string;
+  readonly at: number;
+  /** The plan's id there. */
+  readonly planId?: string;
 }
 
 /**
@@ -472,6 +487,10 @@ export interface Plan {
   readonly epics?: PlanEpics;
   /** Beluga moving its stalled milestones along (see the pilot's rescue), by milestone id: kept, so a restart doesn't start over. */
   readonly rescue?: Readonly<Record<string, PlanRescue>>;
+  /** It moved to another computer (BLG-806): this copy is the record of it, paused, off the lists; the plan runs there. */
+  readonly movedTo?: PlanMove;
+  /** It came here from another computer. */
+  readonly movedFrom?: PlanMove;
   /** The first draft's review by a fresh agent, when you asked for one (see draft-review.ts). */
   readonly review?: DraftReview;
   readonly activity: readonly PlanEvent[];
@@ -568,8 +587,11 @@ export function reducePlans(state: PlansSlice, action: PlansAction): PlansSlice 
 
 export const planById = (state: PlansState, id: string): Plan | undefined => state.plans.find((p) => p.id === id);
 
-/** The plan a conversation is the home of (the newest, when several were). */
-export const planForHome = (state: PlansState, channel: string): Plan | undefined => [...state.plans].reverse().find((p) => p.home === channel);
+/** The plan a conversation is the home of (the newest, when several were). A plan that moved away has no home here any more. */
+export const planForHome = (state: PlansState, channel: string): Plan | undefined => [...state.plans].reverse().find((p) => p.home === channel && !p.movedTo);
+
+/** The plans that run here (one that moved to another computer is only its record). */
+export const plansHere = (state: PlansState): readonly Plan[] => state.plans.filter((p) => !p.movedTo);
 
 /** The plan a board task stands for as an epic: the plan's own, or one of its milestones' (see epics.ts). */
 export function planEpicOf(state: PlansState, issueId: string): { readonly plan: Plan; readonly milestone?: PlanMilestone } | undefined {

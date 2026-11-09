@@ -378,6 +378,8 @@ export class PlanPilot {
   tick(only?: ReadonlySet<string>): void {
     for (const plan of this.deps.plans.list()) {
       if (only && !only.has(plan.id)) continue;
+      // Moved to another computer (BLG-806): it runs there, this is only its record.
+      if (plan.movedTo) continue;
       try {
         // Plans from before epics: their shape goes on the board once.
         if (plan.body && plan.status !== 'draft' && !this.structured.has(plan.id)) {
@@ -404,6 +406,7 @@ export class PlanPilot {
    */
   async startNow(planId: string, taskId: string, by: Actor, agent?: AgentRef): Promise<string> {
     const plan = this.deps.plans.need(planId);
+    if (plan.movedTo) throw new Error(`This plan moved to ${plan.movedTo.name}: it runs there now`);
     if (plan.status !== 'active' || !plan.body) throw new Error('The plan isn’t approved yet');
     if (plan.draft) throw new Error('Changes to the plan are waiting for approval: approve or discard them first');
     const view = this.view(plan);
@@ -867,14 +870,17 @@ export class PlanPilot {
       // The first ready task first (it goes In Progress); the rest in their order.
       const ordered = [first, ...tasks.filter((t) => t !== first)];
       ids = ordered.map((t) => t.issue!.id);
-      const base = first.bases?.length ? planBranchFor(plan, first.issue.projectId) : first.base;
+      // Moved here mid-milestone (BLG-806): from the branch its agent left on the other computer, its work so far.
+      const resume = plan.runs[milestoneId]?.resumeFrom;
+      const base = resume ?? (first.bases?.length ? planBranchFor(plan, first.issue.projectId) : first.base);
       // The agent you started it with (BLG-506), else the plan's (BLG-497); none: your default.
       const agent = pick ?? plan.agent;
       const name = `${first.issue.key} ${m.milestone.title}`;
       const ws = await this.deps.work.startShared(ids, name, { quiet: true, ...(base ? { base } : {}), ...(agent ? { agent } : {}) });
       // A milestone across repos: a worktree in each of its other repos too, its agent working in all of them.
       const along = await this.alongside(plan, m.milestone, first.issue.projectId, name, agent);
-      const fresh = this.deps.plans.setAgent(plan.id, milestoneId, { worktree: ws.id, ...(ws.branch ? { branch: ws.branch } : {}), at: Date.now(), tasks: ordered.map((t) => t.task.id), ...(along.length ? { along } : {}) });
+      this.deps.plans.setAgent(plan.id, milestoneId, { worktree: ws.id, ...(ws.branch ? { branch: ws.branch } : {}), at: Date.now(), tasks: ordered.map((t) => t.task.id), ...(along.length ? { along } : {}) });
+      const fresh = this.deps.plans.resumed(plan.id, milestoneId);
       const keys = ordered.map((t) => t.issue!.key);
       const repos = isMultiRepo(plan) ? ` in ${[first.issue.projectId, ...along.map((a) => a.projectId)].map((r) => this.repoName(r)).join(' and ')}` : '';
       const said = `started one agent for “${m.milestone.title}” (${keys.join(', ')})${repos} in a new worktree${base ? ` from ${base}` : ''}`;

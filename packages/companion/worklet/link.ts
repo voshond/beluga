@@ -143,6 +143,8 @@ function open(msg: Extract<UiToWorklet, { op: 'open' }>): void {
   // 1.16 (BLG-150): the Mac wants the phone to act — hand it to the screens (the native side is there).
   c.on('req', (f) => frame(f));
   c.on('vidAck', (f) => frame(f));
+  // 1.46 (BLG-809): where your computers are, for the screens to link each by itself.
+  c.on('computers', (f) => frame(f));
   // 1.16: a byte tunnel to the phone's own debugging port (adb over the link). The worklet has bare-tcp.
   c.on('tun', (f) => onTunnel(c, f));
   c.on('close', (code, reason) => {

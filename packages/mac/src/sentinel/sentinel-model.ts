@@ -241,9 +241,12 @@ export function headlineOf(run: Pick<RunSummary, 'headline' | 'state' | 'why'>):
 }
 
 /** The sidebar row's line, and whether it's a problem (paused after failures; Claude's change isn't one). */
+/** Why a sentinel stopped on its own (failures in a row, a limit hit), in words; undefined while it's on, paused by hand, or paused because your agent changed it. */
+export const brokenWords = (s: Sentinel): string | undefined => (s.paused && s.pausedWhy && s.pausedWhy !== CLAUDE_CHANGED ? (pausedWords(s) ?? 'Paused after failures') : undefined);
+
 export function sidebarLine(state: SentinelState): { readonly text: string; readonly problem: boolean } {
-  const broken = state.items.find((s) => s.paused && s.pausedWhy && s.pausedWhy !== CLAUDE_CHANGED);
-  if (broken) return { text: pausedWords(broken) ?? 'Paused after failures', problem: true };
+  const broken = state.items.map(brokenWords).find((w) => w !== undefined);
+  if (broken) return { text: broken, problem: true };
   const watching = state.items.filter((s) => !s.paused);
   if (!state.items.length) return { text: 'Nothing watching yet', problem: false };
   if (!watching.length) return { text: `Nothing watching · ${state.items.length} paused`, problem: false };
@@ -929,11 +932,13 @@ export interface SideSentinel {
   readonly live: boolean;
   readonly needs: boolean;
   readonly failed: boolean;
+  /** Why it stopped on its own ("Paused after 3 failures in a row"): the Sentinel row's problem mark is about it. */
+  readonly broken?: string;
   readonly runs: readonly SideRun[];
 }
 
-/** Folded, the Sentinel row keeps these under it: running, waiting for you, or its last run failed. */
-export const needsALook = (x: Pick<SideSentinel, 'live' | 'needs' | 'failed'>): boolean => x.live || x.needs || x.failed;
+/** Folded, the Sentinel row keeps these under it: running, waiting for you, its last run failed, or it stopped on its own. */
+export const needsALook = (x: Pick<SideSentinel, 'live' | 'needs' | 'failed' | 'broken'>): boolean => x.live || x.needs || x.failed || x.broken !== undefined;
 
 /** The runs a sentinel row unfolds to at most; the rest are on its page. */
 export const SIDE_RUNS = 5;
@@ -951,9 +956,10 @@ function sideRunOf(run: RunSummary): SideRun {
 }
 
 /**
- * The sentinels the sidebar lists under its Sentinel row (BLG-570): every one that's on, and a
- * paused one while a run of it still goes or waits for you. The one that ran last first; one that
- * never ran last, by name. Each with its runs, newest first (every one the index keeps).
+ * The sentinels the sidebar lists under its Sentinel row (BLG-570): every one that's on, a paused
+ * one while a run of it still goes or waits for you, and one that stopped on its own (the row's
+ * problem mark is about it). The one that ran last first; one that never ran last, by name. Each
+ * with its runs, newest first (every one the index keeps).
  */
 export function sidebarSentinels(state: Pick<SentinelState, 'items' | 'runs'>): SideSentinel[] {
   const out: Array<SideSentinel & { readonly last: number }> = [];
@@ -961,9 +967,10 @@ export function sidebarSentinels(state: Pick<SentinelState, 'items' | 'runs'>): 
     const runs = state.runs.filter((r) => r.sentinelId === sentinel.id).sort((a, b) => b.startedAt - a.startedAt);
     const live = runs.some((r) => r.state === 'running' || r.state === 'queued');
     const needs = runs.some((r) => r.state === 'needs-you');
-    if (sentinel.paused && !live && !needs) continue;
+    const broken = brokenWords(sentinel);
+    if (sentinel.paused && !live && !needs && !broken) continue;
     const ended = runs.find((r) => r.state !== 'running' && r.state !== 'queued');
-    out.push({ sentinel, live, needs, failed: ended?.state === 'failed', runs: runs.map(sideRunOf), last: runs[0]?.startedAt ?? 0 });
+    out.push({ sentinel, live, needs, failed: ended?.state === 'failed', ...(broken ? { broken } : {}), runs: runs.map(sideRunOf), last: runs[0]?.startedAt ?? 0 });
   }
   return out.sort((a, b) => b.last - a.last || a.sentinel.name.localeCompare(b.sentinel.name)).map(({ last: _l, ...rest }) => rest);
 }

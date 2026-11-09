@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ClaudeSkill } from '@beluga/shared/skills.js';
-import { useApi, useApp } from '../lib/beluga.js';
+import { useApi, useApp, useScopedKey } from '../lib/beluga.js';
 
 /** How long a conversation's list stays fresh (a skill you just added shows the next time you type /). */
 const FRESH_MS = 20_000;
@@ -17,7 +17,8 @@ export function useSkills(channel: string, want: boolean): readonly ClaudeSkill[
     const view = state.view;
     return (view.projectId === 'chats' ? view.dir : state.projects.find((p) => p.id === view.projectId)?.root) || null;
   });
-  const key = channel === 'draft' ? JSON.stringify([channel, draftDir]) : channel;
+  // Each computer's own list (BLG-784).
+  const key = useScopedKey(channel === 'draft' ? JSON.stringify([channel, draftDir]) : channel);
   const [skills, setSkills] = useState<readonly ClaudeSkill[]>(() => cache.get(key)?.skills ?? []);
   const inConversation = channel.startsWith('ws:') || (channel === 'draft' && draftDir !== undefined);
   useEffect(() => {

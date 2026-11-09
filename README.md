@@ -231,9 +231,46 @@ A phone app shows what your Mac's Beluga is doing and lets you answer what needs
 <p align="center"><img src="assets/mac/model.png" alt="Model and thinking picker" width="900"><br><sub><b>Model and thinking</b> per conversation, in plain words.</sub></p>
 </details>
 
+## Use your other computers
+
+<p align="center">
+  <picture>
+    <source media="(min-width: 700px)" srcset="assets/scenes/machines-dark.gif">
+    <img src="assets/scenes/machines-dark-still.png" alt="This Mac and your phone wired to three computers of yours, a Mac mini that is your Always On, build-box on AWS and an Ubuntu box, each with its own mark. A task's Runs on chip flips from this Mac to build-box, the task hops there and its steps stream back to the chat and the phone; then the Mac's lid closes and the phone keeps up until it's done" width="720">
+  </picture>
+</p>
+<p align="center"><sub>Your Beluga app stays on your Mac. The work runs on the computer you pick.</sub></p>
+
+Your Beluga app stays on the Mac in front of you, with its own windows and shortcuts. Your other computers, a Mac mini, an AWS or Azure server, a Linux box, do the work: worktrees, Claude Code runs, plans, sentinels and dev servers run there, and your Mac and phone show it live. One setting sends all new work to a computer (Settings › Your Computers › Run New Work On, or Best Available for whichever has the most room), or pick per task with **Runs on**, beside the mode and model.
+
+### Set one up
+
+If you can `ssh` into it, it's two steps:
+
+1. In Beluga, **Settings › Your Computers › Add a Computer… › Over SSH**: pick the host from your ssh config (or type `you@host`) and press **Add**. Beluga installs itself there and starts.
+2. Check that the four pictures match and press **Join**.
+
+Without SSH, run `beluga pair --computer` on the computer and use **Link or Code** instead. If Claude isn't signed in there yet, its row says so: [sign it in once](docs/headless.md#signing-claude-in-on-a-server).
+
+A project the computer doesn't have yet is cloned and set up there the first time you send work to it. Its `.env` files are asked about by name before they go, its dev servers open at `localhost` on your Mac, and a computer that never sleeps can be your **Always On**, answering friends while your Mac is closed.
+
+### A computer, the browser, or the phone
+
+It isn't Beluga in a browser: nothing about the app comes from the computer. Only what you do and what it shows cross an end-to-end link, so the app is still your Mac app, and this Mac's work and every computer's sit side by side.
+
+| | Your computers | A browser ([below](#run-it-on-a-server)) | The phone |
+| --- | --- | --- | --- |
+| Use it when | you're at a Mac with Beluga | the device has no Beluga (a borrowed laptop, a tablet) | you're away |
+| The app | your own, native | served by the server | the phone app |
+| Where work runs | the computer you pick, per task or by default | the server | your Mac or your computers |
+| Dev servers | at `localhost` on your Mac | on the server | — |
+| Set up | Add Over SSH, two steps | `beluga web …` and a join link | scan a QR |
+
+More: [Your computers](docs/machines.md) · [What crosses the link](docs/security.md#machines-your-computers)
+
 ## Run it on a server
 
-Beluga also runs with no window, on a computer that stays on: a Linux server, a home PC or a Mac mini. Your projects and agents live there, and you use them from your phone or open the whole Beluga app in any browser.
+Beluga also runs with no window, on a computer that stays on: a Linux server, a home PC or a Mac mini. Your projects and agents live there, and you use them from your phone or open the whole Beluga app in any browser. With Beluga on your Mac too, [add it as one of your computers](#use-your-other-computers) instead.
 
 ### Install and set up
 
@@ -315,6 +352,7 @@ beluga web --off
 | `beluga status` | whether it runs, its version, projects and phones |
 | `beluga project add <folder or git URL>` | add a project (a URL is cloned first) |
 | `beluga phones` | list the paired phones, or remove one |
+| `beluga pair --computer` · `beluga computers` | let your Beluga app add this server; list your devices, forget one everywhere |
 | `beluga logs -f` | follow its log |
 | `beluga up` · `beluga stop` | start it, stop it |
 | `beluga update` | the latest version, in place |

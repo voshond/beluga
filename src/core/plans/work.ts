@@ -15,9 +15,10 @@ import { DraftReviewer } from './draft-review.js';
 import { dropEpics, syncEpics } from './epics.js';
 import type { BodyInput, PlanOp, RepoChangeInput, TaskInput } from './edit.js';
 import { type Autonomy, MAX_PLAN_REPOS, type Plan, type TestsAt, activeDecisions, allTasks, checkerOf, decisionText, isMultiRepo, milestoneRepos, planForHome, planRepos, planTaskOfIssue, planTitle, proposedRepos, reviewerOf, runOf } from './model.js';
+import { PlanMover } from './move-work.js';
 import { issueForWorkspace } from '../board/model.js';
 import { type PilotDeps, PlanPilot } from './pilot.js';
-import type { TaskView } from './progress.js';
+import { liveFrom, type TaskView } from './progress.js';
 import { type PlanGit, planGitOf } from './plan-git.js';
 import { type Plans, UNTITLED } from './plans.js';
 import { type MilestoneWhere, type NearRepo, type PlanRepoInfo, checkFailedPrompt, checkerBrief, describePlan, handbackPrompt, headBrief, milestoneNote, milestoneWhere, planningBrief, reviewerBrief, sizeWords, workerNote } from './prompt.js';
@@ -103,6 +104,8 @@ export class PlansWork {
   readonly pilot: PlanPilot;
   /** Work handed back this session (plan id and the words), so the same thing reaches the head once. */
   private readonly handedBack = new Set<string>();
+  /** Moving a plan to another computer of yours (BLG-806): this daemon's part. */
+  readonly mover: PlanMover;
   /** A fresh agent's read of each first draft, before Approve Plan (see draft-review.ts). */
   readonly reviewer: DraftReviewer;
 
@@ -173,6 +176,20 @@ export class PlansWork {
       ...(deps.rescueMs !== undefined ? { rescueMs: deps.rescueMs } : {}),
       structure: (plan) => this.structure(plan.id),
       testsOf,
+    });
+    this.mover = new PlanMover({
+      store: deps.store,
+      plans: deps.plans,
+      board: deps.board.board,
+      ...(deps.controller ? { controller: deps.controller } : {}),
+      view: (plan) => this.pilot.view(plan),
+      busy: (channel) => liveFrom(deps.store.getState()).busy(channel),
+      settle: (id) => {
+        this.structure(id);
+        this.pilot.schedule();
+      },
+      me: () => this.me(),
+      ...(deps.now ? { now: deps.now } : {}),
     });
     // A task of a plan: its worktree's Claude knows the plan and what runs beside it.
     deps.board.setBriefExtra((issue) => this.workerBrief(issue));
@@ -599,7 +616,7 @@ export class PlansWork {
     if (reviewing) return reviewing.status === 'draft' && reviewing.draft ? { tools: this.reviewerTools(reviewing.id), brief: reviewerBrief(reviewing), checker: true } : undefined;
     const checking = checkerOf(this.plans.state(), channel);
     if (checking) {
-      if (checking.plan.status !== 'active' || !checking.plan.body) return undefined;
+      if (checking.plan.status !== 'active' || !checking.plan.body || checking.plan.movedTo) return undefined;
       const view = this.pilot.view(checking.plan);
       const m = view.milestones.find((x) => x.milestone.id === checking.milestone);
       return m ? { tools: this.checkerTools(checking.plan.id, m.milestone.id), brief: checkerBrief(view, m, this.pilot.repoChecks(checking.plan, m.milestone)), checker: true } : undefined;
@@ -750,7 +767,7 @@ export class PlansWork {
   /** The active plan milestone whose agent works in this worktree (its own, not one beside it). */
   private milestoneIn(workspaceId: string): { readonly plan: Plan; readonly id: string } | undefined {
     for (const plan of this.plans.list()) {
-      if (plan.status !== 'active' || !plan.body) continue;
+      if (plan.status !== 'active' || !plan.body || plan.movedTo) continue;
       const id = Object.keys(plan.runs).find((k) => plan.runs[k]?.agent?.worktree === workspaceId);
       if (id) return { plan, id };
     }

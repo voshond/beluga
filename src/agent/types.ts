@@ -580,7 +580,7 @@ export interface AgentBackend {
   /** What a project's run command should be after `failed` failed in `dir` (a model looks). */
   fixRun?(dir: string, failed: string, output: string): Promise<ScriptFix | undefined>;
   /** A project's setup and/or run command, worked out from its files in `dir` (a model looks). */
-  workOutScripts?(dir: string, want: { setup: boolean; run: boolean }): Promise<WorkedOutScripts | undefined>;
+  workOutScripts?(dir: string, want: { setup: boolean; run: boolean; system?: string }): Promise<WorkedOutScripts | undefined>;
   /** A task written from a description: title, goal, criteria, labels from the board's own (Sonnet). */
   draftTask?(text: string, ctx: DraftContext): Promise<TaskDraft | undefined>;
   /** What a project is about, from a quick read-only look at its folder (About This Project, BLG-298). */

@@ -1,3 +1,5 @@
+import { untag } from '@beluga/machines/attention.js';
+import { machineClientOf } from '../machines/pane-clients.js';
 import { useEffect, useSyncExternalStore } from 'react';
 import type { SocketClient } from '@beluga/ipc/socket-client.js';
 import { inApp } from '../lib/boot.js';
@@ -190,9 +192,17 @@ export function useRequestPopup(client: SocketClient): void {
 export function useRequestNative(client: SocketClient): void {
   useRequestPopup(client);
   useEffect(() => {
+    // One of your computers' (BLG-790): answered on that computer, with its own ids.
+    const answer = (action: RequestAction, approval?: string, task?: string): void => {
+      const a = untag(approval);
+      const t = untag(task);
+      const machine = a.machine ?? t.machine;
+      const on = machine ? machineClientOf(machine) : client;
+      if (on) void runRequestAction(on, action, a.id, t.id);
+    };
     const onEvent = (e: Event): void => {
       const d = (e as CustomEvent<{ action?: RequestAction; approval?: string; task?: string }>).detail;
-      if (d?.action) void runRequestAction(client, d.action, d.approval, d.task);
+      if (d?.action) answer(d.action, d.approval, d.task);
     };
     document.addEventListener(REQUEST_NOTIFICATION, onEvent);
     if (!inApp()) return () => document.removeEventListener(REQUEST_NOTIFICATION, onEvent);
@@ -200,7 +210,7 @@ export function useRequestNative(client: SocketClient): void {
     let off: (() => void) | undefined;
     void import('@tauri-apps/api/event')
       .then(async ({ listen }) => {
-        const un = await listen<{ action: RequestAction; approval?: string; task?: string }>('notification-request', (e) => void runRequestAction(client, e.payload.action, e.payload.approval, e.payload.task));
+        const un = await listen<{ action: RequestAction; approval?: string; task?: string }>('notification-request', (e) => answer(e.payload.action, e.payload.approval, e.payload.task));
         if (alive) off = un;
         else un();
       })

@@ -1,3 +1,5 @@
+import { EnvSend, attachEnvSend } from '../machines/env-send.js';
+import { Forwarder, attachForwarder, serveTunnels } from '../machines/forward.js';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import os from 'node:os';
@@ -5,7 +7,7 @@ import path from 'node:path';
 import { claudeCodeOf } from '../core/claude-code/launch.js';
 import { belugaEnv } from '../core/beluga-env.js';
 import { belugaHome } from '../core/home.js';
-import { loadSettings } from '../core/settings.js';
+import { loadSettings, saveSettings } from '../core/settings.js';
 import type { Session } from '../core/session.js';
 import type { Store } from '../core/store.js';
 import { installedVersion } from '../core/version.js';
@@ -20,7 +22,22 @@ import { CompanionHost } from './host.js';
 import { idleWhenWatched } from './push.js';
 import { attachCompanion, detachCompanion } from './registry.js';
 import type { ConvOutput } from './views.js';
+import type { NetworkSummary } from '../net/mesh/views.js';
 import { needSentinel } from '../core/sentinel/registry.js';
+import { DEMO_ALWAYS_ON, demoMachines } from '../machines/demo.js';
+import { collectInfo, realInfoDeps } from '../machines/info.js';
+import { ComputerUpdater, psHere, updateRunner } from '../machines/versions.js';
+import { IPC_VERSION } from '../ipc/protocol.js';
+import { Machines } from '../machines/machines.js';
+import { SettingsSync } from '../machines/sync.js';
+import { attachMachines, detachMachines, screenDoorOf } from '../machines/registry.js';
+import { AlwaysOn, attachAlwaysOn, detachAlwaysOn } from '../machines/always-on.js';
+import { FriendsLink, attachFriendsLink, detachFriendsLink } from '../machines/friends.js';
+import { LeaseKeeper, dhtLeaseBoard } from '../machines/lease.js';
+import { gateNetwork } from '../core/network.js';
+import { type SwappableIdentity, swappableIdentity } from '../core/identity.js';
+import { networkSummaryOf, networkSwitchOf } from '../core/network.js';
+import { pinCompanionSeed } from './host.js';
 
 /**
  * Start the phone companion for the daemon (the Mac app's Beluga): the device book in
@@ -132,6 +149,8 @@ export interface CompanionLaunch {
   readonly session: Session;
   readonly store: Store;
   readonly identity: Identity;
+  /** Your identity as it moves to your Always On and back (BLG-796); `identity` reads through it. */
+  readonly you?: SwappableIdentity;
   readonly demo: boolean;
   readonly log?: (line: string) => void;
   /** The daemon's terminals: a worktree's, shared with the phone. */
@@ -167,10 +186,120 @@ export function dhtFromEnv(env: NodeJS.ProcessEnv = process.env): { dht?: { boot
 export function launchCompanion(opts: CompanionLaunch): () => Promise<void> {
   const dir = opts.demo ? mkdtempSync(path.join(os.tmpdir(), 'beluga-demo-companion-')) : belugaHome();
   const devices = new DeviceBook(path.join(dir, 'devices.json'));
+  const seedFile = path.join(dir, 'companion-seed.json');
   let host: CompanionHost | undefined;
+  // Your device set and computers (BLG-774): they share the phones' node, relay and address.
+  // Its name and icon as kept here (BLG-780): what every device of yours shows.
+  const infoDeps = { ...realInfoDeps(() => opts.store.getState(), { version: installedVersion(), ipc: IPC_VERSION }), look: () => ({ name: macName(), ...(loadSettings().computerIcon ? { icon: loadSettings().computerIcon! } : {}) }) };
+  // Update It from your app (BLG-777): `beluga update` here once nothing runs, or what runs is said.
+  const run = opts.demo ? undefined : updateRunner();
+  const updater = new ComputerUpdater({
+    state: () => opts.store.getState(),
+    shells: () => (opts.terminals?.list() ?? []).filter((p) => p.running && p.pid !== undefined).map((p) => p.pid!),
+    ps: psHere,
+    ...(run ? { run } : {}),
+    name: macName,
+    ...(opts.log ? { log: opts.log } : {}),
+  });
+  // .env files for worktrees made on your computers (BLG-800): asked with names, sent over the link.
+  let envSend: EnvSend | undefined;
+  // Your settings, the same on every device of yours (BLG-805); your own variables only with computers you said yes for.
+  const settings = opts.demo
+    ? undefined
+    : new SettingsSync({
+        file: path.join(dir, 'settings-sync.json'),
+        prefs: () => opts.store.getState().prefs,
+        watch: (listener) => opts.store.subscribe(listener),
+        apply: (patch) => opts.session.setPrefs(patch as Parameters<Session['setPrefs']>[0]),
+        secrets: { read: () => opts.session.env.globals(), write: (key, value) => opts.session.env.setOne(undefined, key, value), watch: (listener) => opts.session.env.watch(listener) },
+        ...(opts.log ? { log: opts.log } : {}),
+      });
+  // Make Always On (BLG-796): your identity and friends network move to one of your computers and back.
+  let alwaysOn: AlwaysOn | undefined;
+  let friends: FriendsLink | undefined;
+  let lease: LeaseKeeper | undefined;
+  const you = opts.you ?? swappableIdentity(opts.identity);
+  const machines = new Machines({
+    dir,
+    identity: you.identity,
+    devices,
+    node: () => host!.dhtNode(),
+    address: () => host!.address(),
+    relayUrl: () => host?.relayUrl(),
+    relay: { add: (route) => host?.reach.server.add(route), remove: (key) => host?.reach.server.remove(key) },
+    name: macName,
+    version: installedVersion(),
+    removePhone: (id) => void host?.removeDevice(id, 'This phone was forgotten on another of your devices'),
+    onChange: () => host?.machinesChanged(),
+    // What this computer has free, for an app of yours that asks (BLG-778).
+    info: () => collectInfo(infoDeps),
+    updater,
+    ...(settings ? { settings } : {}),
+    // Renamed or a new icon from your app: this computer's own settings, so every device agrees.
+    setLook: (look) => {
+      saveSettings({ ...(look.name ? { computerName: look.name } : {}), ...(look.icon ? { computerIcon: look.icon } : {}) });
+      if (look.name) named = undefined;
+    },
+    // Add Over SSH (BLG-781): your own ssh, keys and agent.
+    ssh: belugaEnv('SSH') ?? 'ssh',
+    // An app of yours driving this computer: a screen of the daemon's, of kind machine (BLG-775).
+    adopt: (socket, hello) => {
+      const door = screenDoorOf(opts.session);
+      if (door) door.adoptMachine(socket, hello);
+      else socket.close(1013, 'Beluga is starting');
+    },
+    // The demo's Mac mini and build-box (BLG-779), for the e2e tests and GIFs.
+    ...(opts.demo ? { demo: () => demoMachines(opts.store.getState()) } : {}),
+    // An app of yours forwarding this computer's dev servers to itself, or sharing its own ports here (BLG-802/804).
+    tunnels: (socket) => void serveTunnels(socket, { name: macName, ...(opts.log ? { log: opts.log } : {}) }),
+    alwaysOn: {
+      serve: (socket, cert, hello) => (alwaysOn ? alwaysOn.serve(socket, cert, hello) : socket.close(1013, 'Beluga is starting')),
+      at: () => alwaysOn?.at(),
+      net: () => {
+        const summary = networkSummaryOf(opts.session);
+        return summary?.enabled ? { ...summary, enabled: true as const, friends: [...summary.friends], groups: [...summary.groups], invitations: [...summary.invitations], pendingJoins: [...summary.pendingJoins] } : undefined;
+      },
+      // Between polls the friends link mirrors it live; this only fills in while that link is down.
+      mirror: (net) => {
+        if (!friends?.live) opts.store.dispatch({ type: 'net_summary', summary: net as unknown as NetworkSummary });
+      },
+    },
+    onWorktree: (machineId, workspaceId) => void envSend?.offer(machineId, workspaceId).catch((err: unknown) => opts.log?.(`env-send: couldn't offer env files: ${err instanceof Error ? err.message : String(err)}`)),
+    ...(opts.log ? { log: opts.log } : {}),
+  });
+  envSend = new EnvSend({
+    file: path.join(dir, 'env-send.json'),
+    projects: () => opts.store.getState().projects,
+    machineName: (id) => machines.book.get(id)?.name ?? 'Your computer',
+    call: (machineId, method, args) => machines.door.call(machineId, method, args),
+    publish: (asks) => opts.store.dispatch({ type: 'env_sends', asks }),
+    ...(opts.log ? { log: opts.log } : {}),
+  });
+  attachEnvSend(opts.session, envSend);
+  // Your computers' dev servers at localhost on this Mac, while a screen of yours drives them (BLG-802).
+  const forwarder = new Forwarder({
+    live: () => machines.door.live(),
+    machineName: (id) => machines.book.get(id)?.name ?? 'Your computer',
+    call: (machineId, method, args) => machines.door.call(machineId, method, args),
+    openLink: (id) => {
+      const record = machines.book.get(id);
+      return record ? machines.openLink(record) : Promise.reject(new Error('That computer is gone from your devices'));
+    },
+    publish: (forwards) => opts.store.dispatch({ type: 'forwards', forwards }),
+    publishShares: (shares, onComputers) => opts.store.dispatch({ type: 'port_shares', shares, onComputers }),
+    ...(opts.log ? { log: opts.log } : {}),
+  });
+  if (!opts.demo) forwarder.start();
+  attachForwarder(opts.session, forwarder);
   const outputs = new OutputCache(opts.session, opts.store, () => host?.refreshViews());
   host = new CompanionHost({
-    identity: opts.identity,
+    identity: you.identity,
+    seedFile,
+    // A phone's certificate is signed by your identity: while your Always On holds it, phones pair there.
+    cannotPair: () => {
+      const at = opts.demo ? undefined : alwaysOn?.view();
+      return at && !at.here ? `${at.name ?? 'Your Always On'} holds your identity now: make this Mac Always On again (Settings › Your Computers) to pair a phone here.` : undefined;
+    },
     store: opts.store,
     devices,
     call: (clientId, method, args) => dispatchCall(opts.session, clientId, method, args),
@@ -197,14 +326,77 @@ export function launchCompanion(opts: CompanionLaunch): () => Promise<void> {
     // or it's the demo (nothing leaves the computer).
     relay: opts.demo || ['p2p', 'none'].includes(opts.store.getState().prefs.tunnel) ? 'off' : 'cloudflared',
     ...(opts.log ? { log: opts.log } : {}),
+    machines,
+    // Your Always On runs your friends network: it tells your phones what comes in, not this Mac too (BLG-850).
+    tellsFriends: () => !alwaysOn?.at(),
   });
+  alwaysOn = new AlwaysOn({
+    dir,
+    machines,
+    you,
+    network: () => networkSwitchOf(opts.session),
+    settings: { load: loadSettings, save: (patch) => void saveSettings(patch) },
+    pinAddress: (identity) => pinCompanionSeed(seedFile, identity),
+    phones: () => devices.all().map((r) => r.cert.device),
+    onChange: () => {
+      host?.machinesChanged();
+      friends?.check();
+    },
+    // Trust levels arriving with your identity count at once (the gateway reads Ask Me For from disk each time).
+    settingsChanged: () => opts.store.dispatch({ type: 'remembered', people: loadSettings().people }),
+    ...(opts.demo ? { demo: { start: { ...DEMO_ALWAYS_ON }, name: (id) => machines.list().find((m) => m.id === id)?.name } } : {}),
+    ...(opts.log ? { log: opts.log } : {}),
+  });
+  attachAlwaysOn(opts.session, alwaysOn);
+  // Friends through your Always On (BLG-797): its network shown and used from here, over your own link.
+  if (!opts.demo) {
+    friends = new FriendsLink({
+      machines,
+      at: () => alwaysOn?.at(),
+      store: opts.store,
+      intents: opts.session.intents,
+      version: installedVersion(),
+      file: path.join(dir, 'friends-mirror.json'),
+      ...(opts.log ? { log: opts.log } : {}),
+    });
+    attachFriendsLink(opts.session, friends);
+    // Never two of you, never none (BLG-799): the lease on the DHT, renewed by whichever install is you.
+    const ao = alwaysOn;
+    lease = new LeaseKeeper({
+      host: ao,
+      board: dhtLeaseBoard(() => host!.dhtNode()),
+      self: () => ({ id: machines.runOnDevice().id, name: macName() }),
+      heard: (id) => machines.lastHeard(id),
+      reachable: (id) => machines.reach(id),
+      ...(opts.log ? { log: opts.log } : {}),
+    });
+    const keeper = lease;
+    gateNetwork(opts.session, () => keeper.mayRun());
+  }
   attachCompanion(opts.session, host);
-  void host.start().catch((err: unknown) => opts.log?.(`companion: could not start: ${String(err)}`));
+  attachMachines(opts.session, machines);
+  void host
+    .start()
+    .then(() => {
+      machines.start();
+      alwaysOn?.start();
+      friends?.start();
+      lease?.start();
+    })
+    .catch((err: unknown) => opts.log?.(`companion: could not start: ${String(err)}`));
   // A phone on this Mac's USB: set up by itself, or what to switch on said in Settings › Phone (BLG-190).
   if (!opts.demo) host.watchCable();
   return async () => {
     outputs.stop();
+    forwarder.stop();
     detachCompanion(opts.session);
+    detachMachines(opts.session);
+    detachAlwaysOn(opts.session);
+    alwaysOn?.stop();
+    detachFriendsLink(opts.session);
+    friends?.stop();
+    lease?.stop();
+    await machines.stop();
     await host?.stop();
     host = undefined;
   };

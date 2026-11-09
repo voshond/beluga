@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { kindOf, NeedsStack } from '../components/Needs';
 import { Header, Screen, useScrolled } from '../components/Screen';
 import { Card, Row, T } from '../components/ui';
-import { ago, useView, useVisibleNeeds } from '../lib/hooks';
+import { ago, useView, useAllNeeds } from '../lib/hooks';
 import type { HomeView } from '../lib/link/protocol';
 
 /** Everything that needs you: the stack to swipe through, and the list of all of it. */
@@ -13,7 +13,7 @@ export default function Needs() {
   const { scrolled, onScroll } = useScrolled();
   const insets = useSafeAreaInsets();
   const home = useView<HomeView>('home');
-  const needs = useVisibleNeeds(home?.data.needsYou);
+  const needs = useAllNeeds(home?.data.needsYou);
   return (
     <Screen>
       <Header scrolled={scrolled} back title="Needs you" at={home?.at} />

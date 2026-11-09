@@ -7,6 +7,8 @@ import { EMPTY_HISTORY, type NavHistory, type PanelSnapshot, canGoBack, canGoFor
 import { pageAlive, restorePatch } from './nav-pages.js';
 import { currentTab, panelChosenOpen } from './panel.js';
 import { getPrefs, setPrefs, subscribePrefs } from './prefs.js';
+import { paneOf, sameView } from '../machines/pane-model.js';
+import { machineClientOf } from '../machines/pane-clients.js';
 
 /**
  * Back and forward in this window (lib/nav-history.ts is the history itself): every page you go
@@ -38,8 +40,19 @@ const subscribe = (l: () => void): (() => void) => {
   return () => void listeners.delete(l);
 };
 
+/**
+ * What the panel reads for the page on screen: this Mac's state, or on a computer's page (BLG-784)
+ * that computer's, once its screen shows the page.
+ */
+function panelStateOf(state: AppState): AppState {
+  const { machine, view } = paneOf(state.view);
+  const there = machine ? machineClientOf(machine)?.store.getState() : undefined;
+  return there && sameView(there.view, view) ? there : state;
+}
+
 /** What's open on the page on screen now. */
-function snapshotOf(state: AppState): PanelSnapshot {
+function snapshotOf(local: AppState): PanelSnapshot {
+  const state = panelStateOf(local);
   const prefs = getPrefs();
   const topTab = currentTab(state, prefs, 'top');
   const bottomTab = currentTab(state, prefs, 'bottom');
@@ -72,7 +85,9 @@ function step(dir: -1 | 1): boolean {
   restoring = true;
   try {
     go(to.view);
-    const patch = restorePatch(getPrefs(), client.store.getState().view, to.panels);
+    // A computer's page is drawn a moment later (machines/MachinePane.tsx): its panels are of the page itself.
+    const shown = client.store.getState().view;
+    const patch = restorePatch(getPrefs(), shown.kind === 'machine' ? shown.view : shown, to.panels);
     if (Object.keys(patch).length) setPrefs(patch);
   } catch (err) {
     console.error('beluga: going back or forward failed', err);

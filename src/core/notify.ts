@@ -183,7 +183,7 @@ function planNews(prev: DomainState, next: DomainState): NoticeEvent[] {
   const out: NoticeEvent[] = [];
   for (const plan of next.plans.plans) {
     const old = prev.plans.plans.find((p) => p.id === plan.id);
-    if (!old?.body || !plan.body || plan.status === 'draft') continue;
+    if (!old?.body || !plan.body || plan.status === 'draft' || plan.movedTo) continue;
     const name = planTitle(plan);
     const at = { plan: plan.id, channel: plan.home };
     const prs = (): number => next.board.issues.filter((i) => i.plan?.id === plan.id && i.pr?.state === 'OPEN').length;

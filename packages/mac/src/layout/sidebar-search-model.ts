@@ -23,8 +23,19 @@ export interface ChatMatch {
   readonly detail: string;
 }
 
+/** A conversation or a message on one of your computers (BLG-785): which computer, and its page there. */
+export interface RemoteMatch {
+  readonly machine: { readonly id: string; readonly name: string };
+  /** Its worktree there. */
+  readonly id: string;
+  readonly label: string;
+  readonly detail: string;
+  readonly hit?: SearchHit;
+}
+
 export type SidebarResult =
   | { readonly type: 'chat'; readonly key: string; readonly chat: ChatMatch }
+  | { readonly type: 'remote'; readonly key: string; readonly match: RemoteMatch }
   /** `index`: the hit's place in `state.search.hits`, which opening it names. */
   | { readonly type: 'message'; readonly key: string; readonly hit: SearchHit; readonly index: number }
   | { readonly type: 'all'; readonly key: string };
@@ -51,13 +62,30 @@ export function matchChats(query: string, sources: SidebarSearchSources): ChatMa
 export const searchesMessages = (query: string): boolean => wordsOf(query).some((w) => w.length >= MESSAGE_WORD_MIN);
 
 /** What the sidebar lists for a query: the chats, the messages found for this very query, the way to all of them. */
-export function sidebarResults(query: string, chats: readonly ChatMatch[], search: Pick<AppState['search'], 'query' | 'hits'>): SidebarResult[] {
+export function sidebarResults(query: string, chats: readonly ChatMatch[], search: Pick<AppState['search'], 'query' | 'hits'>, remote: { readonly chats: readonly RemoteMatch[]; readonly messages: readonly RemoteMatch[] } = { chats: [], messages: [] }): SidebarResult[] {
   const hits = searchesMessages(query) && search.query === query ? search.hits.slice(0, MAX_MESSAGES) : [];
+  const tagged = (m: RemoteMatch, i: number): SidebarResult => ({ type: 'remote', key: `${m.machine.id}:${m.id}:${m.hit ? `${m.hit.ts}:${i}` : 'chat'}`, match: m });
   return [
     ...chats.map((chat): SidebarResult => ({ type: 'chat', key: chat.key, chat })),
+    // Your computers' conversations after this Mac's, each tagged; their messages after this Mac's too.
+    ...remote.chats.map(tagged),
     ...hits.map((hit, index): SidebarResult => ({ type: 'message', key: `${hit.channel}:${hit.ts}:${index}`, hit, index })),
+    ...remote.messages.slice(0, MAX_MESSAGES).map(tagged),
     { type: 'all', key: 'all' },
   ];
+}
+
+/** Your computers' worktrees and chats with every word in their name or project (by computer, best names first). */
+export function matchRemoteChats(query: string, sources: ReadonlyArray<{ readonly machine: { readonly id: string; readonly name: string }; readonly snapshot?: { readonly projects: ReadonlyArray<{ readonly name: string; readonly workspaces: ReadonlyArray<{ readonly id: string; readonly name: string; readonly kind: string }> }> } }>): RemoteMatch[] {
+  const words = wordsOf(query);
+  if (!words.length) return [];
+  return sources.flatMap((src) =>
+    (src.snapshot?.projects ?? []).flatMap((p) =>
+      p.workspaces
+        .filter((w) => w.kind !== 'main' && words.every((word) => w.name.toLowerCase().includes(word) || p.name.toLowerCase().includes(word)))
+        .map((w) => ({ machine: { id: src.machine.id, name: src.machine.name }, id: w.id, label: w.name, detail: `${p.name} · ${src.machine.name}` })),
+    ),
+  );
 }
 
 /** The next selected row, going round at the ends. */

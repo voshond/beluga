@@ -1,3 +1,8 @@
+import { sumCounts } from '@beluga/machines/attention.js';
+import { onRemoteAttention, remoteAttention } from '../machines/remote-attention.js';
+import { untag } from '@beluga/machines/attention.js';
+import { machineClientOf } from '../machines/pane-clients.js';
+import { onMachine, pageOfChannel } from '../machines/pane-model.js';
 import { useEffect } from 'react';
 import { appInvoke, inApp, native } from './boot.js';
 import type { Actions } from './actions.js';
@@ -229,15 +234,20 @@ export function useTrayStatus(client: SocketClient): void {
     let last = '';
     let seen: unknown;
     let seenLook: unknown;
+    let seenThere: unknown;
     let working: number | undefined;
     let repeating = false;
     const update = (): void => {
       const st = client.store.getState();
       const prefs = getPrefs();
-      if (st === seen && prefs.menuBar === seenLook) return;
+      const there = remoteAttention();
+      if (st === seen && prefs.menuBar === seenLook && there === seenThere) return;
       seen = st;
       seenLook = prefs.menuBar;
-      const counts = menuBarCounts(st);
+      seenThere = there;
+      // Every computer's added (BLG-790): one Dock badge and one menu bar for all of them.
+      const here = menuBarCounts(st);
+      const counts = { ...here, ...sumCounts(here, there.map((r) => r.counts)) };
       const look = prefs.menuBar;
       // The whale spouts: once as a Claude finishes, or on and off while one works.
       const step = spoutStep(prefs.reduceMotion ? 'off' : look.spout, working, counts.working);
@@ -258,7 +268,9 @@ export function useTrayStatus(client: SocketClient): void {
     tick.request();
     const off = client.store.subscribe(tick.request);
     const offPrefs = subscribePrefs(tick.request);
+    const offThere = onRemoteAttention(tick.request);
     return () => {
+      offThere();
       off();
       offPrefs();
       tick.stop();
@@ -353,7 +365,14 @@ export function useWindowFocus(client: SocketClient): void {
  */
 export function useNotificationTaps(client: SocketClient, ui: UiStore, actions: Actions): void {
   useEffect(() => {
-    const go = (channel: string | undefined): void => {
+    const go = (tagged: string | undefined): void => {
+      // One of your computers' (BLG-790): read there, and opened there in the pane.
+      const { machine, id: channel } = untag(tagged);
+      if (machine) {
+        void machineClientOf(machine)?.api.inbox.read(channel ? { channel } : {});
+        const page = channel ? pageOfChannel(channel) : undefined;
+        return page ? actions.run({ type: 'view', view: onMachine(machine, page) }) : ui.patch({ notices: true });
+      }
       const target = macNoticeTarget(client.store.getState(), channel);
       if (!target || channel === undefined) return ui.patch({ notices: true });
       void client.api.inbox.read({ channel });

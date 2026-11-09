@@ -62,10 +62,14 @@ export interface BelugaClient {
   close(): void;
 }
 
-/** The Mac app, a browser on the web port (set by the daemon, never claimed), a command run once (`beluga web`), a test, or the desktop app connected to a server. */
-export type ClientKind = 'mac' | 'web' | 'cli' | 'test' | 'remote-app';
+/**
+ * The Mac app, a browser on the web port (set by the daemon, never claimed), a command run once
+ * (`beluga web`), a test, the desktop app connected to a server, or your own app driving this
+ * computer over its link (BLG-775, set by the daemon for a device of yours, never claimed).
+ */
+export type ClientKind = 'mac' | 'web' | 'cli' | 'test' | 'remote-app' | 'machine';
 /** What a screen may say it is in its hello. */
-export type HelloKind = Exclude<ClientKind, 'web'>;
+export type HelloKind = Exclude<ClientKind, 'web' | 'machine'>;
 
 type Group<M> = M extends `${infer G}.${string}` ? G : never;
 type NameIn<M, G extends string> = M extends `${G}.${infer N}` ? N : never;

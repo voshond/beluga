@@ -99,10 +99,11 @@ export interface MessageView extends ChatExtras {
   readonly ts: number;
   readonly mine: boolean;
   /**
-   * Your direct messages: waiting (in your outbox until they're online), delivered, or expired.
+   * Your direct messages: waiting (in your outbox until they're online), delivered, seen (it was on
+   * their screen, BLG-798; a friend on an older Beluga never says), or expired.
    * Group messages that can't be read (no key for them yet) are 'locked'.
    */
-  readonly status?: 'waiting' | 'delivered' | 'expired' | 'locked';
+  readonly status?: 'waiting' | 'delivered' | 'seen' | 'expired' | 'locked';
   /** When its author last changed its text (direct messages). */
   readonly edited?: number;
   /** Emoji reactions under it (BLG-702), in the order they were first put there; none: left out. */

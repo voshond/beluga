@@ -9,7 +9,7 @@ import { z } from 'zod';
  * ignores what it doesn't know. A breaking change bumps the major, and the Mac keeps answering the
  * previous major for a release.
  */
-export const COMPANION_PROTO = { major: 1, minor: 50 } as const;
+export const COMPANION_PROTO = { major: 1, minor: 52 } as const;
 
 /**
  * What came in which minor, for a phone talking to an older Mac: it subscribes to a topic (and
@@ -137,8 +137,15 @@ export const COMPANION_PROTO = { major: 1, minor: 50 } as const;
  * SINCE.threads: an older Mac refuses an argument it doesn't know, so its children stay.
  * SINCE.threadAgents: a family also lists the chat's native sub-agents (`ThreadFamilyView.agents`),
  * read-only. An older Mac leaves them out: the sheet lists threads only.
+ * 1.48 (BLG-798): your own direct message says Delivered or Seen (`ChatMessageView.delivery`). An older Mac leaves it out.
+ * 1.49 (BLG-809): your computers, where to dial each (`computers`, sent after the welcome and when
+ * they change), so the phone links to each by itself with the certificate it has. Each computer lets
+ * in the phones of your device set, with this phone table's limits. An older Mac sends none, an
+ * older phone drops the frame: nothing changes for either. Each says its Runs on line as the Mac's
+ * menu does (`line`, `why`), and the phone shows every computer's work, Needs You and New Task's
+ * Runs on from its own links (BLG-810).
  */
-export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36, reactions: 41, cancelSteer: 47, triage: 48, draftReview: 49, threads: 50, threadAgents: 50 } as const;
+export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36, reactions: 41, cancelSteer: 47, triage: 48, draftReview: 49, threads: 50, threadAgents: 50, seen: 51, computers: 52 } as const;
 
 /** One frame's biggest payload, and a file piece. */
 export const MAX_COMPANION_FRAME = 1024 * 1024;
@@ -1108,6 +1115,8 @@ export const ChatMessageView = z.object({
   files: z.array(OutputView).max(20).optional(),
   /** 1.41 (BLG-702): the emoji reactions under it, in the order they were first put there. */
   reactions: z.array(ChatReactionView).max(20).optional(),
+  /** 1.48 (BLG-798): your own direct message: it reached them (your Always On has theirs the same way), or it was on their screen. */
+  delivery: z.enum(['delivered', 'seen']).optional(),
   /** A friend's Claude answering you can't touch their Mac from the chat: what it offers to do there as a request (gateway.ask `to`). */
   offer: z.object({ to: id, ask: z.string().max(500), needs: z.array(z.enum(['project', 'shell', 'files', 'screen', 'device'])).max(5).optional() }).optional(),
   /**
@@ -1441,6 +1450,34 @@ export const relayUrlFor = (base: string, keyHex: string): string => `${base.rep
 export const RelayRecord = z.object({ v: z.literal(1), relay: RelayUrl.optional(), at: ts, phones: z.array(z.string().regex(/^[0-9a-f]{16}$/)).max(8).optional() });
 export type RelayRecord = z.infer<typeof RelayRecord>;
 
+/**
+ * 1.49 (BLG-809): one of your computers as your Mac tells its phones: who it is, how it looks, and
+ * where to dial it (its companion address and relays). Nothing secret: keys are public, and a
+ * computer lets the phone in only because your identity signed the phone's certificate.
+ */
+export const PhoneComputer = z.object({
+  id: z.string().regex(/^[0-9a-f]{16}$/),
+  name: z.string().min(1).max(64),
+  /** Its icon as kept on it (`auto` or none: its kind's own). */
+  icon: z.string().max(200).optional(),
+  /** What it is and, on Linux, which one (src/machines/kind.ts): its mark, as the Mac draws it. Plain strings, so a newer kind reaches an older phone as unknown. */
+  kind: z.string().max(32).optional(),
+  distro: z.string().max(32).optional(),
+  platform: z.enum(['android', 'ios', 'macos', 'linux', 'windows']),
+  address: z.string().regex(/^[0-9a-f]{64}$/),
+  relays: z.array(RelayUrl).max(4),
+  /** When your Mac last heard from it. */
+  lastSeen: ts.optional(),
+  /** It's your Always On (BLG-796). */
+  alwaysOn: z.boolean().optional(),
+  /** As the Mac's Runs on menu says it (src/machines/words.ts): what it has free, and why it can't take new work now. */
+  line: z.string().max(200).optional(),
+  why: z.string().max(200).optional(),
+});
+export type PhoneComputer = z.infer<typeof PhoneComputer>;
+/** Computers one Mac tells a phone about (a device set holds at most MAX_SET_DEVICES). */
+export const MAX_PHONE_COMPUTERS = 32;
+
 // ---- frames
 
 export const PhoneFrame = z.discriminatedUnion('t', [
@@ -1526,6 +1563,8 @@ export const MacFrame = z.discriminatedUnion('t', [
   z.object({ t: z.literal('tun_close'), id: tunId, error: z.string().max(300).optional() }),
   /** 1.18: the Mac took the screen video's piece `seq` (the phone paces itself by these). */
   z.object({ t: z.literal('vid_ack'), seq: z.number().int().min(0) }),
+  /** 1.46: your computers and where to dial each (only to a phone with SINCE.computers): the whole list, each time it changes. */
+  z.object({ t: z.literal('computers'), list: z.array(PhoneComputer).max(MAX_PHONE_COMPUTERS) }),
   z.object({ t: z.literal('bye'), reason: z.string().max(200) }),
 ]);
 export type MacFrame = z.infer<typeof MacFrame>;
@@ -1568,22 +1607,103 @@ export const parseMacFrame = (raw: string): MacFrame | undefined => parse(MacFra
 /** `?r=` (additive): the Mac's relay, URL-encoded, so pairing works where the DHT doesn't. */
 export const DEVICE_LINK = /^(?:beluga|klaud):\/\/device#([\w-]{22})(?:\?r=([\w%.-]+))?$/;
 
+/**
+ * What a device of yours is (BLG-774): a phone, a Beluga app you drive from, or a computer that
+ * does the work. A certificate without one is a phone's (every one signed before roles).
+ */
+export const DEVICE_ROLES = ['phone', 'app', 'computer'] as const;
+export type DeviceRole = (typeof DEVICE_ROLES)[number];
+/** Phones are android or ios; apps and computers are macos, linux or windows. */
+export const DEVICE_PLATFORMS = ['android', 'ios', 'macos', 'linux', 'windows'] as const;
+export type DevicePlatform = (typeof DEVICE_PLATFORMS)[number];
+const hex64 = z.string().regex(/^[0-9a-f]{64}$/);
+
 export const DeviceCert = z.object({
   v: z.literal(1),
   /** Your peer id and identity key (base64 SPKI). */
   owner: id,
   ownerKey: z.string().max(200),
-  /** The phone's own Ed25519 key (hex), its Noise link key (hex) and box key (hex X25519). */
-  device: z.string().regex(/^[0-9a-f]{64}$/),
-  link: z.string().regex(/^[0-9a-f]{64}$/),
-  box: z.string().regex(/^[0-9a-f]{64}$/),
+  /** The device's own Ed25519 key (hex), its Noise link key (hex) and box key (hex X25519). */
+  device: hex64,
+  link: hex64,
+  box: hex64,
   name: z.string().min(1).max(64),
-  platform: z.enum(['android', 'ios']),
+  platform: z.enum(DEVICE_PLATFORMS),
+  /** Additive (BLG-774): left out on a phone's, so the certificates phones hold still verify. */
+  role: z.enum(DEVICE_ROLES).optional(),
   issuedAt: ts,
   /** Your identity's signature over the canonical JSON of the rest ('beluga-device-v1'). */
   sig: z.string().max(200),
 });
 export type DeviceCert = z.infer<typeof DeviceCert>;
+
+/**
+ * A device let go (BLG-774): its key, when, and who said so: your identity (`by` 'identity') or a
+ * device of yours (`by` its device key), signed. A certificate issued at or before `at` is refused
+ * everywhere; pairing it again later issues a newer one.
+ */
+export const Forget = z.object({ device: hex64, at: ts, by: z.union([z.literal('identity'), hex64]), sig: z.string().max(200) });
+export type Forget = z.infer<typeof Forget>;
+/** Devices one identity may have in its set (phones are still MAX_DEVICES of them). */
+export const MAX_SET_DEVICES = 64;
+export const MAX_FORGOTTEN = 1024;
+
+/**
+ * Your device set (BLG-774): every certificate your identity signed that still holds, and who was
+ * forgotten, signed as a whole by your identity. `seq` only grows: a computer keeps the newest.
+ */
+export const DeviceRoster = z.object({
+  v: z.literal(1),
+  owner: id,
+  ownerKey: z.string().max(200),
+  seq: z.number().int().min(1),
+  issuedAt: ts,
+  devices: z.array(DeviceCert).max(MAX_SET_DEVICES),
+  forgotten: z.array(Forget).max(MAX_FORGOTTEN),
+  sig: z.string().max(200),
+});
+export type DeviceRoster = z.infer<typeof DeviceRoster>;
+
+/**
+ * Joining a computer (BLG-774, `beluga pair --computer` on it; the app dials with the link or code).
+ * `mac` is the sender's proof that it holds the pairing's secret, as for phones (roles 'app' and
+ * 'computer'). The computer proves it holds the keys it names by signing the handshake with each.
+ *   app      → mp_hello {proto, app cert, name}
+ *   computer → mp_keys {device, link, box, name, platform, address, relay?, sigs}   both show the fingerprint
+ *   (you click Join on the app)
+ *   app      → mp_ok {cert (role computer), roster}
+ *   computer → mp_done                                                              or mp_refused either way
+ */
+export const MachinePair = z.discriminatedUnion('t', [
+  /** `address` and `relay`: where the computer reaches the app back (to tell it what it forgot). */
+  z.object({ t: z.literal('mp_hello'), proto: z.number().int(), mac: z.string().max(100), app: DeviceCert, name: z.string().min(1).max(64), address: hex64.optional(), relay: RelayUrl.optional() }),
+  z.object({
+    t: z.literal('mp_keys'),
+    proto: z.number().int(),
+    mac: z.string().max(100),
+    device: hex64,
+    link: hex64,
+    box: hex64,
+    name: z.string().min(1).max(64),
+    platform: z.enum(['macos', 'linux', 'windows']),
+    version: z.string().max(40),
+    /** Where the app dials it from now on (its companion address), and its relay. */
+    address: hex64,
+    relay: RelayUrl.optional(),
+    /** The handshake hash signed with its device key and with its link key. */
+    deviceSig: z.string().max(200),
+    linkSig: z.string().max(200),
+  }),
+  z.object({ t: z.literal('mp_ok'), mac: z.string().max(100), cert: DeviceCert, roster: DeviceRoster }),
+  z.object({ t: z.literal('mp_done') }),
+  z.object({ t: z.literal('mp_refused'), reason: z.string().max(200), why: z.enum(['expired', 'cancelled', 'unverified', 'tries', 'busy', 'owned', 'version', 'declined']).optional() }),
+]);
+export type MachinePair = z.infer<typeof MachinePair>;
+export const parseMachinePair = (raw: string): MachinePair | undefined => parse(MachinePair, raw);
+
+/** What devices of yours tell each other to stay one set (BLG-774; carried by the links of BLG-775). */
+export const DeviceSetSync = z.object({ t: z.literal('devset'), roster: DeviceRoster.optional(), forgotten: z.array(Forget).max(MAX_FORGOTTEN) });
+export type DeviceSetSync = z.infer<typeof DeviceSetSync>;
 
 /**
  * The pairing's messages. `mac` on dev_hello and dev_ok is the sender's proof that it holds the

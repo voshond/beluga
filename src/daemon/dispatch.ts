@@ -4,6 +4,7 @@ import { runAsClient } from '../core/client-context.js';
 import type { Session } from '../core/session.js';
 import { isMethod, parseArgs } from '../ipc/api.js';
 import { HANDLERS } from '../ipc/handlers.js';
+import { routeToAlwaysOn } from '../machines/friends.js';
 
 export type CallOutcome = { readonly ok: true; readonly value?: unknown } | { readonly ok: false; readonly error: string };
 
@@ -21,6 +22,9 @@ export async function dispatchCall(session: Session, clientId: string, method: s
   try {
     // JSON has no undefined: a left-out argument arrives as null.
     const args = parseArgs(method, raw.map((v) => (v === null ? undefined : v)));
+    // Your friends network on your Always On (BLG-797): its calls go there, checked here first.
+    const routed = routeToAlwaysOn(session, method, args as readonly unknown[], clientId);
+    if (routed) return await routed;
     const handler = HANDLERS[method] as (s: Session, ...a: unknown[]) => unknown;
     const value = await runAsClient(clientId, () => handler(session, ...(args as unknown[])));
     blackbox.call(method, performance.now() - began);

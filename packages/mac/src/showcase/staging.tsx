@@ -46,6 +46,8 @@ export const STAGING: Record<string, Staging> = {
     },
   },
   sentinel: { pose: { rx: 14, ry: -14, rz: 1 } },
+  // Your app and phone on the left, your computers on the right: turned toward the computers, where the work goes.
+  machines: { pose: { rx: 14, ry: -14, rz: 1 } },
   // Only the cards tilt; the size beside them reads straight on.
   archive: { css: `.${s.archive} { transform-style: preserve-3d; } .${s.pile} { transform-style: preserve-3d; transform: rotateX(16deg) rotateY(22deg) rotateZ(-2deg); }` },
 };

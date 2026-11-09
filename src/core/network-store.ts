@@ -48,7 +48,9 @@ export type NetworkAction =
   /** Every conversation's missed calls now. */
   | { type: 'net_missed_calls'; missed: Readonly<Record<string, readonly MissedCallView[]>> }
   /** The network stopped. */
-  | { type: 'net_off' };
+  | { type: 'net_off' }
+  /** Your Always On's network as it is now, whole (BLG-797: this install shows it through the link). */
+  | { type: 'net_mirror'; network: NetworkState };
 
 /** Friend requests kept at once (both ways). */
 export const MAX_OFFERS = 40;
@@ -81,6 +83,8 @@ function withReactions(m: MessageView, reactions: readonly Reaction[]): MessageV
 
 export function reduceNetwork(state: NetworkSlice, action: NetworkAction): NetworkSlice {
   switch (action.type) {
+    case 'net_mirror':
+      return { network: action.network };
     case 'net_summary': {
       const { files, live, main, calls, callNotes, missedCalls } = state.network;
       // A friend request is over once you're friends (either side may have used it).

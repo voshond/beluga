@@ -164,3 +164,63 @@ OpenCode asks before each step it takes, the way Claude Code does, once Beluga h
 - Beluga always answers "allow once" or "reject", never "always", so nothing it allows is kept in OpenCode.
 - Friends' tasks and guests don't run on OpenCode. Your OpenCode plugins, and in newer OpenCode the rules you saved with "Always allow" in its own app, can answer a step before Beluga is asked, and OpenCode has no sandbox to fall back on. A friend's task goes to Claude (or Codex) instead, and their card says why. Guests are turned away, with the reason on the Invite People sheet.
 - Quick side calls on OpenCode (answering in a chat, naming a worktree) and side questions (/btw) run without your plugins. Every tool still asks, and Beluga allows only the ones the call was given: none for a side question.
+
+## Machines: your computers
+
+Your Beluga app can drive your other computers (a Mac mini, a cloud server, a Linux box): see
+[docs/machines.md](machines.md). Each of them can run anything you could, so who may drive one is
+kept as tightly as who may open a terminal on it.
+
+- **Only devices your identity signed.** Adding a computer (over SSH, or with the link or code
+  `beluga pair --computer` prints, good once for 10 minutes) ends with the same four pictures on
+  both sides and your click on Join; then your identity signs it into your **device set**. A
+  computer lets in exactly the apps and phones in the newest set your identity signed, each by its
+  own key, end to end encrypted (Noise), directly or through a relay that only carries ciphertext.
+  Pairing over SSH uses your own ssh in batch mode: it never asks for or keeps a password.
+- **What a driving app may do.** Everything you do in Beluga, as if you sat at that computer:
+  chats, worktrees, runs, plans, sentinels, files, terminals, git, settings, friends. Not who gets
+  in: making or revoking browser links, pairing phones, joining apps or computers, forgetting a
+  device and quitting Beluga there stay with the computer itself (its own app or terminal) or with
+  your app's own Settings › Your Computers. Every API method is decided one way or the other
+  (`src/machines/coverage.ts`), and a refused one answers in plain words.
+- **One direction.** Your app drives your computers; a computer never drives your app, nor another
+  computer. Computers only swap the device set and your settings with each other. Work goes to a
+  computer only from your app: on a computer, Run New Work On always means that computer. The app's
+  UI is always its own build: nothing is served from the computer, only the app's actions and their
+  answers cross the link.
+- **What a computer may ask of your app.** Only to show a notification, copy text, come to the
+  front, read an image you pasted, or open an http(s) page in your browser. Anything else (a
+  `file:` link, another scheme) is answered no at the app's door, before it reaches the window.
+- **Phones are trusted through your identity.** A phone you paired is in your device set, so each
+  computer lets it in directly, with the phone's limits (the same as on your Mac,
+  `src/companion/coverage.ts`), never an app's. A computer keeps no record of it on disk.
+- **Forgetting an app, a phone or a computer.** Any of your devices can forget one (Settings › Your
+  Computers › ••• › Forget, `beluga computers forget <name>`). It's cut off at once where you did
+  it, and everywhere else as the set reaches them; forgets only add up, so an older set can't undo
+  one. A device paired again later gets a new certificate. What your Mac kept of a forgotten
+  computer (its last state and the files you read) is cleared.
+- **Your identity leaves this Mac once, when you ask.** Make Always On… moves your identity and
+  your friends network to one computer, after a confirmation that says so, over your own
+  end-to-end link. Each file is checked (SHA-256) before the hand-over commits, so there's never two
+  of you and never none. Your Mac keeps a stand-by copy that never leaves it again.
+- **The lease keeps exactly one of you online.** Whichever install is you renews a lease every
+  minute: a record on the DHT under a key only your identity derives. Your Mac stands in only after
+  your Always On hasn't answered for 10 minutes and its lease is 10 minutes stale, and hands back by
+  itself when it answers. An install that finds a fresher lease than its own stops being you at
+  once, and one that was your Always On asks the lease before its network starts.
+- **Secrets only after the ask.** Your settings follow you to every computer; your own variables
+  (Settings › Environment) don't, until you say Keep My Secrets in Sync With … for that computer.
+  Then they go over the end-to-end link and never into a log: names and counts only, and a hash of
+  each value to tell what changed.
+- **.env files are asked about by name, and logged by name.** A worktree made on a computer asks
+  before the project's .env files go there (Send Once, Don't Send, or Always for This Project),
+  showing their names only. A send is logged with the file names, never their values, and the files
+  are written readable only by you. Values never reach an ask or the phone. Keys, certificates,
+  `.ssh`, `.aws`, `~/.beluga` and links pointing at them never go, whatever you choose; a file
+  dropped on a chat there is checked the same way.
+- **Ports go only where you said.** Your app may open a stream to any port on a computer it drives
+  (it could run anything there anyway); a computer reaches only the ports of this Mac you shared
+  with it, until you Unshare.
+- **What stays on your Mac.** A computer's last state and the pieces of files you read are cached
+  under `~/.beluga/cache` (capped, never beside your keys), so an offline computer stays readable.
+  `.env` files and keys are never cached.

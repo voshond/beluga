@@ -138,7 +138,7 @@ test('the tour explains Sentinel: a sentence becomes a sentinel, then real ones 
   await welcome.getByRole('button', { name: /Get Started/ }).click();
   await expect(welcome.getByRole('heading', { name: 'Which agent is yours?' })).toBeVisible();
   await welcome.getByRole('button', { name: 'Continue', exact: true }).click();
-  for (const heading of ['Work on everything at once.', 'See every agent work. Steer any of them.', 'Answers you can sort, not just read.', 'Your agent, and your friends’ agents.']) {
+  for (const heading of ['Work on everything at once.', 'See every agent work. Steer any of them.', 'Answers you can sort, not just read.', 'Your app here. The work on any computer.', 'Your agent, and your friends’ agents.']) {
     await expect(welcome.getByRole('heading', { name: heading })).toBeVisible();
     await welcome.getByRole('button', { name: 'Continue', exact: true }).click();
   }

@@ -90,7 +90,11 @@ export const NETWORK_HANDLERS = {
   'network.presence.get': (s) => net(s).getPresence(),
   'network.avatar.set': (s, b64) => net(s).setAvatar(b64 === null ? undefined : Buffer.from(b64, 'base64')),
   'network.avatar.get': (s, sha) => net(s).avatar(sha),
-  'network.read': (s, conversation) => net(s).markRead(conversation),
+  // Read on a screen of yours (the phone's open conversation): read, and Seen unless you turned that off (BLG-798).
+  'network.read': (s, conversation) => {
+    net(s).markRead(conversation);
+    if (s.store.getState().prefs.readReceipts !== false) net(s).markSeen(conversation);
+  },
   'network.messages.delete': (s, conversation, id, opts) => net(s).deleteMessage(conversation, id, opts?.everyone ?? false),
   'network.messages.edit': (s, conversation, id, text) => net(s).editMessage(conversation, id, text),
   'network.messages.react': (s, conversation, id, emoji, on) => net(s).react(conversation, id, emoji, on),

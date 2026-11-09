@@ -35,6 +35,7 @@ import { ASSISTANT_TITLE, isAssistant } from '../shared/assistant.js';
 import { type SlotWait, clampParallelRuns } from '../shared/run-slots.js';
 import { fallbackFor } from '../shared/runtime-fallbacks.js';
 import { agentForAsk } from './gateway/serve.js';
+import { fromMachine } from './client-context.js';
 import { buildPreviewAppend } from '../agent/preview-prompt.js';
 import { experimentOn } from '../shared/experiments.js';
 
@@ -284,6 +285,8 @@ export class AgentHost {
   /** Approvals waiting per person, so one person can't crowd out everyone else's. */
   private readonly approvalsBy = new Map<string, number>();
   private readonly seenRequests: string[] = [];
+  /** Requests your app made from another computer, driving this one (BLG-803): their runs are told so. */
+  private readonly remoteRequests = new Set<string>();
   /** Requests already given to Claude under their own id (a retry gets a fresh one: ids are unique in its transcript). */
   private readonly promptIds = new Set<string>();
   /** Tool approvals waiting → the conversation whose run asked for them. */
@@ -844,6 +847,8 @@ export class AgentHost {
     // Drop replays of a request we've already seen.
     const key = `${from}:${body.requestId}`;
     if (this.seenRequests.includes(key)) return;
+    // Asked from your app on another computer: noted now, while the request is its (a queued run starts later).
+    if (from === this.selfId && fromMachine()) this.remoteRequests.add(body.requestId);
     this.seenRequests.push(key);
     if (this.seenRequests.length > SEEN_REQUESTS) this.seenRequests.shift();
     this.pickNamed(from, body);
@@ -1250,7 +1255,10 @@ export class AgentHost {
     }
     // A worktree's run: what it starts carries BELUGA_WORKTREE (and the old KLAUD_WORKTREE), so test runs it leaves behind can be stopped.
     const worktree = place && place.autoEdit && !place.askOnly ? place.cwd : undefined;
-    const tag: Record<string, string> = worktree ? belugaEnvBoth('WORKTREE', worktree) : {};
+    // Asked from your app on another computer (BLG-803): the run hears so (run-instructions.ts), and what it starts.
+    // BROWSER=none (BLG-838): tools that open a browser themselves (create-react-app, vite --open) don't, here where nobody is.
+    const remote = this.remoteRequests.has(body.requestId);
+    const tag: Record<string, string> = { ...(worktree ? belugaEnvBoth('WORKTREE', worktree) : {}), ...(remote ? { BELUGA_REMOTE_CLIENT: '1', BROWSER: 'none' } : {}) };
     /** What this run kept running on purpose (see keepsRunning), noted in the conversation when it ends. */
     const kept = new Set<string>();
     this.currentChannel = body.channel;
@@ -1388,7 +1396,7 @@ export class AgentHost {
         ...(from === this.selfId ? this.machineBrief() : {}),
         // Your variables can hold secrets: only runs you asked for get them, never a friend's.
         // Your own runs also get adb on PATH (and ANDROID_SERIAL) when a phone is set up, so Bash can drive it (BLG-174).
-        ...(from === this.selfId && (this.deps.envFor || phone?.env) ? { env: { ...this.deps.envFor?.(body.channel, place?.cwd), ...(phone?.env ?? {}), ...tag } } : worktree ? { env: tag } : {}),
+        ...(from === this.selfId && (this.deps.envFor || phone?.env) ? { env: { ...this.deps.envFor?.(body.channel, place?.cwd), ...(phone?.env ?? {}), ...tag } } : worktree || remote ? { env: tag } : {}),
         ...this.compactor.threshold(),
       })]);
       if (controller.signal.aborted) throw new Error('aborted');
@@ -1405,6 +1413,7 @@ export class AgentHost {
       this.emitAgent(body.requestId, from, 'error', reason, body.channel);
     } finally {
       ended = true;
+      this.remoteRequests.delete(body.requestId);
       if (lane.current === controller) {
         lane.current = undefined;
         lane.followUps = undefined;

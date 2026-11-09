@@ -16,16 +16,18 @@ import { defaultAgentOf } from '@beluga/protocol.js';
 import { Icon } from '../components/Icon.js';
 import { Kbd, Tip, cx } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
-import { recipientLabel, recipientPrefix, toast, useApi, useApp, useBeluga, useUi } from '../lib/beluga.js';
+import { recipientLabel, recipientPrefix, toast, useApi, useApp, useBeluga, useUi, useMachine, useScopedKey } from '../lib/beluga.js';
 import { agentName, useAgentNameIn, useMyAgentName } from '../lib/agent-words.js';
 import { sameDeep, sameFields } from '../lib/stable.js';
 import { getPrefs, usePrefs } from '../lib/prefs.js';
 import { sendsToTerminal } from '../lib/convo-mode.js';
 import { chordLabel } from '../lib/shortcuts-model.js';
 import { cmdReturn, returnName, thisComputer, upFirst, yourComputer } from '../lib/os-words.js';
-import { ModelPicker } from './ModelPicker.js';
+import { ModelPicker, myRuntime } from './ModelPicker.js';
 import { ContextMeter } from './ContextMeter.js';
 import { McpChip } from './McpChip.js';
+import { RunsOnLabel, RunsOnPicker } from './RunsOn.js';
+import { sendToComputer, useStartDeps } from '../machines/start-there.js';
 import { QueueTray } from './QueueTray.js';
 import { BtwCard, askBtw } from './BtwCard.js';
 import { expectClaude, launchFlight } from './flight.js';
@@ -54,6 +56,8 @@ import { shortcutKeys } from '../lib/shortcuts.js';
 import { projectOfView } from '../tasks/use-tasks.js';
 import { answerSend, answeringIn, sendAction, sendsUrgent, steerBlockNote } from './send-action.js';
 import { useSteerBlock } from './use-steer.js';
+
+import { scopedKey } from '../machines/pane-model.js';
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
@@ -113,8 +117,9 @@ const runOnChoice = new Map<string, RunOn>();
 
 /** In a friend's worktree you have a copy of: "Runs on Ata's Mac" or "on This Mac", one click to switch. */
 function RunOnChip({ wsId, ownerName, value, onChange }: { wsId: string; ownerName: string; value: RunOn; onChange: (v: RunOn) => void }) {
+  const key = useScopedKey(wsId);
   const pick = (v: RunOn): void => {
-    runOnChoice.set(wsId, v);
+    runOnChoice.set(key, v);
     onChange(v);
   };
   return (
@@ -181,6 +186,9 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   const channel = channelOf(state.view);
   const agentHere = useAgentNameIn(channel);
   const draftKey = draftKeyOf(state.view);
+  // The window's memories of this box (its words, Plan with Tasks, a new worktree's branch) are per computer (BLG-784).
+  const machine = useMachine();
+  const boxKey = scopedKey(machine, draftKey);
   const shared = state.view.kind === 'shared';
   const compose = state.compose;
   const queue = useMemo(() => queueIn(state, channel, state.selfId), [state.log, channel, state.selfId]);
@@ -211,7 +219,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   // A new worktree's page is picked for by its project (new chats and worktrees all share "draft"):
   // its worktree starts as the plan's home.
   const newWorktree = state.view.kind === 'draft_worktree';
-  const tasksKey = newWorktree ? draftKey : channel;
+  const tasksKey = newWorktree ? boxKey : scopedKey(machine, channel);
   const [, redraw] = useState(0);
   const armed = !homePlan && tasksPicked.has(tasksKey);
   const arm = (on: boolean): void => {
@@ -253,16 +261,20 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   const copyOf = sharedWs ? state.sharedProjects.find((p) => p.owner === sharedWs.owner && p.id === sharedWs.projectId)?.copy : undefined;
   const canRunHere = Boolean(sharedWs && copyOf?.state === 'ready');
   const [runOnState, setRunOn] = useState<RunOn>('owner');
-  const runOn: RunOn = canRunHere && sharedWs ? (runOnChoice.get(sharedWs.id) ?? runOnState) : 'owner';
+  const runOn: RunOn = canRunHere && sharedWs ? (runOnChoice.get(scopedKey(machine, sharedWs.id)) ?? runOnState) : 'owner';
   // Following along, or the owner's Mac can't hear you right now (offline, or an old Beluga): the box is locked,
   // unless what you say goes to your own Claude in your copy.
   const readOnly = state.view.kind === 'shared' && state.view.tab === 'chat' && runOn !== 'here' && (sharedWs?.role === 'view' || Boolean(state.waiting));
   // A new worktree: the branch it starts from and its name (empty: named from the task).
   const draftProject = state.view.kind === 'draft_worktree' ? state.view.projectId : undefined;
-  const [worktree, setWorktreeState] = useState<WorktreeChoice>(() => (draftProject && worktreeChoices.get(draftProject)) || { name: '' });
-  useEffect(() => setWorktreeState((draftProject && worktreeChoices.get(draftProject)) || { name: '' }), [draftProject]);
+  // New work (a new chat or worktree): Runs on picks where it goes.
+  const newWork = state.view.kind === 'draft_worktree' || state.view.kind === 'draft' ? { project: state.view.projectId === 'chats' ? undefined : state.view.projectId, folder: state.view.kind === 'draft' ? state.view.dir || undefined : undefined } : undefined;
+  const startDeps = useStartDeps();
+  const choiceKey = draftProject ? scopedKey(machine, draftProject) : undefined;
+  const [worktree, setWorktreeState] = useState<WorktreeChoice>(() => (choiceKey && worktreeChoices.get(choiceKey)) || { name: '' });
+  useEffect(() => setWorktreeState((choiceKey && worktreeChoices.get(choiceKey)) || { name: '' }), [choiceKey]);
   const setWorktree = (choice: WorktreeChoice): void => {
-    if (draftProject) worktreeChoices.set(draftProject, choice);
+    if (choiceKey) worktreeChoices.set(choiceKey, choice);
     setWorktreeState(choice);
   };
   // A side question (/btw): "/btw " turns the box into one; it's answered in the card above, never in the chat.
@@ -334,18 +346,18 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   }, [buffer]);
   // Each chat keeps its own unsent words: going to another puts its words in the box, never these.
   useLayoutEffect(() => {
-    if (boxOf !== undefined && boxOf !== draftKey) {
-      const text = drafts.get(draftKey) ?? '';
+    if (boxOf !== undefined && boxOf !== boxKey) {
+      const text = drafts.get(boxKey) ?? '';
       ui.patch({ buffer: text, cursor: text.length, historyIndex: -1 });
       sug.reset();
     }
-    boxOf = draftKey;
-  }, [draftKey]);
+    boxOf = boxKey;
+  }, [boxKey]);
   useEffect(() => {
     const text = ui.get().buffer;
-    if (text) drafts.set(draftKey, text);
-    else drafts.delete(draftKey);
-  }, [draftKey, buffer]);
+    if (text) drafts.set(boxKey, text);
+    else drafts.delete(boxKey);
+  }, [boxKey, buffer]);
   useEffect(() => {
     const focus = (): void => ref.current?.focus();
     document.addEventListener('beluga:focus-composer', focus);
@@ -367,15 +379,25 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   /** The first message of a new worktree starts it (on the chosen branch, with the chosen name). */
   const createWorktree = (projectId: string, text: string): void => {
     const name = worktree.name.trim();
-    // Its words left the box when it was sent; its branch and name go with them.
-    worktreeChoices.delete(projectId);
-    setWorktreeState({ name: '' });
     // Seen as its terminal (Settings › Terminal): the terminal opens on this message (BLG-553).
     const terminal = Boolean(text.trim()) && sendsToTerminal(client.store.getState(), getPrefs(), 'draft', worktree.agent?.runtime);
     // Started in the mode the picker shows (Act, Plan First or Plan with Tasks).
     const mode = worktreeMode({ terminal, plan: client.store.getState().planMode.draft === true, tasks: armed });
+    const opts = { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...mode };
+    // Runs on one of your computers (BLG-788): made there, in the same project, and opened at once.
+    // Held (the computer Runs on names can't take it now): nothing starts, the words stay in the box.
+    const sent = sendToComputer(startDeps, projectId, worktree.agent?.runtime ?? myRuntime(client.store.getState().prefs), { kind: 'worktree', text, opts });
+    if (sent === 'held') return keepWords(text);
+    // Its words left the box when it was sent; its branch and name go with them.
+    worktreeChoices.delete(scopedKey(machine, projectId));
+    setWorktreeState({ name: '' });
     arm(false);
+    if (sent === 'sent') return;
     void api.workspaces.startWorktree(projectId, text, { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...mode }).catch((err: unknown) => toast(client, `Couldn't create the worktree: ${errorText(err)}`, 'error'));
+  };
+  /** Held for a computer that can't take it now: the words go back in the box, nothing was sent. */
+  const keepWords = (text: string): void => {
+    if (!ui.get().buffer) ui.patch({ buffer: text, cursor: text.length });
   };
   const deliver = (text: string, urgent: boolean): void => {
     if (readOnly) return;
@@ -387,6 +409,14 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     // /invite adds a friend, or adds friends to what's on screen (BLG-203): done here, where the view is known.
     if (handleInvite(client, ui, text)) return;
     if (draftProject && !text.startsWith('/')) return createWorktree(draftProject, text);
+    // A new chat (in a project, outside one, or in a folder), Runs on one of your computers (BLG-788,
+    // BLG-841): started there; held, never here instead, when the computer named can't take it.
+    const v = client.store.getState().view;
+    if (v.kind === 'draft' && !text.startsWith('/')) {
+      const sent = sendToComputer(startDeps, v.projectId, myRuntime(client.store.getState().prefs), { kind: 'chat', text }, v.dir || undefined);
+      if (sent === 'held') return keepWords(text);
+      if (sent === 'sent') return;
+    }
     if (to && !text.startsWith('/')) {
       ui.patch({ to: undefined });
       return actions.submit(`${recipientPrefix(to)}${text}`, urgent);
@@ -664,7 +694,8 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
           ) : null}
           {canRunHere && sharedWs ? <RunOnChip wsId={sharedWs.id} ownerName={state.sharedProjects.find((p) => p.owner === sharedWs.owner)?.ownerName ?? 'Their'} value={runOn} onChange={setRunOn} /> : null}
           {!shared ? <ModelPicker channel={channel} {...(draftProject ? { draft: worktree.agent, onDraft: (agent: AgentRef | undefined) => setWorktree({ ...worktree, agent }) } : {})} /> : null}
-          {!shared ? <McpChip /> : null}
+          {/* Where new work runs (BLG-786); a chat that runs somewhere already says where. Only with a computer paired. */}
+          {shared ? null : newWork ? <RunsOnPicker {...(newWork.project ? { project: newWork.project } : {})} {...(worktree.agent?.runtime && draftProject ? { runtime: worktree.agent.runtime } : {})} {...(newWork.folder ? { folder: newWork.folder } : {})} /> : <RunsOnLabel />}
           {burning && state.prefs.effort === 'max' ? (
             <Tip label={`Max effort: ${agentHere} thinks as hard as it can`}>
               <span className={m.tag}>
@@ -674,6 +705,8 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
             </Tip>
           ) : null}
           <span className={s.flex} />
+          {/* Your MCP servers, on the box's right beside how full the context is (BLG-252). */}
+          {!shared ? <McpChip /> : null}
           {channel !== 'draft' ? <ContextMeter channel={channel} /> : null}
           {/* While you talk, only your voice's control shows: two square buttons side by side stopped Claude by mistake. */}
           {compose.busy && !talking ? (

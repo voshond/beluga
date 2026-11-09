@@ -1,5 +1,6 @@
 import type { IconName } from '../components/Icon.js';
 import type { Step } from './onboarding-model.js';
+import { thisComputer } from '../lib/os-words.js';
 
 /** The tour's words, one idea a step. Every line says what the app really does. */
 export interface TourCopy {
@@ -31,6 +32,13 @@ export const TOUR_COPY: Readonly<Partial<Record<Step, TourCopy>>> = {
     title: 'Answers you can sort, not just read.',
     body: 'Ask about your data and your agent finds the database, picks the way in (Postgres, SQLite, a file, a URL), connects and runs the query. The answer comes back as a live table in the conversation.',
     points: ['Headings sort, long tables search and page', 'A table turns into a chart in a click', 'File trees, JSON, terminal output and diagrams too'],
+  },
+  machines: {
+    eyebrow: 'Your computers',
+    icon: 'server',
+    title: 'Your app here. The work on any computer.',
+    body: `Pair a Mac mini at home, a cloud server or a Linux box, and any task can run there while you follow it from ${thisComputer()} or your phone. Make one your Always On, and it keeps working, and answers your friends, while you’re away.`,
+    points: ['Pick where a task runs, beside the mode and model', 'Close the lid, and your phone keeps up', 'One Always On computer stands in for you'],
   },
   friends: {
     eyebrow: 'Together',

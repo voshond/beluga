@@ -27,6 +27,7 @@ export function NetworkSettings() {
   const groups = net.groups.filter((g) => g.active).length;
   const chatClaude = useApp((st) => st.prefs.chatClaude);
   const shareUsage = useApp((st) => st.prefs.shareUsage);
+  const readReceipts = useApp((st) => st.prefs.readReceipts);
   return (
     <Group title="Friends">
       <Row
@@ -83,6 +84,11 @@ export function NetworkSettings() {
             ]}
             onChange={(v) => void client.api.session.setPrefs({ shareUsage: v })}
           />
+        </Row>
+      ) : null}
+      {net.enabled ? (
+        <Row label="Say when you’ve seen a message" detail="Friends see Seen under their message once it was on your screen here or on your phone. Off, they only see Delivered.">
+          <Switch label="Say when you’ve seen a message" on={readReceipts} onChange={(v) => void client.api.session.setPrefs({ readReceipts: v })} />
         </Row>
       ) : null}
     </Group>

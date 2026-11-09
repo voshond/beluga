@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { type BodyInput, type BodyOf, CHUNK_BYTES, type FsEntry } from '../protocol.js';
+import { type BodyInput, type BodyOf, CHUNK_BYTES, type FsEntry, MAX_FILE_BYTES } from '../protocol.js';
+import { FIRST_RANGE, type RangeOptions, type TextRange } from '../shared/text-range.js';
 import { parseLocation } from './mentions.js';
 import { type ShareService, isSecretPath } from './shares.js';
 import { type Location, type Store, peerName } from './store.js';
@@ -291,6 +292,35 @@ export class RoomFiles {
   }
 
   /**
+   * One piece of a file's text (BLG-791). Yours: read where it is, refused as a whole read would be,
+   * and watched like one. A friend's: their whole read (up to 512 KB), as one piece from the start.
+   */
+  async readRange(at: Location, range: RangeOptions): Promise<TextRange> {
+    if (at.owner === this.selfId) {
+      this.deps.shares.watchFile(at.share, at.path);
+      return this.deps.shares.readRange(at.share, at.path, range.offset, range.length, true);
+    }
+    if (range.offset > 0) throw new Error('A friend’s file is read from its start');
+    const { content } = await this.readFile(at);
+    return { content, offset: 0, total: Buffer.byteLength(content), mtime: 0 };
+  }
+
+  /**
+   * What the viewer opens with: a file of yours too big to read whole, its first piece (the rest
+   * streams as you scroll, BLG-791); anything else, the whole read.
+   */
+  private async opening(at: Location): Promise<{ content: string; truncated: boolean; next?: number; total?: number }> {
+    if (at.owner === this.selfId) {
+      const { size } = await this.deps.shares.stat(at.share, at.path, true);
+      if (size > MAX_FILE_BYTES) {
+        const first = await this.readRange(at, { offset: 0, length: FIRST_RANGE });
+        return { content: first.content, truncated: false, ...(first.next !== undefined ? { next: first.next, total: first.total } : {}) };
+      }
+    }
+    return this.readFile(at);
+  }
+
+  /**
    * Load the viewer's file. Change notifications can arrive in bursts (or be sent on
    * purpose), so at most one load per file runs at a time; extra requests collapse
    * into a single reload once it finishes.
@@ -320,8 +350,8 @@ export class RoomFiles {
         this.store.dispatch({ type: 'viewer_image', at, image: await decodeImageAsync(bytes, at.path) });
         return;
       }
-      const { content, truncated } = await this.readFile(at);
-      this.store.dispatch({ type: 'viewer_content', at, content, truncated });
+      const { content, truncated, next, total } = await this.opening(at);
+      this.store.dispatch({ type: 'viewer_content', at, content, truncated, ...(next !== undefined && total !== undefined ? { next, total } : {}) });
     } catch (err) {
       this.store.dispatch({ type: 'viewer_error', at, error: errorText(err) });
     }

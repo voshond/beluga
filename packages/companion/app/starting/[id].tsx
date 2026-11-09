@@ -35,7 +35,7 @@ export default function Starting() {
       if (!s) return;
       if (s.state === 'sent' && (s.topic || s.plan)) {
         // It's there: this screen becomes it.
-        router.replace((s.plan ? `/plan/${encodeURIComponent(s.plan)}` : convHref(s.topic!)) as never);
+        router.replace((s.plan ? `/plan/${encodeURIComponent(s.plan)}` : convHref(s.topic!, s.on)) as never);
       } else if (s.state === 'failed' && s.start) {
         // Undone: back where you were, Ask open again with your words.
         store.toast({ text: s.error ?? "It didn't start.", tone: 'error' });

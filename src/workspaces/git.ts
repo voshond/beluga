@@ -466,11 +466,14 @@ async function withLockRetry(cwd: string, args: readonly string[], tries = 6): P
   }
 }
 
-export async function commitAll(dir: string, message: string): Promise<boolean> {
+export async function commitAll(dir: string, message: string, opts: { readonly orAsBeluga?: boolean } = {}): Promise<boolean> {
   await withLockRetry(dir, ['add', '-A']);
   const staged = (await tryGit(dir, ['diff', '--cached', '--name-only']))?.trim();
   if (!staged) return false;
-  await withLockRetry(dir, ['commit', '-m', message]);
+  // A commit Beluga makes for you (moving work to another computer) on a computer with no git
+  // identity yet, like a fresh server: authored as Beluga rather than failing. Yours otherwise.
+  const asBeluga = opts.orAsBeluga && !(await tryGit(dir, ['config', 'user.email']))?.trim() ? ['-c', 'user.name=Beluga', '-c', 'user.email=beluga@localhost'] : [];
+  await withLockRetry(dir, [...asBeluga, 'commit', '-m', message]);
   return true;
 }
 

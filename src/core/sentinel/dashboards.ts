@@ -110,6 +110,24 @@ export class Dashboards {
     return this.replace({ ...d, tiles: placeTile(d.tiles, tileId, to.col, to.row) });
   }
 
+  /**
+   * Tiles that came with a sentinel from another computer (BLG-807): on the dashboard of that name
+   * here (made when there's none), after its own, each with an id of its own here, flowing in order.
+   * → the dashboard and the tiles' ids here (to take them off again).
+   */
+  putTiles(name: string, compare: Compare, tiles: readonly Tile[]): { readonly dashboard: string; readonly tiles: readonly string[] } {
+    const d = this.get(name) ?? this.create(name, [], { compare });
+    const room = Math.max(0, MAX_TILES - d.tiles.length);
+    const added = tiles.slice(0, room).map(({ col: _c, row: _r, ...t }) => ({ ...t, id: short('tl') }));
+    this.replace({ ...d, tiles: [...d.tiles, ...added] });
+    return { dashboard: d.id, tiles: added.map((t) => t.id) };
+  }
+
+  /** Tiles taken off where they were (their sentinel moved away with them). */
+  dropTiles(ids: ReadonlySet<string>): void {
+    for (const d of this.items) if (d.tiles.some((t) => ids.has(t.id))) this.replace({ ...d, tiles: d.tiles.filter((t) => !ids.has(t.id)) });
+  }
+
   /** The first number arrived: the first dashboard, with every number as a tile (once, ever). */
   autoMake(metrics: readonly MetricInfo[]): Dashboard | undefined {
     if (this.made || this.items.length || !metrics.length) return undefined;

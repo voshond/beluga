@@ -18,11 +18,15 @@ import type { Readable } from 'node:stream';
 import { stopWhenInputEnds } from './stop-on-input.js';
 import { DaemonServer } from './server.js';
 import { ownTempRoot } from './temp-root.js';
+import { attachScreenDoor, machinesOf } from '../machines/registry.js';
+import { isDemoMachine } from '../machines/demo.js';
+import { demoLinkMs, withLatency } from '../machines/latency.js';
 import { type WebArgs, sshWords } from './web.js';
 import { WebAccess, attachWebAccess, readWebConfig } from './web-access.js';
 import { uploadsDir } from './web-files.js';
 import { publicWords } from './reach/public.js';
 import { tailscaleWords } from './reach/tailscale.js';
+import { dropGitLocalEnv } from '../core/git-env.js';
 
 /** How long the daemon waits after the last screen closes before leaving the room. */
 export const LINGER_MS = 3000;
@@ -124,6 +128,17 @@ export async function startDaemon(config: Config, opts: DaemonOptions): Promise<
   }, { network: true });
   server = new DaemonServer({ session: core.session, token, version: opts.version, terminals: core.terminals, log, uploadsRoot: uploadsDir(), ...(opts.port ? { port: opts.port } : {}), ...(opts.allowedOrigins ? { allowedOrigins: opts.allowedOrigins } : {}) });
   const port = await server.listen();
+  // Your computers (BLG-775): an app of yours driving this one comes in as a screen; this app's
+  // screens on one of yours go out through the machines' door.
+  attachScreenDoor(core.session, server);
+  server.routeMachines((id, ws, hello) => {
+    // The demo's computers (BLG-779) are this daemon itself: their pages open and stream as a computer's would (BLG-784).
+    // BELUGA_DEMO_LINK_MS adds a link's round trip to them (BLG-792), for e2e at a real link's pace.
+    if (config.mode === 'demo' && isDemoMachine(id)) return server.serveAsMachine(withLatency(ws, demoLinkMs() / 2), hello);
+    const machines = machinesOf(core.session);
+    if (machines) machines.door.open(id, ws, hello);
+    else ws.close(4404, 'No computers here');
+  });
   web = new WebAccess({ door: server, log, ...(opts.web?.root ? { root: opts.web.root } : {}) });
   attachWebAccess(core.session, web);
   let webAt: string | undefined;
@@ -181,6 +196,8 @@ export async function startDaemon(config: Config, opts: DaemonOptions): Promise<
 
 /** Run the daemon as this process: signals stop it, problems are logged and shown, never fatal. */
 export async function runDaemon(config: Config, opts: DaemonOptions): Promise<void> {
+  // Started from inside git (a hook, an alias, git bisect run): its git commands must not land in that repository (git-env.ts).
+  dropGitLocalEnv();
   const log = (line: string): void => {
     blackbox.record('log', line);
     if (opts.log) opts.log(line);

@@ -1,4 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react';
+import { useScopedKey } from '../../lib/beluga.js';
 
 /**
  * Which steps you opened, per card, for as long as the window is open: scrolling a card out of
@@ -36,7 +37,9 @@ export interface Disclosure {
   readonly setShown: (shown: boolean) => void;
 }
 
-export function useDisclosure(scope: string): Disclosure {
+export function useDisclosure(card: string): Disclosure {
+  // Each computer's cards their own (BLG-784).
+  const scope = useScopedKey(card);
   const m = useSyncExternalStore(
     useCallback(
       (l: () => void) => {

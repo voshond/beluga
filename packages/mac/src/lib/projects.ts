@@ -101,7 +101,16 @@ export function useProjectIcon(projectId: string, trim = false): Icon | undefine
  * Choose folders with the Mac's own Open panel; in a page the web port served, the server's
  * folders in Beluga's own picker (undefined in a development browser, or when cancelled).
  */
-export async function pickFolders(title: string): Promise<string[] | undefined> {
+export async function pickFolders(title: string, opts: { machine?: string | undefined } = {}): Promise<string[] | undefined> {
+  // On a page of one of your computers (BLG-793): its folders, walked over its link, not this Mac's.
+  if (opts.machine) {
+    const [{ browseFolder }, { machineClientOf }, { currentMachines }] = await Promise.all([import('../dialogs/FolderBrowser.js'), import('../machines/pane-clients.js'), import('../machines/use-machines.js')]);
+    const client = machineClientOf(opts.machine);
+    if (!client) throw new Error('That computer can’t be reached right now');
+    const name = currentMachines().find((m) => m.id === opts.machine)?.name ?? 'your computer';
+    const picked = await browseFolder(title, { on: { name, browse: (dir) => client.api.local.browse(dir) } });
+    return picked ? [picked] : undefined;
+  }
   if (!inApp()) {
     if (!webServed()) return undefined;
     const { browseFolder } = await import('../dialogs/FolderBrowser.js');

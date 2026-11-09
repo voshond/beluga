@@ -17,6 +17,8 @@ interface Ask {
   readonly title: string;
   readonly action: string;
   readonly start?: string;
+  /** One of your computers' folders (BLG-793): walked with its own local.browse, and named. */
+  readonly on?: { readonly name: string; readonly browse: (dir?: string) => Promise<Browsed> };
   readonly done: (path: string | undefined) => void;
 }
 
@@ -27,10 +29,10 @@ const set = (next: Ask | undefined): void => {
   for (const l of [...listeners]) l();
 };
 
-/** Ask for a folder of the computer Beluga runs on; undefined when you cancel. */
-export function browseFolder(title: string, opts: { action?: string; start?: string } = {}): Promise<string | undefined> {
+/** Ask for a folder of the computer Beluga runs on (or `on`, one of your computers); undefined when you cancel. */
+export function browseFolder(title: string, opts: { action?: string; start?: string; on?: Ask['on'] } = {}): Promise<string | undefined> {
   asking?.done(undefined);
-  return new Promise((resolve) => set({ title, action: opts.action ?? 'Choose', ...(opts.start ? { start: opts.start } : {}), done: resolve }));
+  return new Promise((resolve) => set({ title, action: opts.action ?? 'Choose', ...(opts.start ? { start: opts.start } : {}), ...(opts.on ? { on: opts.on } : {}), done: resolve }));
 }
 
 type Browsed = Awaited<ReturnType<ReturnType<typeof useApi>['local']['browse']>>;
@@ -55,7 +57,7 @@ function FolderBrowser({ ask, onDone }: { ask: Ask; onDone: (path: string | unde
   const [error, setError] = useState<string>();
   const go = (dir?: string): void => {
     setError(undefined);
-    api.local.browse(dir).then(setAt, (err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+    (ask.on ? ask.on.browse(dir) : api.local.browse(dir)).then(setAt, (err: unknown) => setError(err instanceof Error ? err.message : String(err)));
   };
   useEffect(() => go(ask.start), [ask]);
   const short = (p: string): string => (at && p.startsWith(at.home) ? `~${p.slice(at.home.length)}` : p);
@@ -93,7 +95,7 @@ function FolderBrowser({ ask, onDone }: { ask: Ask; onDone: (path: string | unde
             ))}
           </div>
           <div className={f.footer}>
-            <span className={f.hint}>On the computer Beluga runs on</span>
+            <span className={f.hint}>{ask.on ? `On ${ask.on.name}` : 'On the computer Beluga runs on'}</span>
             <Button variant="quiet" onClick={() => onDone(undefined)}>
               Cancel
             </Button>

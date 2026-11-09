@@ -157,6 +157,24 @@ export class MetricFiles {
     }
   }
 
+  /** A metric's whole history, written at once (its sentinel moved here from another computer, BLG-807). */
+  putAll(sentinelId: string, name: string, lines: readonly MetricLine[]): void {
+    const kept = prunePoints([...lines].sort((a, b) => a.at - b.at), this.now(), KEEP_POINTS);
+    const file = this.fileOf(sentinelId, name);
+    if (!file) {
+      const m = this.memory.get(sentinelId) ?? new Map<string, MetricLine[]>();
+      m.set(name, kept);
+      this.memory.set(sentinelId, m);
+      return;
+    }
+    mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    const tmp = `${file}.tmp-${process.pid}`;
+    writeFileSync(tmp, kept.map((l) => `${JSON.stringify(l)}\n`).join(''), { mode: 0o600 });
+    renameSync(tmp, file);
+    this.counts.set(file, { n: kept.length, oldest: kept[0]?.at ?? this.now() });
+    this.torn.delete(file);
+  }
+
   /** A deleted sentinel's numbers go with it. */
   remove(sentinelId: string): void {
     this.memory.delete(sentinelId);

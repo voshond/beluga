@@ -1,6 +1,9 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { NeedsYou, OutputView, Topic } from './link/protocol';
 import { kv } from './kv';
+import type { ComputerLinkState } from './link/computers';
+import { mergeNeeds } from './link/needs';
+import { useOn } from './scope';
 import { type CachedView, type FileState, type LinkState, type OutboxItem, store, type Toast } from './store';
 
 /** The screens' way into the store. Each hook re-renders only when its own key changes. */
@@ -12,19 +15,61 @@ export function useLink(): LinkState {
   );
 }
 
-/** Does the Mac have this (by its protocol's minor)? Re-renders when the link learns it. */
+/** Does the Mac (or the computer this screen shows) have this, by its protocol's minor? Re-renders when the link learns it. */
 export function useSupports(what: Parameters<typeof store.supports>[0]): boolean {
+  const on = useOn();
   useLink();
-  return store.supports(what);
+  useComputers();
+  return on ? store.supportsOn(on, what) : store.supports(what);
 }
 
-/** A topic's view; subscribes to it on the Mac while the screen is mounted. */
+/** A topic's view; subscribes to it on the Mac (or the computer this screen shows) while the screen is mounted. */
 export function useView<T>(topic: Topic | undefined): CachedView<T> | undefined {
-  useEffect(() => (topic ? store.watch(topic) : undefined), [topic]);
+  return useViewAt<T>(useOn(), topic);
+}
+
+/** A topic's view on your Mac (`on` undefined) or on one of your computers, whatever scope the screen is in. */
+export function useViewAt<T>(on: string | undefined, topic: Topic | undefined): CachedView<T> | undefined {
+  useEffect(() => (topic ? (on ? store.watchOn(on, topic) : store.watch(topic)) : undefined), [topic, on]);
+  const key = topic ? (on ? `view:${on}|${topic}` : `view:${topic}`) : undefined;
   return useSyncExternalStore(
-    (fn) => (topic ? store.subscribe(`view:${topic}`, fn) : () => {}),
-    () => (topic ? store.view<T>(topic) : undefined),
+    (fn) => (key ? store.subscribe(key, fn) : () => {}),
+    () => (topic ? (on ? store.viewOn<T>(on, topic) : store.view<T>(topic)) : undefined),
   );
+}
+
+/** Your computers and how each link is (BLG-809). */
+export function useComputers(): readonly ComputerLinkState[] {
+  return useSyncExternalStore(
+    (fn) => store.subscribe('computers', fn),
+    () => store.computers(),
+  );
+}
+
+/** One of your computers, by id. */
+export function useComputer(id: string | undefined): ComputerLinkState | undefined {
+  return useComputers().find((c) => c.computer.id === id);
+}
+
+/**
+ * What needs you on your Mac and on every computer of yours (BLG-810): each computer's home is
+ * followed on its own link while this is shown, its items say which computer, and answering one
+ * goes back to it.
+ */
+export function useAllNeeds(mac: readonly NeedsYou[] | undefined): NeedsYou[] {
+  const computers = useComputers();
+  const ids = computers.map((c) => c.computer.id).join(',');
+  useEffect(() => {
+    const offs = ids ? ids.split(',').map((id) => store.watchOn(id, 'home')) : [];
+    return () => offs.forEach((off) => off());
+  }, [ids]);
+  const theirs = useSyncExternalStore(
+    (fn) => store.subscribe('computer-needs', fn),
+    () => store.computerNeeds(),
+  );
+  // Each thing once: the Mac's copy while its link is open, else your Always On's, where an answer is taken now (BLG-857).
+  const macOpen = useLink().phase === 'open';
+  return useVisibleNeeds(theirs.length ? mergeNeeds(mac, theirs, macOpen) : mac);
 }
 
 /** Needs-you items minus the ones you've just answered (until the Mac drops them). */
@@ -38,13 +83,17 @@ export function useVisibleNeeds(items: readonly NeedsYou[] | undefined): NeedsYo
 
 export function useFile(ref: string | undefined, variant: 'thumb' | 'full' | 'text'): FileState | undefined {
   const key = `${ref}#${variant}`;
+  // A computer's files aren't fetched through your Mac (their refs are that computer's own, BLG-810).
+  const on = useOn();
+  const name = useComputer(on)?.computer.name;
   useEffect(() => {
-    if (ref) store.fetch(ref, variant);
-  }, [ref, variant]);
-  return useSyncExternalStore(
-    (fn) => (ref ? store.subscribe(`file:${key}`, fn) : () => {}),
-    () => (ref ? store.file(ref, variant) : undefined),
+    if (ref && !on) store.fetch(ref, variant);
+  }, [ref, variant, on]);
+  const state = useSyncExternalStore(
+    (fn) => (ref && !on ? store.subscribe(`file:${key}`, fn) : () => {}),
+    () => (ref && !on ? store.file(ref, variant) : undefined),
   );
+  return on && ref ? { status: 'error', got: 0, error: `Opens on ${name ?? 'that computer'}` } : state;
 }
 
 /** How saving an output on the phone goes (lib/saved.ts): only watched, never started here. */

@@ -139,6 +139,11 @@
   padding: 24px;
   color: var(--text-3);
 }
+/* Where a big file asks for its next piece as you scroll near it. */
+.more {
+  flex: none;
+  height: 1px;
+}
 .notice {
   flex: none;
   display: flex;

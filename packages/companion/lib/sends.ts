@@ -51,6 +51,8 @@ export interface Send {
   readonly plan?: string;
   /** It carries a photo (sent first, `put`): not kept across launches. */
   readonly photo?: boolean;
+  /** Made on one of your computers, over its own link (BLG-810); none: your Mac. */
+  readonly on?: string;
 }
 
 /** How long a confirmed bubble may wait for the view to show it before it goes anyway. */
@@ -79,6 +81,10 @@ class Sends {
     );
     for (const s of this.list) this.watchTopic(s.where);
     store.subscribe('linked', () => this.onLinked());
+    // Your Always On linked (BLG-850): a chat message waiting for your Mac can go there.
+    store.subscribe('computers', () => {
+      if (store.friendsOn()) for (const s of this.list) if (s.state === 'waiting' && s.where.startsWith('chat:')) this.run(s.id);
+    });
   }
 
   // ---- for screens
@@ -104,15 +110,16 @@ class Sends {
   // ---- sending
 
   /** A message into a conversation (`conv:`) or a chat (`chat:`): shown now, confirmed by the Mac. */
-  message(topic: Topic, text: string, call: Call | Prepare, opts: { photo?: boolean } = {}): void {
-    const id = this.add({ where: topic, text, seen: mine(topic).map((m) => m.id), ...(opts.photo ? { photo: true } : {}) }, call);
-    this.watchTopic(topic);
+  message(topic: Topic, text: string, call: Call | Prepare, opts: { photo?: boolean; on?: string } = {}): void {
+    const where = whereOf(topic, opts.on);
+    const id = this.add({ where, text, seen: mine(where).map((m) => m.id), ...(opts.photo ? { photo: true } : {}), ...(opts.on ? { on: opts.on } : {}) }, call);
+    this.watchTopic(where);
     this.run(id);
   }
 
   /** A start from Ask → its id, for its screen (`/starting/<id>`). */
-  start(start: Start, text: string, call: Call | Prepare, opts: { photo?: boolean } = {}): string {
-    const id = this.add({ where: '', text, seen: [], start, ...(opts.photo ? { photo: true } : {}) }, call);
+  start(start: Start, text: string, call: Call | Prepare, opts: { photo?: boolean; on?: string } = {}): string {
+    const id = this.add({ where: '', text, seen: [], start, ...(opts.photo ? { photo: true } : {}), ...(opts.on ? { on: opts.on } : {}) }, call);
     this.patch(id, { where: `new:${id}` });
     // Ask opens its screen next: until that screen closes, it reverses a refusal itself.
     this.shown.add(id);
@@ -145,7 +152,11 @@ class Sends {
   private async run(id: string): Promise<void> {
     const s = this.get(id);
     if (!s) return;
-    if (!store.linked) {
+    // A chat with your Mac away goes through your Always On, which runs your friends network (BLG-850).
+    const on = s.on ?? (s.where.startsWith('chat:') && !store.linked ? store.friendsOn() : undefined);
+    // On a computer: over its own link now, or not at all (nothing waits for a computer that's away).
+    if (on && !store.linkedTo(on)) return this.fail(id, `${store.computerName(on) ?? 'That computer'} is away.`);
+    if (!on && !store.linked) {
       // A photo goes up only while linked; everything else waits for the Mac.
       if (s.photo && !s.call) return this.fail(id, 'Your Mac is away, and a photo only goes while it answers.');
       return this.patch(id, { state: 'waiting' });
@@ -161,7 +172,7 @@ class Sends {
     } catch (e) {
       return this.fail(id, (e as Error).message);
     }
-    store.call<unknown>(call, { queue: false }).then(
+    store.call<unknown>(call, { queue: false, ...(on ? { on } : {}) }).then(
       (value) => this.onOk(id, value),
       (e: Error & { lost?: boolean }) => (e.lost ? this.onLost(id) : this.fail(id, e.message)),
     );
@@ -213,7 +224,8 @@ class Sends {
   // ---- checking against the Mac's views
 
   private watchTopic(where: string): void {
-    if (this.watched.has(where) || !(where.startsWith('conv:') || where.startsWith('chat:'))) return;
+    const { topic } = splitWhere(where);
+    if (this.watched.has(where) || !(topic.startsWith('conv:') || topic.startsWith('chat:'))) return;
     this.watched.add(where);
     store.subscribe(`view:${where}`, () => this.reconcile(where));
   }
@@ -222,8 +234,9 @@ class Sends {
   private reconcile(where: string): void {
     const waiting = this.list.filter((s) => s.where === where && (s.state === 'sent' || s.state === 'unsure' || s.state === 'sending'));
     if (!waiting.length) return;
-    const view = store.view(where as Topic);
-    const items = mine(where as Topic);
+    const { on, topic } = splitWhere(where);
+    const view = on ? store.viewOn(on, topic) : store.view(topic);
+    const items = mine(where);
     const claimed = new Set<string>();
     const gone: string[] = [];
     for (const s of waiting) {
@@ -240,7 +253,7 @@ class Sends {
       this.changed();
     }
     // A view straight from the Mac after the link came back, without it: it didn't get there.
-    if (view && !view.stale && store.linked) for (const s of this.list) if (s.where === where && s.state === 'unsure') this.patch(s.id, { state: 'failed', error: "It didn't reach your Mac." });
+    if (view && !view.stale && (on ? store.linkedTo(on) : store.linked || Boolean(store.friendsOn()))) for (const s of this.list) if (s.where === where && s.state === 'unsure') this.patch(s.id, { state: 'failed', error: "It didn't reach your Mac." });
   }
 
   // ---- state
@@ -257,9 +270,17 @@ class Sends {
   }
 }
 
+/** Where a message shows: its topic, under its computer's id when it's on one (as that computer's views are keyed). */
+export const whereOf = (topic: Topic, on?: string): string => (on ? `${on}|${topic}` : topic);
+const splitWhere = (where: string): { on?: string; topic: Topic } => {
+  const bar = where.indexOf('|');
+  return bar < 0 ? { topic: where as Topic } : { on: where.slice(0, bar), topic: where.slice(bar + 1) as Topic };
+};
+
 /** Your messages in a conversation (and its queue) or a chat, as the cached view has them. */
-function mine(topic: Topic): { id: string; text: string }[] {
-  const v = store.view<ConvView | ChatView>(topic)?.data;
+function mine(where: string): { id: string; text: string }[] {
+  const { on, topic } = splitWhere(where);
+  const v = (on ? store.viewOn<ConvView | ChatView>(on, topic) : store.view<ConvView | ChatView>(topic))?.data;
   if (!v) return [];
   if (topic.startsWith('chat:')) return (v as ChatView).messages.filter((m) => m.mine).map((m) => ({ id: m.id, text: m.text }));
   const c = v as ConvView;

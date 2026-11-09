@@ -1,19 +1,21 @@
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { type AppState, type Location, type ViewerState, fileKey } from '@beluga/core/store.js';
 import type { ChangedFile as Change } from '@beluga/workspaces/git.js';
 import { shareNameOf } from '@beluga/shared/share-names.js';
 import { useApi, useApp } from '../lib/beluga.js';
-import { lazyView } from '../lib/lazy-view.js';
 import type { DocVariant } from '../components/markdown/MarkdownDoc.js';
 import { hasRenderedLook, isVisualFile } from './reader/reader-model.js';
+import { peekFirst, readFirst } from './reader/streamed.js';
 import r from './reader/reader.module.css';
+import { ReaderContent } from './reader/reader-lazy.js';
 
 /**
  * A changed file as itself, next to its diff: Markdown formatted, web pages drawn, pictures and PDFs as they look,
  * code as it is now. Read on its own, so the Files tab's open file stays where it is.
  */
 
-const FileContent = lazyView('views/reader/FileReader', () => import('./reader/FileReader.js').then((m) => m.FileContent), false);
+/** The reader in its own chunk (views/reader/reader-lazy.tsx): fetched early, drawn at once once it's here (BLG-853), giving up on a stalled fetch instead of waiting (#370). */
+const FileContent = ReaderContent;
 
 /** How a changed file can be looked at: its diff, or the file (a picture or a PDF only as itself). */
 export type ChangeLook = 'diff' | 'file';
@@ -46,23 +48,40 @@ export function useChangeLocation(path: string | undefined): Location | undefine
   return useMemo(() => (path ? changeLocation({ view, selfId, shared }, path) : undefined), [view, selfId, shared, path]);
 }
 
-/** The file's text, read again whenever the changes are (Claude edited it, a commit) or it's written. */
-function useText(at: Location, skip: boolean, version: unknown, written: number | undefined): { content?: string; truncated?: boolean; error?: string } {
+interface Text {
+  readonly content?: string;
+  /** A big file: where the rest starts (the reader streams it as you scroll), and its size. */
+  readonly next?: number;
+  readonly total?: number;
+  readonly error?: string;
+}
+
+/**
+ * The file's first piece (BLG-791), read again whenever the changes are (Claude edited it, a
+ * commit) or it's written. Opening, one read ahead under the pointer shows at once and will do.
+ */
+function useText(at: Location, skip: boolean, version: unknown, written: number | undefined): Text {
   const api = useApi();
   const key = `${at.owner}\0${at.share}\0${at.path}`;
-  const [state, setState] = useState<{ key: string; content?: string; truncated?: boolean; error?: string }>();
+  const [state, setState] = useState<Text & { key: string }>();
+  const opened = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (skip) return;
     let alive = true;
-    api.files.read(at).then(
-      ({ content, truncated }) => alive && setState({ key, content, truncated }),
+    // Its first read may come from the read-ahead; a read after a change asks the file again.
+    const first = opened.current !== key;
+    opened.current = key;
+    readFirst(api, at, first).then(
+      (piece) => alive && setState({ key, content: piece.content, ...(piece.next !== undefined ? { next: piece.next, total: piece.total } : {}) }),
       (err: unknown) => alive && setState({ key, error: err instanceof Error ? err.message : String(err) }),
     );
     return () => {
       alive = false;
     };
   }, [key, version, written, skip]);
-  return state?.key === key ? state : {};
+  if (state?.key === key) return state;
+  const ahead = skip ? undefined : peekFirst(at);
+  return ahead ? { content: ahead.content, ...(ahead.next !== undefined ? { next: ahead.next, total: ahead.total } : {}) } : {};
 }
 
 export function ChangedFileView({ at, variant, wrap = true, version: own }: { at: Location; variant: DocVariant; wrap?: boolean; version?: string | number }) {
@@ -74,7 +93,8 @@ export function ChangedFileView({ at, variant, wrap = true, version: own }: { at
   const viewer: ViewerState = {
     ...at,
     content: text.content ?? '',
-    truncated: text.truncated ?? false,
+    truncated: false,
+    ...(text.next !== undefined ? { next: text.next, total: text.total } : {}),
     loading: !visual && text.content === undefined && !text.error,
     ...(text.error ? { error: text.error } : {}),
     scroll: 0,

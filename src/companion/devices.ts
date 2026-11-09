@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { readJson, writeJson } from '../net/mesh/files.js';
+import { roleFits, roleOf } from './device-crypto.js';
 import { DeviceCert, type DeviceView, LinkPath, MAX_DEVICES, PHONE_USE } from './protocol.js';
 
 /**
@@ -9,8 +10,11 @@ import { DeviceCert, type DeviceView, LinkPath, MAX_DEVICES, PHONE_USE } from '.
  * from then on (the host's firewall reads this book).
  */
 
+/** Only a phone's certificate is kept here: an app's or a computer's never passes as a phone (BLG-774). */
+export const isPhoneCert = (cert: DeviceCert): boolean => roleOf(cert) === 'phone' && roleFits(cert);
+
 export const DeviceRecord = z.object({
-  cert: DeviceCert,
+  cert: DeviceCert.refine(isPhoneCert, 'Not a phone'),
   pairedAt: z.number().int().min(0),
   lastSeen: z.number().int().min(0).optional(),
   app: z.string().max(40).optional(),
@@ -50,6 +54,7 @@ export class DeviceBook {
 
   /** Keep a new phone (the same device again replaces its old certificate). */
   add(cert: DeviceCert, app?: string): DeviceRecord {
+    if (!isPhoneCert(cert)) throw new Error('Only a phone pairs here');
     const rest = this.list.filter((r) => r.cert.device !== cert.device && r.cert.link !== cert.link);
     if (rest.length >= MAX_DEVICES) throw new Error(`You have ${MAX_DEVICES} phones paired; remove one first`);
     const record: DeviceRecord = { cert, pairedAt: cert.issuedAt, ...(app ? { app } : {}) };
@@ -74,7 +79,7 @@ export class DeviceBook {
     return this.list.map((r) => ({
       id: deviceId(r.cert),
       name: r.cert.name,
-      platform: r.cert.platform,
+      platform: r.cert.platform === 'ios' ? 'ios' : 'android',
       ...(r.app ? { app: r.app } : {}),
       pairedAt: r.pairedAt,
       ...(r.lastSeen !== undefined ? { lastSeen: r.lastSeen } : {}),

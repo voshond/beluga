@@ -68,7 +68,7 @@ const runsKey = (id: string): string => `sentinel-runs:${id}`;
 /**
  * Under the Sentinel row (BLG-570), as running plans are under Work: the sentinels, each opening its
  * page and unfolding to its runs (BLG-576), newest first. `all`: every one that's on; else only
- * those running, waiting for you, or whose last run failed.
+ * those running, waiting for you, whose last run failed, or that stopped on their own.
  */
 export function SentinelSideRows({ all }: { all: boolean }) {
   const enabled = useApp((st) => st.sentinel.enabled);
@@ -86,11 +86,11 @@ export function SentinelSideRows({ all }: { all: boolean }) {
 function SentinelSideRow({ item }: { item: SideSentinel }) {
   const actions = useActions();
   const a = useSentinelActions();
-  const { sentinel, live, needs, failed, runs } = item;
+  const { sentinel, live, needs, failed, broken, runs } = item;
   const open = useUi((u) => u.collapsed.includes(runsKey(sentinel.id)));
   const selected = useApp((st) => st.view.kind === 'sentinel_page' && st.view.id === sentinel.id);
   const toggle = (): void => actions.run({ type: 'toggle_fold', key: runsKey(sentinel.id) });
-  const tip = needs ? `${sentinel.name} waits for you` : live ? `${sentinel.name} is running` : failed ? `${sentinel.name}: its last run failed` : `${sentinel.name}: ${runs.length ? `${runs.length} run${runs.length === 1 ? '' : 's'}` : 'no runs yet'}`;
+  const tip = needs ? `${sentinel.name} waits for you` : live ? `${sentinel.name} is running` : broken ? `${sentinel.name}: ${broken}` : failed ? `${sentinel.name}: its last run failed` : `${sentinel.name}: ${runs.length ? `${runs.length} run${runs.length === 1 ? '' : 's'}` : 'no runs yet'}`;
   return (
     <>
       <Row
@@ -122,7 +122,7 @@ function SentinelSideRow({ item }: { item: SideSentinel }) {
             toggle();
           }
         }}
-        trailing={live ? <DotMark tone="claude" live signal="working" /> : needs ? <DotMark tone="warn" signal="needs" /> : failed ? <Icon name="alert" size={12} className={s.alert} /> : null}
+        trailing={live ? <DotMark tone="claude" live signal="working" /> : needs ? <DotMark tone="warn" signal="needs" /> : failed || broken ? <Icon name="alert" size={12} className={s.alert} /> : null}
       />
       {open ? <SideRuns sentinelId={sentinel.id} runs={runs} /> : null}
     </>

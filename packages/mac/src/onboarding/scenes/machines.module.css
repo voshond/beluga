@@ -1,0 +1,286 @@
+/*
+ * Your computers (Machines.tsx): this Mac and the phone on the left, the computers that do the
+ * work on the right, wired through one point. Pastel tiles, hairlines, no glow.
+ */
+
+.machines {
+  display: grid;
+  grid-template-columns: 216px 96px 214px;
+  height: 336px;
+}
+
+/* ── This Mac and the phone ───────────────────────────────── */
+
+.devices {
+  position: relative;
+}
+.mac {
+  composes: glass from './scenes.module.css';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform-origin: 50% 100%;
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 12px;
+}
+.mac .head {
+  border-bottom: 0.5px solid var(--hairline);
+}
+.head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.sub {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.tile {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: oklch(0.6 0.11 var(--hue));
+  background: oklch(0.75 0.08 var(--hue) / 0.2);
+}
+.body {
+  flex: 1;
+  min-height: 0;
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.ask {
+  align-self: flex-end;
+  padding: 5px 10px;
+  border-radius: 11px 11px 4px 11px;
+  font-size: 11.5px;
+  background: var(--bg-hover);
+}
+.line code {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+.live {
+  color: var(--claude);
+}
+.composer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: 9px;
+  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  white-space: nowrap;
+  color: var(--text-2);
+  background: var(--bg-hover);
+}
+.chip[data-on] {
+  color: oklch(0.6 0.12 250);
+  background: oklch(0.75 0.08 250 / 0.2);
+}
+.lid {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--text-2);
+}
+.note {
+  position: absolute;
+  left: 0;
+  top: 222px;
+  width: 112px;
+  display: inline-flex;
+  gap: 5px;
+  align-items: flex-start;
+  font-size: 9.5px;
+  line-height: 1.35;
+  color: var(--text-3);
+}
+.note svg {
+  flex: none;
+  margin-top: 1px;
+}
+.phone {
+  composes: glass from './scenes.module.css';
+  position: absolute;
+  right: 0;
+  top: 208px;
+  width: 88px;
+  height: 128px;
+  border-radius: 16px;
+  padding: 16px 9px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 10px;
+  transition: box-shadow 0.4s ease;
+}
+.phone[data-keeps-up] {
+  box-shadow:
+    0 0 0 1px oklch(0.75 0.08 250 / 0.7),
+    0 30px 80px -20px rgba(0, 0, 0, 0.35);
+}
+.notch {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 26px;
+  height: 4px;
+  border-radius: 2px;
+  transform: translateX(-50%);
+  background: var(--hairline-strong);
+}
+.phoneHead {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: oklch(0.6 0.12 250);
+}
+.phoneLine {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  color: var(--text-2);
+}
+
+/* ── The wires ─────────────────────────────────────────────── */
+
+.wire {
+  position: relative;
+}
+.wireSvg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.wireBase {
+  fill: none;
+  stroke: var(--hairline-strong);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 5;
+  transition:
+    stroke 0.4s ease,
+    opacity 0.4s ease;
+}
+.wireBase[data-live] {
+  stroke: color-mix(in srgb, var(--claude) 45%, transparent);
+  stroke-dasharray: none;
+}
+.wireBase[data-off] {
+  opacity: 0.35;
+}
+.junction {
+  fill: var(--bg-raised);
+  stroke: var(--hairline-strong);
+  stroke-width: 1.5;
+}
+.packet {
+  composes: glass from './scenes.module.css';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  color: var(--claude);
+  offset-rotate: 0deg;
+  animation: hop 0.9s cubic-bezier(0.45, 0, 0.2, 1) forwards;
+}
+.packet[data-tone='ok'] {
+  color: var(--ok);
+}
+@keyframes hop {
+  from {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  20%,
+  80% {
+    opacity: 1;
+  }
+  to {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+/* ── The computers that do the work ───────────────────────── */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.machine {
+  composes: glass from './scenes.module.css';
+  height: 96px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: box-shadow 0.4s ease;
+}
+.machine[data-busy] {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--claude) 40%, transparent),
+    0 30px 80px -20px rgba(0, 0, 0, 0.35);
+}
+.status {
+  padding: 0 12px 11px 49px;
+  font-size: 11px;
+}
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-2);
+}
+.always {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 550;
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .packet {
+    animation: none;
+  }
+}
