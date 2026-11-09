@@ -401,6 +401,32 @@ fn open(app: &AppHandle, url: &str) -> Result<(), String> {
     main_window(app)?.navigate(url).map_err(|e| e.to_string())
 }
 
+const SIGNED_OUT_RETRY: &str = r#"(function(){
+var form = document.getElementById('f');
+var heading = (document.querySelector('h1') || {}).textContent || '';
+if (!(form && form.password) && !/^Ask for a link/.test(heading)) return;
+var key = 'belugaSessionRetry', last = Number(sessionStorage.getItem(key)) || 0;
+if (Date.now() - last < 15000) return;
+sessionStorage.setItem(key, String(Date.now()));
+location.replace(location.href);
+})();"#;
+
+pub fn signed_out_retry(config: &ClientConfig, url: &Url) -> bool {
+    config.mode == Some(Mode::Server)
+        && config.server_url.as_deref() == Some(url.origin().ascii_serialization().as_str())
+}
+
+pub fn on_page_load(webview: &tauri::Webview, payload: &tauri::webview::PageLoadPayload<'_>) {
+    if payload.event() != tauri::webview::PageLoadEvent::Finished || webview.label() != "main" {
+        return;
+    }
+    let config = webview.app_handle().state::<ClientState>().config();
+    if !signed_out_retry(&config, payload.url()) {
+        return;
+    }
+    let _ = webview.eval(SIGNED_OUT_RETRY);
+}
+
 /// Running Beluga here: what asks the daemon refuses in server mode, so it is never started there.
 pub fn require_local(app: &AppHandle) -> Result<(), String> {
     match app.state::<ClientState>().mode() {
@@ -578,6 +604,24 @@ mod tests {
             ..ClientConfig::default()
         };
         assert_eq!(navigation(&here, &url("https://github.com/x"), false), Navigation::Stay);
+    }
+
+    #[test]
+    fn only_the_saved_server_gets_a_signed_out_retry() {
+        let url = |u: &str| Url::parse(u).unwrap();
+        let server = ClientConfig {
+            mode: Some(Mode::Server),
+            server_url: Some("https://box.example.com".into()),
+            device_name: None,
+        };
+        assert!(signed_out_retry(&server, &url("https://box.example.com/")));
+        assert!(!signed_out_retry(&server, &url("tauri://localhost/connect.html")));
+        assert!(!signed_out_retry(&server, &url("https://github.com/")));
+        let here = ClientConfig {
+            mode: Some(Mode::Local),
+            ..server.clone()
+        };
+        assert!(!signed_out_retry(&here, &url("https://box.example.com/")));
     }
 
     #[test]
