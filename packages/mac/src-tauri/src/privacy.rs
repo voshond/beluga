@@ -76,6 +76,17 @@ pub async fn privacy_access() -> PrivacyAccess {
     .unwrap_or(PrivacyAccess::UNKNOWN)
 }
 
+/// Whether a device screenshot (device.rs) may capture the screen. On a Mac without Screen
+/// Recording, macOS's prompt shows and its pane opens, and this one is a no.
+pub(crate) fn screen_capture_allowed() -> bool {
+    if cfg!(not(target_os = "macos")) || mac::screen() == "granted" {
+        return true;
+    }
+    mac::request_screen();
+    let _ = open_pane("screen");
+    false
+}
+
 /// Ask for one permission: Beluga goes into the pane's list (Screen Recording and Accessibility
 /// show macOS's own prompt the first time), then System Settings opens at it. Automation asks
 /// with macOS's prompt (for Finder); its pane only opens when that was declined before.

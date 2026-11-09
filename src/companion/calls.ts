@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { API, type Method } from '../ipc/api.js';
+import { DEVICE_CAPS, DEVICE_OS } from '../shared/devices.js';
 import { ChatMessageView, DataListView, DocumentView, FilePageView, FolderView, FoundView, MergeCheckView, MergeView, SignedLinkView, SubAgentDetailView, TerminalView, TerminalsView, TranscriptView, TurnView, VoiceMacView } from './protocol.js';
 
 /**
@@ -28,6 +29,8 @@ export type TaskDraftResult = z.infer<typeof TaskDraftResult>;
 /** What `put` answers: a piece taken, then the file's ref. */
 /** A sentinel's run as the phone reads it (src/core/sentinel/model.ts RunSummary; more fields pass through). */
 export const SentinelRunResult = z.object({ id: z.string(), sentinelId: z.string(), state: z.string(), startedAt: z.number(), headline: z.string() }).passthrough();
+/** A client device connected to the Mac's Beluga (src/shared/devices.ts DeviceInfo). */
+export const DeviceResult = z.object({ id: z.string(), name: z.string(), os: z.enum(DEVICE_OS), caps: z.array(z.enum(DEVICE_CAPS)), lastSeen: z.number() });
 export const PutResult =z.union([z.object({ received: z.number().int().min(0) }), z.object({ ref: z.string() })]);
 
 export const PhoneCalls = {
@@ -187,6 +190,8 @@ export const PhoneCalls = {
   // 1.22 (BLG-244): a number over time (its points, oldest first), and pull to refresh a dashboard.
   'sentinel.metricRead': entry('sentinel.metricRead', z.object({ metric: z.object({ name: z.string(), label: z.string(), unit: z.string() }).passthrough(), lines: z.array(z.object({ at: z.number(), runId: z.string(), value: z.number().optional() }).passthrough()) })),
   'dashboard.refresh': entry('dashboard.refresh', z.object({ total: z.number() })),
+  // BLG-54: the client devices (remote apps) connected now.
+  'devices.list': entry('devices.list', z.array(DeviceResult)),
   // 1.25 (BLG-345): a table's document chip, read through the Mac, and a storage chip's link signed there.
   'sentinel.document': entry('sentinel.document', DocumentView),
   'sentinel.signStorage': entry('sentinel.signStorage', SignedLinkView),

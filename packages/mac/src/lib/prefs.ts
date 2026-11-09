@@ -1,3 +1,4 @@
+import { appInvoke, native } from './boot-mode.js';
 import { useSyncExternalStore } from 'react';
 import { onPowerSaving, powerSaving } from './power.js';
 import { DEFAULT_FIRE, type FireLook, fireLookOf } from '../chat/fire-look.js';
@@ -309,9 +310,9 @@ function themeSheet(): void {
 /** The window's blur, on or off, told to the app once per change (nothing outside the app). */
 let vibrancyOn: boolean | undefined;
 function vibrancy(on: boolean): void {
-  if (vibrancyOn === on || !('__TAURI_INTERNALS__' in globalThis)) return;
+  if (vibrancyOn === on || !native('menuBarPane')) return;
   vibrancyOn = on;
-  void import('@tauri-apps/api/core').then(({ invoke }) => invoke('set_vibrancy', { on })).catch(() => undefined);
+  void appInvoke('set_vibrancy', { on }).catch(() => undefined);
 }
 
 /** Put the preferences on the document (CSS variables and data attributes do the rest). */

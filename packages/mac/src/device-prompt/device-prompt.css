@@ -1,0 +1,105 @@
+html[data-app='tauri'] body {
+  background: var(--bg);
+}
+
+.device-prompt {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 100vh;
+  padding: var(--space-5);
+}
+
+.device-prompt h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.device-prompt p {
+  margin: 0;
+}
+
+.device-prompt-who,
+.device-prompt-hint,
+.device-prompt-left {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.device-prompt-why {
+  color: var(--text-2);
+}
+
+.device-prompt-command {
+  flex: 1;
+  min-height: 80px;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3);
+  overflow: auto;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}
+
+.device-prompt-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px var(--space-3);
+  margin: 0;
+  font-size: 12px;
+}
+
+.device-prompt-facts dt {
+  color: var(--text-3);
+}
+
+.device-prompt-facts dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+.device-prompt-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.device-prompt-left {
+  margin-right: auto;
+}
+
+.device-prompt-actions button {
+  padding: 7px 16px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.device-prompt-actions .device-prompt-deny {
+  border-color: transparent;
+  background: var(--accent);
+  color: white;
+}
+
+.device-prompt-actions button:focus-visible,
+.device-prompt-command:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.device-prompt-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

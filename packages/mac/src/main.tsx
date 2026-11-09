@@ -6,7 +6,7 @@ import { createRoot } from 'react-dom/client';
 import type { SocketClient } from '@beluga/ipc/socket-client.js';
 import { App } from './App.js';
 import { brandText } from './lib/brand.js';
-import { capabilities, connect, inApp, Unreachable } from './lib/boot.js';
+import { capabilities, connect, inApp, Unreachable, native } from './lib/boot.js';
 import { BelugaProvider } from './lib/beluga.js';
 import { apply, zoom } from './lib/prefs.js';
 import { watchWindow } from './lib/window-active.js';
@@ -19,7 +19,7 @@ import './styles/tokens.css';
 import './styles/base.css';
 
 apply();
-if (inApp()) document.documentElement.dataset.app = 'tauri';
+if (native('look')) document.documentElement.dataset.app = 'tauri';
 watchWindow();
 watchPreloadErrors();
 

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { PresenceState } from '@beluga/net/mesh/views.js';
 import type { SocketClient } from '@beluga/ipc/socket-client.js';
-import { inApp } from '../lib/boot.js';
+import { native, appInvoke } from '../lib/boot.js';
 import { IDLE_AWAY_MS, findInvitation, idleStep, presenceFor, rememberIdleAway, selfLine, wasIdleAway } from './net-model.js';
 import { openNet } from './net-sheets.js';
 
@@ -41,7 +41,7 @@ export function openNetworkLink(url: string): boolean {
 /** Keep the menu-bar menu's status items in step (gone while the network is off). */
 export function useTrayPresence(client: SocketClient): void {
   useEffect(() => {
-    if (!inApp()) return;
+    if (!native('tray')) return;
     let last = '';
     const update = (): void => {
       const self = client.store.getState().network.self;
@@ -49,7 +49,7 @@ export function useTrayPresence(client: SocketClient): void {
       const key = JSON.stringify(presence);
       if (key === last) return;
       last = key;
-      void import('@tauri-apps/api/core').then(({ invoke }) => invoke('set_tray_presence', { presence })).catch(() => undefined);
+      void appInvoke('set_tray_presence', { presence }).catch(() => undefined);
     };
     update();
     return client.store.subscribe(update);
@@ -61,10 +61,9 @@ const ACTIVITY = ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart', 'f
 
 /** How long since you last used the Mac (the system's idle time in the app; this window's input in a browser). */
 async function idleMs(lastInput: number): Promise<number> {
-  if (inApp()) {
+  if (native('idle')) {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const secs = await invoke<number | null>('system_idle_seconds');
+      const secs = await appInvoke<number | null>('system_idle_seconds');
       if (typeof secs === 'number') return secs * 1000;
     } catch {
       // Fall back to this window's input.

@@ -1,10 +1,10 @@
-import { inApp } from './boot.js';
+import { native } from './boot.js';
 import { keyPlatform, primaryLabel } from './shortcuts-model.js';
 
 /** Open a web page in the default browser (or a mailto: link in Mail). */
 export async function openExternal(url: string): Promise<void> {
   if (!/^(https?:\/\/|mailto:)/i.test(url)) return;
-  if (inApp()) {
+  if (native('openExternal')) {
     const { openUrl } = await import('@tauri-apps/plugin-opener');
     await openUrl(url);
   } else window.open(url, '_blank', 'noopener');

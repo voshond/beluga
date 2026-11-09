@@ -14,7 +14,7 @@ async function openBoard(page: Page) {
   await page.getByRole('tablist', { name: 'Show' }).getByRole('tab', { name: /^All/ }).click();
   await page.getByRole('tablist', { name: 'Display' }).getByRole('tab', { name: 'Board' }).click();
   // The demo's task is a sub-task, tucked under its epic until opened out.
-  const showAll = page.getByRole('button', { name: 'Show All' });
+  const showAll = page.getByRole('button', { name: 'Show All', exact: true });
   if (await showAll.isVisible()) await showAll.click();
   return page.getByRole('list', { name: 'Board' }).getByRole('listitem', { name: /^In Progress/ });
 }

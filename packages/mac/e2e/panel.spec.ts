@@ -169,15 +169,20 @@ test('Terminal in the panel: + adds a shell for this workspace, and it runs ther
   await tab(page, 'Terminal').click();
   const term = panel(page).getByRole('region', { name: 'Terminal' });
   await expect(term.getByRole('tab', { name: /^Shell/ }).first()).toBeVisible();
+  // Shells the demo already has (Shell 1…) stay; the one + adds is the selected one.
+  const numbered = term.getByRole('tab', { name: /^Shell \d+/ });
+  const before = await numbered.count();
   await term.getByRole('button', { name: 'New shell' }).click();
-  await expect(term.getByRole('tab', { name: /^Shell \d+/ })).toBeVisible();
+  await expect(numbered).toHaveCount(before + 1);
+  const added = term.getByRole('tab', { name: /^Shell \d+/, selected: true });
+  await expect(added).toBeVisible();
   await term.locator('.xterm').click();
   await page.keyboard.type('pwd; echo panel-$((6*7))\n');
   await expect(term.getByText('panel-42').last()).toBeVisible({ timeout: 15_000 });
   await expect(term.getByText(/add-auth/).first()).toBeVisible();
-  await term.getByRole('tab', { name: /^Shell \d+/ }).hover();
-  await term.getByRole('button', { name: /^Close Shell \d+/ }).click();
-  await expect(term.getByRole('tab', { name: /^Shell \d+/ })).toHaveCount(0);
+  await added.hover();
+  await added.getByRole('button', { name: /^Close Shell \d+/ }).click();
+  await expect(numbered).toHaveCount(before);
 });
 
 test('⌘J opens a drawer under the chat when that’s your choice (Settings › Terminal), and it remembers its height', async ({ page }) => {

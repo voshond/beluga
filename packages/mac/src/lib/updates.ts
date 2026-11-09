@@ -2,7 +2,8 @@ import { useEffect, useSyncExternalStore } from 'react';
 import type { View } from '@beluga/core/store.js';
 import type { SocketClient } from '@beluga/ipc/socket-client.js';
 import type { Actions } from './actions.js';
-import { APP_VERSION, inApp } from './boot.js';
+import { APP_VERSION, appInvoke, native } from './boot.js';
+import type { ClientCommand } from './boot-mode.js';
 import { INITIAL_UPDATE_STATE, type SavedPlace, type UpdateMode, type UpdateState, activityOf, placeAction } from './update-model.js';
 
 /**
@@ -53,27 +54,26 @@ let started = false;
 export function startUpdates(): void {
   if (started) return;
   started = true;
-  if (!inApp()) {
+  if (!native('updates')) {
     if (window.__BELUGA_UPDATES__) patchState(window.__BELUGA_UPDATES__);
     return;
   }
   void (async () => {
-    const [{ invoke }, { listen }] = await Promise.all([import('@tauri-apps/api/core'), import('@tauri-apps/api/event')]);
+    const { listen } = await import('@tauri-apps/api/event');
     await listen<UpdateState>('update-state', (e) => set({ state: e.payload }));
     await listen('update-show', () => set({ open: true }));
-    set({ state: await invoke<UpdateState>('update_state') });
+    set({ state: await appInvoke<UpdateState>('update_state') });
   })().catch(() => undefined);
 }
 
-async function ask(cmd: string, args: Record<string, unknown> | undefined, pretend: () => void): Promise<void> {
-  if (!inApp()) {
+async function ask(cmd: ClientCommand, args: Record<string, unknown> | undefined, pretend: () => void): Promise<void> {
+  if (!native('updates')) {
     (window.__BELUGA_UPDATE_CALLS__ ??= []).push(args ? `${cmd} ${JSON.stringify(args)}` : cmd);
     pretend();
     return;
   }
-  const { invoke } = await import('@tauri-apps/api/core');
   // What went wrong comes back as the state's error (the shell sends it), not here.
-  await invoke(cmd, args).catch(() => undefined);
+  await appInvoke(cmd, args).catch(() => undefined);
 }
 
 export const openUpdateSheet = (): void => set({ open: true });
@@ -157,13 +157,13 @@ export function useUpdateActivity(client: SocketClient, actions: Actions): void 
       if (key === last) return;
       last = key;
       set({ claude: activity.claude });
-      if (inApp()) void import('@tauri-apps/api/core').then(({ invoke }) => invoke('update_activity', { activity })).catch(() => undefined);
+      if (native('updates')) void appInvoke('update_activity', { activity }).catch(() => undefined);
     };
     update();
     const off = client.store.subscribe(update);
     return () => {
       off();
-      if (inApp()) void import('@tauri-apps/api/core').then(({ invoke }) => invoke('update_activity', { activity: null })).catch(() => undefined);
+      if (native('updates')) void appInvoke('update_activity', { activity: null }).catch(() => undefined);
     };
   }, [client]);
 }

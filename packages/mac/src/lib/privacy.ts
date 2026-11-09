@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { inApp } from './boot.js';
+import { native, appInvoke } from './boot.js';
 import { useClock } from './window-active.js';
 import type { PrivacyAccess, PrivacyPane } from './privacy-model.js';
 
@@ -23,19 +23,17 @@ declare global {
 }
 
 export async function privacyAccess(): Promise<PrivacyAccess> {
-  if (!inApp()) return { ...UNKNOWN_PRIVACY, ...(typeof window !== 'undefined' ? window.__BELUGA_PRIVACY__ : undefined) };
-  const { invoke } = await import('@tauri-apps/api/core');
-  return invoke<PrivacyAccess>('privacy_access').catch(() => UNKNOWN_PRIVACY);
+  if (!native('access')) return { ...UNKNOWN_PRIVACY, ...(typeof window !== 'undefined' ? window.__BELUGA_PRIVACY__ : undefined) };
+  return appInvoke<PrivacyAccess>('privacy_access').catch(() => UNKNOWN_PRIVACY);
 }
 
 /** Put Beluga in the pane's list where macOS allows it, and open System Settings there. */
 export async function requestPrivacy(pane: PrivacyPane): Promise<void> {
-  if (!inApp()) {
+  if (!native('access')) {
     (window.__BELUGA_PRIVACY_CALLS__ ??= []).push(pane);
     return;
   }
-  const { invoke } = await import('@tauri-apps/api/core');
-  await invoke('privacy_request', { pane });
+  await appInvoke('privacy_request', { pane });
 }
 
 /**
