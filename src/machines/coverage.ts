@@ -264,6 +264,7 @@ export const MACHINE: Record<Method, MachineSide> = {
   'projects.newHome': 'drive',
   'projects.iconAt': 'drive',
   'projects.github': 'drive',
+  'projects.githubCached': 'drive',
   'projects.clone': 'drive',
   'projects.cloneProgress': 'drive',
   'projects.setHome': 'drive',

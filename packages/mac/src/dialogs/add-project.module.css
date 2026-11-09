@@ -228,6 +228,11 @@
   color: var(--error);
 }
 
+.listStatus {
+  color: var(--text-3);
+  font-size: 0.86rem;
+  font-weight: 400;
+}
 .githubList {
   flex: 0 1 200px;
   max-height: 200px;

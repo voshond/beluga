@@ -11,6 +11,7 @@ export const CloneProject = ({ onDone }: { onDone: () => void }) => {
   const api = useApi();
   const [repositories, setRepositories] = useState<Awaited<ReturnType<typeof api.projects.github>>>();
   const [listError, setListError] = useState('');
+  const [refreshing, setRefreshing] = useState(true);
   const [filter, setFilter] = useState('');
   const [home, setHome] = useState('');
   const [remote, setRemote] = useState('');
@@ -20,9 +21,15 @@ export const CloneProject = ({ onDone }: { onDone: () => void }) => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    void api.projects.github().then(setRepositories, (err) => setListError(err instanceof Error ? err.message : String(err)));
+    void api.projects.githubCached().then((cached) => { if (cached) setRepositories((current) => current ?? cached.repos); }, () => undefined);
+    void api.projects.github()
+      .then(setRepositories, (err) => setListError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setRefreshing(false));
     void api.projects.newHome().then(setHome, () => undefined);
   }, []);
+
+  const shownRepositories = repositories?.filter((repo) => repo.name.toLowerCase().includes(filter.toLowerCase()));
+  const listNote = !repositories ? (listError ? null : 'Loading GitHub repositories…') : shownRepositories?.length === 0 ? (refreshing ? 'Looking for more on GitHub…' : 'No repositories found.') : null;
 
   const tick = useClock(busy, 500);
 
@@ -54,10 +61,13 @@ export const CloneProject = ({ onDone }: { onDone: () => void }) => {
     <form className={s.newForm} onSubmit={(event) => { event.preventDefault(); void handleClone(); }}>
       <div className={s.listHead}>
         <span>Your GitHub repositories</span>
+        {repositories && refreshing ? <small className={s.listStatus} role="status">Updating…</small> : null}
         <input className={s.filter} value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter" aria-label="Filter GitHub repositories" />
       </div>
       <div className={`${s.list} ${s.githubList}`} role="list">
-        {listError ? <div className={s.note} role="alert">{listError} You can still enter a URL below.</div> : !repositories ? <div className={s.note}>Loading GitHub repositories…</div> : repositories.filter((repo) => repo.name.toLowerCase().includes(filter.toLowerCase())).length === 0 ? <div className={s.note}>No repositories found.</div> : repositories.filter((repo) => repo.name.toLowerCase().includes(filter.toLowerCase())).map((repo) => (
+        {listError ? <div className={s.note} role="alert">{repositories ? `Showing the last list. ${listError}` : `${listError} You can still enter a URL below.`}</div> : null}
+        {listNote ? <div className={s.note}>{listNote}</div> : null}
+        {shownRepositories?.map((repo) => (
           <div className={s.item} role="listitem" key={repo.name}>
             <span className={s.itemText}><span className={s.itemName}>{repo.name}</span><span className={s.itemPath}>{repo.private ? 'Private' : 'Public'}{repo.archived ? ' · Archived' : ''}</span></span>
             <Button size="small" disabled={busy} onClick={() => { setRemote(repo.url); if (home) setTarget(joinPath(home, repo.name.split('/').at(-1) || '')); setError(''); }}>Select</Button>
