@@ -71,7 +71,7 @@ The right panel's **This workspace › Agent** row opens the same report for one
 
 - It reads only that worktree's logs: its own folder under the Claude Code transcripts, and the Codex sessions whose folder is the worktree or one inside it.
 - The numbers come from the same code as the script (`src/core/usage-report.ts`, through `readFolderUsage` in `src/core/usage-files.ts`). So the panel and the script always agree.
-- The row's own number is Beluga's count without cache reads. The breakdown's total includes them, which is why it is bigger.
+- The breakdown counts like the row does: input + output + cache write, without cache reads (they are nearly free and would drown the rest). So its numbers add up to the row's. Each model's cache reads are still listed on its detail line, and the foot says how many were left out. The script's Total does include them.
 - The API method is `workspaces.usageBreakdown`. It is the Mac's only: the phone doesn't show worktree usage yet.
 
 ## What an agent is

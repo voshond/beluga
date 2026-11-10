@@ -1,5 +1,6 @@
 import { SUB_AGENTS, type AgentUsage, type ModelUsage, type UsageSummary } from '@beluga/core/usage-report.js';
 import { formatTokens } from '@beluga/ui/work-models.js';
+import { tokensOf } from '@beluga/workspaces/usage-days.js';
 import { Icon } from '../components/Icon.js';
 import { Button } from '../components/ui.js';
 import { useUsageBreakdown } from '../views/usage-breakdown-state.js';
@@ -19,10 +20,10 @@ const ModelRow = ({ model, whole }: { readonly model: ModelUsage; readonly whole
         {model.model}
       </span>
       <span className={s.provider}>{model.provider}</span>
-      <span className={s.total}>{formatTokens(model.total)}</span>
+      <span className={s.total}>{formatTokens(tokensOf(model))}</span>
     </div>
     <span className={s.bar} aria-hidden="true">
-      <span style={{ width: `${shareOf(model.total, whole)}%` }} />
+      <span style={{ width: `${shareOf(tokensOf(model), whole)}%` }} />
     </span>
     <div className={s.split}>
       {`${model.messages} ${model.messages === 1 ? 'reply' : 'replies'} · in ${formatTokens(model.input)} · out ${formatTokens(model.output)} · cache read ${formatTokens(model.cacheRead)} · cache write ${formatTokens(model.cacheWrite)}`}
@@ -36,7 +37,7 @@ const AgentGroup = ({ agent, whole }: { readonly agent: AgentUsage; readonly who
     <section className={s.group} aria-label={title}>
       <div className={s.groupHead}>
         <span>{title}</span>
-        <span>{formatTokens(agent.total)}</span>
+        <span>{formatTokens(tokensOf(agent))}</span>
       </div>
       {agent.models.map((model) => (
         <ModelRow key={`${model.provider}/${model.model}`} model={model} whole={whole} />
@@ -72,10 +73,10 @@ export const UsageBreakdownView = ({ summary, loading, error, onReload }: UsageB
   return (
     <div className={s.breakdown}>
       {summary.agents.map((agent) => (
-        <AgentGroup key={agent.agent} agent={agent} whole={summary.total} />
+        <AgentGroup key={agent.agent} agent={agent} whole={tokensOf(summary)} />
       ))}
       <div className={s.foot}>
-        <span>{`${formatTokens(summary.total)} tokens in all, cache reads included`}</span>
+        <span>{`Cache reads not counted, as in the row: ${formatTokens(summary.cacheRead)} more`}</span>
         <Button size="small" variant="quiet" icon="refresh" aria-label="Read the logs again" onClick={onReload} />
       </div>
     </div>
