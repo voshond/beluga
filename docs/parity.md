@@ -774,6 +774,17 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | Paste or drop an image | `attachments.add` | ⌘V / drop: a chip plus its picture above the text |
 | An image in a message | `attachments.read` (yours from disk, a friend's through their share) | the picture (several in a grid); click for full size, ⌘C copies, Open shows it in Preview |
 
+## Which agent and model, on each page (BLG-80)
+
+Every page that shows an agent shows its runtime's mark and its name with the model ("Codex (GPT-5)", `agentName(ref, { model: true })`). No API method of its own: the values come with the state and views the pages already get.
+
+| Page | Source | Mac | Phone |
+|---|---|---|---|
+| Task | the worktree's picker (`pickedAgent`), else the task's agent | Task page › Agent row | Task page pill (`TaskPageView.agent`) |
+| Room / chat | each person's room card (`defaultAgentOf(PeerInfo)`, through `chatPeople`); none for someone not in your room | Conversation inspector › each person's chip · each agent message's badge | Chat › People chips (`ChatMemberView.agent`, 1.54) · each turn's badge |
+| Project | `projectAgent` (Project Settings' pick, else your default) | Project home › the composer's agent chip, and Plan with … | Work › each project's heading (`WorkView.projects[].agent`, 1.54) |
+| Conversation | the conversation's picker | Composer agent picker | ⋯ › Agent · name (model) |
+
 ## Agent runs, per runtime
 
 What an agent run does on each runtime (BLG-461, OpenCode BLG-686, Copilot BLG-873). A cell is **pass** (it works as on Claude), **fallback** (it works another way, or is greyed, and the UI says why: the reason is `src/shared/runtime-fallbacks.ts`, named here as `fallback:<id>`), or **n/a** (nothing of it applies on that runtime, so nothing is shown for it; a feature the runtime lacks altogether is `missing:<id>`, from the same file's `RUNTIME_MISSING`, and its control isn't offered there). `tests/parity.test.ts` fails on a blank cell, on a fallback or a missing feature the table and the code disagree about, on a fallback no screen shows, and on a capability Codex, OpenCode or Copilot lacks (`src/agent/runtime/codex/index.ts`, `src/agent/runtime/opencode/index.ts`, `src/agent/runtime/copilot/index.ts`) that no row accounts for. The local model runtime has Claude's capabilities (it is Claude Code on another endpoint) except `hasModelList`, so its column would be Claude's.

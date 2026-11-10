@@ -2,7 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { KeyboardLift } from '../../components/KeyboardLift';
 import { ArrowLeftRight, Clock, Eraser, Lock, Pencil, SquareTerminal, Trash2, TriangleAlert, X } from 'lucide-react-native';
 import { AskClaudePicker, type AskTarget, askTargets } from '../../components/AskClaudePicker';
-import { agentBadge, agentLabel } from '../../../../src/shared/agent-label';
+import { agentBadge, agentLabel, agentName } from '../../../../src/shared/agent-label';
 import { type AgentMark, AgentMarkIcon, agentMark, modelMark } from '../../components/AgentMark';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Platform, ScrollView, StyleSheet as RNStyleSheet, TextInput, View } from 'react-native';
@@ -249,7 +249,7 @@ function People({ members }: { members: readonly ChatMemberView[] }) {
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, backgroundColor: color.bg }} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: 6 }}>
       {members.slice(0, 12).map((m) => (
-        <View key={m.peerId} accessibilityLabel={`${m.me ? 'You' : m.name}: ${m.presence ?? ''}, agent ${m.claude ?? ''}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, paddingLeft: 3, paddingRight: 10, borderRadius: 14, backgroundColor: color.card, borderWidth: 0.5, borderColor: color.hairline }}>
+        <View key={m.peerId} accessibilityLabel={`${m.me ? 'You' : m.name}: ${m.presence ?? ''}, agent ${[m.agent ? agentName(m.agent, { model: true }) : '', m.claude ?? ''].filter(Boolean).join(', ')}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, paddingLeft: 3, paddingRight: 10, borderRadius: 14, backgroundColor: color.card, borderWidth: 0.5, borderColor: color.hairline }}>
           <Avatar name={m.name} size={22} {...(m.presence ? { presence: m.presence } : {})} />
           <T v="caption" c={color.text} style={{ fontWeight: '700' }}>
             {m.me ? 'You' : m.name}
@@ -258,6 +258,11 @@ function People({ members }: { members: readonly ChatMemberView[] }) {
           {m.claude ? (
             <T v="caption" c={m.claude.startsWith('offline') ? color.text3 : color.text2} style={{ fontSize: 12 }}>
               {m.claude}
+            </T>
+          ) : null}
+          {m.agent ? (
+            <T v="caption" c={color.text3} style={{ fontSize: 12 }} numberOfLines={1}>
+              · {agentName(m.agent, { model: true })}
             </T>
           ) : null}
         </View>

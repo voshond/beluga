@@ -5,6 +5,10 @@ import { TRUST_LEVELS, type TrustLevel } from '@beluga/shared/settings-schema.js
 import { PersonRules } from '../gateway/AccessSettings.js';
 import { Select } from '../dialogs/settings-controls.js';
 import { useApi, useApp, useBeluga } from '../lib/beluga.js';
+import { Icon } from '../components/Icon.js';
+import { agentMark } from '@beluga/shared/agent-marks.js';
+import { agentName } from '../lib/agent-words.js';
+import chat from '../chat/chat.module.css';
 import { type ChatPerson, claudeLine, versionChip, waitingLabel } from '@beluga/core/chat-people.js';
 import { APP_VERSION } from '../lib/boot.js';
 import { PersonButton } from './PersonProfile.js';
@@ -82,6 +86,12 @@ function PersonRow({ p, trust }: { p: ChatPerson; trust?: string }) {
         <span className={n.hereName}>{p.me ? 'You' : p.name}</span>
         <span className={n.hereLine}>{line}</span>
       </span>
+      {p.agent ? (
+        <span className={chat.agentBadge} title={`Runs ${agentName(p.agent, { model: true })}`}>
+          <Icon name={agentMark(p.agent)} size={10} />
+          {agentName(p.agent, { model: true })}
+        </span>
+      ) : null}
       {chip ? <span className={chip.behind ? n.hereBehind : n.hereVersion}>{chip.text}</span> : null}
     </li>
   );

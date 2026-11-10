@@ -18,6 +18,7 @@ import type { ConvSummary, PlansView, TasksView, WorkView } from '../../lib/link
 import { store } from '../../lib/store';
 import { nestRows } from '../../lib/thread-rows';
 import { categorySections, settledWords, triageOptions, whenWords } from '../../lib/triage';
+import { agentName } from '../../../../src/shared/agent-label';
 import { remindPresets } from '../../../../src/shared/remind';
 import { ProjectMark } from '../../components/ProjectMark';
 import { TasksList } from '../../components/Tasks';
@@ -93,6 +94,7 @@ export default function Work() {
         lead={p.id === 'asked' || p.id === 'room' ? <Folder color={color.text3} size={18} /> : <ProjectMark name={p.name} icon={p.icon} size={22} />}
         label={p.name}
         {...(p.conversations.length ? { count: p.conversations.length } : {})}
+        {...(p.agent ? { sub: agentName(p.agent, { model: true }), subLead: <AgentMarkIcon mark={agentMark(p.agent)} size={12} color={color.text3} muted /> } : {})}
       />
       {fold.folded(p.id) ? null : p.conversations.length ? (
         rows(p.conversations)

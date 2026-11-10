@@ -429,7 +429,7 @@ describe('the views of a known Mac', () => {
   it('work lists a project with no conversations yet (one just added), last, and never Chats (BLG-675)', () => {
     const added = { ...state, projects: [...state.projects, { id: 'p9', name: 'notes', root: '/srv/notes', base: 'main', workspaces: [] }, { id: 'chats', name: 'Chats', root: '', base: '', workspaces: [] }] } as DomainState;
     const work = WorkView.parse(viewOf(added, ctx, 'work'));
-    expect(work.projects.at(-1)).toEqual({ id: 'p9', name: 'notes', conversations: [] });
+    expect(work.projects.at(-1)).toEqual({ id: 'p9', name: 'notes', conversations: [], agent: { runtime: 'claude', label: 'Claude' } });
     expect(work.projects.find((p) => p.id === 'p1')?.conversations.length).toBeGreaterThan(0);
     expect(work.projects.some((p) => p.id === 'chats' || p.name === 'Chats')).toBe(false);
   });
@@ -660,6 +660,25 @@ describe('the views of a known Mac', () => {
     const sent = { id: 't_fromanswer01', direction: 'sent' as const, peerId: BOB, peerName: 'bob', kind: 'ask' as const, ask: 'Send me your wallpaper', needs: ['files' as const], by: 'person' as const, answer: 'm3abcdefgh', state: 'sent' as const, steps: [], createdAt: T0 + 41, updatedAt: T0 + 41 };
     const after = ChatView.parse(viewOf({ ...withAnswers, gateway: { ...withAnswers.gateway, tasks: [...withAnswers.gateway.tasks, sent] } }, ctx, `chat:dm:${BOB}`));
     expect(after.messages.map((m) => m.offer)).toEqual([undefined, undefined, undefined, undefined]);
+  });
+
+  it('says which agent and model each chat member and each of your projects runs on (BLG-80)', () => {
+    const withAgents = {
+      ...state,
+      self: { ...state.self!, defaultAgent: { runtime: 'codex', label: 'Codex', model: 'gpt-5' } },
+      peers: [...state.peers.filter((p) => p.peerId !== BOB), { peerId: BOB, name: 'bob', agent: true, shares: [], defaultAgent: { runtime: 'claude', label: 'Claude', model: 'opus' } }],
+    } as DomainState;
+    const chat = ChatView.parse(viewOf(withAgents, ctx, `chat:dm:${BOB}`));
+    expect(chat.members?.map((m) => [m.name, m.agent])).toEqual([
+      ['kayra', { runtime: 'codex', label: 'Codex', model: 'gpt-5' }],
+      ['bob', { runtime: 'claude', label: 'Claude', model: 'opus' }],
+    ]);
+    const stranger = ChatView.parse(viewOf({ ...withAgents, peers: [] } as DomainState, ctx, `chat:dm:${BOB}`));
+    expect(stranger.members?.find((m) => m.peerId === BOB)?.agent).toBeUndefined();
+    const project = (st: DomainState) => WorkView.parse(viewOf(st, ctx, 'work')).projects.find((p) => p.id === 'p1')?.agent;
+    expect(project(withAgents)).toEqual({ runtime: 'codex', label: 'Codex', model: 'gpt-5' });
+    const picked = { ...withAgents, prefs: { ...withAgents.prefs, projectAgents: { landing: { runtime: 'local', label: 'Local model', model: 'qwen3' } } } } as DomainState;
+    expect(project(picked)).toEqual({ runtime: 'local', label: 'Local model', model: 'qwen3' });
   });
 
   it('a chat says who’s there, what their Claude does, what waits on whom and who gets it later (BLG-210)', () => {

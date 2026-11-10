@@ -1,3 +1,4 @@
+import { type AgentRef, defaultAgentOf } from '../protocol.js';
 import { shortVersion } from '../net/mesh/features.js';
 import type { LiveClaude, PersonView, PresenceState } from '../net/mesh/views.js';
 import { type TaskView, isFinal, oneLine, requestGist, targetLabel } from './gateway/model.js';
@@ -18,6 +19,8 @@ export interface ChatPerson {
   readonly me: boolean;
   readonly presence: PresenceState;
   readonly claude: ClaudeState;
+  /** Which agent answers for them, and its model (BLG-80): their room card's default; unknown when they aren't in your room. */
+  readonly agent?: AgentRef;
   /** What their Claude is on, in a few words ("run tests in ata-api"), while it works. */
   readonly doing?: string;
   /** Their Beluga's version ("1.2.0"), when their Mac said. */
@@ -28,7 +31,9 @@ export interface ChatPerson {
 
 export interface ChatPeopleInput {
   readonly conversation: string;
-  readonly self?: { readonly peerId: string; readonly name: string; readonly presence?: PresenceState; readonly version?: string };
+  readonly self?: { readonly peerId: string; readonly name: string; readonly presence?: PresenceState; readonly version?: string; readonly agent?: AgentRef };
+  /** Room cards (PeerInfo): which agent each person runs. */
+  readonly peers?: readonly { readonly peerId: string; readonly agents?: readonly AgentRef[]; readonly defaultAgent?: AgentRef }[];
   /** Everyone else in it: the friend, or the channel's other members. */
   readonly others: readonly PersonView[];
   /** Claudes answering here now (stale ones already dropped). */
@@ -66,6 +71,7 @@ export function chatPeople(input: ChatPeopleInput): ChatPerson[] {
       me: true,
       presence: input.self.presence ?? 'online',
       claude: working ? 'working' : 'idle',
+      ...(input.self.agent ? { agent: input.self.agent } : {}),
       ...(working && doing ? { doing: oneLine(doing, 80) } : {}),
       ...(input.self.version ? { version: shortVersion(input.self.version) } : {}),
     });
@@ -77,12 +83,14 @@ export function chatPeople(input: ChatPeopleInput): ChatPerson[] {
     const answering = live.some((l) => l.peerId === p.peerId);
     const claude: ClaudeState = p.update ? 'update' : presence === 'offline' ? 'offline' : task || answering ? 'working' : 'idle';
     const doing = claude === 'working' ? (task ? requestGist(task, 60) : 'answering') : undefined;
+    const card = input.peers?.find((x) => x.peerId === p.peerId);
     out.push({
       peerId: p.peerId,
       name: p.name,
       me: false,
       presence,
       claude,
+      ...(card ? { agent: defaultAgentOf(card) } : {}),
       ...(doing ? { doing: oneLine(doing, 80) } : {}),
       ...(version ? { version } : {}),
       ...(p.update ? { update: p.update } : {}),
