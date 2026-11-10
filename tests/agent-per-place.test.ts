@@ -64,6 +64,16 @@ describe('a place and its agent', () => {
 
   const projectId = () => store.getState().projects.find((p) => p.root)!.id;
 
+  it('makes a chat with an agent, which every run uses, and which persists (BLG-83)', async () => {
+    const chat = (await ctl.newChat('chats', 'chat with codex', undefined, { agent: CODEX }))!;
+    expect(ctl.agentIn(`ws:${chat.id}`)).toMatchObject({ runtime: 'codex', label: 'Codex' });
+    const again = new WorkspaceManager(wsStore);
+    await again.refresh();
+    expect(again.find(chat.id)).toMatchObject({ agent: { runtime: 'codex', label: 'Codex' }, model: 'gpt-5-codex' });
+    const plain = (await ctl.newChat('chats', 'plain chat'))!;
+    expect(ctl.agentIn(`ws:${plain.id}`)).toBeUndefined();
+  });
+
   it('makes a worktree with an agent, which every run from it uses, and which persists', async () => {
     const ws = (await ctl.newWorktree(projectId(), 'codex-one', { quiet: true, agent: CODEX }))!;
     expect(ctl.place(`ws:${ws.id}`)).toMatchObject({ agent: CODEX, model: 'gpt-5-codex', resume: undefined });
