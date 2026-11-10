@@ -21,7 +21,7 @@ test('start a worktree on Copilot, run a task, approve a command, stop mid-turn'
   // Settings › Agent lists Copilot, ready; and your agent asks before commands.
   await page.keyboard.press('Meta+,');
   const settings = page.getByRole('dialog');
-  await settings.getByRole('button', { name: 'Agent' }).click();
+  await settings.getByRole('button', { name: 'Agent', exact: true }).click();
   await expect(settings.getByTestId('settings-agent-copilot')).toContainText('Ready', { timeout: 15_000 });
   if (shots) await page.screenshot({ path: `${shots}/copilot-01-settings-agent.png` });
   const ask = settings.getByRole('switch', { name: 'Self approval' });

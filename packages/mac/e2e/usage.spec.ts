@@ -248,3 +248,21 @@ test('share your stats: a picture to save or copy, from your card and from the r
   await recap.getByRole('button', { name: 'Share…' }).click();
   await expect(page.getByRole('dialog', { name: 'Share Your Stats' })).toBeVisible();
 });
+
+test('the leaderboard: standings by points, and each number head to head with how much more', async ({ page }) => {
+  await openUsage(page);
+  const board = page.getByRole('region', { name: 'Leaderboard' });
+  await board.scrollIntoViewIfNeeded();
+  // bob and mia's Macs send their numbers over the demo network.
+  const standings = board.getByRole('list', { name: 'Standings' });
+  await expect(standings.getByRole('listitem')).toHaveCount(3);
+  await expect(standings.getByRole('listitem', { name: /^\d\. You, \d+ points$/ })).toBeVisible();
+  for (const name of ['Prompt characters', 'Pull requests merged', 'Agent hours']) {
+    const versus = board.getByRole('region', { name });
+    await expect(versus.getByRole('img', { name: /^bob: / })).toBeVisible();
+    await expect(versus.getByRole('img', { name: /^You: / })).toBeVisible();
+  }
+  await expect(board.getByRole('region', { name: 'Prompt characters' }).getByText(/^bob wrote [\d.]+× as much as you$/)).toBeVisible();
+  await board.getByRole('tab', { name: 'Year' }).click();
+  await expect(standings.getByRole('listitem')).toHaveCount(3);
+});

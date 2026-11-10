@@ -24,7 +24,9 @@ Inviting someone exposes your agent, with your permissions, to other people. Bel
 
 ## Codex runs
 
-Claude Code asks Beluga before every step it takes, so the rules above are checked one step at a time. Codex runs its own commands and edits without asking first, so on Codex the same rules are kept by **Codex's own sandbox** instead: a permissions profile Beluga sets for each run, enforced by macOS.
+Claude Code asks Beluga before every step it takes, so the rules above are checked one step at a time. Codex runs its own commands and edits without asking first, so on Codex the same rules are kept by **Codex's own sandbox** instead: a permissions profile Beluga sets for each run, enforced by the operating system.
+
+On Linux, runs that keep your home private (a friend's task below Full trust, an external agent below Full trust, and quick side calls) start with Codex's minimal system-tool reads and explicit grants for the run's folders and your git config. Other user folders stay unreadable. This also keeps read-only shared folders usable: Codex 0.164's Linux sandbox cannot reopen them beneath a denied home directory. Beluga omits redundant nested masks while retaining secret denials inside readable shared folders. Tool-free side calls skip project instruction files, using only the instructions supplied with the call. Your own runs and other platforms keep their existing baseline.
 
 - Writes go only to the run's own folders. A project's main folder, and a plan while it's being made, are read only.
 - `.env` files, keys and credential stores (`.ssh`, `.aws`, the GitHub CLI's token, the keychains, Beluga's own files in `~/.beluga`, Codex's and Claude's logins) can't be read at all, so no command reaches them however it's written. Templates like `.env.example` are hidden too: the sandbox can't tell them apart.

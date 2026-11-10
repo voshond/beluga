@@ -113,7 +113,11 @@ pub fn menu_bar<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
 /// so the window knows the native side isn't in step.
 #[tauri::command]
 pub fn set_ui_language(app: AppHandle, locale: String) -> Result<(), String> {
-    let same = LOCALE.read().map(|l| *l == locale).unwrap_or(false);
+    // Nothing saved yet (a first launch) built the menus in English already: no redraw for "en".
+    let same = LOCALE
+        .read()
+        .map(|l| *l == locale || (l.is_empty() && locale == "en"))
+        .unwrap_or(false);
     let mut problems: Vec<String> = Vec::new();
     match saved_at(&app) {
         Some(p) => {
@@ -130,6 +134,12 @@ pub fn set_ui_language(app: AppHandle, locale: String) -> Result<(), String> {
     }
     if !same {
         use_locale(&locale);
+        // The old menu bar comes off the window without a word from GTK (menu::clear_keys); the
+        // window gives the new one your keys again as it reloads.
+        #[cfg(target_os = "linux")]
+        if let Some(Ok(items)) = app.menu().map(|m| m.items()) {
+            crate::menu::clear_keys(items);
+        }
         match menu_bar(&app).and_then(|menu| app.set_menu(menu).map(|_| ())) {
             Ok(()) => {}
             Err(e) => problems.push(format!("can't redraw the menu bar: {e}")),

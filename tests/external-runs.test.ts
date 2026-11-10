@@ -307,10 +307,10 @@ describe('a run an external agent starts', () => {
     expect(built.row).toMatchObject({ origin: 'agent', home: 'denied', network: true, yourTools: false });
     const profile = built.config['permissions.beluga'] as { filesystem: Record<string, string>; network: { enabled: boolean } };
     expect(profile.network.enabled).toBe(true);
-    expect(profile.filesystem['/Users/me']).toBe('deny');
+    expect(profile.filesystem['/Users/me']).toBe(process.platform === 'linux' ? undefined : 'deny');
     expect(profile.filesystem['/Users/me/.beluga']).toBe('deny');
-    // Nothing opens anything else under home: ~/other/.env stays under the deny.
-    expect(Object.entries(profile.filesystem).filter(([, how]) => how !== 'deny').map(([p]) => p).sort()).toEqual(['/Users/me/.gitconfig', work]);
+    // Linux starts with system-tool reads; neither baseline opens other home folders.
+    expect(Object.entries(profile.filesystem).filter(([, how]) => how !== 'deny').map(([p]) => p).sort()).toEqual(process.platform === 'linux' ? [':minimal', '/Users/me/.gitconfig', work].sort() : ['/Users/me/.gitconfig', work]);
     expect(profile.filesystem[`${work}/**/.env*`]).toBe('deny');
     expect(built.config['mcp_servers.mine.enabled']).toBe(false);
     expect(built.config['features.plugins']).toBe(false);
@@ -336,7 +336,7 @@ describe('a run an external agent starts', () => {
     const at = { cwd: '/Users/me/p', folders: [], writable: ['/Users/me/p'], home: '/Users/me', belugaHome: '/Users/me/.beluga' };
     const folder = codexConfinement('friend', 'folder', at);
     const full = codexConfinement('friend', 'full', at);
-    expect((folder.config['permissions.beluga'] as { filesystem: Record<string, string> }).filesystem['/Users/me']).toBe('deny');
+    expect((folder.config['permissions.beluga'] as { filesystem: Record<string, string> }).filesystem['/Users/me']).toBe(process.platform === 'linux' ? undefined : 'deny');
     expect((full.config['permissions.beluga'] as { filesystem: Record<string, string> }).filesystem['/Users/me']).toBeUndefined();
     expect(approvalFor(full.row, { askBeforeCommands: true })).toBe('never');
     expect(folder.approval).toBe('never');

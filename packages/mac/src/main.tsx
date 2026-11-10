@@ -16,6 +16,7 @@ import { watchPreloadErrors } from './lib/lazy-view.js';
 import { Button } from './components/ui.js';
 import { UpdateLayer } from './dialogs/UpdateSheet.js';
 import { FolderBrowserHost } from './dialogs/FolderBrowser.js';
+import { PartBoundary } from './lib/part-boundary.js';
 import s from './layout/Shell.module.css';
 import './styles/tokens.css';
 import './styles/base.css';
@@ -95,12 +96,29 @@ function Root() {
     );
   }
   return (
-    <BelugaProvider client={client}>
-      <App />
-      <UpdateLayer connected />
-      {/* A browser's folder picker, and in the app a computer's (BLG-793). */}
-      <FolderBrowserHost />
-    </BelugaProvider>
+    // Anything that throws while drawing shows why, with a way back, instead of a grey window (BLG-905).
+    <PartBoundary part="window" onCrash={(crash) => void client.api.diagnostics.windowCrash(crash).catch(() => undefined)} fallback={(error) => <WindowBroken error={error} />}>
+      <BelugaProvider client={client}>
+        <App />
+        <UpdateLayer connected />
+        {/* A browser's folder picker, and in the app a computer's (BLG-793). */}
+        <FolderBrowserHost />
+      </BelugaProvider>
+    </PartBoundary>
+  );
+}
+
+/** The whole window couldn't be drawn: what went wrong, and Reload (your agents and terminals keep running). */
+function WindowBroken({ error }: { error: Error }) {
+  return (
+    <div className={s.connecting} data-tauri-drag-region>
+      <div className={s.connectBox} role="alert">
+        <strong>Beluga’s window ran into a problem</strong>
+        <span>{brandText(error.message)}</span>
+        <span>Reloading the window brings it back. Your agents and terminals keep running, and Report a Problem in Settings › About includes what happened.</span>
+        <Button onClick={() => location.reload()}>Reload Window</Button>
+      </div>
+    </div>
   );
 }
 

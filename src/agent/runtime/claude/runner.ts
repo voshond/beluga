@@ -75,6 +75,8 @@ export interface ClaudeBackendOptions {
   readonly claudePath?: string;
   /** Who the agent is told it is, when not the place's agent (a local model: its own name). */
   readonly agentOf?: (input: AgentRunInput) => AgentRef | undefined;
+  /** Your saved variables for Settings' MCP check in a folder (RuntimeOptions.ownEnv). */
+  readonly ownEnv?: (cwd: string) => Readonly<Record<string, string>>;
 }
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
@@ -162,7 +164,8 @@ function showThinking(q: unknown): void {
  */
 export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
   let sessionId: string | undefined;
-  const mcp = new McpConnect(claudeMcpSession(opts.claudePath));
+  // Settings' MCP list reads your saved variables as your runs do (#442).
+  const mcp = new McpConnect(claudeMcpSession(opts.claudePath), opts.ownEnv ? { ownEnv: opts.ownEnv } : {});
 
   return {
     async run(input: AgentRunInput): Promise<string> {

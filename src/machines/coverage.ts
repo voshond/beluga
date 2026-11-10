@@ -323,12 +323,14 @@ export const MACHINE: Record<Method, MachineSide> = {
   'support.answer': 'drive',
   // ---- stats
   'stats.get': 'drive',
+  'stats.leaderboard': 'drive',
   'stats.note': 'drive',
   'stats.saveImage': 'drive',
   // ---- diagnostics
   'diagnostics.report': 'drive',
   // The window couldn't load a part of itself (#370): noted in that computer's black box.
   'diagnostics.windowProblem': 'drive',
+  'diagnostics.windowCrash': 'drive',
   // ---- devices
   'devices.list': 'drive',
   // ---- agentSetup

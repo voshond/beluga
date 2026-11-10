@@ -179,7 +179,14 @@ export function holdImage(api: Api, image: Loadable, size: ImageSize): { url: Pr
   };
 }
 
-export type ImageState = { readonly status: 'loading' } | { readonly status: 'ready'; readonly url: string } | { readonly status: 'error'; readonly error: string };
+/** Whether a failed read means the file is gone (an agent deleted or moved it since it linked it). */
+export const imageGone = (error: string): boolean => /ENOENT|no such file|is not there|is gone/i.test(error);
+
+/** What a picture that can't show says in its place: never the raw error for one that was deleted. */
+export const unavailableText = (error: string): { text: string; detail: string } =>
+  imageGone(error) ? { text: 'Image no longer here', detail: 'The file was moved or deleted since this was written' } : { text: 'Image unavailable', detail: error };
+
+export type ImageState ={ readonly status: 'loading' } | { readonly status: 'ready'; readonly url: string } | { readonly status: 'error'; readonly error: string };
 
 /** The image while it's on screen (kept that long): `thumb` in a message, `full` in the lightbox. */
 export function useImage(api: Api, image: ChatImage, size: ImageSize = 'thumb'): ImageState {
