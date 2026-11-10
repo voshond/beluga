@@ -32,6 +32,7 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
   { id: 'graphs', label: 'Graphs', when: 'Every run', source: 'src/agent/graph-prompt.ts', text: (c) => buildGraphAppend(Boolean(c.input.terminal)), sample: () => buildGraphAppend() },
   { id: 'views', label: 'Views', when: 'Every run', source: 'src/agent/view-prompt.ts', text: (c) => buildViewAppend(Boolean(c.input.terminal)), sample: () => buildViewAppend() },
   { id: 'task', label: 'Task brief', when: 'Runs with the task board (a worktree doing a task, a main folder)', source: 'src/core/board/prompt.ts', text: (c) => c.input.taskBrief ?? '' },
+  { id: 'routing', label: 'Routed task run', when: 'A worktree doing a task, with Routed task runs on (Settings › Experimental)', source: 'src/core/board/routing.ts', text: (c) => c.input.routing?.brief ?? '' },
   { id: 'plan', label: 'Plan brief', when: 'A plan’s conversations', source: 'src/core/plans/prompt.ts', text: (c) => c.input.planBrief ?? '' },
   { id: 'mac', label: 'Your Mac', when: 'Your Mac’s assistant', source: 'src/core/assistant', text: (c) => c.input.macBrief ?? '' },
   { id: 'shared', label: 'A friend’s worktree', when: 'Your agent in a worktree a friend shared with you', source: 'src/core/shared-guest.ts', text: (c) => c.input.sharedBrief ?? '' },

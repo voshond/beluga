@@ -24,6 +24,8 @@ import { CodexMcp } from './mcp.js';
 import { type MappedPrompt, mapSlash } from './skills.js';
 import { claudeHome } from '../../../core/claude-code/launch.js';
 import { worktreeGitDirs } from '../../../workspaces/git.js';
+import { belugaHome } from '../../../core/home.js';
+import { codexRoleConfig, codexTierModel } from './roles.js';
 
 export interface CodexBackendOptions {
   readonly cwd: string;
@@ -282,11 +284,14 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
           const gitDirs = writableRoots.includes(cwd) ? await worktreeGitDirs(cwd) : undefined;
           const confined = codexConfinement(origin, input.scope, { cwd, folders: [...extraDirs, ...(fixup ? [fixup] : [])], writable: writableRoots, yourServers, ...(gitDirs ? { gitDirs } : {}) });
           approval = approvalFor(confined.row, { planning, ...(input.askBeforeCommands ? { askBeforeCommands: true } : {}) });
+          const routing = input.routing && confined.row.yourTools ? input.routing : undefined;
           if (!settled) {
             settled = true;
-            await settle(rpc, input.model ?? place?.model ?? opts.model);
+            const want = input.model ?? place?.model ?? opts.model;
+            await settle(rpc, routing ? (codexTierModel(want, await listOf(rpc)) ?? want) : want);
           }
-          const params = { cwd, ...(model ? { model } : {}), developerInstructions: runInstructions(input, opts.bridge.selfName(), CODEX_AGENT), config: { ...confined.config, ...PROJECT_DOCS, ...runFeatures(confined.row.yourTools), ...mcpConfig(mounted.servers) }, approvalPolicy: approval };
+          const roles = routing ? await codexRoleConfig(routing, await listOf(rpc), path.join(belugaHome(), 'codex-roles')) : {};
+          const params = { cwd, ...(model ? { model } : {}), developerInstructions: runInstructions(input, opts.bridge.selfName(), CODEX_AGENT), config: { ...confined.config, ...PROJECT_DOCS, ...runFeatures(confined.row.yourTools), ...mcpConfig(mounted.servers), ...roles }, approvalPolicy: approval };
           let thread: ThreadStartResponse | undefined;
           if (resume) {
             thread = await rpc.request<ThreadStartResponse>('thread/resume', { threadId: resume, ...params }).catch(() => undefined);

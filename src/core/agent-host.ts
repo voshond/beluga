@@ -40,6 +40,7 @@ import { agentForAsk } from './gateway/serve.js';
 import { fromMachine } from './client-context.js';
 import { buildPreviewAppend } from '../agent/preview-prompt.js';
 import { experimentOn } from '../shared/experiments.js';
+import { type RoutedRun, type TaskRoute, routableRuntime, routedRun } from './board/routing.js';
 
 /** How an external agent's message goes in, and what happened to it. */
 export type ExternalSendMode = 'auto' | 'queue' | 'steer' | 'restart';
@@ -200,6 +201,7 @@ interface Lane {
   runAgent?: string;
   /** The current run has the plan's tools (BLG-773): one started before the conversation had a plan never takes your messages in. */
   runPlanTools?: boolean;
+  routedModel?: string;
   /** Set while the run has answered but waits on background agents: messages go straight in. */
   followUps?: (followUp: FollowUp) => boolean;
   /** Set while a run of Claude's works here: your urgent messages steer it (see steer). */
@@ -1099,7 +1101,7 @@ export class AgentHost {
       ...this.promptIdOf(body),
       requesterName: this.requesterOf(from, body),
       viaAgent: body.viaAgent,
-      model: this.modelNow(body.channel),
+      model: this.followUpModel(lane, body.channel),
       context: this.recentChat(body.channel),
       onEvent: (kind, text) => emit(kind, text),
       onStep: (record) => this.steps.put(runKey(body.requestId), record),
@@ -1131,7 +1133,7 @@ export class AgentHost {
       ...this.promptIdOf(body),
       requesterName: this.requesterOf(from, body),
       viaAgent: body.viaAgent,
-      model: this.modelNow(body.channel),
+      model: this.followUpModel(lane, body.channel),
       // The conversation is the run's own: what's said in the chat it has already.
       context: [],
       onEvent: (kind, text) => {
@@ -1461,6 +1463,8 @@ export class AgentHost {
       // A friend's run gets its repo's board too, as their trust allows (BLG-701; see boardAccess).
       const friendBoard = from === this.selfId ? undefined : this.boardAccess(from);
       const board = noBoard || (from !== this.selfId && !friendBoard) ? undefined : this.deps.board?.(body.channel, from, { plan: planFirst && from === this.selfId, ...(friendBoard ? { friend: { id: from, name: requesterName } } : {}) });
+      const routed = yours && !external && !body.plan ? this.routedFor(board?.route, other && named ? named : (this.deps.agentRef?.(body.channel) ?? CLAUDE_AGENT), place, named) : undefined;
+      lane.routedModel = routed?.model;
       // Child threads: your own runs in your own chats, with the flag on. A dialogue's turn comes through runDialogueTurn and never gets them.
       // Not an external agent's run: a thread would run as you, without its grant, label or Stop.
       const threads = from === this.selfId && !external && this.store.getState().prefs.agentThreads && !root && !place?.syncMain && !sentinelChat && !sentinel?.inRun ? this.deps.threads?.(body.channel) : undefined;
@@ -1567,7 +1571,7 @@ export class AgentHost {
           // Anything that queued up behind this run from the same person can go in now.
           if (send) lane.waiting = lane.waiting.filter((w) => !this.sendFollowUp(lane, w.from, w.body));
         },
-        ...this.modelFor(place?.model, place?.agent ?? named, place?.effort),
+        ...(routed ? { model: routed.model, effort: place?.effort ?? routed.effort, routing: routed.routing } : this.modelFor(place?.model, place?.agent ?? named, place?.effort)),
         // Your MCP servers (your logins: Figma, Linear…) are for runs you asked for, never a friend's.
         ...(yours ? { ownerMcp: true } : {}),
         // Your own flags for `claude` and `codex` (Settings › Agents), never on a friend's run or an agent's below full.
@@ -1596,6 +1600,7 @@ export class AgentHost {
       if (lane.current === controller) {
         lane.current = undefined;
         lane.runAgent = undefined;
+        lane.routedModel = undefined;
         lane.followUps = undefined;
         lane.steer = undefined;
         lane.runFrom = undefined;
@@ -1731,6 +1736,18 @@ export class AgentHost {
    */
   private modelNow(channel: string): string {
     return this.modelFor(this.deps.workspaces?.inChannel(channel)?.model, this.deps.workspaces?.agentIn(channel)).model ?? '';
+  }
+
+  private followUpModel(lane: Lane, channel: string): string {
+    if (lane.routedModel && this.deps.workspaces?.inChannel(channel)?.model === undefined) return lane.routedModel;
+    return this.modelNow(channel);
+  }
+
+  private routedFor(route: TaskRoute | undefined, runtime: AgentRef, place: AgentPlace | undefined, named: AgentRef | undefined): RoutedRun | undefined {
+    const routable = routableRuntime(this.store.getState().prefs.experiments, runtime.runtime);
+    if (!route || !routable) return undefined;
+    if (place?.model || (place?.agent ?? named)?.model) return undefined;
+    return routedRun(route, routable);
   }
 
   /** The requester's trust now: every check on a run reads it here, never from the people book. */

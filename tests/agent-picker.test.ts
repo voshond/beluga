@@ -106,3 +106,38 @@ describe("the phone's demo picker", () => {
     expect(codex.groups.flatMap((g) => g.models.filter((m) => m.on).map((m) => `${g.runtime}:${m.value}`))).toEqual(['codex:gpt-5-codex']);
   });
 });
+
+describe('agentPicker with Auto (BLG-82, routed task runs)', () => {
+  const auto = { runtime: 'claude', chip: 'Auto · Opus', description: 'Sized medium from its task', active: true };
+
+  it('the default row becomes Auto, checked, and the chip says what it routed to, over your Settings model', () => {
+    const p = agentPicker(state([{ id: 'a' }], true, 'haiku'), 'ws:a', 'claude', undefined, auto);
+    expect(p.label).toBe('Auto · Opus');
+    expect(p.groups[0]?.models.map((m) => [m.label, m.on])).toEqual([
+      ['Auto', true],
+      ['Opus', false],
+      ['Haiku', false],
+    ]);
+    expect(p.groups[0]?.models[0]?.description).toBe('Sized medium from its task');
+  });
+
+  it('a model picked for the conversation stays checked, and Auto is the row that goes back', () => {
+    const p = agentPicker(state([{ id: 'a', model: 'haiku' }]), 'ws:a', 'claude', undefined, { ...auto, active: false });
+    expect(p.label).toBe('Haiku');
+    expect(p.groups[0]?.models.map((m) => [m.label, m.on])).toEqual([
+      ['Auto', false],
+      ['Opus', false],
+      ['Haiku', true],
+    ]);
+    expect(pickAction(p, p.groups[0]!, '')).toEqual({ kind: 'model', value: '' });
+  });
+
+  it('on Codex it adds the Auto row when its list has no default one, and says Codex in the chip', () => {
+    const p = agentPicker(state([{ id: 'a', agent: { runtime: 'codex', label: 'Codex' } }]), 'ws:a', 'claude', undefined, { ...auto, runtime: 'codex', chip: 'Auto · Frontier' });
+    expect(p.label).toBe('Codex · Auto · Frontier');
+    expect(p.groups.find((g) => g.runtime === 'codex')?.models.map((m) => [m.label, m.on])).toEqual([
+      ['Auto', true],
+      ['GPT-5 Codex', false],
+    ]);
+  });
+});

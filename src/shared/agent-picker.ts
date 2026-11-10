@@ -1,6 +1,7 @@
 import type { AgentRef } from '../protocol.js';
 import type { RuntimeChoice, RuntimeModel } from './agent-runtimes.js';
 import { modelName } from './agent-label.js';
+import { latestModels } from './model-families.js';
 
 /**
  * The agent picker (BLG-446), as the Mac's composer and the phone show it: runtimes as groups
@@ -46,6 +47,13 @@ export interface AgentPicker {
   readonly groups: readonly PickerGroup[];
 }
 
+export type AutoChoice = {
+  readonly runtime: string;
+  readonly chip: string;
+  readonly description: string;
+  readonly active: boolean;
+};
+
 /** What picking an entry does: a model of the same runtime is a model change, another runtime an agent change. */
 export type PickAction = { readonly kind: 'model'; readonly value: string } | { readonly kind: 'agent'; readonly agent: AgentRef | null };
 
@@ -61,13 +69,18 @@ export function runtimeOf(state: PickerState, channel: string, defaultRuntime = 
   return workspaceOf(state, channel)?.agent?.runtime ?? defaultRuntime;
 }
 
-function modelsOf(state: PickerState, r: RuntimeChoice): readonly RuntimeModel[] {
+function modelsOf(state: PickerState, r: RuntimeChoice, keep: readonly string[] = []): readonly RuntimeModel[] {
   if (!r.available) return [];
-  return r.id === DEFAULT_RUNTIME ? state.models : (r.models ?? [{ value: '', label: 'Default', description: `${r.label}'s choice` }]);
+  return latestModels(r.id === DEFAULT_RUNTIME ? state.models : (r.models ?? [{ value: '', label: 'Default', description: `${r.label}'s choice` }]), keep);
 }
 
 /** `draft`: a new worktree's own pick, before it exists (the New Worktree box). */
-export function agentPicker(state: PickerState, channel: string, defaultRuntime = DEFAULT_RUNTIME, draft?: AgentRef): AgentPicker {
+const withAuto = (models: readonly RuntimeModel[], auto: AutoChoice): readonly RuntimeModel[] => {
+  const row = { value: '', label: 'Auto', description: auto.description };
+  return models.some((m) => m.value === '') ? models.map((m) => (m.value === '' ? { ...m, ...row } : m)) : [row, ...models];
+};
+
+export function agentPicker(state: PickerState, channel: string, defaultRuntime = DEFAULT_RUNTIME, draft?: AgentRef, auto?: AutoChoice): AgentPicker {
   const conversation = channel === 'room' || channel === 'draft' ? undefined : channel;
   const ws = conversation ? workspaceOf(state, conversation) : undefined;
   const pinned = ws?.agent ?? (conversation ? undefined : draft);
@@ -81,11 +94,11 @@ export function agentPicker(state: PickerState, channel: string, defaultRuntime 
     ...(r.why ? { why: r.why } : {}),
     isDefault: r.id === defaultRuntime,
     current: r.id === runtime,
-    models: modelsOf(state, r).map((m) => ({ ...m, on: r.id === runtime && m.value === model })),
+    models: (auto?.runtime === r.id ? withAuto(modelsOf(state, r, [model]), auto) : modelsOf(state, r, r.id === runtime ? [model] : [])).map((m) => ({ ...m, on: r.id === runtime && m.value === (auto?.active && auto.runtime === r.id ? '' : model) })),
   }));
   const group = groups.find((g) => g.current);
   const picked = group?.models.find((m) => m.on);
-  const modelWords = picked?.label ?? (model ? modelName(model) : 'Default');
+  const modelWords = auto?.active && auto.runtime === runtime ? auto.chip : (picked?.label ?? (model ? modelName(model) : 'Default'));
   const label = runtime === defaultRuntime ? modelWords : `${group?.label ?? runtime} · ${modelWords}`;
   return { ...(conversation ? { conversation } : {}), runtime, model, label, groups };
 }

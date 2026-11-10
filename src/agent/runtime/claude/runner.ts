@@ -27,7 +27,7 @@ import { runToolSuites } from '../../run-tools.js';
 import { sdkServers } from './sdk-mount.js';
 import { ownerMcpServers } from './owner-mcp.js';
 import { McpConnect, claudeMcpSession } from './mcp-connect.js';
-import type { AgentBackend, AgentRunInput, FollowUp, LiveStatus, RoomBridge, RunProcess, Steer } from '../../types.js';
+import type { AgentBackend, AgentRunInput, FollowUp, LiveStatus, RoomBridge, RunProcess, RunRouting, Steer } from '../../types.js';
 import { keepLines, trackedSpawn } from './claude-process.js';
 import { keptBashInput } from '../../../workspaces/test-procs.js';
 import { SCRATCH_DIR } from '../../../shared/scratch-dir.js';
@@ -99,6 +99,14 @@ export function usageOf(modelUsage: Record<string, { inputTokens: number; output
   const sum = (pick: (u: (typeof all)[number]) => number): number => all.reduce((n, u) => n + (pick(u) || 0), 0);
   return { input: sum((u) => u.inputTokens), output: sum((u) => u.outputTokens), cacheRead: sum((u) => u.cacheReadInputTokens), cacheWrite: sum((u) => u.cacheCreationInputTokens), cost, session };
 }
+
+export const sdkAgents = (routing: RunRouting): NonNullable<Options['agents']> =>
+  Object.fromEntries(
+    Object.entries(routing.agents).map(([name, worker]) => [
+      name,
+      { description: worker.description, prompt: worker.prompt, model: worker.model, ...(worker.effort ? { effort: worker.effort } : {}), ...(worker.disallowedTools ? { disallowedTools: [...worker.disallowedTools] } : {}) },
+    ]),
+  );
 
 /** Claude Code's name for a model, without its "(recommended)": the picker says "Default", not "Default (recommended)". */
 const plainModelName = (name: string): string => name.replace(/\s*\(recommended\)\s*$/i, '') || name;
@@ -270,6 +278,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
         ...skills,
         ...((input.model ?? opts.model) ? { model: input.model ?? opts.model } : {}),
         ...(input.effort ? { effort: input.effort } : {}),
+        ...(input.routing ? { agents: sdkAgents(input.routing) } : {}),
         // This replaces Claude Code's whole environment, so it starts from ours.
         // Claude Code's own auto-compact follows Beluga's threshold (see shared/context-usage.ts).
         env: { ...process.env, ...zshCompatEnv({ ...process.env, ...input.env }), ...input.env, ...compactEnv(Boolean(input.autoCompactAt), input.autoCompactAt ?? 0) },

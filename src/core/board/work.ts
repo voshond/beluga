@@ -15,6 +15,7 @@ import { type AgentRef, defaultAgentOf } from '../../protocol.js';
 import { chosenAgent } from '../settings.js';
 import { needsChecksText, unexplained } from './criteria.js';
 import { inSet, labelsFor } from './labels.js';
+import { type TaskRoute, routeTask } from './routing.js';
 import { aboutPrompt, alongPrompt, briefPrompt, boardNote, definePrompt, describeIssue, describeList, friendNote, gitHubLine, ownTaskPrompt, reposPrompt } from './prompt.js';
 import { type Actor, type Assignee, BRIEF_SECTIONS, type ExternalActor, type BriefSection, type Issue, STATUS_INFO, boardName, boardOf, childrenOf, filterIssues, isArchived, isFinished, isOpen, isOwnBoard, isStartable, issueForWorkspace, reposOf, titleFromName, worktreeDoing, worktreeOf } from './model.js';
 
@@ -536,7 +537,7 @@ export class BoardWork {
     const along = channel.startsWith(WS) && issue ? this.alongNote(channel.slice(WS.length), issue) : '';
     const decide = !own && !issue && !opts.plan && this.mayOpenOwnTask(channel) ? ownTaskPrompt() : '';
     const brief = (own ? own.brief : issue ? briefPrompt(this.board.state(), issue) + this.briefExtra(issue) : boardNote() + decide) + repos + along + about + parallel + (opts.plan ? definePrompt(Boolean(issue)) : '');
-    if (!opts.plan) return { tools, brief };
+    if (!opts.plan) return { tools, brief, ...(issue && !own ? { route: routeTask(issue) } : {}) };
     this.pending.delete(channel);
     return {
       tools,
@@ -970,6 +971,7 @@ interface FriendHome {
 export interface RunBoard {
   readonly tools?: BoardTools;
   readonly brief?: string;
+  readonly route?: TaskRoute;
   /** Planning: whether the plan's task still has to be defined (before Claude asks you to approve the plan). */
   readonly needsDefinition?: () => boolean;
   /** Planning: you approved the plan; its task goes on the board. */

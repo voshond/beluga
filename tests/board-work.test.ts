@@ -117,6 +117,8 @@ describe('worktrees and their tasks', () => {
     const issue = issueForWorkspace(store.getState().board, 'w1')!;
     expect(issue).toMatchObject({ key: 'BOB-1', title: 'Rate-limit login', status: 'in_progress', origin: 'claude', private: true, assignee: { kind: 'person', id: 'p-me' }, branch: 'beluga/add-rate-limiting' });
     expect(said).toBe('Opened BOB-1 “Rate-limit login”, this worktree’s task: private (only the user sees it, until they Share with Team) and assigned to them. Tell the user you opened it and that it’s private: `task:BOB-1`.');
+    expect(work.forRun('ws:w1', 'p-me')!.route).toMatchObject({ size: 'small', orchestrator: { tier: 'medium' } });
+    expect(work.forRun('ws:w1', 'p-me', { plan: true })!.route).toBeUndefined();
     // From then on its runs do the task, and know it's private.
     const brief = work.forRun('ws:w1', 'p-me')!.brief;
     expect(brief).toContain('This worktree is doing task BOB-1');

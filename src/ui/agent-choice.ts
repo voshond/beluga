@@ -1,6 +1,7 @@
 import type { AgentRef } from '../protocol.js';
 import type { RuntimeChoice, RuntimeModel } from '../shared/agent-runtimes.js';
 import { type AgentMark, runtimeMark } from '../shared/agent-marks.js';
+import { latestModels } from '../shared/model-families.js';
 
 /** protocol.ts's CLAUDE_AGENT, repeated so the phone bundles this file without the daemon's protocol (types only from there). */
 // agent-wording: claude (the Claude runtime's own name)
@@ -27,12 +28,12 @@ export interface AgentOption {
 const SEP = ':';
 
 /** `claudeModels`: Claude Code's own (the state's `models`); the other runtimes bring theirs. */
-export function agentChoices(runtimes: readonly RuntimeChoice[], claudeModels: readonly RuntimeModel[]): AgentOption[] {
+export function agentChoices(runtimes: readonly RuntimeChoice[], claudeModels: readonly RuntimeModel[], keep: readonly string[] = []): AgentOption[] {
   const known = runtimes.length ? runtimes : [{ id: CLAUDE_AGENT.runtime, label: CLAUDE_AGENT.label, available: true }];
   return known.flatMap((r) => {
     const base = { runtime: r.id, group: r.label, mark: runtimeMark(r.id) };
     if (!r.available) return [{ ...base, value: `${r.id}${SEP}`, label: r.label, model: '', disabled: true, ...(r.why ? { why: r.why } : {}) }];
-    const models = (r.id === CLAUDE_AGENT.runtime ? claudeModels : (r.models ?? [])).filter((m) => m.value);
+    const models = latestModels(r.id === CLAUDE_AGENT.runtime ? claudeModels : (r.models ?? []), keep).filter((m) => m.value);
     return [
       { ...base, value: `${r.id}${SEP}`, label: r.label, model: '' },
       ...models.map((m) => ({ ...base, value: `${r.id}${SEP}${m.value}`, label: `${r.label} · ${m.label}`, model: m.value, ...(m.why ? { disabled: true, why: m.why } : {}) })),

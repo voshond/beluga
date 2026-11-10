@@ -8,9 +8,9 @@ import { Button, Empty, IconButton, Tip, cx } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
 import { useApi, useApp, useBeluga, useMachine } from '../lib/beluga.js';
 import { runtimeMark } from '@beluga/shared/agent-marks.js';
-import { agentPicker, pickedAgent } from '@beluga/shared/agent-picker.js';
+import { type AutoChoice, agentPicker, pickedAgent } from '@beluga/shared/agent-picker.js';
 import { agentName } from '@beluga/shared/agent-label.js';
-import { myRuntime, pickerState } from '../chat/ModelPicker.js';
+import { autoChoice, myRuntime, pickerState } from '../chat/ModelPicker.js';
 import { useMyAgentName } from '../lib/agent-words.js';
 import { SplitButton } from '../components/SplitButton.js';
 import type { AgentRef } from '@beluga/protocol.js';
@@ -598,12 +598,14 @@ function AgentProp({ issue }: { issue: Issue }) {
   const { who } = useTaskStart(issue);
   const mine = useMyAgentName();
   const running = useApp((s) => (live ? pickedAgent(agentPicker(pickerState(s), `ws:${live.id}`, myRuntime(s.prefs))) : undefined), sameAgent);
+  const auto = useApp((s) => (live ? autoChoice(s, `ws:${live.id}`) : undefined), sameAuto);
   if (running && live) {
+    const name = auto?.active ? `${running.label} · ${auto.chip}` : agentName(running, { model: true });
     return (
       <Prop label="Agent">
-        <button type="button" className={t.propValue} onClick={() => openWorktree(live.id)} title={`Running in ${live.name}: change it in its conversation`} aria-label={`Agent: ${agentName(running, { model: true })}, in ${live.name}`}>
+        <button type="button" className={t.propValue} onClick={() => openWorktree(live.id)} title={auto?.active ? auto.description : `Running in ${live.name}: change it in its conversation`} aria-label={`Agent: ${name}, in ${live.name}`}>
           <Icon name={runtimeMark(running.runtime)} size={13} />
-          {agentName(running, { model: true })}
+          {name}
         </button>
       </Prop>
     );
@@ -618,6 +620,7 @@ function AgentProp({ issue }: { issue: Issue }) {
   );
 }
 
+const sameAuto = (a: AutoChoice | undefined, b: AutoChoice | undefined): boolean => JSON.stringify(a) === JSON.stringify(b);
 const sameAgent = (a: AgentRef | undefined, b: AgentRef | undefined): boolean => a?.runtime === b?.runtime && a?.label === b?.label && a?.model === b?.model;
 
 /** A due date: the Mac's date picker from a plain button, and a way to clear it. */
