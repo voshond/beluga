@@ -41,6 +41,7 @@ import { KeyboardSettings } from './KeyboardSettings.js';
 import { ExperimentalSettings } from './ExperimentalSettings.js';
 import { WebAccessSettings } from './WebAccessSettings.js';
 import { Group, Row, Select, Switch } from './settings-controls.js';
+import { LOCALES, type LanguagePref, languagePref, setLanguage } from '../i18n/index.js';
 import { PANES } from './settings-index.js';
 import { SettingsSearchField, SettingsSearchResults, useSettingsSearch } from './SettingsSearch.js';
 import { MaintainerChip } from './SupportSheets.js';
@@ -156,6 +157,9 @@ function General() {
           </form>
         </Row>
         <PictureRow />
+        <Row label="Language" detail="The language of Beluga’s windows and menus. Beluga reloads to switch.">
+          <Select<LanguagePref> label="Language" value={languagePref()} options={LOCALES} onChange={setLanguage} />
+        </Row>
         <Row label="Friends' requests for your agent" detail="For people you haven't picked a trust level for.">
           <Select
             label="Default policy"

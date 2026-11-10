@@ -51,6 +51,7 @@ export const SETTINGS: readonly Entry[] = [
   ...rows('general', undefined, [
     ['Your name', 'What friends see in the room.', 'profile display name'],
     ['Your picture', 'Friends and people in your groups see it.', 'avatar photo profile image'],
+    ['Language', 'The language of Beluga’s windows and menus. Beluga reloads to switch.', 'language locale chinese english translation 语言 中文 简体'],
     ["Friends' requests for your agent", "For people you haven't picked a trust level for.", 'default policy trust sharing allow private'],
   ]),
   group('general', 'Updates', 'Update automatically, check for updates.', 'update upgrade version new release'),

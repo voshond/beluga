@@ -10,6 +10,7 @@ mod device;
 mod export;
 mod focus;
 mod frame;
+mod i18n;
 mod menu;
 mod call_float;
 mod call_overlay;
@@ -402,9 +403,14 @@ pub fn run() {
             updater::update_activity,
             updater::update_dismiss_news,
             frame::own_title_bar,
-            frame::window_control
+            frame::window_control,
+            i18n::set_ui_language
         ])
-        .menu(menu::build)
+        .menu(|app| {
+            // The language the window last chose (src/i18n.rs), before the menus are built.
+            i18n::load(app);
+            i18n::menu_bar(app)
+        })
         .on_menu_event(|app, event| match event.id().as_ref() {
             "check-updates" => updater::check_from_menu(app),
             id => menu::on_event(app, id),
