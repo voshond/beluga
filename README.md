@@ -383,6 +383,7 @@ npm run release            # build, sign and publish a release (see docs/updates
 node scripts/gifs.mjs      # re-record the README's app GIFs (vite + the demo daemon, needs ffmpeg)
 node scripts/readme-scenes.mjs  # re-record the README's scene GIFs (needs ffmpeg)
 node scripts/readme-stills.mjs  # a still of each README GIF, for phones (needs ffmpeg)
+npx tsx scripts/usage-summary.ts  # tokens per agent, by provider and model (docs/usage-report.md)
 ```
 
 ```
