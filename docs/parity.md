@@ -632,7 +632,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `toolbox.create` | ✓ Project Settings › Toolbox › New Tool: name, command with {{params}}, personal or Share with team (saves to beluga.json) · Mac only |
 | `toolbox.update` | ✓ Project Settings › Toolbox › a tool's pencil: change its name, command, params or source · Mac only |
 | `toolbox.delete` | ✓ Project Settings › Toolbox › a tool's ✕: removes it from projects.json or beluga.json · Mac only |
-| `toolbox.run` | ✓ Project › Toolbox: a tool's Run button (Mac) or Run button (phone, read-only output); opens a Terminal tab, streams output, shows ok/failed badge |
+| `toolbox.run` | ✓ Project › Toolbox: a tool's Run button (Mac) or Run button (phone, read-only output); opens a Terminal tab, streams output; the row shows the last run's result (✓/⚠/✗ from its exit code and its `::beluga status=` line, with the message) until the next run |
 | `toolbox.approve` | ✓ Project › Toolbox: team tools (from beluga.json) show an Approve button on first run, same flow as setup/run script approval · Mac only |
 | `toolbox.sshHosts` | ✓ Project Settings › Toolbox: host-param dropdowns read ~/.ssh/config (arch, m1arch, nas, …) · Mac only |
 | `toolbox.dismissSuggestion` | ✓ NeedsYou card "Make tool / Let Claude make it / Not this" on a repeated command: Not this dismisses its signature · Mac only |

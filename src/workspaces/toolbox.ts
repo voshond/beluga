@@ -88,6 +88,35 @@ export function normalizeCommandSig(command: string): string {
     .slice(0, 200);
 }
 
+export const TOOL_REPORT_STATUSES = ['success', 'warn', 'fail'] as const;
+export type ToolReportStatus = (typeof TOOL_REPORT_STATUSES)[number];
+
+/** What a tool's script said about its own result, from a `::beluga status=<status> <message>` line. */
+export interface ToolReport {
+  readonly status: ToolReportStatus;
+  readonly message: string;
+}
+
+const REPORT_LINE = /^::beluga\s+status=(success|warn|fail)(?:\s+(.*))?$/;
+// eslint-disable-next-line no-control-regex
+const ANSI = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
+
+/** The report in one line of terminal output, or undefined when the line is not a marker. */
+export function parseToolReport(line: string): ToolReport | undefined {
+  const match = REPORT_LINE.exec(line.replace(ANSI, '').trim());
+  if (!match) return undefined;
+  return { status: match[1] as ToolReportStatus, message: (match[2] ?? '').trim().slice(0, 200) };
+}
+
+/**
+ * How a tool's last run ended. A non-zero exit always fails; otherwise the script's own report
+ * decides, and a run that reported nothing succeeded.
+ */
+export function toolOutcome(code: number | null, report: ToolReport | undefined): ToolReport {
+  if (code !== 0) return { status: 'fail', message: report?.status === 'fail' && report.message ? report.message : `exit ${code ?? '?'}` };
+  return report ?? { status: 'success', message: '' };
+}
+
 // ---- Zod schemas (browser-safe: zod only)
 
 const ToolParamSchema = z.object({

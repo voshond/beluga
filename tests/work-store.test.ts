@@ -95,6 +95,17 @@ describe('reduceWork: other actions', () => {
     expect(reduceWork(initialWork, { type: 'terminal_exit', id: 'gone', code: 0 })).toBe(initialWork);
   });
 
+  it('a tool report is kept until the terminal starts again or closes', () => {
+    const report = { status: 'success', message: 'Deployed' } as const;
+    const s = reduceWork(reduceWork(initialWork, { type: 'terminal', id: 't1', title: 'deploy' }), { type: 'terminal_report', id: 't1', report });
+    expect(s.termReports).toEqual({ t1: report });
+    expect(reduceWork(s, { type: 'terminal', id: 't1', title: 'deploy' }).termReports).toEqual({ t1: report });
+    const ended = reduceWork(s, { type: 'terminal_exit', id: 't1', code: 0 });
+    expect(reduceWork(ended, { type: 'terminal', id: 't1', title: 'deploy' }).termReports).toEqual({});
+    expect(reduceWork(s, { type: 'terminal', id: 't1' }).termReports).toEqual({});
+    expect(reduceWork(initialWork, { type: 'terminal_report', id: 'gone', report })).toBe(initialWork);
+  });
+
   it('models falls back to the built-in list when empty', () => {
     const models = [{ value: 'opus', label: 'Opus', description: 'big', efforts: ['high'] }];
     expect(reduceWork(initialWork, { type: 'models', models }).models).toBe(models);

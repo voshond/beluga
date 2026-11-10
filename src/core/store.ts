@@ -1377,6 +1377,7 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
     case 'templates':
     case 'terminal':
     case 'terminal_exit':
+    case 'terminal_report':
     case 'terminal_name':
     case 'terminal_env_stale':
     case 'agent_term':
