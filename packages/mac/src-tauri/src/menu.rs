@@ -488,9 +488,9 @@ pub fn tray_menu<R: Runtime>(
     let menu = Menu::new(app)?;
     if !requests.is_empty() {
         let head = if requests.len() == 1 {
-            "1 Request Waiting for You".to_string()
+            crate::i18n::tr("1 Request Waiting for You")
         } else {
-            format!("{} Requests Waiting for You", requests.len())
+            crate::i18n::tr_fmt("{0} Requests Waiting for You", &[&requests.len().to_string()])
         };
         menu.append(&MenuItem::with_id(
             app,
@@ -516,6 +516,9 @@ pub fn tray_menu<R: Runtime>(
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&item(app, "quit", "Quit Beluga", None)?)?;
+    if let Ok(items) = menu.items() {
+        crate::i18n::localize_items(items);
+    }
     Ok(menu)
 }
 

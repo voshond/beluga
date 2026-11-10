@@ -431,7 +431,10 @@ conversation, and it's the same chat.
 - **Media goes Mac to Mac.** The window makes the call with WebRTC (packages/mac/src/call): Opus
   voice with echo cancellation and noise suppression to everyone in it (a mesh), DTLS-SRTP
   encrypted. Public STUN only finds each Mac's address; there's no TURN yet, so two networks that
-  block UDP can't call each other.
+  block UDP can't call each other, and neither can a Mac behind a VPN that gives each destination
+  its own port (Cloudflare WARP does) with most home networks. Call notes still arrive then (they go
+  between the daemons), so a line that hasn't connected after 12 s says so in the strip, by name,
+  until it does: otherwise it looks like a call where nobody talks.
 - **Screen sharing through a tree.** A share is tuned for text (`contentHint: text`, resolution
   kept before frame rate, H.264 first: the Mac's hardware encodes it). The sharer feeds the first
   three viewers; each viewer passes it on to at most two more (`shareTree` in shared/calls.ts), so
@@ -466,16 +469,19 @@ conversation, and it's the same chat.
   network delivers.
 - **Microphone and speaker** (BLG-737). The chevron beside Mute picks which microphone and speaker
   the call uses; a new microphone goes on every line at once, and the choice is kept on this Mac.
-  Picking a speaker needs WebKit's `setSinkId`; without it, macOS's own output is used.
+  Picking a speaker needs WebKit's `setSinkId`; without it, macOS's own output is used. A voice is
+  only sent to a speaker by name when one was picked; otherwise it plays where macOS plays sound.
 - **Background noise** (BLG-744). WebKit ignores a page's `noiseSuppression` and
   `autoGainControl`: only echo cancellation applies (macOS's voice processing, Standard Mic Mode),
   and macOS lets no app turn Voice Isolation on for itself (only the user, in Control Center). So
   the call has its own filter (call/noise-filter.ts): RNNoise (via @sapphi-red/web-noise-suppressor)
   in an audio worklet at 48 kHz, between the microphone and everything that hears you (the lines,
-  the speaking ring, the notes). It's on in every call; Noise Removal in the microphone menu turns it
-  off for that call, rewiring what feeds the call's one track, so no line is renegotiated. If the
-  audio engine won't start, or stops and won't resume, the plain microphone goes on instead and the
-  menu says it can't run.
+  the speaking ring, the notes). It's off until you turn on Noise Removal in the microphone menu,
+  then on in every call on this Mac until you turn it off; either way every line switches at once
+  (the sender's track is replaced, nothing renegotiated). It was on in every call at first, and
+  friends stopped hearing each other since: until a call between two Macs proves its Web Audio
+  track reaches the other side, the line sends the microphone itself. If the audio engine won't
+  start, or stops and won't resume, the plain microphone goes on instead and the menu says it can't run.
 - **The chat where it can't be seen.** Full Screen and Face to Face cover the chat, so what the
   others write from then on pops up on the right, dissolves once there was time to read it, and a
   line under it answers in the same chat (call/ChatPops.tsx). Messages that were already there

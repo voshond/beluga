@@ -356,7 +356,7 @@ export const Markdown = memo(function Markdown({ text, paths = false, localImage
   return (
     <LiveText.Provider value={live}>
       <MessageImages.Provider value={images}>
-      <div className={`${s.markdown} ${typed ? s.typed : ''} selectable`}>
+      <div className={`${s.markdown} ${typed ? s.typed : ''} selectable`} data-md>
         <ReactMarkdown remarkPlugins={REMARK} rehypePlugins={html ? GITHUB_REHYPE : NO_REHYPE} remarkRehypeOptions={html ? TO_HTML : undefined} components={components} urlTransform={keepUrl}>
           {source}
         </ReactMarkdown>

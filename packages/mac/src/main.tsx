@@ -3,6 +3,8 @@ import './lib/zod-jitless.js';
 import './lib/storage-rename.js';
 import { Fragment, StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { followOwnWords } from './i18n/own.js';
+import { startI18n } from './i18n/start.js';
 import type { SocketClient } from '@beluga/ipc/socket-client.js';
 import { App } from './App.js';
 import { brandText } from './lib/brand.js';
@@ -57,9 +59,12 @@ function Root() {
       .then((c) => {
         if (!alive) return c.close();
         setError(undefined);
+        // Before the first draw: names people gave things stay as they are (i18n/own.ts).
+        const offWords = followOwnWords(c.store);
         setClient(c);
         const since = Date.now();
         c.onClose(() => {
+          offWords();
           setClient(undefined);
           // Dropped right away (Beluga turned the screen away): wait before trying again.
           if (Date.now() - since < 5000) return retry();
@@ -105,8 +110,11 @@ function Root() {
  */
 const Strict = import.meta.env.DEV && new URLSearchParams(location.search).has('nostrict') ? Fragment : StrictMode;
 
-createRoot(document.getElementById('root')!).render(
-  <Strict>
-    <Root />
-  </Strict>,
+// The window's language first (src/i18n), so its first frame is already in it.
+void startI18n({ native: true }).then(() =>
+  createRoot(document.getElementById('root')!).render(
+    <Strict>
+      <Root />
+    </Strict>,
+  ),
 );

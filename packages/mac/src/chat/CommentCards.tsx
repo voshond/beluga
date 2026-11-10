@@ -25,7 +25,7 @@ export function CommentCards({ box }: { box: string }) {
           <div key={c.id} role="listitem" className={s.commentCard} aria-label={`Comment on ${where}`}>
             <div className={s.commentHead}>
               <Icon name="chat" size={11} />
-              <span className={s.commentWhere} title={where}>
+              <span className={s.commentWhere} title={where} translate="no">
                 {where}
               </span>
               <button type="button" aria-label={`Remove the comment on ${where}`} onClick={() => removeComment(box, c.id)}>
@@ -33,11 +33,11 @@ export function CommentCards({ box }: { box: string }) {
               </button>
             </div>
             {line ? (
-              <div className={s.commentCode} data-sign={line[0]}>
+              <div className={s.commentCode} data-sign={line[0]} translate="no">
                 {line.slice(1).trim()}
               </div>
             ) : null}
-            <div className={s.commentSaid}>{c.text}</div>
+            <div className={s.commentSaid} translate="no">{c.text}</div>
           </div>
         );
       })}

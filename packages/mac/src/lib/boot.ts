@@ -10,6 +10,7 @@ import { bootMode, inShell, native, remoteApp, appInvoke } from './boot-mode.js'
 import { deviceReach } from './device-bridge.js';
 import { uploadFile } from './web-files.js';
 import { machineSocketUrl } from '../machines/pane-model.js';
+import { t } from '../i18n/index.js';
 
 export { bootMode, inShell, native, remoteApp, appInvoke };
 
@@ -108,7 +109,7 @@ export function capabilities(setZoom: (dir: 'in' | 'out' | 'reset') => { ok: boo
         // A real sound name ("default" isn't one on macOS: it was silent). See lib/sounds/native.ts.
         const { sound, fallback }: { sound?: string; fallback?: () => void } = test ? {} : await notificationSound(n);
         // An approval on its own gets Approve / Decline (and Always for a friend's request) on the notification.
-        sendNotification({ title: n.title, body: n.body, ...(sound ? { sound } : {}), ...notificationActions(n), extra: { ...(n.channel ? { channel: n.channel } : {}), ...(n.approval ? { approval: n.approval } : {}), ...(n.task ? { task: n.task } : {}) } });
+        sendNotification({ title: t(n.title), body: t(n.body), ...(sound ? { sound } : {}), ...notificationActions(n), extra: { ...(n.channel ? { channel: n.channel } : {}), ...(n.approval ? { approval: n.approval } : {}), ...(n.task ? { task: n.task } : {}) } });
         fallback?.();
         return;
       }
