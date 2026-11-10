@@ -221,10 +221,15 @@ a.chip:hover {
   line-height: inherit;
 }
 
-/* A worktree's link takes more room than its name: the chip hugs its words from the start of that
-   room, never stretched to it (BLG-878). */
+/* A worktree's link: its name from the start of the room its words take, and the chip covering all
+   of that room, so no bare stretch is left that the caret could get into (BLG-878, BLG-887). */
 .chipFace.chipHug {
-  right: auto;
-  max-width: 100%;
   justify-content: flex-start;
+}
+
+/* A worktree's link written short ("[\u2007name]", worktree-box.ts): its room is its name and about
+   a chip's icon and padding; a hair less padding keeps the whole name in it (BLG-887). */
+.chipFace.chipSnug {
+  padding: 0 3px 0 2px;
+  gap: 2px;
 }
