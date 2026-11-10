@@ -45,6 +45,12 @@ export const taskSize = (issue: Pick<Issue, 'estimate' | 'labels' | 'brief'>): R
 
 export const routeTask = (issue: Pick<Issue, 'estimate' | 'labels' | 'brief'>): TaskRoute => ROUTES[taskSize(issue)];
 
+export const UNTASKED_ROUTE: TaskRoute = ROUTES.medium;
+
+export const routeWork = (issue: Pick<Issue, 'estimate' | 'labels' | 'brief'> | undefined): TaskRoute => (issue ? routeTask(issue) : UNTASKED_ROUTE);
+
+export const isRoutedPlace = (ws: { readonly kind?: string; readonly askOnly?: boolean } | undefined): boolean => ws?.kind === 'worktree' && !ws.askOnly;
+
 const WORKER_RULES = ['Never commit, push, change the task board or ask the user anything: the orchestrator does those.', 'Never widen your step: work you find outside it goes in your report, not in the code.'].join('\n');
 
 const REPORT_SHAPE = 'End with a short report: its first line one of `done`, `blocked` or `failed`; then what you changed (files), what you ran and how it went, and anything the orchestrator must decide.';
@@ -118,13 +124,14 @@ type RouteState = {
   readonly prefs: { readonly experiments?: readonly string[] };
   readonly board: BoardState;
   readonly plans: { readonly plans: ReadonlyArray<Pick<Plan, 'status' | 'body' | 'movedTo' | 'runs'>> };
-  readonly projects: ReadonlyArray<{ readonly workspaces: ReadonlyArray<{ readonly id: string; readonly agent?: AgentRef; readonly model?: string }> }>;
+  readonly projects: ReadonlyArray<{ readonly workspaces: ReadonlyArray<{ readonly id: string; readonly kind?: string; readonly askOnly?: boolean; readonly agent?: AgentRef; readonly model?: string }> }>;
 };
 
 export type ConversationRoute = {
   readonly route: TaskRoute;
   readonly runtime: RoutedRuntime;
   readonly picked: boolean;
+  readonly tasked: boolean;
 };
 
 const inMilestone = (st: RouteState, workspaceId: string): boolean =>
@@ -137,8 +144,8 @@ export const conversationRoute = (st: RouteState, channel: string, defaultRuntim
   if (!ws) return undefined;
   const runtime = routableRuntime(st.prefs.experiments, ws.agent?.runtime ?? defaultRuntime);
   const issue = issueForWorkspace(st.board, id);
-  if (!runtime || !issue || inMilestone(st, id)) return undefined;
-  return { route: routeTask(issue), runtime, picked: Boolean(ws.model || ws.agent?.model) };
+  if (!runtime || (!issue && !isRoutedPlace(ws)) || inMilestone(st, id)) return undefined;
+  return { route: routeWork(issue), runtime, picked: Boolean(ws.model || ws.agent?.model), tasked: Boolean(issue) };
 };
 
 const TIER_LABEL: Readonly<Record<RoutedRuntime, Readonly<Record<RouteTier, string>>>> = {
@@ -148,7 +155,11 @@ const TIER_LABEL: Readonly<Record<RoutedRuntime, Readonly<Record<RouteTier, stri
 
 export const routeModelLabel = (route: TaskRoute, runtime: RoutedRuntime): string => TIER_LABEL[runtime][route.orchestrator.tier];
 
-export const routeSummary = (route: TaskRoute, runtime: RoutedRuntime): string => {
+export const routeSummary = (route: TaskRoute, runtime: RoutedRuntime, tasked = true): string => {
   const name = (tier: RouteTier): string => TIER_LABEL[runtime][tier];
-  return `Sized ${route.size} from its task: ${name(route.orchestrator.tier)} plans and reviews, ${name(route.builder)} builds, ${name(route.scout)} scouts`;
+  const sized = tasked ? `Sized ${route.size} from its task` : `No task yet, so sized ${route.size}`;
+  return `${sized}: ${name(route.orchestrator.tier)} plans and reviews, ${name(route.builder)} builds, ${name(route.scout)} scouts`;
 };
+
+export const draftSummary = (runtime: RoutedRuntime): string =>
+  `Sized from its task when it starts: ${TIER_LABEL[runtime].large} or ${TIER_LABEL[runtime].medium} plans and reviews, smaller models do the steps`;

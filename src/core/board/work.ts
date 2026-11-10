@@ -15,7 +15,7 @@ import { type AgentRef, defaultAgentOf } from '../../protocol.js';
 import { chosenAgent } from '../settings.js';
 import { needsChecksText, unexplained } from './criteria.js';
 import { inSet, labelsFor } from './labels.js';
-import { type TaskRoute, routeTask } from './routing.js';
+import { type TaskRoute, isRoutedPlace, routeWork } from './routing.js';
 import { aboutPrompt, alongPrompt, briefPrompt, boardNote, definePrompt, describeIssue, describeList, friendNote, gitHubLine, ownTaskPrompt, reposPrompt } from './prompt.js';
 import { type Actor, type Assignee, BRIEF_SECTIONS, type ExternalActor, type BriefSection, type Issue, STATUS_INFO, boardName, boardOf, childrenOf, filterIssues, isArchived, isFinished, isOpen, isOwnBoard, isStartable, issueForWorkspace, reposOf, titleFromName, worktreeDoing, worktreeOf } from './model.js';
 
@@ -537,7 +537,8 @@ export class BoardWork {
     const along = channel.startsWith(WS) && issue ? this.alongNote(channel.slice(WS.length), issue) : '';
     const decide = !own && !issue && !opts.plan && this.mayOpenOwnTask(channel) ? ownTaskPrompt() : '';
     const brief = (own ? own.brief : issue ? briefPrompt(this.board.state(), issue) + this.briefExtra(issue) : boardNote() + decide) + repos + along + about + parallel + (opts.plan ? definePrompt(Boolean(issue)) : '');
-    if (!opts.plan) return { tools, brief, ...(issue && !own ? { route: routeTask(issue) } : {}) };
+    const place = channel.startsWith(WS) ? this.workspaces().find((w) => w.id === channel.slice(WS.length)) : undefined;
+    if (!opts.plan) return { tools, brief, ...(!own && (issue || isRoutedPlace(place)) ? { route: routeWork(issue) } : {}) };
     this.pending.delete(channel);
     return {
       tools,

@@ -180,7 +180,7 @@ describe('what the screens show for a routed conversation', () => {
     prefs: { experiments: o.experiments ?? ['routing'] },
     board: { ...NO_BOARD, issues: [issue] },
     plans: { plans: o.milestone ? [{ status: 'active', body: {}, runs: { m1: { agent: { worktree: 'w1' } } } } as unknown as Plan] : [] },
-    projects: [{ workspaces: [{ id: 'w1', ...(o.model ? { model: o.model } : {}), ...(o.runtime ? { agent: { runtime: o.runtime, label: o.runtime } } : {}) }, { id: 'w2' }] }],
+    projects: [{ workspaces: [{ id: 'w1', ...(o.model ? { model: o.model } : {}), ...(o.runtime ? { agent: { runtime: o.runtime, label: o.runtime } } : {}) }, { id: 'w2', kind: 'chat', askOnly: true }, { id: 'w3', kind: 'worktree' }] }],
   });
 
   it('a worktree doing a task, with the experiment on, is routed the way the daemon routes it', () => {
@@ -195,6 +195,12 @@ describe('what the screens show for a routed conversation', () => {
     expect(conversationRoute(routeState({ milestone: true }), 'ws:w1', 'claude')).toBeUndefined();
     expect(conversationRoute(routeState({ runtime: 'copilot' }), 'ws:w1', 'claude')).toBeUndefined();
     expect(conversationRoute(routeState(), 'room', 'claude')).toBeUndefined();
+  });
+
+  it('a worktree with no task yet is routed too, sized medium until it has one; a main folder’s chat never', () => {
+    expect(conversationRoute(routeState(), 'ws:w3', 'claude')).toMatchObject({ tasked: false, route: { size: 'medium' } });
+    expect(conversationRoute(routeState(), 'ws:w2', 'claude')).toBeUndefined();
+    expect(routeSummary(routeTask(task({ estimate: 3 })), 'claude', false)).toBe('No task yet, so sized medium: Opus plans and reviews, Sonnet builds, Haiku scouts');
   });
 
   it('names the orchestrator in each runtime’s words, and says who does what', () => {
