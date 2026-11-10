@@ -50,9 +50,9 @@ from `tauri.linux.conf.json`.
 
 ## Checks and releases
 
-- `ci.yml` runs the tests on Ubuntu, macOS and Windows. Windows doesn't block a merge until it
-  has passed once.
-- `desktop.yml` builds the Rust shell with clippy and runs its tests on Linux and Windows.
+- `ci.yml` runs the tests on Ubuntu. macOS and Windows are tested locally.
+- `desktop.yml` builds the Rust shell with clippy and runs its tests on Linux and Windows. It
+  runs by hand only (Actions → Run workflow).
 - `release-desktop.yml` runs when a `-mac` release is published (or by hand for a tag). It
   builds the Linux and Windows packages, uploads them to the same release, and adds
   `linux-x86_64` and `windows-x86_64` to its `latest.json`. `release-mac.mjs` keeps those

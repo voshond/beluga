@@ -109,7 +109,8 @@ computer unable to connect, the update sheet names it and offers **Update … Fi
 ## Releasing
 
 Releases are made from the maintainer's Mac, not CI: there's no workflow that publishes anything.
-GitHub Actions only checks pull requests (`.github/workflows/ci.yml`, `mac.yml`).
+GitHub Actions only checks pull requests (`.github/workflows/ci.yml`, on Linux); `mac.yml` and
+`desktop.yml` run by hand.
 
 **Beluga for Mac** (tags `v<version>-mac`), from an up-to-date main:
 
