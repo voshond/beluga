@@ -13,6 +13,7 @@ import { ClearAlert } from './ClearAlert.js';
 import { ConfirmAlert } from './ConfirmAlert.js';
 import { HandoffSheet } from './HandoffSheet.js';
 import { ProjectSettingsSheet } from './ProjectSettingsSheet.js';
+import { ToolboxSheet } from './ToolboxSheet.js';
 import { PullRequestSheet } from './PullRequestSheet.js';
 import { RemoteWorktreeSheet } from './RemoteWorktreeSheet.js';
 import { TemplatesSheet } from './TemplatesSheet.js';
@@ -44,6 +45,7 @@ export const NATIVE_MENUS: NativeMenus = {
   clear: ClearAlert,
   agents: AgentsAlert,
   scripts: ProjectSettingsSheet,
+  toolbox: ToolboxSheet,
   pr: PullRequestSheet,
   templates: TemplatesSheet,
   handoff: HandoffSheet,

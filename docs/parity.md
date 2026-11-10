@@ -124,6 +124,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `share_who` | the Share a Folder sheet with the folder filled in |
 | `pr` | sheet |
 | `scripts` | sheet |
+| `toolbox` | sheet |
 | `templates` | sheet |
 | `handoff` | sheet |
 | `remote_ws` | sheet |

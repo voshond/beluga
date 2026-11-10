@@ -17,6 +17,7 @@ import { Select } from "../components/Select.js";
 import { Button, Dot, Empty, Segmented, Tip, cx } from "../components/ui.js";
 import { useActions } from "../lib/actions.js";
 import { toast, useApi, useApp, useBeluga } from "../lib/beluga.js";
+import type { Tool } from "@beluga/workspaces/toolbox.js";
 import { useMyAgentName } from "../lib/agent-words.js";
 import { RunsOnPicker } from "../chat/RunsOn.js";
 import { type WorkToStart, sendToComputer, useStartDeps } from "../machines/start-there.js";
@@ -644,6 +645,7 @@ function Lists({ model }: { model: HomeModel }) {
       <HomePulls projectId={project.id} />
       <HomeIssues projectId={project.id} />
       <HomeActions projectId={project.id} />
+      <HomeToolbox projectId={project.id} projectRoot={project.root} />
       <HomeHistory projectId={project.id} />
       {archived.length ? (
         <Section
@@ -861,6 +863,109 @@ function HomeActions({ projectId }: { projectId: string }) {
           <RunRow projectId={projectId} run={run} now={now} compact />
         </div>
       ))}
+    </Section>
+  );
+}
+
+/**
+ * The project's Toolbox: named commands run without an agent. Each tool is a button that opens in
+ * a Terminal tab; host-param tools show the SSH host dropdown before running.
+ */
+function HomeToolbox({ projectId, projectRoot }: { projectId: string; projectRoot: string }) {
+  const api = useApi();
+  const { ui, client } = useBeluga();
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [hosts, setHosts] = useState<string[]>([]);
+  const [hostFor, setHostFor] = useState<string | null>(null);
+  const [hostValue, setHostValue] = useState('');
+  const late = useLateArrival(projectId, tools.length > 0);
+
+  useEffect(() => {
+    void api.toolbox.list(projectRoot).then((ts) => setTools(ts as Tool[]));
+    void api.toolbox.sshHosts().then((hs) => setHosts(hs as string[]));
+  }, [projectRoot]);
+
+  if (!tools.length) return null;
+
+  const run = (tool: Tool, params: Record<string, string> = {}): void => {
+    void api.toolbox.run(projectRoot, tool.id, params).catch((err: unknown) => {
+      toast(client, err instanceof Error ? err.message : String(err), 'error');
+    });
+  };
+
+  const handleRun = (tool: Tool): void => {
+    const hostParams = tool.params?.filter((p) => p.kind === 'host') ?? [];
+    if (hostParams.length > 0 && hosts.length > 0) {
+      setHostFor(tool.id);
+      setHostValue(hosts[0] ?? '');
+      return;
+    }
+    run(tool);
+  };
+
+  return (
+    <Section
+      arrive={late}
+      title="Toolbox"
+      count={tools.length}
+      hint="Commands that run without an agent"
+      action={
+        <Button
+          size="small"
+          variant="quiet"
+          onClick={() => ui.openMenu({ kind: 'toolbox', projectId, projectRoot })}
+        >
+          Manage
+        </Button>
+      }
+    >
+      {tools.map((tool) => {
+        const needsHost = (tool.params?.some((p) => p.kind === 'host') ?? false) && hosts.length > 0;
+        const pickingHost = hostFor === tool.id;
+        return (
+          <div key={tool.id} role="listitem" className={s.toolboxItem}>
+            {pickingHost ? (
+              <div className={s.toolboxRunRow}>
+                <Icon name="wrench" size={12} className={s.toolboxIcon} />
+                <span className={s.toolboxName}>{tool.name}</span>
+                <Select
+                  className={s.hostSelect}
+                  value={hostValue}
+                  options={hosts.map((h) => ({ value: h, label: h }))}
+                  onChange={setHostValue}
+                  label="Host"
+                />
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setHostFor(null);
+                    const hostParam = tool.params?.find((p) => p.kind === 'host');
+                    run(tool, hostParam ? { [hostParam.name]: hostValue } : {});
+                  }}
+                >
+                  Run
+                </Button>
+                <Button size="small" variant="quiet" onClick={() => setHostFor(null)}>Cancel</Button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className={s.row}
+                onClick={() => handleRun(tool)}
+                aria-label={`Run ${tool.name}`}
+              >
+                <span className={s.rowIcon}><Icon name="wrench" size={13} /></span>
+                <span className={s.rowMain}>
+                  <span className={s.rowTitle}><span className={s.rowName}>{tool.name}</span></span>
+                  <span className={s.rowLast}>{tool.command}</span>
+                </span>
+                {needsHost && <span className={s.rowWhen}>picks host</span>}
+                <Icon name="chevronRight" size={11} className={s.rowChevron} />
+              </button>
+            )}
+          </div>
+        );
+      })}
     </Section>
   );
 }
