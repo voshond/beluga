@@ -604,6 +604,20 @@ function dialogueItems(state: DomainState): NeedsYou[] {
 function toolboxSuggestionItems(state: DomainState): NeedsYou[] {
   return (state.toolboxSuggestions ?? []).map((s: ToolboxSuggestion): NeedsYou => {
     const root = s.projectRoot;
+    if (s.kind === 'propose' && s.replaces) {
+      return {
+        id: `toolbox-propose:${s.id}`,
+        kind: 'decision',
+        from: 'Claude',
+        title: `Update tool "${clip(s.name, 60)}" in your Toolbox?`,
+        detail: clip(s.command, 200),
+        askedAt: s.askedAt,
+        actions: [
+          { label: 'Update', tone: 'main' as const, method: 'toolbox.acceptProposal', args: [root, { name: s.name, command: s.command, ...(s.params ? { params: s.params } : {}) }, s.replaces] },
+          { label: 'Discard', tone: 'danger' as const, method: 'toolbox.dismissSuggestion', args: [root, s.id] },
+        ],
+      };
+    }
     if (s.kind === 'propose') {
       return {
         id: `toolbox-propose:${s.id}`,

@@ -280,11 +280,15 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
             const termKey = service.run(r, projectId, tool.id, params ?? {});
             return `Running "${tool.name}" in terminal ${termKey}.`;
           },
-          propose: (draft: { name: string; command: string; params?: Array<{ name: string; kind: 'host' | 'text' }>; projectRoot?: string }) => {
+          propose: (draft: { name: string; command: string; params?: Array<{ name: string; kind: 'host' | 'text' }>; projectRoot?: string; replaces?: string }) => {
             const r = draft.projectRoot ?? root;
+            const replaced = draft.replaces ? service.list(r).find((t) => t.id === draft.replaces || t.name === draft.replaces) : undefined;
+            if (draft.replaces && !replaced) return Promise.reject(new Error(`No tool "${draft.replaces}" to replace in this project. Use tool_list to see available tools.`));
             const id = `propose-${Date.now().toString(36)}`;
-            opts.store.dispatch({ type: 'toolbox_suggestion_add', suggestion: { id, kind: 'propose', projectRoot: r, name: draft.name, command: draft.command, ...(draft.params ? { params: draft.params } : {}), askedAt: Date.now() } });
-            return `Proposed tool "${draft.name}". It will appear as a "Keep / Discard" card.`;
+            opts.store.dispatch({ type: 'toolbox_suggestion_add', suggestion: { id, kind: 'propose', projectRoot: r, name: draft.name, command: draft.command, ...(draft.params ? { params: draft.params } : {}), ...(replaced ? { replaces: replaced.id } : {}), askedAt: Date.now() } });
+            return replaced
+              ? `Proposed an update to "${replaced.name}". It will appear as an "Update / Discard" card.`
+              : `Proposed tool "${draft.name}". It will appear as a "Keep / Discard" card.`;
           },
         } satisfies ToolboxTools;
       },
