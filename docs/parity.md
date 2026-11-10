@@ -386,6 +386,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `workspaces.otherOrigins` | who made each worktree made outside Beluga (picks the right conversation; never shown as a tool's name) |
 | `workspaces.otherActivity` | worktrees made outside Beluga listed after a project's own, most recently active first (5, then Show N more) |
 | `workspaces.worktreeInfo` | the page a worktree from another tool shows when it has no conversation (or About This Worktree) |
+| `workspaces.usageBreakdown` | the panel's This workspace › Agent (click it: tokens by provider and model, sub-agents apart) |
 | `workspaces.showConversation` | that page › Earlier conversations › Show |
 | `workspaces.outsideConversations` | project ••• › Import from Claude Code… (the project's folder and the folders inside it; Choose Another Folder…) |
 | `workspaces.importOutside` | that sheet › Continue in a Worktree (one brought in already: Open Its Worktree) |

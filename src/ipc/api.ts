@@ -370,6 +370,8 @@ export const API = {
   // When each one last changed (git's view): the Mac sidebar lists them most recent first.
   'workspaces.otherActivity': args(id),
   'workspaces.worktreeInfo': args(id),
+  // A worktree's tokens by provider and model, read from its Claude Code and Codex logs (BLG-85).
+  'workspaces.usageBreakdown': args(id),
   'workspaces.showConversation': args(id, z.string().min(1).max(100)),
   // Claude Code conversations from outside Beluga in a project's folder (or `path`), and going on with one in a new worktree (BLG-321).
   'workspaces.outsideConversations': args(id, opt(path)),

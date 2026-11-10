@@ -153,6 +153,7 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'workspaces.otherOrigins': 'gated',
   'workspaces.otherActivity': 'gated',
   'workspaces.worktreeInfo': 'covered',
+  'workspaces.usageBreakdown': { refused: NO_TOOL },
   'workspaces.showConversation': 'ui_only',
   'workspaces.outsideConversations': 'gated',
   'workspaces.importOutside': 'gated',

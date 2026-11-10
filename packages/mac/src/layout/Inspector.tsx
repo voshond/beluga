@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { findWorkspace, stateOf } from '@beluga/ui/workspace-models.js';
 import { formatTokens } from '@beluga/ui/work-models.js';
 import { formatBytes } from '@beluga/shared/format.js';
@@ -27,6 +27,7 @@ import { sameDeep, sameFields } from '../lib/stable.js';
 import s from './Inspector.module.css';
 import { fileManager } from '../lib/os-words.js';
 import { ThreadsSection } from '../threads/ThreadsSection.js';
+import { UsageBreakdown, UsageToggle } from './UsageBreakdown.js';
 import { Panel } from './inspector-parts.js';
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -177,6 +178,7 @@ function WorkspaceDetails({ id }: { id: string }) {
     },
     (a, b) => sameDeep(a, b, 2),
   );
+  const [usageOpen, setUsageOpen] = useState(false);
   const { ws, st, pr, ctx, setup } = state;
   if (!ws || !st) return null;
   const members = Object.entries(state.members ?? {});
@@ -205,7 +207,16 @@ function WorkspaceDetails({ id }: { id: string }) {
             {ctx.compacting ? 'Compacting…' : `${contextPct(ctx)}% · ${formatTokenCount(ctx.used)} of ${formatTokenCount(ctx.window)}`}
           </Field>
         ) : null}
-        {tokens ? <Field label="Agent">{`${formatTokens(tokens)} tokens${ws.usage?.local ? ` · ${speedWords(ws.usage.local.tps)}` : ws.usage?.cost ? ` · $${ws.usage.cost.toFixed(2)}` : ''}`}</Field> : null}
+        {tokens ? (
+          <Field label="Agent">
+            <UsageToggle
+              open={usageOpen}
+              label={`${formatTokens(tokens)} tokens${ws.usage?.local ? ` · ${speedWords(ws.usage.local.tps)}` : ws.usage?.cost ? ` · $${ws.usage.cost.toFixed(2)}` : ''}`}
+              onToggle={() => setUsageOpen((open) => !open)}
+            />
+          </Field>
+        ) : null}
+        {tokens && usageOpen ? <UsageBreakdown id={ws.id} refreshKey={String(ws.usage?.lastAt ?? 0)} /> : null}
         {state.disk !== undefined ? <Field label="Disk">{formatBytes(state.disk)}</Field> : null}
         {setup ? <Field label="Setup">{setup.status === 'running' ? 'Running…' : setup.status === 'done' ? 'Done' : `Failed${setup.detail ? ` (${setup.detail})` : ''}`}</Field> : null}
         {ws.handedTo ? <Field label="Handed to">{ws.handedTo}</Field> : null}

@@ -175,6 +175,7 @@ export const PHONE: Record<Method, Side> = {
   'workspaces.otherOrigins': 'mac',
   'workspaces.otherActivity': 'mac',
   'workspaces.worktreeInfo': 'mac',
+  'workspaces.usageBreakdown': 'mac', // The phone shows no worktree usage yet: the breakdown is the Mac panel's (BLG-85).
   'workspaces.showConversation': 'mac',
   'workspaces.outsideConversations': 'mac',
   'workspaces.importOutside': 'mac',
