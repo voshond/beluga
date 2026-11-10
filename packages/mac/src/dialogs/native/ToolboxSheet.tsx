@@ -179,8 +179,7 @@ export function ToolboxSheet({ menu, close }: NativeMenuProps<'toolbox'>) {
       submitLabel="Done"
       onSubmit={close}
       onCancel={close}
-      cancelLabel=""
-      hideSubmit={false}
+      hideSubmit
       width={540}
     >
       {tools.length > 0 ? (
