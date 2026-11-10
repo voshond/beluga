@@ -622,7 +622,8 @@ Advanced at the bottom. Learn it once and it works everywhere.
 - **Work**: Conversations · Plans · Tasks. While Settings on the Mac has chat categories on, Conversations
   shows the Inbox by project, then Working, Later and Settled, folded. Long-press a chat for Settle, Remind Me
   Later, Show Again Now or Un-settle. The phone never changes the setting, and a question in a chat put off
-  till later stays in Needs you.
+  till later stays in Needs you. Each of your projects' headings says the agent and model it runs on
+  (`WorkView.projects[].agent`, 1.54, BLG-80).
   A conversation reads as cards: your message, the agent's
   answer (code folded into chips; views and graphs drawn), and while it works a live panel: thinking
   or writing with a soft shimmer, the step it's on with its tool, time and progress, the steps
@@ -672,6 +673,8 @@ Advanced at the bottom. Learn it once and it works everywhere.
   Ask your agent. A task between you and a friend's agent shows as a small card there (`ChatMessageView.task`:
   who asks whom, where it is, the result's summary and files; BLG-208); a phone too old for it shows the
   message's words.
+  Each person's chip says which agent answers for them and its model (`ChatMemberView.agent`, 1.54, BLG-80);
+  someone outside your room, or an older Mac, shows none.
 - **People**: friends, their presence and allowance; tap one for Message, Ask their agent, Take a
   screenshot of their desktop.
 

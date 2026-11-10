@@ -12,7 +12,7 @@ import { Board, type IssuePatch, type NewIssue } from './board.js';
 import type { IssuePr } from './model.js';
 import { agentLabel, agentName } from '../../shared/agent-label.js';
 import { type AgentRef, defaultAgentOf } from '../../protocol.js';
-import { chosenAgent } from '../settings.js';
+import { projectAgent } from '../../shared/agent-picker.js';
 import { needsChecksText, unexplained } from './criteria.js';
 import { inSet, labelsFor } from './labels.js';
 import { type TaskRoute, isRoutedPlace, routeWork } from './routing.js';
@@ -196,7 +196,7 @@ export class BoardWork {
     if (ws?.agent) return ws.agent;
     const st = this.deps.store.getState();
     const project = ws ? st.projects.find((p) => p.id === ws.projectId)?.name : undefined;
-    return project && st.prefs.projectAgents?.[project] ? chosenAgent(st.prefs, project) : defaultAgentOf(st.self);
+    return projectAgent(st.prefs, defaultAgentOf(st.self), project);
   }
 
   /**

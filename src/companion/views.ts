@@ -2,7 +2,7 @@ import path from 'node:path';
 import { STILLS_DIR, STILL_SCHEME } from '../shared/preview/ref.js';
 import { SCRATCH_DIR } from '../shared/scratch-dir.js';
 import { dialogueHeader } from '../core/dialogues/view.js';
-import { agentPicker, pickedAgent } from '../shared/agent-picker.js';
+import { agentPicker, pickedAgent, projectAgent } from '../shared/agent-picker.js';
 import { roomAgentTags } from '../shared/agent-tags.js';
 import { type Approval, type DomainState, type LogItem, type SubAgent, isRunning } from '../core/store.js';
 import { agentLabel, agentName } from '../shared/agent-label.js';
@@ -679,11 +679,17 @@ export function workView(state: DomainState, ctx?: ViewContext): WorkView {
   const lastOf = (p: { conversations: ConvSummary[] }): number => Math.max(0, ...p.conversations.map((c) => c.lastAt ?? 0));
   return {
     projects: [...byProject.values()]
-      .map((p) => ({ ...p, conversations: p.conversations.sort((a, b) => (b.lastAt ?? 0) - (a.lastAt ?? 0)).slice(0, 200) }))
+      .map((p) => ({ ...p, ...projectAgentView(state, p.id), conversations: p.conversations.sort((a, b) => (b.lastAt ?? 0) - (a.lastAt ?? 0)).slice(0, 200) }))
       .sort((a, b) => lastOf(b) - lastOf(a))
       .slice(0, 200),
     ...(state.prefs.chatCategories ? { categories: true as const } : {}),
   };
+}
+
+/** Which agent and model a project of yours runs on (BLG-80), as the Mac's project page says it. Not yours (Room, shared): none. */
+function projectAgentView(state: DomainState, id: string): { agent?: AgentRef } {
+  const project = state.projects.find((p) => p.id === id);
+  return project ? { agent: agentRefView(projectAgent(state.prefs, defaultAgentOf(state.self), project.name)) } : {};
 }
 
 /** A chat's category for Work: nothing while `chatCategories` is off, or for what has no category. */
@@ -1550,8 +1556,9 @@ function chatPeopleOf(state: DomainState, conversation: string, dm: PersonView |
   const now = Date.now();
   return chatPeople({
     conversation,
-    self: { peerId: net.self?.peerId ?? myId(state), name: myName(state), ...(net.self ? { presence: net.self.appearOffline ? 'offline' : net.self.presence.state } : {}) },
+    self: { peerId: net.self?.peerId ?? myId(state), name: myName(state), agent: defaultAgentOf(state.self), ...(net.self ? { presence: net.self.appearOffline ? 'offline' : net.self.presence.state } : {}) },
     others,
+    peers: state.peers,
     live: (net.live?.[conversation] ?? []).filter((l) => now - l.since < 3 * 60_000),
     tasks: state.gateway.tasks,
     myRun: { working: Boolean(run), ...(doing ? { doing } : {}) },
@@ -1562,7 +1569,7 @@ function chatPeopleOf(state: DomainState, conversation: string, dm: PersonView |
 function chatMembers(state: DomainState, dm: { peerId: string; name: string } | undefined, group: { members: readonly { peerId: string; name: string; self: boolean }[] } | undefined, people: ReturnType<typeof chatPeopleOf>): ChatView['members'] {
   const extra = (peerId: string, mine: boolean) => {
     const p = people.find((x) => (mine ? x.me : x.peerId === peerId));
-    return p ? { presence: p.presence, claude: clip(claudePill(p), 80) } : {};
+    return p ? { presence: p.presence, claude: clip(claudePill(p), 80), ...(p.agent ? { agent: agentRefView(p.agent) } : {}) } : {};
   };
   const me = { peerId: clip(myId(state), 200), name: clip(myName(state), 64), me: true, ...extra(myId(state), true) };
   const others = dm ? [{ peerId: dm.peerId, name: dm.name }] : (group?.members ?? []).filter((m) => !m.self && m.peerId !== me.peerId).map((m) => ({ peerId: m.peerId, name: m.name }));

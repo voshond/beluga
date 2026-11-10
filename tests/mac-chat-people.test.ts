@@ -52,6 +52,12 @@ describe('the people in a chat and their Claudes', () => {
     expect(people[0]!.version).toBe('1.3.0');
   });
 
+  it('says which agent each person runs, from their room card (BLG-80)', () => {
+    const codex = { runtime: 'codex', label: 'Codex', model: 'gpt-5' } as const;
+    const people = chatPeople({ conversation: CHAT, self: { ...me, agent: codex }, others: [person('Ata'), person('Bo')], peers: [{ peerId: id('a'), defaultAgent: { runtime: 'claude', label: 'Claude', model: 'opus' } }], tasks: [] });
+    expect(people.map((p) => p.agent)).toEqual([codex, { runtime: 'claude', label: 'Claude', model: 'opus' }, undefined]);
+  });
+
   it('is idle when nothing runs here (a finished task, or one in another chat, doesn’t count)', () => {
     const people = chatPeople({ conversation: CHAT, self: me, others: [person('Ata')], tasks: [task({ state: 'done' }), task({ id: 't2', chat: 'dm:x', conversation: 'dm:x' })] });
     expect(people.map((p) => p.claude)).toEqual(['idle', 'idle']);

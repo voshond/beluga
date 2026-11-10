@@ -19,7 +19,10 @@ import { useActions } from "../lib/actions.js";
 import { toast, useApi, useApp, useBeluga } from "../lib/beluga.js";
 import { type Tool, type ToolReport, toolOutcome } from "@beluga/workspaces/toolbox.js";
 import { toolboxTermId } from "@beluga/shared/terminal-keys.js";
-import { useMyAgentName } from "../lib/agent-words.js";
+import { agentName, useMyAgent } from "../lib/agent-words.js";
+import { agentMark } from "@beluga/shared/agent-marks.js";
+import { projectAgent } from "@beluga/shared/agent-picker.js";
+import chat from "../chat/chat.module.css";
 import { RunsOnPicker } from "../chat/RunsOn.js";
 import { type WorkToStart, sendToComputer, useStartDeps } from "../machines/start-there.js";
 import { myRuntime } from "../chat/ModelPicker.js";
@@ -227,11 +230,15 @@ const errorText = (err: unknown): string =>
  * opens and Claude starts planning; with no text, the New Plan sheet).
  */
 function HomeComposer({ project }: { project: Project }) {
-  const agent = useMyAgentName();
+  const myAgent = useMyAgent();
   const api = useApi();
   const actions = useActions();
   const { client } = useBeluga();
   const prefs = usePrefs();
+  const projectAgents = useApp((st) => st.prefs.projectAgents, sameDeep);
+  const projectAgentRef = projectAgent({ projectAgents }, myAgent, project.name);
+  const agent = agentName(projectAgentRef);
+  const agentFull = agentName(projectAgentRef, { model: true });
   const [mode, setMode] = useState<Mode>("worktree");
   const [text, setText] = useState("");
   const [base, setBase] = useState<string>();
@@ -439,6 +446,10 @@ function HomeComposer({ project }: { project: Project }) {
       {att.dropTarget}
       <div className={s.composerHead}>
         <h2 className={s.prompt}>What do you want to do in {project.name}?</h2>
+        <span className={chat.agentBadge} title={`New worktrees here run ${agentFull}`}>
+          <Icon name={agentMark(projectAgentRef)} size={10} />
+          {agentFull}
+        </span>
         <Segmented<Mode>
           label="How to start"
           value={mode}

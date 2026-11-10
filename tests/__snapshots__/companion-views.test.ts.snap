@@ -7,6 +7,10 @@ exports[`the views of a known Mac > snapshot 1`] = `
     "live": [],
     "members": [
       {
+        "agent": {
+          "label": "Claude",
+          "runtime": "claude",
+        },
         "claude": "idle",
         "me": true,
         "name": "kayra",
@@ -2074,6 +2078,10 @@ bob · tests",
         "name": "Asked of friends",
       },
       {
+        "agent": {
+          "label": "Claude",
+          "runtime": "claude",
+        },
         "conversations": [
           {
             "agents": 1,

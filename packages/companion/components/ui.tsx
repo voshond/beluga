@@ -192,10 +192,10 @@ export function Section({ title, right, children, style }: { readonly title: str
  * A group's head that folds it: what it is (a project's mark and name), a quiet count while
  * folded, anything else on the right, and a chevron that turns. The whole head is the tap.
  */
-export function FoldHead({ folded, onToggle, lead, label, count, right, big }: { readonly folded: boolean; readonly onToggle: () => void; readonly lead?: ReactNode; readonly label: string; readonly count?: number; readonly right?: ReactNode; readonly big?: boolean }) {
+export function FoldHead({ folded, onToggle, lead, label, count, sub, subLead, right, big }: { readonly folded: boolean; readonly onToggle: () => void; readonly lead?: ReactNode; readonly label: string; readonly count?: number; readonly sub?: string; readonly subLead?: ReactNode; readonly right?: ReactNode; readonly big?: boolean }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 20, paddingVertical: 4 }}>
-      <Press onPress={onToggle} haptics accessibilityRole="button" accessibilityState={{ expanded: !folded }} accessibilityLabel={`${label}, ${folded ? 'folded' : 'open'}`} hitSlop={6} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 32 }}>
+      <Press onPress={onToggle} haptics accessibilityRole="button" accessibilityState={{ expanded: !folded }} accessibilityLabel={`${label}${sub ? `, ${sub}` : ''}, ${folded ? 'folded' : 'open'}`} hitSlop={6} style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 32 }}>
         {lead}
         <T v={big ? 'heading' : 'callout'} c={color.text} numberOfLines={1} style={{ flexShrink: 1, fontWeight: '600' }}>
           {label}
@@ -204,6 +204,14 @@ export function FoldHead({ folded, onToggle, lead, label, count, right, big }: {
           <T v="caption" style={{ fontVariant: ['tabular-nums'] }}>
             {count}
           </T>
+        ) : null}
+        {sub ? (
+          <View style={{ flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            {subLead}
+            <T v="caption" c={color.text3} numberOfLines={1} style={{ flexShrink: 1 }}>
+              {sub}
+            </T>
+          </View>
         ) : null}
         <View style={{ flex: 1 }} />
         <View style={{ transform: [{ rotate: folded ? '-90deg' : '0deg' }] }}>

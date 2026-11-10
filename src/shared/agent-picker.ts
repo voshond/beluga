@@ -127,6 +127,14 @@ export function placeAgent(ws: { readonly agent?: AgentRef; readonly model?: str
   return model ? { ...ref, model } : ref;
 }
 
+/**
+ * The agent a project's work runs on (BLG-80): its own pick in Project Settings, else your default.
+ * What a project's page says on the Mac and the phone, and what its conversations fall back to.
+ */
+export function projectAgent(prefs: { readonly projectAgents?: Readonly<Record<string, AgentRef>> }, fallback: AgentRef, project: string | undefined): AgentRef {
+  return (project ? prefs.projectAgents?.[project] : undefined) ?? fallback;
+}
+
 /** The agent and model a conversation runs on now, as an agent (what a task's page shows for its worktree). */
 export function pickedAgent(p: Pick<AgentPicker, 'runtime' | 'model' | 'groups'>): AgentRef {
   const group = p.groups.find((g) => g.current);
