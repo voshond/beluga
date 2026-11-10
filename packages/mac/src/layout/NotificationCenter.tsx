@@ -232,6 +232,8 @@ function Empty({ filter, any }: { filter: NoticeFilter; any: boolean }) {
   );
 }
 
+const sameWaiting = (a: readonly Waiting[], b: readonly Waiting[]): boolean => sameDeep(a, b, 10);
+
 /** What happened while you were elsewhere: Today and Earlier, filters, read, clear. */
 export function Center({ close }: { close: () => void }) {
   const api = useApi();
@@ -239,8 +241,9 @@ export function Center({ close }: { close: () => void }) {
   const { ui, client } = useBeluga();
   const inbox = useApp((st) => st.inbox);
   const notify = useApp((st) => st.prefs.notify);
-  // What waits for you, drawn again only when it changes (not on every streamed step).
-  const waiting = useApp(waitingList, sameDeep);
+  // What waits for you, drawn again only when it changes (not on every streamed step). Deep enough
+  // for an answer's arguments (a Toolbox tool to make is an object in them).
+  const waiting = useApp(waitingList, sameWaiting);
   const [filter, setFilter] = useState<NoticeFilter>('all');
   const now = useNow();
   const unread = inbox.filter((n) => !n.read).length;

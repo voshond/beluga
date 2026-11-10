@@ -228,16 +228,20 @@ function viewSubscribe(store: { subscribe: (listener: () => void) => () => void 
  * The shared state seen through this window (re-renders when the picked part changes). A pick
  * that builds something new each time (a filtered list) passes `equal` (e.g. sameItems, lib/stable.ts):
  * while it says the new pick is the same, the view keeps the old one and isn't drawn again.
+ * The same state and pick always give the same value back, even where `equal` can't tell (data
+ * deeper than sameDeep looks): React would otherwise draw it again and again, until it gives up.
  */
 export function useApp<T>(pick: (s: AppState) => T, equal?: (a: T, b: T) => boolean): T {
   const { client } = useBeluga();
-  const last = useRef<{ readonly value: T } | undefined>(undefined);
+  const last = useRef<{ readonly state: AppState; readonly pick: (s: AppState) => T; readonly value: T } | undefined>(undefined);
   return useSyncExternalStore(viewSubscribe(client.store), () => {
-    const next = pick(client.store.getState());
-    if (!equal) return next;
-    if (last.current && equal(last.current.value, next)) return last.current.value;
-    last.current = { value: next };
-    return next;
+    const state = client.store.getState();
+    const was = last.current;
+    if (was && was.state === state && was.pick === pick) return was.value;
+    const next = pick(state);
+    const value = was && equal && equal(was.value, next) ? was.value : next;
+    last.current = { state, pick, value };
+    return value;
   });
 }
 

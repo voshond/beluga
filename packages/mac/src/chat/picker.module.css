@@ -33,6 +33,10 @@
 .popover {
   z-index: 60;
   width: 340px;
+  /* Every model and the thinking meter outgrow a short window: scroll within the room there is. */
+  max-height: var(--radix-popover-content-available-height, 80vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 8px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
