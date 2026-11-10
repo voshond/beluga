@@ -14,7 +14,7 @@ import {
 import { Icon } from "../components/Icon.js";
 import { ProjectIcon } from "../components/ProjectIcon.js";
 import { Select } from "../components/Select.js";
-import { Button, Dot, Empty, Segmented, Tip, cx } from "../components/ui.js";
+import { Button, Dot, Empty, Segmented, Tip, Working, cx } from "../components/ui.js";
 import { useActions } from "../lib/actions.js";
 import { toast, useApi, useApp, useBeluga } from "../lib/beluga.js";
 import type { Tool } from "@beluga/workspaces/toolbox.js";
@@ -878,6 +878,8 @@ function HomeToolbox({ projectId, projectRoot }: { projectId: string; projectRoo
   const [hosts, setHosts] = useState<string[]>([]);
   const [hostFor, setHostFor] = useState<string | null>(null);
   const [hostValue, setHostValue] = useState('');
+  const [runningId, setRunningId] = useState<string | null>(null);
+  const [resultTool, setResultTool] = useState<{ id: string; ok: boolean } | null>(null);
   const late = useLateArrival(projectId, tools.length > 0);
 
   useEffect(() => {
@@ -888,12 +890,24 @@ function HomeToolbox({ projectId, projectRoot }: { projectId: string; projectRoo
   if (!tools.length) return null;
 
   const run = (tool: Tool, params: Record<string, string> = {}): void => {
-    void api.toolbox.run(projectRoot, tool.id, params).catch((err: unknown) => {
-      toast(client, err instanceof Error ? err.message : String(err), 'error');
-    });
+    setRunningId(tool.id);
+    setResultTool(null);
+    void api.toolbox.run(projectRoot, tool.id, params)
+      .then(() => {
+        setRunningId(null);
+        setResultTool({ id: tool.id, ok: true });
+        setTimeout(() => setResultTool((r) => (r?.id === tool.id ? null : r)), 2000);
+      })
+      .catch((err: unknown) => {
+        setRunningId(null);
+        setResultTool({ id: tool.id, ok: false });
+        setTimeout(() => setResultTool((r) => (r?.id === tool.id ? null : r)), 3000);
+        toast(client, err instanceof Error ? err.message : String(err), 'error');
+      });
   };
 
   const handleRun = (tool: Tool): void => {
+    if (runningId !== null) return;
     const hostParams = tool.params?.filter((p) => p.kind === 'host') ?? [];
     if (hostParams.length > 0 && hosts.length > 0) {
       setHostFor(tool.id);
@@ -922,6 +936,9 @@ function HomeToolbox({ projectId, projectRoot }: { projectId: string; projectRoo
       {tools.map((tool) => {
         const needsHost = (tool.params?.some((p) => p.kind === 'host') ?? false) && hosts.length > 0;
         const pickingHost = hostFor === tool.id;
+        const isRunning = runningId === tool.id;
+        const result = resultTool?.id === tool.id ? resultTool : null;
+
         return (
           <div key={tool.id} role="listitem" className={s.toolboxItem}>
             {pickingHost ? (
@@ -937,13 +954,14 @@ function HomeToolbox({ projectId, projectRoot }: { projectId: string; projectRoo
                 />
                 <Button
                   size="small"
+                  disabled={isRunning}
                   onClick={() => {
                     setHostFor(null);
                     const hostParam = tool.params?.find((p) => p.kind === 'host');
                     run(tool, hostParam ? { [hostParam.name]: hostValue } : {});
                   }}
                 >
-                  Run
+                  {isRunning ? <Working /> : 'Run'}
                 </Button>
                 <Button size="small" variant="quiet" onClick={() => setHostFor(null)}>Cancel</Button>
               </div>
@@ -952,15 +970,22 @@ function HomeToolbox({ projectId, projectRoot }: { projectId: string; projectRoo
                 type="button"
                 className={s.row}
                 onClick={() => handleRun(tool)}
+                disabled={runningId !== null}
                 aria-label={`Run ${tool.name}`}
+                aria-busy={isRunning}
               >
                 <span className={s.rowIcon}><Icon name="wrench" size={13} /></span>
                 <span className={s.rowMain}>
                   <span className={s.rowTitle}><span className={s.rowName}>{tool.name}</span></span>
                   <span className={s.rowLast}>{tool.command}</span>
                 </span>
-                {needsHost && <span className={s.rowWhen}>picks host</span>}
-                <Icon name="chevronRight" size={11} className={s.rowChevron} />
+                {needsHost && !isRunning && !result && <span className={s.rowWhen}>picks host</span>}
+                {isRunning
+                  ? <span className={s.toolboxWorking}><Working /></span>
+                  : result
+                    ? <span className={result.ok ? s.toolboxOk : s.toolboxFail}><Icon name={result.ok ? 'check' : 'x'} size={11} /></span>
+                    : <Icon name="chevronRight" size={11} className={s.rowChevron} />
+                }
               </button>
             )}
           </div>
