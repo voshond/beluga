@@ -3,6 +3,7 @@ import { ATTACHMENT_SCHEME } from '@beluga/core/attachment-share.js';
 import type { LinkedImage } from '@beluga/shared/attachment-links.js';
 import type { Location } from '@beluga/core/store.js';
 import type { SocketClient } from '@beluga/ipc/socket-client.js';
+import { copyPng } from '../lib/copy.js';
 import { sourceTag } from '../machines/pane-model.js';
 
 /**
@@ -260,7 +261,7 @@ export function useLightbox(): Lightbox | undefined {
   );
 }
 
-/** Put the image on the clipboard (as PNG, which every app pastes). */
+/** Put the image on the clipboard as PNG, which every app pastes. */
 export async function copyImage(url: string): Promise<void> {
   const blob = await (await fetch(url)).blob();
   const png =
@@ -278,5 +279,5 @@ export async function copyImage(url: string): Promise<void> {
           img.onerror = () => reject(new Error("Couldn't read the image"));
           img.src = url;
         });
-  await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+  await copyPng(png);
 }

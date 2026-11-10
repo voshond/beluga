@@ -261,11 +261,11 @@ export const MACHINE: Record<Method, MachineSide> = {
   'projects.initGit': 'drive',
   'projects.suggest': 'drive',
   'projects.create': 'drive',
+  'projects.clone': 'drive',
   'projects.newHome': 'drive',
   'projects.iconAt': 'drive',
   'projects.github': 'drive',
   'projects.githubCached': 'drive',
-  'projects.clone': 'drive',
   'projects.cloneProgress': 'drive',
   'projects.setHome': 'drive',
   // ---- local
@@ -692,6 +692,20 @@ export const MACHINE: Record<Method, MachineSide> = {
   'toolbox.sshHosts': 'drive',
   'toolbox.dismissSuggestion': 'drive',
   'toolbox.acceptProposal': 'drive',
+
+  // ---- external agents: letting one in stays with the computer itself.
+  'external.activity': 'drive',
+  'external.agents': 'drive',
+  'external.localToken': 'refuse',
+  'external.pairingCode': 'refuse',
+  'external.resume': 'drive',
+  'external.revoke': 'drive',
+  'external.setEnabled': 'refuse',
+  'external.setPaused': 'drive',
+  'external.setRoute': 'refuse',
+  'external.status': 'drive',
+  'external.stopAgent': 'drive',
+  'external.stopAll': 'drive',
 };
 
 /** A method a screen driving a computer may not call (unknown names are left to the API, which refuses them). */

@@ -23,7 +23,7 @@ describe('what the phone may call', () => {
   });
 
   it('keeps code, git, terminals, settings, files by path and hosting on the Mac', () => {
-    const macOnly = /^(git|terminals|env|workbench|diff|shell|files|projects|local|stripe|invites|sharing|remote|view|daemon|people)\./;
+    const macOnly = /^(git|terminals|env|workbench|diff|shell|files|projects|local|stripe|revenuecat|invites|sharing|remote|view|daemon|people)\./;
     // Answering someone at the door is an exception: it's an answer, like an approval. So is picking a
     // conversation's agent (BLG-446): the composer's picker, the phone's too.
     expect(METHODS.filter((m) => macOnly.test(m) && PHONE[m] === 'phone').sort()).toEqual(['invites.decline', 'invites.letIn', 'workbench.setAgent', 'workbench.setModel']);

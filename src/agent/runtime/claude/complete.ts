@@ -2,6 +2,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { CompletionError, type CompletionRequest } from '../types.js';
 import { PromptQueue } from './live-run.js';
 import { sdkServers } from './sdk-mount.js';
+import { claudeExecutable } from '../../claude-code.js';
 
 /**
  * A side call on Claude Code (agent/side-calls.ts): one model turn or a few, no saved session, no
@@ -51,7 +52,7 @@ export async function claudeComplete(req: CompletionRequest, claudePath?: string
               },
             }
           : {}),
-        ...(claudePath ? { pathToClaudeCodeExecutable: claudePath } : {}),
+        ...claudeExecutable(claudePath),
       },
     });
     for await (const msg of q) {

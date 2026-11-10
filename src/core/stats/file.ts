@@ -5,7 +5,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { STAT_KEYS, type StatsSnapshot, dayStart } from '../../shared/stats.js';
+import { STAT_KEYS, type StatsSnapshot, dayStart, isRealTime } from '../../shared/stats.js';
 import { belugaHome } from '../home.js';
 
 /** A count that's off by a hair (float drift, a runtime's odd reading) is clamped, never a reason to drop the whole file. */
@@ -69,10 +69,18 @@ export function saveStats(data: StatsFile, file: string): void {
   renameSync(tmp, file);
 }
 
+/**
+ * When your stats start: your first real day (or pull request). Days from a record with no real
+ * date (1970) don't count; when there's nothing else, it's when counting began; nothing at all: 0.
+ */
+function sinceOf(data: StatsFile): number {
+  const firsts = [...Object.keys(data.days).map(dayStart), ...Object.values(data.prs).map((p) => p.opened)];
+  const real = firsts.filter(isRealTime);
+  if (real.length) return Math.min(...real);
+  return firsts.length ? data.startedAt : 0;
+}
+
 /** What the Usage tab gets: the stats, without the counter's bookkeeping. */
 export function snapshotOf(data: StatsFile, backfilling: boolean): StatsSnapshot {
-  const firstDay = Object.keys(data.days).sort()[0];
-  const firstPr = Math.min(Infinity, ...Object.values(data.prs).map((p) => p.opened));
-  const since = Math.min(firstDay ? dayStart(firstDay) : Infinity, firstPr);
-  return { days: data.days, prs: data.prs, hours: data.hours, plan: data.plan, since: Number.isFinite(since) ? since : 0, ...(backfilling ? { backfilling } : {}) };
+  return { days: data.days, prs: data.prs, hours: data.hours, plan: data.plan, since: sinceOf(data), ...(backfilling ? { backfilling } : {}) };
 }

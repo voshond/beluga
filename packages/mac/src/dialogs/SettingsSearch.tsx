@@ -103,6 +103,7 @@ export function revealSetting(container: HTMLElement, hit: Hit): () => void {
   const started = performance.now();
   let frame = 0;
   let unlight: ReturnType<typeof setTimeout> | undefined;
+  let settle: ResizeObserver | undefined;
   const find = (kinds: ReadonlyArray<'row' | 'group'>): HTMLElement | null => {
     for (const a of anchors) {
       if (!kinds.includes(a.kind)) continue;
@@ -119,7 +120,17 @@ export function revealSetting(container: HTMLElement, hit: Hit): () => void {
     const still = document.documentElement.dataset.motion === 'reduce';
     el.scrollIntoView({ block: 'center', behavior: still ? 'auto' : 'smooth' });
     el.setAttribute('data-found', '');
-    unlight = setTimeout(() => el.removeAttribute('data-found'), FOUND_MS);
+    // Rows above it that load late push it down: while it's lit, it's scrolled to again.
+    if (typeof ResizeObserver !== 'undefined') {
+      let first = true;
+      // (Its first call is only the sizes they have now: the scroll above is under way.)
+      settle = new ResizeObserver(() => (first ? (first = false) : el.scrollIntoView({ block: 'center', behavior: still ? 'auto' : 'smooth' })));
+      for (const part of container.children) settle.observe(part);
+    }
+    unlight = setTimeout(() => {
+      el.removeAttribute('data-found');
+      settle?.disconnect();
+    }, FOUND_MS);
     const control = el.matches('[data-setting]') ? el.querySelector<HTMLElement>('input:not([type="hidden"]):not([hidden]), button:not([disabled]), select, textarea, [tabindex="0"]') : null;
     if (control) control.focus({ preventScroll: true });
     else {
@@ -136,6 +147,7 @@ export function revealSetting(container: HTMLElement, hit: Hit): () => void {
   return () => {
     cancelAnimationFrame(frame);
     if (unlight) clearTimeout(unlight);
+    settle?.disconnect();
   };
 }
 

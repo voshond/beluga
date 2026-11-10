@@ -144,7 +144,10 @@ export const APP_VERSION: string = version;
 export async function connect(caps: Capabilities): Promise<SocketClient> {
   const { url, token } = await endpoint();
   const device = await deviceReach(uploadFile);
-  return SocketClient.connect({ url, token, kind: remoteApp() ? 'remote-app' : 'mac', version: APP_VERSION, caps, ...(device ? { device } : {}) });
+  const client = await SocketClient.connect({ url, token, kind: remoteApp() ? 'remote-app' : 'mac', version: APP_VERSION, caps, ...(device ? { device } : {}) });
+  // The window opens on Overview (a screen starts on the room, which is no place of its own here: BLG-871).
+  client.store.dispatch({ type: 'view', view: { kind: 'overview' } });
+  return client;
 }
 
 /**

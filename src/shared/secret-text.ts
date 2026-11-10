@@ -9,6 +9,7 @@ const SECRETS: ReadonlyArray<readonly [RegExp, string]> = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, 'a private key'],
   [/\bsk-ant-[A-Za-z0-9_-]{20,}/, 'an Anthropic API key'],
   [/\b(sk|rk)_live_[A-Za-z0-9]{10,}/, 'a Stripe secret key'],
+  [/\bsk_[A-Za-z0-9_-]{16,}/, 'a RevenueCat secret key'],
   [/\bsk-(proj-)?[A-Za-z0-9_-]{32,}/, 'an API key'],
   [/\bgh[pousr]_[A-Za-z0-9]{30,}|\bgithub_pat_[A-Za-z0-9_]{30,}/, 'a GitHub token'],
   [/\bAKIA[0-9A-Z]{16}\b/, 'an AWS access key'],

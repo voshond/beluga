@@ -95,6 +95,13 @@ export interface StatsSnapshot {
 
 export const EMPTY_STATS: StatsSnapshot = { days: {}, prs: {}, hours: Array.from({ length: 168 }, () => 0), since: 0 };
 
+/**
+ * Nothing Beluga counts happened before this (it didn't exist yet): an earlier time is a record
+ * with no real date (a 0 reads as 1 January 1970), not something you did.
+ */
+export const EARLIEST_REAL = Date.UTC(2024, 0, 1);
+export const isRealTime = (ms: number | undefined): ms is number => typeof ms === 'number' && ms >= EARLIEST_REAL;
+
 const pad = (n: number): string => String(n).padStart(2, '0');
 
 /** The local day a moment falls on, as "2026-10-18". */

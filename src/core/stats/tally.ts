@@ -3,7 +3,7 @@
  * and their tokens; prompts and agent time from a chat history; pull requests from GitHub.
  * Every function returns a new StatsFile.
  */
-import { type PlanKind, type PlanWindow, type StatCounts, addToDay, dayStart, statDay } from '../../shared/stats.js';
+import { type PlanKind, type PlanWindow, type StatCounts, addToDay, dayStart, isRealTime, statDay } from '../../shared/stats.js';
 import { worktreeOrigin } from '../../workspaces/origin.js';
 import type { Project, Workspace } from '../../workspaces/types.js';
 import { tokensOf } from '../../workspaces/usage-days.js';
@@ -34,6 +34,9 @@ export function countPrompt(file: StatsFile, at: number, project: string, agent:
   return { ...count(file, at, project, agent, { prompts: 1, chars }), hours };
 }
 
+/** When a workspace was made, as best known: a record with no real date (0) takes the last time it was used, else now. */
+const madeAt = (w: Workspace, now: number): number => (isRealTime(w.createdAt) ? w.createdAt : isRealTime(w.usage?.lastAt) ? w.usage.lastAt : now);
+
 /** Workspaces Beluga counts: yours and chats (not another tool's worktrees, nor one still being made). */
 const counted = (w: Workspace): boolean => !w.pending && (w.kind !== 'worktree' || worktreeOrigin(w) === 'beluga');
 
@@ -55,8 +58,8 @@ export function observeWorkspaces(file: StatsFile, projects: readonly Project[],
       const was = seen[w.id];
       const archived = Boolean(w.archived);
       if (!was) {
-        out = madeWith(out, w, root, agent);
-        if (archived && w.kind === 'worktree') out = count(out, w.archive?.at ?? w.usage?.lastAt ?? w.createdAt, root, agent, { archived: 1 });
+        out = madeWith(out, w, root, agent, madeAt(w, now));
+        if (archived && w.kind === 'worktree') out = count(out, w.archive?.at ?? w.usage?.lastAt ?? madeAt(w, now), root, agent, { archived: 1 });
       } else {
         const dt = Math.max(0, tokens - was.t);
         const dc = Math.max(0, cost - was.c);
@@ -70,10 +73,10 @@ export function observeWorkspaces(file: StatsFile, projects: readonly Project[],
 }
 
 /** A workspace counted for the first time: made on its day, and its tokens on the days they were spent (the rest on the day it was made). */
-function madeWith(file: StatsFile, w: Workspace, root: string, agent: string): StatsFile {
+function madeWith(file: StatsFile, w: Workspace, root: string, agent: string, made: number): StatsFile {
   let out = file;
-  if (w.kind === 'worktree') out = count(out, w.createdAt, root, agent, { worktrees: 1 });
-  if (w.kind === 'chat') out = count(out, w.createdAt, root, agent, { chats: 1 });
+  if (w.kind === 'worktree') out = count(out, made, root, agent, { worktrees: 1 });
+  if (w.kind === 'chat') out = count(out, made, root, agent, { chats: 1 });
   const u = w.usage;
   if (!u) return out;
   let tokens = tokensOf(u);
@@ -84,7 +87,7 @@ function madeWith(file: StatsFile, w: Workspace, root: string, agent: string): S
     cost -= day.cost;
   }
   // From before days were kept: on the day it was made (better than nowhere).
-  if (tokens > 0 || cost > 0.000_001) out = count(out, w.createdAt, root, agent, { tokens: Math.max(0, tokens), cost: Math.max(0, cost) });
+  if (tokens > 0 || cost > 0.000_001) out = count(out, made, root, agent, { tokens: Math.max(0, tokens), cost: Math.max(0, cost) });
   return out;
 }
 

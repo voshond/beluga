@@ -205,13 +205,14 @@
   font-size: 0.92rem;
 }
 /* The last slide: your pass, swinging at the right. */
+/*
+ * The pass hangs over the whole stage (from 69% across), so it swings out to the left without
+ * being cut off; only the card takes the pointer (Lanyard's passThrough), the words stay clickable.
+ */
 .pass {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 38vw;
-  cursor: grab;
+  inset: 0;
+  pointer-events: none;
 }
 /* Room for the pass: the words keep to the left. */
 .stageWithPass {

@@ -48,6 +48,18 @@ describe('bounds and redaction', () => {
     expect(out).toContain('git log --author=bob --oneline');
   });
 
+  it('redacts RevenueCat secret keys bare, in a Bearer header and in an assignment, but not ordinary words', () => {
+    const rc = ['sk', 'AbCdEfGhIjKlMnOpQrStUvWx'].join('_');
+    const out = redactSecrets([`key ${rc} here`, `curl -H "Authorization: Bearer ${rc}" https://api`, `REVENUECAT_API_KEY=${rc}`, 'rename task_name_value and risk_assessment_value_long'].join('\n'));
+    expect(out).not.toContain(rc);
+    expect(out).not.toContain('AbCdEfGh');
+    expect(out).toContain('REVENUECAT_API_KEY=[redacted]');
+    expect(out).toContain('task_name_value');
+    expect(out).toContain('risk_assessment_value_long');
+    // Bare, with nothing else on the line that would also trigger a header/assignment rule.
+    expect(redactSecrets(`key ${rc} here`)).toBe('key [redacted] here');
+  });
+
   it('bounds tool input: secret keys hidden, long strings cut, the whole kept small', () => {
     const b = boundInput({ command: 'npm test', api_key: 'xyz', content: 'x'.repeat(40_000), nested: { token: 't', ok: 1 } });
     expect(b.input.command).toBe('npm test');
