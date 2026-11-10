@@ -107,6 +107,20 @@ BoardWork.forRun ── route (taskSize) ──▶ AgentHost.runAgent
 
 No new API method, no protocol change, nothing on the phone.
 
+## 4b. What the screens show
+
+The daemon and the screens decide with one rule (`routableRuntime`, `conversationRoute` in
+`routing.ts`, browser-safe), so the chip can't disagree with the run.
+
+- **The chip** in the composer reads `Auto · Opus · High` (`Codex · Auto · Frontier` on Codex): the
+  model the task was routed to and the routed effort.
+- **The picker**: the runtime's Default row becomes **Auto**, with who does what ("Sized large from
+  its task: Opus plans and reviews, Sonnet builds, Haiku scouts"). Picking a model turns routing off
+  for the conversation; picking Auto (the old Default, `setModel('')`) turns it back on. The Thinking
+  track keeps your saved effort; its line says what Auto picked for this task.
+- **The model sheet** (native) and **the task page's Agent** say the same.
+- Not changed: the phone (no phone work in BLG-82) and the terminal UI's `/model` menu.
+
 ## 4a. Codex
 
 Codex has its own multi-agent (`features.multi_agent`, on for your own runs since BLG-519), and
@@ -139,4 +153,3 @@ Checked live on this machine (codex-cli 0.167): with the role files Beluga wrote
 - Learn the sizes: record per run which tier did which step and its cost (`usageOf` already sums
   per model) and tune the thresholds from it.
 - A per-project override of the tier table (Settings › Agents), only if one table doesn't suit.
-- Show the routed model on the conversation's model chip ("Auto · Opus").

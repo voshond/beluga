@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { runtimeMark } from '@beluga/shared/agent-marks.js';
 import { agentPicker } from '@beluga/shared/agent-picker.js';
 import { findWorkspace } from '@beluga/ui/workspace-models.js';
-import { foreignMark, myRuntime, pickerState, samePicker, setMyAgent } from '../../chat/ModelPicker.js';
+import { autoChoice, foreignMark, myRuntime, pickerState, samePicker, setMyAgent } from '../../chat/ModelPicker.js';
 import { Field, FormSheet, PickList, formStyles as f } from '../../components/FormSheet.js';
 import { Icon } from '../../components/Icon.js';
 import { useMyAgentName } from '../../lib/agent-words.js';
@@ -17,10 +17,10 @@ import { revealLabel, thisComputer } from '../../lib/os-words.js';
  */
 export function ModelSheet({ menu, close }: NativeMenuProps<'model'>) {
   const api = useApi();
-  const picker = useApp((st) => agentPicker(pickerState(st), menu.channel ?? 'draft', myRuntime(st.prefs)), samePicker);
+  const picker = useApp((st) => agentPicker(pickerState(st), menu.channel ?? 'draft', myRuntime(st.prefs), undefined, menu.channel ? autoChoice(st, menu.channel) : undefined), samePicker);
   const group = picker.groups.find((g) => g.current);
   const models = group?.models ?? [];
-  const current = picker.model;
+  const current = models.find((m) => m.on)?.value ?? picker.model;
   const [value, setValue] = useState(current);
   const use = (v: string): void => {
     if (!group || models.find((m) => m.value === v)?.why) return;

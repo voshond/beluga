@@ -5,7 +5,8 @@ import type { AppState } from '@beluga/core/store.js';
 import { type AgentRef, CLAUDE_AGENT } from '@beluga/protocol.js';
 import { type HandoffMode, limitHit, needsHandoff } from '@beluga/shared/agent-handoff.js';
 import { type AgentMark, modelMark, runtimeMark } from '@beluga/shared/agent-marks.js';
-import { type AgentPicker, type PickerGroup, type PickerState, agentPicker, pickAction } from '@beluga/shared/agent-picker.js';
+import { type AgentPicker, type AutoChoice, type PickerGroup, type PickerState, agentPicker, pickAction } from '@beluga/shared/agent-picker.js';
+import { conversationRoute, routeModelLabel, routeSummary } from '@beluga/core/board/routing.js';
 import type { RuntimeModel } from '@beluga/shared/agent-runtimes.js';
 import type { AgentOption } from '@beluga/ui/agent-choice.js';
 import { Icon } from '../components/Icon.js';
@@ -41,6 +42,17 @@ export function setMyAgent(api: Api, runtime: string, label: string, model: stri
 
 /** The picker's view of the state: "your default model" is your agent's, whichever runtime it is. */
 export const pickerState = (st: AppState): PickerState => ({ ...st, prefs: { model: myModel(st.prefs) || undefined } });
+
+export const autoChoice = (st: AppState, channel: string): AutoChoice | undefined => {
+  const found = conversationRoute(st, channel, myRuntime(st.prefs));
+  if (!found) return undefined;
+  return { runtime: found.runtime, chip: `Auto · ${routeModelLabel(found.route, found.runtime)}`, description: routeSummary(found.route, found.runtime), active: !found.picked };
+};
+
+const routedEffort = (st: AppState, channel: string): Effort | undefined => {
+  const found = conversationRoute(st, channel, myRuntime(st.prefs));
+  return found && !found.picked ? found.route.orchestrator.effort : undefined;
+};
 
 /** A model's details (its effort levels) by runtime and value; Claude's come from Claude Code itself. */
 export function modelInfo(st: Pick<AppState, 'runtimes' | 'models'>, runtime: string, model: string): RuntimeModel | undefined {
@@ -130,8 +142,10 @@ interface Move {
 export function ModelPicker({ channel, draft, onDraft }: { channel: string; draft?: AgentRef; onDraft?: (agent: AgentRef | undefined) => void }) {
   const api = useApi();
   // Only what the picker shows (not the whole state): not drawn again on every streamed event (KLD-48).
-  const picker = useApp((st) => agentPicker(pickerState(st), channel, myRuntime(st.prefs), draft), samePicker);
-  const effort = useApp((st) => st.prefs.effort);
+  const picker = useApp((st) => agentPicker(pickerState(st), channel, myRuntime(st.prefs), draft, draft ? undefined : autoChoice(st, channel)), samePicker);
+  const chosenEffort = useApp((st) => st.prefs.effort);
+  const routed = useApp((st) => (draft ? undefined : routedEffort(st, channel)));
+  const effort = routed ?? chosenEffort;
   const carried = useApp((st) => carriedOf(st, channel), sameCarried);
   const [seen, setSeen] = useState<string>();
   const [move, setMove] = useState<Move>();
@@ -194,7 +208,7 @@ export function ModelPicker({ channel, draft, onDraft }: { channel: string; draf
   ) : (
     label
   );
-  const level = effort ? EFFORTS.indexOf(effort) : -1;
+  const level = chosenEffort ? EFFORTS.indexOf(chosenEffort) : -1;
   return (
     <Popover.Root onOpenChange={(open) => !open && (setMove(undefined), setSeen(undefined))}>
       <Popover.Trigger asChild>
@@ -240,17 +254,17 @@ export function ModelPicker({ channel, draft, onDraft }: { channel: string; draf
               <div className={s.thinking}>
                 <div className={s.thinkingHead}>
                   <span className={s.thinkingLabel}>Thinking</span>
-                  <span className={s.thinkingDetail}>{effort ? EFFORT_INFO[effort].detail : 'Your agent decides how much to think, case by case'}</span>
+                  <span className={s.thinkingDetail}>{routed ? `Auto picked ${EFFORT_INFO[routed].label} for this task` : effort ? EFFORT_INFO[effort].detail : 'Your agent decides how much to think, case by case'}</span>
                 </div>
                 {/* Auto, then Low to Max: a thumb that slides to the level picked, a warm fill behind it as deep as the level. */}
                 <div className={s.track} role="radiogroup" aria-label="Thinking effort" style={{ '--at': level + 1, '--heat': level < 0 ? 0 : (level + 1) / EFFORTS.length } as CSSProperties}>
                   <span className={s.fill} aria-hidden />
                   <span className={s.thumb} aria-hidden />
-                  <button type="button" role="radio" aria-checked={!effort} className={cx(s.level, !effort && s.levelOn)} title="Your agent decides how much to think, case by case" onClick={() => void api.session.setPrefs({ effort: null })}>
+                  <button type="button" role="radio" aria-checked={!chosenEffort} className={cx(s.level, !chosenEffort && s.levelOn)} title="Your agent decides how much to think, case by case" onClick={() => void api.session.setPrefs({ effort: null })}>
                     Auto
                   </button>
                   {EFFORTS.map((e) => (
-                    <button key={e} type="button" role="radio" aria-checked={effort === e} disabled={!allowed.has(e)} title={allowed.has(e) ? EFFORT_INFO[e].detail : 'This model doesn’t take this level'} className={cx(s.level, effort === e && s.levelOn)} onClick={() => void api.session.setPrefs({ effort: e })}>
+                    <button key={e} type="button" role="radio" aria-checked={chosenEffort === e} disabled={!allowed.has(e)} title={allowed.has(e) ? EFFORT_INFO[e].detail : 'This model doesn’t take this level'} className={cx(s.level, chosenEffort === e && s.levelOn)} onClick={() => void api.session.setPrefs({ effort: e })}>
                       {EFFORT_INFO[e].label}
                     </button>
                   ))}

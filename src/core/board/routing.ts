@@ -1,6 +1,9 @@
 import type { RunRouting, RunSubagent } from '../../agent/types.js';
+import type { AgentRef } from '../../protocol.js';
+import { experimentOn } from '../../shared/experiments.js';
 import type { Effort } from '../../shared/settings-schema.js';
-import type { Issue } from './model.js';
+import type { Plan } from '../plans/model.js';
+import { type BoardState, type Issue, issueForWorkspace } from './model.js';
 
 export type RouteTier = 'small' | 'medium' | 'large';
 
@@ -107,3 +110,45 @@ export const routedRun = (route: TaskRoute, runtime: RoutedRuntime = 'claude'): 
   effort: route.orchestrator.effort,
   routing: { brief: routingBrief(route, runtime), agents: workerAgents(route) },
 });
+
+export const routableRuntime = (experiments: readonly string[] | undefined, runtime: string): RoutedRuntime | undefined =>
+  experimentOn(experiments, 'routing') ? ROUTED_RUNTIMES.find((id) => id === runtime) : undefined;
+
+type RouteState = {
+  readonly prefs: { readonly experiments?: readonly string[] };
+  readonly board: BoardState;
+  readonly plans: { readonly plans: ReadonlyArray<Pick<Plan, 'status' | 'body' | 'movedTo' | 'runs'>> };
+  readonly projects: ReadonlyArray<{ readonly workspaces: ReadonlyArray<{ readonly id: string; readonly agent?: AgentRef; readonly model?: string }> }>;
+};
+
+export type ConversationRoute = {
+  readonly route: TaskRoute;
+  readonly runtime: RoutedRuntime;
+  readonly picked: boolean;
+};
+
+const inMilestone = (st: RouteState, workspaceId: string): boolean =>
+  st.plans.plans.some((plan) => plan.status === 'active' && plan.body && !plan.movedTo && Object.values(plan.runs).some((run) => run?.agent?.worktree === workspaceId));
+
+export const conversationRoute = (st: RouteState, channel: string, defaultRuntime: string): ConversationRoute | undefined => {
+  if (!channel.startsWith('ws:')) return undefined;
+  const id = channel.slice('ws:'.length);
+  const ws = st.projects.flatMap((p) => p.workspaces).find((w) => w.id === id);
+  if (!ws) return undefined;
+  const runtime = routableRuntime(st.prefs.experiments, ws.agent?.runtime ?? defaultRuntime);
+  const issue = issueForWorkspace(st.board, id);
+  if (!runtime || !issue || inMilestone(st, id)) return undefined;
+  return { route: routeTask(issue), runtime, picked: Boolean(ws.model || ws.agent?.model) };
+};
+
+const TIER_LABEL: Readonly<Record<RoutedRuntime, Readonly<Record<RouteTier, string>>>> = {
+  claude: { small: 'Haiku', medium: 'Sonnet', large: 'Opus' },
+  codex: { small: 'Fast', medium: 'Default', large: 'Frontier' },
+};
+
+export const routeModelLabel = (route: TaskRoute, runtime: RoutedRuntime): string => TIER_LABEL[runtime][route.orchestrator.tier];
+
+export const routeSummary = (route: TaskRoute, runtime: RoutedRuntime): string => {
+  const name = (tier: RouteTier): string => TIER_LABEL[runtime][tier];
+  return `Sized ${route.size} from its task: ${name(route.orchestrator.tier)} plans and reviews, ${name(route.builder)} builds, ${name(route.scout)} scouts`;
+};

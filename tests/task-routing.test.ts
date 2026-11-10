@@ -8,7 +8,9 @@ import { sdkAgents } from '../src/agent/runtime/claude/runner.js';
 import { codexRoleConfig, codexTierModel, roleToml } from '../src/agent/runtime/codex/roles.js';
 import type { Model } from '../src/agent/runtime/codex/protocol.js';
 import { AgentHost } from '../src/core/agent-host.js';
-import { criteriaCount, routeTask, routedRun, taskSize } from '../src/core/board/routing.js';
+import { conversationRoute, criteriaCount, routeModelLabel, routeSummary, routeTask, routedRun, taskSize } from '../src/core/board/routing.js';
+import { NO_BOARD, type Issue } from '../src/core/board/model.js';
+import type { Plan } from '../src/core/plans/model.js';
 import { Store, initialState } from '../src/core/store.js';
 import { waitFor } from './helpers.js';
 
@@ -169,5 +171,36 @@ describe('routing on Codex', () => {
     expect(codex.routing?.brief).toContain('agent_type');
     const copilot = await setup({ experiments: ['routing'], runtime: 'copilot' }).ask();
     expect(copilot.routing).toBeUndefined();
+  });
+});
+
+describe('what the screens show for a routed conversation', () => {
+  const issue = { id: 'i1', worktrees: ['w1'], estimate: 3, labels: [], brief: {} } as unknown as Issue;
+  const routeState = (o: { experiments?: string[]; model?: string; runtime?: string; milestone?: boolean } = {}) => ({
+    prefs: { experiments: o.experiments ?? ['routing'] },
+    board: { ...NO_BOARD, issues: [issue] },
+    plans: { plans: o.milestone ? [{ status: 'active', body: {}, runs: { m1: { agent: { worktree: 'w1' } } } } as unknown as Plan] : [] },
+    projects: [{ workspaces: [{ id: 'w1', ...(o.model ? { model: o.model } : {}), ...(o.runtime ? { agent: { runtime: o.runtime, label: o.runtime } } : {}) }, { id: 'w2' }] }],
+  });
+
+  it('a worktree doing a task, with the experiment on, is routed the way the daemon routes it', () => {
+    expect(conversationRoute(routeState(), 'ws:w1', 'claude')).toMatchObject({ runtime: 'claude', picked: false, route: { size: 'medium' } });
+    expect(conversationRoute(routeState({ model: 'haiku' }), 'ws:w1', 'claude')?.picked).toBe(true);
+    expect(conversationRoute(routeState({ runtime: 'codex' }), 'ws:w1', 'claude')?.runtime).toBe('codex');
+  });
+
+  it('not with the experiment off, without a task, in a plan milestone’s worktree, or on another runtime', () => {
+    expect(conversationRoute(routeState({ experiments: [] }), 'ws:w1', 'claude')).toBeUndefined();
+    expect(conversationRoute(routeState(), 'ws:w2', 'claude')).toBeUndefined();
+    expect(conversationRoute(routeState({ milestone: true }), 'ws:w1', 'claude')).toBeUndefined();
+    expect(conversationRoute(routeState({ runtime: 'copilot' }), 'ws:w1', 'claude')).toBeUndefined();
+    expect(conversationRoute(routeState(), 'room', 'claude')).toBeUndefined();
+  });
+
+  it('names the orchestrator in each runtime’s words, and says who does what', () => {
+    const route = routeTask(task({ estimate: 3 }));
+    expect(routeModelLabel(route, 'claude')).toBe('Opus');
+    expect(routeModelLabel(route, 'codex')).toBe('Frontier');
+    expect(routeSummary(route, 'claude')).toBe('Sized medium from its task: Opus plans and reviews, Sonnet builds, Haiku scouts');
   });
 });
