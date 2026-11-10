@@ -4,7 +4,11 @@ Beluga for Mac updates itself from GitHub Releases, and its engine (the daemon i
 
 ## Klaud is now Beluga
 
-Copies installed as Klaud update to Beluga like any other version: the old release URL redirects to `kayraucklnc/beluga`, so they find the Beluga build on their own. After the update, `~/.klaud` moves to `~/.beluga` (with a link back), and old `klaud://` links still open.
+Copies installed as Klaud update to Beluga like any other version: the old release URL redirects to the Beluga repo, so they find the Beluga build on their own. After the update, `~/.klaud` moves to `~/.beluga` (with a link back), and old `klaud://` links still open.
+
+## The repo moved to beluga-labs
+
+The repo moved from `kayraucklnc/beluga` to `beluga-labs/beluga`. Copies built before the move still read `https://github.com/kayraucklnc/beluga/releases/latest/download/latest.json`, and GitHub redirects that to the new repo, so they keep updating. The redirect only lasts while nothing takes the old name: never create a repo called `beluga` under `kayraucklnc`, and never rename or delete that account. The app id `io.github.kayraucklnc.beluga` stays as it is, since changing it would orphan installed apps' data, notification permissions and background service.
 
 ## What you see
 
@@ -31,7 +35,7 @@ Copies installed as Klaud update to Beluga like any other version: the old relea
 
 The Android app updates itself from the same releases (BLG-426, `packages/companion/lib/update.ts`, `modules/app-update`).
 
-- **When it looks.** At launch, unless it looked less than an hour ago, and every 4 hours while the app is open (an hour after a failed look). It reads `https://api.github.com/repos/kayraucklnc/beluga/releases/latest` and takes the asset named `Beluga-<version>.apk`. When that version is newer than the installed one, it has found an update.
+- **When it looks.** At launch, unless it looked less than an hour ago, and every 4 hours while the app is open (an hour after a failed look). It reads `https://api.github.com/repos/beluga-labs/beluga/releases/latest` and takes the asset named `Beluga-<version>.apk`. When that version is newer than the installed one, it has found an update.
 - **Downloading.** On Wi-Fi the update downloads by itself, as on the Mac. On mobile data it waits until you tap Update Now, and the sheet says how many MB it is. The file is kept in the app's cache and checked before it's used. Its size and SHA-256 must match the release (GitHub's `digest`), and it must be Beluga (`sh.ratel.beluga`) with a higher `versionCode` than the installed app. A file that fails these checks is deleted.
 - **What you see.** Under Home's greeting, a small pill says "Beluga 1.8.0 is ready" ("is out" while it isn't downloaded yet). Tapping it opens a sheet with the release notes, **Update Now** and **Later**. Settings has the same thing as a row on top while there's an update.
 - **Installing.** Update Now hands the APK to Android's `PackageInstaller`. Beluga closes as the new version goes in, and on the next launch it says "Updated to Beluga X" once.
@@ -121,7 +125,7 @@ npm run release -- --notes ../../notes.md --dry-run   # build and write latest.j
 npm run release -- --notes ../../notes.md       # build, then gh release create … --latest
 ```
 
-Installed copies read `https://github.com/kayraucklnc/beluga/releases/latest/download/latest.json`. The release marked *latest* must therefore carry `latest.json`.
+Installed copies read `https://github.com/beluga-labs/beluga/releases/latest/download/latest.json`. The release marked *latest* must therefore carry `latest.json`.
 
 The script ([scripts/release-mac.mjs](../scripts/release-mac.mjs)) does the following:
 

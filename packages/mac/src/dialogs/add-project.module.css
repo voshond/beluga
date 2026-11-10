@@ -237,3 +237,15 @@
   flex: 0 1 200px;
   max-height: 200px;
 }
+
+/* A button's words stacked in one cell: as wide as the widest, whichever shows. */
+.steady {
+  display: inline-grid;
+}
+.steady > span {
+  grid-area: 1 / 1;
+  text-align: center;
+}
+.steadyOff {
+  visibility: hidden;
+}

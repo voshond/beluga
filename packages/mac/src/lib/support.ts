@@ -7,7 +7,7 @@ import type { SupportAsk } from '@beluga/core/support-store.js';
  * `support`, core/support-store.ts); these are the same sheets, any time, asking nothing back.
  */
 
-export const GITHUB_URL = 'https://github.com/kayraucklnc/beluga';
+export const GITHUB_URL = 'https://github.com/beluga-labs/beluga';
 
 /** Who makes Beluga, shown as a GitHub chip (the avatar ships with the app: the window loads no remote images). */
 export const MAINTAINER = { login: 'kayraucklnc', url: 'https://github.com/kayraucklnc' } as const;
