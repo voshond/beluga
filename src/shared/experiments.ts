@@ -4,7 +4,7 @@
  * that explains each one). Browser-safe: data only.
  */
 
-export const EXPERIMENTS = ['previews'] as const;
+export const EXPERIMENTS = ['previews', 'routing'] as const;
 export type Experiment = (typeof EXPERIMENTS)[number];
 
 export interface ExperimentInfo {
@@ -34,6 +34,19 @@ export const EXPERIMENT_INFO: Readonly<Record<Experiment, ExperimentInfo>> = {
     ],
     keywords: 'preview component react render storybook page html props live',
     cost: 'Each preview is built on this computer when it scrolls into view, which takes a moment of CPU and some memory. Beluga lets it go when you look away, and while this is off nothing of it runs at all.',
+  },
+  routing: {
+    id: 'routing',
+    title: 'Routed task runs',
+    summary: 'Each task’s agent picks its model from the task’s size and orchestrates: it plans and reviews, and hands the legwork to smaller models.',
+    changes: [
+      'A task’s agent is sized from its estimate, acceptance criteria and labels: small tasks run on Sonnet, bigger ones on Opus.',
+      'It cuts the task into steps and hands them to helpers on smaller models: a scout reads the code, a builder makes a step, a checker runs the checks against the criteria.',
+      'It keeps what needs judgment for itself: design decisions, questions for you, the task board and the commit.',
+      'A model you picked for the conversation or the agent always wins, and only agents that run on Claude Code are routed. Plan milestones keep their own head agent and checkers.',
+    ],
+    keywords: 'model routing orchestrator auto model haiku sonnet opus subagents cost workers',
+    cost: 'Nothing extra runs on this computer: the same Claude Code runs the helpers. Most of the work moves to smaller models, so a task usually uses less of your plan, though a big task’s orchestrator runs on Opus.',
   },
 };
 

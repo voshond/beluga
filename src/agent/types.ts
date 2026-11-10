@@ -10,6 +10,19 @@ import type { ArgsRuntime } from '../shared/agent-args.js';
 /** How far a request may reach on the owner's computer. */
 export type AccessScope = 'folder' | 'full';
 
+export type RunSubagent = {
+  readonly description: string;
+  readonly prompt: string;
+  readonly model: string;
+  readonly effort?: Effort;
+  readonly disallowedTools?: readonly string[];
+};
+
+export type RunRouting = {
+  readonly brief: string;
+  readonly agents: Readonly<Record<string, RunSubagent>>;
+};
+
 export interface AgentRunInput {
   readonly prompt: string;
   /** Instructions for the agent's own terminal (BLG-534), not a turn: visuals as tokens, no fences (agent/terminal-prompt.ts). */
@@ -125,6 +138,7 @@ export interface AgentRunInput {
   /** A plan (Plans): its tools for this run (its home conversation), and what Claude is told about it. */
   readonly planTools?: PlanTools;
   readonly planBrief?: string;
+  readonly routing?: RunRouting;
   /** "Your Mac" (core/assistant): its tools (the screen, device info, starting work) and what Claude is told it is. */
   readonly macTools?: MacTools;
   readonly macBrief?: string;
