@@ -917,7 +917,10 @@ mod tests {
             let (prompts, opened) = (prompts.clone(), opened.clone());
             tokio::spawn(async move {
                 prompts
-                    .ask(prompt(id), Instant::now() + Duration::from_secs(secs), |w| Ok(opened.lock().unwrap().push(w.to_string())), |_| ())
+                    .ask(prompt(id), Instant::now() + Duration::from_secs(secs), |w| {
+                        opened.lock().unwrap().push(w.to_string());
+                        Ok(())
+                    }, |_| ())
                     .await
             })
         };

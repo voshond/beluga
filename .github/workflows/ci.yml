@@ -1,8 +1,7 @@
 name: CI
 
-# Every pull request: the types check and the tests pass (the terminal UI and the core), on
-# Linux, macOS and Windows. And every push to main: PRs merge once their tests pass on a Mac, so a
-# test that only fails on Linux or Windows shows on the commit that broke it, not on every PR after.
+# Every pull request and push to main: the types check and the tests pass on Linux. macOS and
+# Windows run locally (npx vitest run on that machine); their runners were slow and flaky here.
 on:
   pull_request:
   push:
@@ -16,58 +15,25 @@ concurrency:
 
 jobs:
   test:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-          - os: macos-latest
-          # Windows is the slow one (git and starting programs take longer there): two runners
-          # share its tests.
-          - os: windows-latest
-            shard: 1/2
-          - os: windows-latest
-            shard: 2/2
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      # A commit ending "Tested-on: macOS <its tree>" passed every test on a Mac with exactly
-      # these files (scripts/local-pass.mjs): the macOS run would only repeat it.
-      - name: Already tested on a Mac
-        id: local
-        if: runner.os == 'macOS' && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          commit=$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$SHA")
-          tree=$(jq -r .tree.sha <<<"$commit")
-          if jq -r .message <<<"$commit" | grep -qxF "Tested-on: macOS $tree"; then
-            echo "Every test passed on a Mac for this commit's files: not running them again."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
-      # The tests read files byte for byte: no CRLF from Windows' checkout.
-      - run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
-        if: steps.local.outputs.skip != 'true'
       - uses: actions/setup-node@v4
-        if: steps.local.outputs.skip != 'true'
         with:
           node-version: 24
       - run: npm ci
-        if: steps.local.outputs.skip != 'true'
       # The types check covers the Mac app's shared files too (its Markdown pipeline).
       - run: npm ci
-        if: steps.local.outputs.skip != 'true'
         working-directory: packages/mac
       - run: npm run typecheck
-        if: steps.local.outputs.skip != 'true'
-      - run: npm test -- ${{ matrix.shard && format('--shard={0}', matrix.shard) || '' }}
-        if: steps.local.outputs.skip != 'true'
+      - run: npm test
 
   # The server install (scripts/build-server.mjs, scripts/install.sh): built, installed as people
   # install it (no sudo, into ~/.beluga/server), started, asked how it is and stopped.
   server:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

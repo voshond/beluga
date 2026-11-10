@@ -85,8 +85,7 @@ longer timeout alone only makes it fail less often.
 
 `npm run typecheck`, `npx vitest run`, and in `packages/companion`: `npm run typecheck`.
 
-Run the whole `npx vitest run` after your last change, before you commit. When every test passes on
-a Mac it ends with a `Tested-on: macOS <tree>` line. Put that line, as it is, at the end of the
-commit message, and commit every file it tested (nothing changed since the run). CI then skips its
-macOS run for that commit (`scripts/local-pass.mjs`), and Linux and Windows still run there. No line
-(a failure, part of the suite, a file changed during the run) means don't add one.
+Run the whole `npx vitest run` after your last change, before you commit. CI only runs the tests on
+Linux; macOS and Windows are checked locally. The Mac app's e2e (`npm run e2e` in `packages/mac`)
+and the Rust shell (`cargo clippy` and `cargo test` in `packages/mac/src-tauri`) run locally too, or
+by hand from Actions (`mac.yml`, `desktop.yml`).

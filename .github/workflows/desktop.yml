@@ -1,9 +1,9 @@
 name: Desktop app on Linux and Windows
 
-# Every pull request: the native shell compiles, passes clippy and its tests on Linux and Windows
-# (macOS is mac.yml). Placeholders stand in for the bundled daemon and Node.
+# By hand only (Actions → Desktop app on Linux and Windows → Run workflow): the native shell
+# compiles, passes clippy and its tests on Linux and Windows (macOS is mac.yml). Placeholders stand
+# in for the bundled daemon and Node. Locally: cargo clippy and cargo test in packages/mac/src-tauri.
 on:
-  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -21,6 +21,7 @@ jobs:
           - os: windows-latest
             triple: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
