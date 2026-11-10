@@ -397,7 +397,7 @@ function AgentPane() {
   const p = state.prefs;
   const runtime = myRuntime(p);
   const model = myModel(p);
-  const choices = agentChoices(state.runtimes, state.models);
+  const choices = agentChoices(state.runtimes, state.models, model ? [model] : []);
   // A model its runtime doesn't list (yet) takes every level.
   const efforts = new Set<string>(modelInfo(state, runtime, model)?.efforts ?? EFFORTS);
   const effortOptions = EFFORTS.filter((e) => efforts.has(e) || e === p.effort);

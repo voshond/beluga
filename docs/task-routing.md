@@ -119,7 +119,15 @@ The daemon and the screens decide with one rule (`routableRuntime`, `conversatio
   for the conversation; picking Auto (the old Default, `setModel('')`) turns it back on. The Thinking
   track keeps your saved effort; its line says what Auto picked for this task.
 - **The model sheet** (native) and **the task page's Agent** say the same.
-- Not changed: the phone (no phone work in BLG-82) and the terminal UI's `/model` menu.
+- **Picking a model yourself** stays: every model is still in the list, and picking one turns Auto
+  off for that conversation.
+- **The newest of each family only** (`src/shared/model-families.ts`, `latestModels`): Claude
+  Code lists old versions too (Opus 4.6 to 5.5, Haiku 4.5 and 5.5, three Fables); the pickers show
+  one row per family, its newest version, plus the model a conversation has picked when it's an
+  older one (its row stays the checked one). Codex likewise (the newest Sol, Terra, Astra, Luna).
+  Cleaned where it's shown (`agentPicker`, `agentChoices`), never in the daemon's lists, so an older
+  model still runs when asked for by name. The phone reads `agentPicker` too, so its list is shorter.
+- Not changed: the phone's chip (no phone work in BLG-82).
 
 ## 4a. Codex
 

@@ -99,7 +99,7 @@ export function ProjectSettingsSheet({ menu, close }: NativeMenuProps<'scripts'>
         <TextInput id="script-run" value={values.run} onChange={(v) => (setTouched(true), setValues({ ...values, run: v }))} mono placeholder="npm run dev" />
       </Field>
       <Field label="Agent" htmlFor="project-agent" hint="Runs this project's new conversations and answers when friends write @you about it.">
-        <Popup id="project-agent" value={agent} onChange={setAgent} options={[{ value: '~', label: `Same as yours (${agentName(mine)})`, icon: agentMark(mine) }, ...agentEntries(agentChoices(runtimes, models))]} />
+        <Popup id="project-agent" value={agent} onChange={setAgent} options={[{ value: '~', label: `Same as yours (${agentName(mine)})`, icon: agentMark(mine) }, ...agentEntries(agentChoices(runtimes, models, agent === '~' ? [] : [agentForChoice(agent).model ?? '']))]} />
       </Field>
       <Field label="">
         <Checkbox checked={auto} onChange={setAuto} label="Run setup in new worktrees" detail="For every project; in its Terminal tab" />
