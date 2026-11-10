@@ -86,6 +86,7 @@ export const STEP_ICON: Readonly<Record<StepKind, IconName>> = {
   friend: 'people',
   trigger: 'play',
   measure: 'gauge',
+  tool: 'wrench',
 };
 
 // ---------------------------------------------------------------- times
@@ -626,6 +627,8 @@ export function newStep(kind: StepKind): StepDraft {
       return { kind: 'trigger', name: 'Run another sentinel', sentinelId: '' };
     case 'measure':
       return { kind: 'measure', name: 'Keep the numbers', from: 'previous', metrics: [] };
+    case 'tool':
+      return { kind: 'tool', name: 'Run a Toolbox tool', toolName: '', timeoutSec: 120 };
   }
 }
 

@@ -5,6 +5,7 @@ import type { Status } from './git.js';
 import type { ForkOf } from './github.js';
 import type { DefaultBranch, FetchProblem } from './sync.js';
 import type { ProjectScripts, ResolvedScripts } from './scripts.js';
+import type { Tool } from './toolbox.js';
 
 /** Claude usage in one workspace, summed over every run. */
 export interface WorkspaceUsage {
@@ -234,4 +235,10 @@ export interface ProjectsConfig {
   readonly approvedScripts?: Readonly<Record<string, readonly string[]>>;
   /** Projects you moved (Move Project): their new real root → the id they had, so tasks, history and worktrees stay theirs. */
   readonly ids?: Readonly<Record<string, string>>;
+  /** Personal Toolbox tools per project root (source: 'personal'). Team tools live in beluga.json. */
+  readonly toolbox?: Readonly<Record<string, readonly Tool[]>>;
+  /** Tool commands from beluga.json you allowed to run (by root → command hashes), same pattern as approvedScripts. */
+  readonly approvedTools?: Readonly<Record<string, readonly string[]>>;
+  /** Dismissed detection signature ids per project root (not offered again). */
+  readonly toolboxDismissed?: Readonly<Record<string, readonly string[]>>;
 }

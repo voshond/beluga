@@ -24,6 +24,7 @@ import {
   type Sentinel,
   type Step,
   type StepRun,
+  type ToolStep,
   type TriggerStep,
   APPROVAL_MS,
   SCRIPT_LANGUAGE_INFO,
@@ -221,6 +222,8 @@ export interface RunnerDeps {
   readonly efforts?: (agent: AgentRef | undefined) => readonly string[] | undefined;
   /** Keep a run's numbers (the files, the state, the first dashboard) → their names as kept. */
   readonly keep?: (active: ActiveRun, measured: readonly Measured[]) => void;
+  /** Run a Toolbox tool (BLG-75) by name in a project → {exitCode, output}. Undefined in tests/fakes. */
+  readonly toolboxRun?: (projectId: string, toolName: string, params: Readonly<Record<string, string>>, signal: AbortSignal, timeoutMs: number) => Promise<ShellResult>;
 }
 
 /**
@@ -473,6 +476,8 @@ export class SentinelRunner {
         return Promise.resolve(this.triggerStep(active, step, outputs));
       case 'measure':
         return this.measureStep(active, step, outputs);
+      case 'tool':
+        return this.toolStep(active, step, outputs);
       default:
         return Promise.resolve({ kind: 'failed', why: `${STEP_INFO[(step as Step).kind].label} isn’t available yet (step ${index + 1})` });
     }
@@ -1004,6 +1009,20 @@ export class SentinelRunner {
     } finally {
       this.deps.folders.remove(runId);
     }
+  }
+
+  private async toolStep(active: ActiveRun, step: ToolStep, outputs: Outputs): Promise<StepEnd> {
+    if (!this.deps.toolboxRun) return { kind: 'failed', why: 'Toolbox is not available in this runner.' };
+    if (!step.toolName) return { kind: 'failed', why: 'A tool step needs a tool name (pick one in the step editor).' };
+    const sentinel = active.sentinel;
+    if (!sentinel.projectId) return { kind: 'failed', why: 'A tool step needs a project (set one on the sentinel).' };
+    const ctx = this.context(active, outputs);
+    const params: Record<string, string> = {};
+    for (const [k, v] of Object.entries(step.params ?? {})) params[k] = render(v, ctx);
+    const timeoutMs = (step.timeoutSec ?? 120) * 1000;
+    const result = await this.deps.toolboxRun(sentinel.projectId, step.toolName, params, active.abort.signal, timeoutMs);
+    if (result.exitCode !== 0) return { kind: 'failed', why: `Tool "${step.toolName}" exited ${result.exitCode ?? 'unknown'}:\n${result.output.slice(-500)}` };
+    return { kind: 'done', output: result.output };
   }
 
   private notifyStep(active: ActiveRun, step: NotifyStep, outputs: Outputs): StepEnd {

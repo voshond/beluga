@@ -22,6 +22,7 @@ const NODE_TYPE: Readonly<Record<StepKind, GraphNode['type']>> = {
   friend: 'person',
   trigger: 'service',
   measure: 'metric',
+  tool: 'task',
 };
 
 const STATE: Readonly<Record<StepState, GraphStatus>> = { waiting: 'todo', running: 'active', done: 'done', failed: 'failed', skipped: 'idle' };

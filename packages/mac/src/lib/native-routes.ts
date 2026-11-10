@@ -134,6 +134,11 @@ export function routeOption(ctx: RouteContext, menu: MenuKind, id: string): bool
     case 's-run':
       if (menu.kind === 'scripts') ui.openMenu(menu);
       return true;
+    case 'p-toolbox': {
+      const p = menu.kind === 'project' ? state.projects.find((x) => x.id === menu.id) : undefined;
+      if (p?.root) ui.openMenu({ kind: 'toolbox', projectId: p.id, projectRoot: p.root });
+      return Boolean(p?.root);
+    }
     case 'env-add':
       openSettings(ui, 'environment');
       return true;

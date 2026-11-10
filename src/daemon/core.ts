@@ -44,6 +44,8 @@ import { PeerClient } from '../net/peer-client.js';
 import { closeAllTunnels, offersDirect, openTunnel, waitUntilReachable } from '../net/tunnel.js';
 import { TerminalManager } from '../terminal/index.js';
 import { WorkspaceManager } from '../workspaces/manager.js';
+import { attachToolbox } from '../core/toolbox/registry.js';
+import { ToolboxService } from '../core/toolbox/service.js';
 import { belugaHome } from '../workspaces/store.js';
 import { belugaEnv } from '../core/beluga-env.js';
 import { loadDismissedNeeds } from '../core/dismissed-needs.js';
@@ -400,6 +402,8 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     if (opts.network) stopDialogues = launchDialogues({ session, store, demo: Boolean(demo) });
     // Sentinel: watchers that run on a schedule or by hand, do a few steps and leave a report (docs/sentinel.md).
     if (opts.network) stopSentinel = launchSentinel({ session, store, demo: Boolean(demo) });
+    // Toolbox: named commands saved per-project, run without an agent (BLG-75).
+    attachToolbox(session, new ToolboxService({ store: workspaces.store, workbench: session.workbench }));
     // A run that stopped on your usage limit is told to continue once the limit resets (shared/auto-continue.ts).
     if (opts.network) {
       // A child thread (core/threads) a stop reached is not sent on; one it sends on owes that turn to its parent.

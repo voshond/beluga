@@ -130,6 +130,8 @@ export interface AgentRunInput {
   /** Your own runs: sentinels (core/sentinel), and what Claude is told (a sentinel run's brief, or a short note). */
   readonly sentinelTools?: SentinelTools;
   readonly sentinelBrief?: string;
+  /** Your own runs: project Toolbox tools (BLG-75): list, run and propose named commands. */
+  readonly toolboxTools?: ToolboxTools;
   /** Your own runs: dashboards and the numbers sentinels keep (server `beluga_dashboard`; sentinel_measure inside a run). */
   readonly dashboardTools?: DashboardTools;
   /** Your own runs: the notes of calls you were in (core/calls, BLG-715), to look up, never pasted in. */
@@ -652,4 +654,11 @@ export interface CallNotesTools {
   search(query: string, call?: string, limit?: number): string;
   /** A page of one call, from a turn (`from`) or a time into it (`at`: "12:30", or minutes). */
   read(call: string, opts?: { readonly from?: number; readonly at?: string | number; readonly limit?: number }): string;
+}
+
+/** Project Toolbox as agent tools (agent/toolbox-tools.ts, server `beluga_tools`, BLG-75). */
+export interface ToolboxTools {
+  list(projectRoot?: string): string;
+  run(nameOrId: string, params?: Readonly<Record<string, string>>, projectRoot?: string): string | Promise<string>;
+  propose(draft: { name: string; command: string; params?: Array<{ name: string; kind: 'host' | 'text' }>; projectRoot?: string }): string | Promise<string>;
 }

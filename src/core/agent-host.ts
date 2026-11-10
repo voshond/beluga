@@ -84,6 +84,10 @@ export interface AgentHostDeps {
   readonly confirmTool?: (toolName: string, input: Record<string, unknown>) => { readonly title: string; readonly detail: string } | undefined;
   /** Sentinels (your own runs): their tools, and a sentinel run's brief in its Claude step's conversation (core/sentinel). */
   readonly sentinel?: (channel: string, from: string) => { readonly tools: import('../agent/types.js').SentinelTools; readonly dashboard?: import('../agent/types.js').DashboardTools; readonly brief: string; readonly inRun: boolean } | undefined;
+  /** Project Toolbox (your own runs): the agent's list/run/propose tools for the project in `channel` (BLG-75). */
+  readonly toolbox?: (channel: string) => import('../agent/types.js').ToolboxTools | undefined;
+  /** Called when Claude runs a Bash command in a worktree: records it for Toolbox detection (BLG-75). */
+  readonly onBashCommand?: (projectRoot: string, command: string) => void;
   /** A plan's home conversation (your own runs): its plan tools and what Claude is told about the plan (core/plans); `said` is what this run was asked. */
   readonly plans?: (channel: string, from: string, said?: string) => { readonly tools?: import('../agent/types.js').PlanTools; readonly brief?: string; readonly checker?: boolean } | undefined;
   /** Child threads (core/threads): their tools, bound to this chat. Your own runs only, with the flag on (see runAgent). */
@@ -1285,6 +1289,7 @@ export class AgentHost {
       const planFirst = body.plan && !plans?.tools;
       // Sentinels (your own runs): a sentinel run's Claude step gets its brief, and the task tools (it makes tasks).
       const sentinel = from === this.selfId && !place?.syncMain ? this.deps.sentinel?.(body.channel, from) : undefined;
+      const toolboxTools = from === this.selfId ? this.deps.toolbox?.(body.channel) : undefined;
       const noBoard = place?.syncMain || (place?.askOnly && plans?.checker && !sentinel?.inRun);
       // A friend's run gets its repo's board too, as their trust allows (BLG-701; see boardAccess).
       const friendBoard = from === this.selfId ? undefined : this.boardAccess(from);
@@ -1338,6 +1343,7 @@ export class AgentHost {
         ...(callNotes ? { callNotesTools: callNotes } : {}),
         ...(previewBrief ? { previewBrief } : {}),
         ...(sentinel ? { sentinelTools: sentinel.tools, sentinelBrief: sentinel.brief, ...(sentinel.dashboard ? { dashboardTools: sentinel.dashboard } : {}) } : {}),
+        ...(toolboxTools ? { toolboxTools } : {}),
         prompt: this.promptOf(body, lane.sent),
         ...this.promptIdOf(body),
         requesterName,
@@ -1357,6 +1363,9 @@ export class AgentHost {
           if (worktree && record.tool === 'Bash' && mayLeaveProcesses(record.input?.command, record.input?.run_in_background)) {
             this.testRuns.add(worktree);
             if (keepsRunning(record.input?.command)) kept.add(String(record.input?.command).slice(0, 120));
+          }
+          if (worktree && record.tool === 'Bash' && typeof record.input?.command === 'string' && from === this.selfId) {
+            this.deps.onBashCommand?.(worktree, record.input.command);
           }
           this.steps.put(runKey(body.requestId), record);
         },

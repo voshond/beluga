@@ -718,6 +718,17 @@ export const PHONE: Record<Method, Side> = {
   'sentinel.chatOpen': 'mac',
   'sentinel.chatClear': 'mac',
   'sentinel.chatDelete': 'mac',
+
+  // ---- project Toolbox (BLG-75): the phone lists tools and can run them; create/edit/delete are Mac-only
+  'toolbox.list': 'phone',
+  'toolbox.create': 'mac',
+  'toolbox.update': 'mac',
+  'toolbox.delete': 'mac',
+  'toolbox.run': 'phone',
+  'toolbox.approve': 'mac',
+  'toolbox.sshHosts': 'mac',
+  'toolbox.dismissSuggestion': 'mac',
+  'toolbox.acceptProposal': 'mac',
 };
 
 /** A method the phone may call (unknown names are not). */

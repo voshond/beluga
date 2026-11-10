@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { belugaEnvBoth } from '../core/beluga-env.js';
+import { ToolSchema } from './toolbox.js';
 
 /** Commands a project runs in its workspaces: `setup` once per new worktree, `run` on demand. */
 export interface ProjectScripts {
@@ -34,6 +35,8 @@ const Command = z.string().trim().min(1).max(2000);
 export const ProjectFile = z.object({
   scripts: z.object({ setup: Command.optional(), run: Command.optional() }).partial().default({}),
   prPrompt: z.string().max(8000).optional(),
+  /** Team Toolbox tools committed in this repo (source: 'team'). */
+  tools: z.array(ToolSchema).max(50).optional(),
 });
 export type ProjectFile = z.infer<typeof ProjectFile>;
 

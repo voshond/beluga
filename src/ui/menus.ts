@@ -48,7 +48,9 @@ export type MenuKind =
   | { readonly kind: 'clear'; readonly channel: string; readonly host: boolean }
   | { readonly kind: 'invite_person'; readonly peerId: string }
   | { readonly kind: 'share_folder'; readonly launchDir: string; readonly mine: ReadonlyArray<{ name: string; root?: string; private?: boolean; allowed?: readonly string[] }> }
-  | { readonly kind: 'share_who'; readonly dir: string };
+  | { readonly kind: 'share_who'; readonly dir: string }
+  /** Project Toolbox: manage named commands for a project (BLG-75). */
+  | { readonly kind: 'toolbox'; readonly projectId: string; readonly projectRoot: string };
 
 /** The ⋯ menu on a project: start work, organize into groups, hide, open in Finder (File Explorer, Files). */
 export function projectMenu(state: AppState, id: string): MenuSpec | undefined {
@@ -65,6 +67,7 @@ export function projectMenu(state: AppState, id: string): MenuSpec | undefined {
       { id: 'p-chat', label: 'New chat', hint: "a new one each time, in the project's main folder" },
       ...(p.root ? [{ id: 'p-invite', label: 'Invite someone to this project…', hint: 'a link: they watch, prompt or edit here' }] : []),
       { id: 'p-scripts', label: 'Setup and run commands…', hint: p.scripts?.setup ? `setup: ${p.scripts.setup.command}` : 'none yet' },
+      { id: 'p-toolbox', label: 'Toolbox…', hint: 'Named commands you can run without an agent' },
       { id: 'p-finder', label: `Open in ${FILE_MANAGER}`, hint: '' },
       ...otherGroups.map((g) => ({ id: `p-group:${g.name}`, label: `Move to "${g.name}"`, hint: 'group' })),
       { id: 'p-newgroup', label: 'Move to a new group…', hint: 'type a name' },

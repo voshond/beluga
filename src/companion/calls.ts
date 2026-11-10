@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { API, type Method } from '../ipc/api.js';
 import { DEVICE_CAPS, DEVICE_OS } from '../shared/devices.js';
+import { ToolSchema } from '../workspaces/toolbox.js';
 import { ChatMessageView, DataListView, DocumentView, FilePageView, FolderView, FoundView, MergeCheckView, MergeView, SignedLinkView, SubAgentDetailView, TerminalView, TerminalsView, TranscriptView, TurnView, VoiceMacView } from './protocol.js';
 
 /**
@@ -202,6 +203,9 @@ export const PhoneCalls = {
   // 1.29 (BLG-392): what a sentinel keeps, its files and histories as refs; a run's file opened on the Mac.
   'sentinel.dataList': entry('sentinel.dataList', DataListView),
   'sentinel.runFileOpen': entry('sentinel.runFileOpen', done),
+  // BLG-75: Toolbox — list and run named commands without an agent.
+  'toolbox.list': entry('toolbox.list', z.array(ToolSchema)),
+  'toolbox.run': entry('toolbox.run', z.string()),
 } as const;
 
 export type PhoneMethod = keyof typeof PhoneCalls;
