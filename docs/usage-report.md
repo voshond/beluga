@@ -4,20 +4,34 @@ A script that adds up the tokens your agents used, per agent, split by provider 
 
 ## Where the numbers come from
 
-It reads Claude Code's own transcripts: every `*.jsonl` file under `$CLAUDE_CONFIG_DIR/projects`, or `~/.claude/projects` if that isn't set. Those files record the model and the token counts of every reply.
+Two sources, both read from disk:
+
+- Claude Code transcripts: every `*.jsonl` file under `$CLAUDE_CONFIG_DIR/projects`, or `~/.claude/projects` if that isn't set. Those files record the model and the token counts of every reply.
+- Codex sessions: every `*.jsonl` file (Codex names them `rollout-*.jsonl`) under `$CODEX_HOME/sessions`, or `~/.codex/sessions` (laid out as `YYYY/MM/DD/`).
 
 Beluga's own `stats.json` isn't used. It keeps tokens per runtime and workspace, but not the model, so it can't split them by model.
 
-Other runtimes (Codex, OpenCode) aren't read yet.
+OpenCode isn't read yet.
+
+### How Codex tokens are mapped
+
+OpenAI counts cached input inside `input_tokens`. So the report moves it out: Input = `input_tokens` - `cached_input_tokens` - `cache_write_input_tokens`, Cache read = `cached_input_tokens`, Cache write = `cache_write_input_tokens`, Output = `output_tokens`. The total then equals Codex's own `total_tokens`.
+
+- The first `session_meta` line gives the thread: its `cwd` is the agent, its `model_provider` the provider. Each `token_usage_record` becomes one message, with the model of its turn (from `turn_context`). Records of another thread and repeated `response_id`s are skipped or counted once.
+- A sub-agent rollout has a `source` with a `subagent` key (main threads have `exec` or `cli`). It is listed as `<cwd> (sub-agents)` with its own model. It also embeds its parent's `session_meta` later in the file; that one is ignored.
+- Older rollouts have no `token_usage_record` lines. For those, the running `token_count` totals are diffed (a repeated total adds nothing) and attributed to the latest `turn_context` model.
 
 ## Running it
 
 ```bash
-npx tsx scripts/usage-summary.ts                    # the default transcripts folder
-npx tsx scripts/usage-summary.ts --dir ./transcripts  # another folder
-npx tsx scripts/usage-summary.ts --json             # JSON instead of a table
-npx tsx scripts/usage-summary.ts --help             # the options
+npx tsx scripts/usage-summary.ts                              # both default folders
+npx tsx scripts/usage-summary.ts --claude-dir ./transcripts   # only this Claude Code folder
+npx tsx scripts/usage-summary.ts --codex-dir ./sessions       # only this Codex folder
+npx tsx scripts/usage-summary.ts --json                       # JSON instead of a table
+npx tsx scripts/usage-summary.ts --help                       # the options
 ```
+
+With no folder flag it reads both defaults. Naming either flag reads only the folders named. It exits with an error if a flag has no value, a folder is missing, or no logs are found at all.
 
 Example output (two worktrees, one of them with sub-agents):
 
@@ -55,13 +69,14 @@ All agents
 
 An agent is a session's working folder. For Beluga that is a worktree, so each task's usage lands on its own line. Sub-agents that a session starts are listed separately as `<folder> (sub-agents)`.
 
-If a line has no folder, the project folder name under the transcripts folder is used instead.
+If a line has no folder, the project folder name under the transcripts folder (or the rollout file name for Codex) is used instead.
 
 ## How totals are counted
 
 - Claude Code writes one line per content block, so one reply can appear two or three times. Lines with the same message id are counted once, using the largest count of each kind. If the same id shows up under two agents, it goes to the one that sorts first, so file order never matters.
 - Total = input + output + cache read + cache write.
 - Cache reads are usually most of the total, since every turn re-reads the conversation so far.
+- Codex counting is described above.
 - Synthetic messages, user messages and lines that aren't JSON are skipped.
 
 ## Why it is deterministic

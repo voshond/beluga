@@ -37,6 +37,8 @@ export type UsageSummary = TokenCounts & {
 
 const ZERO_COUNTS: TokenCounts = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
+const SUB_AGENTS = ' (sub-agents)';
+
 const count = z.number().finite().nonnegative().catch(0).default(0);
 
 const TranscriptLine = z.object({
@@ -58,6 +60,34 @@ const TranscriptLine = z.object({
     })
     .optional(),
 });
+
+const CodexTokens = z.object({
+  input_tokens: count,
+  cached_input_tokens: count,
+  cache_write_input_tokens: count,
+  output_tokens: count,
+});
+
+const CodexLine = z.object({
+  type: z.string().optional(),
+  payload: z
+    .object({
+      type: z.string().optional(),
+      id: z.string().optional(),
+      cwd: z.string().optional(),
+      model: z.string().optional(),
+      model_provider: z.string().optional(),
+      turn_id: z.string().optional(),
+      thread_id: z.string().optional(),
+      response_id: z.string().optional(),
+      source: z.union([z.string(), z.object({ subagent: z.object({}).optional() })]).optional().catch(undefined),
+      usage: CodexTokens.optional(),
+      info: z.object({ total_token_usage: CodexTokens.optional() }).nullable().optional(),
+    })
+    .optional(),
+});
+
+type CodexTokenUsage = z.infer<typeof CodexTokens>;
 
 const MODEL_PROVIDERS: readonly (readonly [RegExp, string])[] = [
   [/^(claude|anthropic)/i, 'anthropic'],
@@ -94,27 +124,26 @@ export const providerOfModel = (model: string): string => {
   return match ? match[1] : 'unknown';
 };
 
-const parseLine = (line: string): ReturnType<typeof TranscriptLine.safeParse> | undefined => {
-  try {
-    return TranscriptLine.safeParse(JSON.parse(line));
-  } catch {
-    return undefined;
-  }
-};
+const parseLines = <T extends z.ZodTypeAny>(text: string, schema: T): z.infer<T>[] =>
+  text.split('\n').flatMap((line) => {
+    if (!line.trim()) return [];
+    try {
+      const parsed = schema.safeParse(JSON.parse(line));
+      return parsed.success ? [parsed.data] : [];
+    } catch {
+      return [];
+    }
+  });
 
 export const recordsFromTranscript = (text: string, fallbackAgent: string): UsageRecord[] => {
   const records: UsageRecord[] = [];
-  for (const line of text.split('\n')) {
-    if (!line.trim()) continue;
-    const parsed = parseLine(line);
-    if (!parsed?.success) continue;
-    const entry = parsed.data;
+  for (const entry of parseLines(text, TranscriptLine)) {
     const message = entry.message;
     if (entry.type !== 'assistant' || !message?.usage || !message.model || message.model === '<synthetic>') continue;
     const base = entry.cwd || fallbackAgent;
     const usage = message.usage;
     records.push({
-      agent: entry.isSidechain ? `${base} (sub-agents)` : base,
+      agent: entry.isSidechain ? `${base}${SUB_AGENTS}` : base,
       provider: providerOfModel(message.model),
       model: message.model,
       input: usage.input_tokens,
@@ -127,9 +156,57 @@ export const recordsFromTranscript = (text: string, fallbackAgent: string): Usag
   return records;
 };
 
+const fromCodexTokens = (u: CodexTokenUsage): TokenCounts => ({
+  input: Math.max(0, u.input_tokens - u.cached_input_tokens - u.cache_write_input_tokens),
+  output: u.output_tokens,
+  cacheRead: u.cached_input_tokens,
+  cacheWrite: u.cache_write_input_tokens,
+});
+
+const minusCounts = (a: TokenCounts, b: TokenCounts): TokenCounts => ({
+  input: Math.max(0, a.input - b.input),
+  output: Math.max(0, a.output - b.output),
+  cacheRead: Math.max(0, a.cacheRead - b.cacheRead),
+  cacheWrite: Math.max(0, a.cacheWrite - b.cacheWrite),
+});
+
+export const recordsFromCodexRollout = (text: string, fallbackAgent: string): UsageRecord[] => {
+  const lines = parseLines(text, CodexLine);
+  const meta = lines.find((l) => l.type === 'session_meta')?.payload;
+  const base = meta?.cwd || fallbackAgent;
+  const agent = typeof meta?.source === 'object' && meta.source.subagent ? `${base}${SUB_AGENTS}` : base;
+  const providerFor = (model: string): string => meta?.model_provider || providerOfModel(model);
+  const modelOfTurn = new Map<string, string>();
+  const records: UsageRecord[] = [];
+  const hasRecords = lines.some((l) => l.type === 'token_usage_record');
+  let model = 'unknown';
+  let lastTotal = ZERO_COUNTS;
+  for (const { type, payload } of lines) {
+    if (!payload) continue;
+    if (type === 'turn_context' && payload.model) {
+      model = payload.model;
+      if (payload.turn_id) modelOfTurn.set(payload.turn_id, payload.model);
+      continue;
+    }
+    if (hasRecords && type === 'token_usage_record' && payload.usage) {
+      if (meta?.id && payload.thread_id && payload.thread_id !== meta.id) continue;
+      const used = (payload.turn_id && modelOfTurn.get(payload.turn_id)) || model;
+      records.push({ agent, provider: providerFor(used), model: used, ...fromCodexTokens(payload.usage), ...(payload.response_id ? { id: payload.response_id } : {}) });
+      continue;
+    }
+    const total = payload.type === 'token_count' ? payload.info?.total_token_usage : undefined;
+    if (hasRecords || !total) continue;
+    const counts = fromCodexTokens(total);
+    const delta = minusCounts(counts, lastTotal);
+    lastTotal = counts;
+    if (sumOf(delta) > 0) records.push({ agent, provider: providerFor(model), model, ...delta });
+  }
+  return records;
+};
+
 const labelOrder = (a: UsageRecord, b: UsageRecord): number => compare(a.agent, b.agent) || compare(a.provider, b.provider) || compare(a.model, b.model);
 
-const dedupe =(records: readonly UsageRecord[]): UsageRecord[] => {
+const dedupe = (records: readonly UsageRecord[]): UsageRecord[] => {
   const byId = new Map<string, UsageRecord>();
   const rest: UsageRecord[] = [];
   for (const record of records) {
