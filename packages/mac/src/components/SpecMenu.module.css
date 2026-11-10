@@ -3,8 +3,10 @@
   z-index: 88;
   min-width: 220px;
   max-width: 380px;
-  max-height: min(70vh, 560px);
+  /* The room Radix measured on the side it opened (a menu low in a short window), else 70vh. */
+  max-height: min(var(--radix-dropdown-menu-content-available-height, var(--radix-context-menu-content-available-height, 70vh)), 560px);
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 5px;
   border-radius: 9px;
   background: color-mix(in srgb, var(--bg-raised) 92%, transparent);

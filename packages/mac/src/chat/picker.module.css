@@ -37,6 +37,9 @@
   flex-direction: column;
   width: min(440px, var(--radix-popover-content-available-width, 440px));
   max-height: min(420px, var(--radix-popover-content-available-height, 420px));
+  /* The panes scroll first; what's left over (a short window, the move choices) scrolls here. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 6px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
