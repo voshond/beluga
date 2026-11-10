@@ -811,6 +811,14 @@ everyone in it (`agent_event`), and so does the owner's own chat. The owner's Ma
 the others (`as`), so people who aren't friends with each other still see it all. Someone who only follows along
 (`view`) reads but can't ask; their Mac refuses, and the owner's would too.
 
+**Your own agent in a friend's worktree.** There, "@claude …" is your agent, not theirs (`core/shared-guest.ts`): it
+runs on your Mac in a folder of its own (`~/.beluga/guest-work`), is told whose worktree it is, and reads it with
+`list_peer_files` / `read_peer_file` (the worktree's share, over the link); it can't change it. Your line goes to everyone
+as any message does, and its turn (`agent_event`, requested by you) goes to the owner, who takes it into the worktree's
+conversation (a contributor's own agent, for their own ask only: `WorkspaceSharing.agentMayWrite`) and passes it on
+(`as`). A plain line, or "@claude:<owner> …", is the owner's agent, as before. In a room-shared worktree it's the same,
+your Mac telling each person directly.
+
 The worktree's header shows each person in it, its owner first, with how they're doing (online, away, offline, "needs
 an update" when their Beluga can't link with yours; someone who isn't your friend isn't known), on the owner's Mac too
 (`core/friend-share-people.ts`). While the owner's Mac is offline the message box says "ata's Mac is offline: your

@@ -37,10 +37,11 @@ const NEWEST = 24;
 
 /**
  * Add projects the Mac way: drop folders on it, choose them in the Open panel, or pick from the
- * git projects already on this Mac (most recently worked on first). Or start a new one.
+ * git projects already on this Mac (most recently worked on first). Or start a new one, or clone
+ * one from its git address.
  */
 export function AddProjectSheet() {
-  const { ui } = useBeluga();
+  const { ui, client } = useBeluga();
   const api = useApi();
   const asked = useUi((u) => u.addProject ?? false);
   const open = asked !== false;
@@ -61,7 +62,7 @@ export function AddProjectSheet() {
 
   useEffect(() => {
     if (!open) return;
-    setMode(asked === 'new' ? 'new' : 'add');
+    setMode(asked === 'new' || asked === 'clone' ? asked : 'add');
     setRows(new Map());
     setRevealed(new Set());
     setFilter('');
@@ -119,16 +120,21 @@ export function AddProjectSheet() {
     const known = new Set(roots.split('\n'));
     const q = filter.trim().toLowerCase();
     const listed = new Set((found ?? []).map((f) => f.path));
-    // Folders you dropped, chose or typed (not among the suggestions) and hidden projects come first.
-    const extra = found ? [...rows.keys(), ...hiddenSet, ...revealed].filter((p, i, all) => !listed.has(p) && all.indexOf(p) === i).map((p): Found => ({ path: p, name: baseName(p) || p, changed: 0 })) : [];
+    // Folders you dropped, chose or typed (not among the suggestions) and hidden projects come first,
+    // even while the suggestions are still being looked for: what you added shows at once.
+    const extra = [...rows.keys(), ...(found ? [...hiddenSet, ...revealed] : [])].filter((p, i, all) => !listed.has(p) && all.indexOf(p) === i).map((p): Found => ({ path: p, name: baseName(p) || p, changed: 0 }));
     const newest = (found ?? []).filter((f, i) => q || i < NEWEST || rows.has(f.path));
     return [...extra, ...newest]
       .filter((f) => !known.has(f.path) || rows.has(f.path) || revealed.has(f.path))
       .filter((f) => !q || f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q));
   }, [found, filter, roots, rows, hiddenSet, revealed]);
 
+  // The folder panel failing says so (it used to do nothing); typing a path below still works.
   const choose = async (): Promise<void> => {
-    const picked = await pickFolders('Add projects');
+    const picked = await pickFolders('Add projects').catch((err: unknown) => {
+      client.store.dispatch({ type: 'toast', text: `Couldn't open the folder picker: ${errorText(err)}. Type the path below instead.`, level: 'error' });
+      return undefined;
+    });
     if (picked) await add(picked);
   };
 
@@ -139,7 +145,7 @@ export function AddProjectSheet() {
         <Dialog.Overlay className={s.overlay} />
         <Dialog.Content className={s.sheet} aria-describedby={undefined} onOpenAutoFocus={(e) => (e.preventDefault(), mode === 'add' && filterBox.current?.focus())}>
           <div className={s.head}>
-            <Dialog.Title className={s.title}>{mode === 'new' ? 'New project' : 'Add projects'}</Dialog.Title>
+            <Dialog.Title className={s.title}>{mode === 'new' ? 'New project' : mode === 'clone' ? 'Clone a project' : 'Add projects'}</Dialog.Title>
             <Dialog.Close className={s.close} aria-label="Close">
               <Icon name="x" size={11} />
             </Dialog.Close>
@@ -153,7 +159,7 @@ export function AddProjectSheet() {
               options={[
                 { value: 'add', label: 'Add existing', icon: 'folder' },
                 { value: 'new', label: 'Start new', icon: 'plus' },
-                { value: 'clone', label: 'GitHub', icon: 'folder' },
+                { value: 'clone', label: 'Clone', icon: 'download' },
               ]}
             />
           </div>
@@ -186,10 +192,8 @@ export function AddProjectSheet() {
                 <input ref={filterBox} className={s.filter} value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter" aria-label={`Filter projects on ${thisComputer()}`} />
               </div>
               <div className={s.list} role="list">
-                {found === undefined ? (
-                  <div className={s.note}>Looking in your code folders…</div>
-                ) : shown.length === 0 ? (
-                  <div className={s.note}>{filter ? `Nothing called “${filter}”.` : 'No other git projects in ~/Projects, ~/Developer, ~/code and the like.'}</div>
+                {shown.length === 0 ? (
+                  <div className={s.note}>{found === undefined ? 'Looking in your code folders…' : filter ? `Nothing called “${filter}”.` : 'No other git projects in ~/Projects, ~/Developer, ~/code and the like.'}</div>
                 ) : (
                   shown.map((f) => {
                     const row = rows.get(f.path);
@@ -237,6 +241,7 @@ export function AddProjectSheet() {
                     );
                   })
                 )}
+                {found === undefined && shown.length > 0 ? <div className={s.note}>Looking in your code folders…</div> : null}
               </div>
 
               <form
@@ -267,30 +272,64 @@ export function AddProjectSheet() {
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
-/** Start new: a name and where it goes; Beluga makes the folder, git and a first commit, then opens a worktree draft in it. */
-function NewProject({ onDone }: { onDone: () => void }) {
+/** Where a new or cloned project goes: your code folder, until you pick another. */
+function useParent(): [string | undefined, (dir: string) => void] {
   const api = useApi();
-  const actions = useActions();
-  const home = useApp((st) => st.home);
-  const [name, setName] = useState('');
   const [parent, setParent] = useState<string | undefined>();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | undefined>();
-  const nameBox = useRef<HTMLInputElement>(null);
-  const short = (p: string): string => (home && p.startsWith(home) ? `~${p.slice(home.length)}` : p);
-
   useEffect(() => {
-    nameBox.current?.focus();
     void api.projects.newHome().then(
       (dir) => setParent((p) => p ?? dir),
       () => undefined,
     );
   }, []);
+  return [parent, setParent];
+}
 
+const useShort = (): ((p: string) => string) => {
+  const home = useApp((st) => st.home);
+  return (p) => (home && p.startsWith(home) ? `~${p.slice(home.length)}` : p);
+};
+
+/** The In row: the folder, and Change… (or a path to type where folders can't be picked). */
+function Where({ parent, onChange, label }: { parent: string | undefined; onChange: (dir: string) => void; label: string }) {
+  const short = useShort();
   const change = async (): Promise<void> => {
-    const picked = await pickFolders('Where the new project goes');
-    if (picked?.[0]) setParent(picked[0]);
+    const picked = await pickFolders(label);
+    if (picked?.[0]) onChange(picked[0]);
   };
+  return (
+    <div className={s.field}>
+      <span>In</span>
+      <div className={s.whereRow}>
+        {canPickFolders() ? (
+          <>
+            <span className={s.whereText}>
+              <Icon name="folder" size={13} /> {parent ? short(parent) : 'Your code folder'}
+            </span>
+            <Button size="small" onClick={() => void change()}>
+              Change…
+            </Button>
+          </>
+        ) : (
+          <input className={s.path} value={parent ? short(parent) : ''} onChange={(e) => onChange(e.target.value)} aria-label={label} spellCheck={false} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Start new: a name and where it goes; Beluga makes the folder, git and a first commit, then opens a worktree draft in it. */
+function NewProject({ onDone }: { onDone: () => void }) {
+  const api = useApi();
+  const actions = useActions();
+  const short = useShort();
+  const [name, setName] = useState('');
+  const [parent, setParent] = useParent();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+  const nameBox = useRef<HTMLInputElement>(null);
+
+  useEffect(() => nameBox.current?.focus(), []);
 
   const create = async (): Promise<void> => {
     if (!name.trim() || busy) return;
@@ -320,23 +359,7 @@ function NewProject({ onDone }: { onDone: () => void }) {
         <span>Name</span>
         <input ref={nameBox} className={s.nameInput} value={name} onChange={(e) => (setName(e.target.value), setError(undefined))} placeholder="my-app" aria-label="Project name" spellCheck={false} autoComplete="off" />
       </label>
-      <div className={s.field}>
-        <span>In</span>
-        <div className={s.whereRow}>
-          {canPickFolders() ? (
-            <>
-              <span className={s.whereText}>
-                <Icon name="folder" size={13} /> {parent ? short(parent) : 'Your code folder'}
-              </span>
-              <Button size="small" onClick={() => void change()}>
-                Change…
-              </Button>
-            </>
-          ) : (
-            <input className={s.path} value={parent ? short(parent) : ''} onChange={(e) => setParent(e.target.value)} aria-label="Where the new project goes" spellCheck={false} />
-          )}
-        </div>
-      </div>
+      <Where parent={parent} onChange={setParent} label="Where the new project goes" />
       <p className={error ? s.newError : s.newNote} role={error ? 'alert' : undefined}>
         {error ?? (where ? `Makes ${where} with git and a first commit, ready for worktrees.` : 'Makes the folder with git and a first commit, ready for worktrees.')}
       </p>

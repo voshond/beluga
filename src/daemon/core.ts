@@ -9,6 +9,9 @@ import { createCodexRuntime } from '../agent/runtime/codex/index.js';
 import { ScriptedCodex } from '../agent/runtime/codex/scripted.js';
 import { createOpenCodeRuntime } from '../agent/runtime/opencode/index.js';
 import { ScriptedOpenCode } from '../agent/runtime/opencode/scripted.js';
+import { createCopilotRuntime } from '../agent/runtime/copilot/index.js';
+import { ScriptedCopilot } from '../agent/runtime/copilot/scripted.js';
+import { AUTO_MODEL } from '../agent/runtime/copilot/status.js';
 import { findConversation } from '../agent/runtime/claude/claude-sessions.js';
 import { otherTools } from '../agent/other-tools.js';
 import { copyNative, pasteText } from '../core/clipboard.js';
@@ -32,6 +35,7 @@ import { launchSupport } from '../core/merge-counter.js';
 import { launchStats } from '../core/stats/counter.js';
 import { claudeHome, launchClaudeCode } from '../core/claude-code/launch.js';
 import { launchCompanion } from '../companion/launch.js';
+import { launchExternal } from '../external/launch.js';
 import { swappableIdentity } from '../core/identity.js';
 import { identitiesAtStart } from '../machines/identity-load.js';
 import { closePreviews } from '../preview/off.js';
@@ -49,7 +53,9 @@ import { ToolboxService } from '../core/toolbox/service.js';
 import { belugaHome } from '../workspaces/store.js';
 import { belugaEnv } from '../core/beluga-env.js';
 import { loadDismissedNeeds } from '../core/dismissed-needs.js';
-import { claudeCodePath, claudeCodeReady } from '../agent/claude-code.js';
+import { claudeCodeReady } from '../agent/claude-code.js';
+import { updateClaudeCode } from '../agent/claude-code-updates.js';
+import { claudeCodeWorks } from '../agent/runtime/claude/probe.js';
 
 /**
  * Everything Beluga is apart from its screens: your identity, the room (hosted or joined),
@@ -79,6 +85,15 @@ function demoOpenCode(): AgentRuntime {
   const scripted = new ScriptedOpenCode({ stepMs: 600 });
   const models = scripted.models.map((m) => ({ value: m.value, label: m.name.split('/').at(-1) ?? m.name, description: m.value.split('/')[0] ?? '', ...(m.efforts.length ? { efforts: m.efforts } : {}) }));
   return createOpenCodeRuntime({ connect: scripted.connect, resolve: async () => undefined, status: async () => ({ state: 'ready', models }) });
+}
+
+/** The demo's Copilot: ready, on a plan with a few models besides Auto. */
+function demoCopilot(): AgentRuntime {
+  const offered = ['claude-sonnet-4.5', 'gpt-5.3-codex'];
+  const scripted = new ScriptedCopilot({ stepMs: 600, models: offered });
+  const names: Readonly<Record<string, string>> = { 'claude-sonnet-4.5': 'Claude Sonnet 4.5', 'gpt-5.3-codex': 'GPT-5.3-Codex' };
+  const models = [AUTO_MODEL, ...offered.map((value) => ({ value, label: names[value] ?? value, description: '' }))];
+  return createCopilotRuntime({ connect: scripted.connect, status: async () => ({ state: 'ready', models }) });
 }
 
 let claudeWithStatus: AgentRuntime | undefined;
@@ -326,9 +341,9 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     createAgent: demo
       ? (bridge) => createMockBackend(bridge, Number(belugaEnv('DEMO_PACE')) || 2.6) // unhurried, so you can watch workspaces run side by side
       : undefined,
-    // The demo's Codex and OpenCode: the real runtimes over a scripted app-server and a scripted
-    // `opencode acp`, so a worktree can run on either (BLG-462, BLG-686).
-    ...(demo ? { alsoRuntimes: [createCodexRuntime({ connect: new ScriptedCodex({ stepMs: 600 }).connect }), demoOpenCode()] } : {}),
+    // The demo's Codex, OpenCode and Copilot: the real runtimes over a scripted app-server, a
+    // scripted `opencode acp` and a scripted `copilot --acp`, so a worktree can run on any (BLG-462, BLG-686, BLG-873).
+    ...(demo ? { alsoRuntimes: [createCodexRuntime({ connect: new ScriptedCodex({ stepMs: 600 }).connect }), demoOpenCode(), demoCopilot()] } : {}),
     // Your agent through the runtime seam (agent/runtime): Claude, the only one registered yet.
     ...(!demo && config.agent
       ? {
@@ -341,13 +356,16 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
               autoEdit: primary?.writable ?? false,
               additionalDirectories: config.shares.slice(1).map((s) => s.root),
               ...(config.model ? { model: config.model } : {}),
-              executablePath: belugaEnv('CLAUDE_PATH') ?? claudeCodePath(),
+              // Your own Claude Code when you named one; else unset: each call asks for the current one (claudeExecutable), so a newer one Beluga moved to is used from the next run.
+              ...(belugaEnv('CLAUDE_PATH') ? { executablePath: belugaEnv('CLAUDE_PATH') } : {}),
             },
           },
         }
       : {}),
     launchDir: process.cwd(),
     terminals,
+    // Claude Code kept current in the background (a newer one in the build's line, checked first), unless you run your own.
+    ...(!demo && config.agent && !belugaEnv('CLAUDE_PATH') && belugaEnv('CLAUDE_CODE_UPDATES') !== 'off' ? { updateAgent: async () => (await updateClaudeCode({ works: (bin) => claudeCodeWorks(bin) })) === 'updated' } : {}),
     savedPeople: saved.people,
     loadPeople: () => loadSettings().people,
     replayFile: path.join(belugaHome(), 'seen.json'),
@@ -375,6 +393,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
   let stopAssistant = (): void => undefined;
   let stopThreads = (): void => undefined;
   let stopCompanion = async (): Promise<void> => undefined;
+  let stopExternal = async (): Promise<void> => undefined;
   const start = (): void => {
     session.start();
     // The Beluga network (friends, groups, presence): only the daemon runs it, and only when it's turned on.
@@ -423,6 +442,8 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     if (opts.network) stopClaudeCode = launchClaudeCode({ session, store, demo: Boolean(demo), notify: (e) => session.notifier.notify(e) });
     // Your phone (docs/companion.md): pairing it, and its link. Its DHT node runs only while a phone is paired or a pairing is open.
     if (opts.network) stopCompanion = launchCompanion({ session, store, identity: you.identity, you, terminals, demo: Boolean(demo), log: (line) => console.warn(line) });
+    // External agents (GrokBot, a Claude Code in your terminal): their own port, off until you turn it on.
+    if (opts.network) stopExternal = launchExternal({ session, log: (line) => console.warn(line) });
     if (config.mode === 'host' && config.inviteNow) void publish(config, room, session, () => closing);
     if (!demo) return;
     // A pretend friend and a fake invite so every part of the UI has something to show.
@@ -456,6 +477,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     if (closing) return;
     closing = true;
     closeAllTunnels();
+    await stopExternal();
     await leaveNetwork(session);
     stopGateway();
     stopCalls();

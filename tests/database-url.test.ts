@@ -155,6 +155,9 @@ describe('secretIn (a message to the room)', () => {
   it('spots a password or key before everyone sees it', () => {
     expect(secretIn('here: postgresql://postgres.abc:Hunter2pw@aws-1-eu-central-1.pooler.supabase.com:5432/postgres')).toBe('a connection string with its password');
     expect(secretIn('SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiJ9.abc')).toBe('a secret value');
+    const rc = ['sk', 'AbCdEfGhIjKlMnOpQrStUvWx'].join('_');
+    expect(secretIn(`the RevenueCat key is ${rc}`)).toBe('a RevenueCat secret key');
+    expect(secretIn('rename task_name_value please')).toBeUndefined();
     expect(secretIn('my key is sk-ant-api03-abcdefghijklmnopqrstuvwxyz')).toBe('an Anthropic API key');
     // Talking about them is fine.
     expect(secretIn('postgresql://postgres:[YOUR-PASSWORD]@db.x.supabase.co/postgres')).toBeUndefined();

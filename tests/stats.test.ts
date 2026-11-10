@@ -50,6 +50,14 @@ describe('observing workspaces', () => {
     const today = totalsOf(snapshotOf(file, false), statDay(NOW));
     expect(today).toMatchObject({ tokens: 500, cost: 0.5, archived: 1, worktrees: 1 });
   });
+
+  it('counts a workspace with no real date on the last day it was used, never in 1970', () => {
+    const lastAt = NOW - 2 * DAY;
+    const list = [ws('dateless', { createdAt: 0, usage: { ...usage(100, 0.1), lastAt } }), ws('never-used', { createdAt: 0 })];
+    const file = observeWorkspaces(emptyStats(NOW), [project(list)], agentOf, NOW);
+    expect(Object.keys(file.days).sort()).toEqual([statDay(lastAt), statDay(NOW)]);
+    expect(totalsOf(snapshotOf(file, false), '').worktrees).toBe(2);
+  });
 });
 
 describe('the chat history backfill', () => {
@@ -112,6 +120,14 @@ describe('reading the stats', () => {
     expect(dailySeries(snap, 'prompts', NOW, 3).map((d) => d.value)).toEqual([1, 1, 1]);
     expect(streaks(snap, NOW)).toEqual({ current: 3, longest: 3 });
     expect(snap.since).toBeLessThanOrEqual(NOW - 6 * DAY);
+  });
+
+  it('starts from your first real day, past one counted in 1970 by a record with no date', () => {
+    const file = { ...emptyStats(NOW), days: { '1970-01-01': { [ROOT]: { claude: { worktrees: 1 } } }, [statDay(NOW - 5 * DAY)]: { [ROOT]: { claude: { prompts: 1 } } } } };
+    expect(statDay(snapshotOf(file, false).since)).toBe(statDay(NOW - 5 * DAY));
+    // Nothing real at all: from when counting began.
+    const only = { ...emptyStats(NOW), days: { '1970-01-01': { [ROOT]: { claude: { worktrees: 1 } } } } };
+    expect(snapshotOf(only, false).since).toBe(NOW);
   });
 
   it('makes a repeatable demo year for every project', () => {

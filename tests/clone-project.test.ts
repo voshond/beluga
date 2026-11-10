@@ -1,8 +1,10 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { Session } from '../src/core/session.js';
+import { HANDLERS } from '../src/ipc/handlers.js';
 import { cloneProject } from '../src/workspaces/clone-project.js';
 
 const tmp = (): string => mkdtempSync(path.join(os.tmpdir(), 'beluga-clone-'));
@@ -46,5 +48,21 @@ describe('cloning a project', () => {
     process.env.GIT_CONFIG_KEY_0 = `url.file://${parent}/missing.insteadOf`;
     process.env.GIT_CONFIG_VALUE_0 = 'https://github.com/example/missing.git';
     await expect(cloneProject('https://github.com/example/missing.git', path.join(parent, 'clone'))).rejects.toThrow(/Clone failed.*access/s);
+  });
+});
+
+describe('projects.clone', () => {
+  it('opens the project you already have of that repository, however its address is written', async () => {
+    const mine = tmp();
+    git(mine, 'init');
+    git(mine, 'remote', 'add', 'origin', 'git@github.com:example/wiki.git');
+    const added: string[] = [];
+    const workspaces = { addProject: async (dir: string) => (added.push(dir), { project: { id: 'new-id' } }) };
+    const store = { getState: () => ({ projects: [{ id: 'wiki-id', root: mine }] }) };
+    const target = path.join(tmp(), 'wiki');
+    const s = { workspaces, store } as unknown as Session;
+    expect(await HANDLERS['projects.clone'](s, 'https://github.com/example/wiki', target)).toEqual({ id: 'wiki-id', path: mine, existed: true });
+    expect(added).toEqual([]);
+    expect(existsSync(target)).toBe(false);
   });
 });

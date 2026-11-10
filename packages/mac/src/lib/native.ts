@@ -34,7 +34,6 @@ const isCommand = (id: string): id is CommandId => (COMMAND_IDS as readonly stri
 
 const GO: Record<string, PlaceKind> = {
   'go-tasks': 'tasks',
-  'go-room': 'room',
   'go-files': 'files',
   'go-overview': 'overview',
   'go-search': 'search',

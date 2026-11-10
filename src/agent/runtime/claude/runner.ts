@@ -32,7 +32,7 @@ import { keepLines, trackedSpawn } from './claude-process.js';
 import { keptBashInput } from '../../../workspaces/test-procs.js';
 import { SCRATCH_DIR } from '../../../shared/scratch-dir.js';
 import { type AgentRef, CLAUDE_AGENT, type ClaudeAnswer, ClaudeQuestion, type Usage } from '../../../protocol.js';
-import { claudeCodeReady } from '../../claude-code.js';
+import { claudeCodeReady, claudeExecutable } from '../../claude-code.js';
 import { claudeHome } from '../../../core/claude-code/launch.js';
 import { belugaHome } from '../../../core/home.js';
 import { expandCommand, mayBeCommand, skillOptions } from './skill-plugins.js';
@@ -246,7 +246,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
                   const kept = input.env?.KLAUD_WORKTREE ? keptBashInput(hookInput.tool_name, scratched ?? toolInput, keptLog) : undefined;
                   const patched = kept ?? scratched;
                   const allow = (reason: string) => (patched ? { hookSpecificOutput: { ...verdict('allow', reason).hookSpecificOutput, updatedInput: patched } } : verdict('allow', reason));
-                  if (decision === 'allow') return patched ? allow('Allowed by Beluga.') : {};
+                  if (decision === 'allow' && !input.asksFirst?.(hookInput.tool_name)) return patched ? allow('Allowed by Beluga.') : {};
                   if (decision === 'secret') return (await input.canUseSecret?.(hookInput.tool_name, toolInput)) ? allow('Approved by the machine owner.') : verdict('deny', SECRET_DECLINED);
                   return (await input.canUseTool(hookInput.tool_name, toolInput)) ? allow('Approved by the machine owner.') : verdict('deny', 'The machine owner declined this action.');
                 },
@@ -273,7 +273,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
         // This replaces Claude Code's whole environment, so it starts from ours.
         // Claude Code's own auto-compact follows Beluga's threshold (see shared/context-usage.ts).
         env: { ...process.env, ...zshCompatEnv({ ...process.env, ...input.env }), ...input.env, ...compactEnv(Boolean(input.autoCompactAt), input.autoCompactAt ?? 0) },
-        ...(opts.claudePath ? { pathToClaudeCodeExecutable: opts.claudePath } : {}),
+        ...claudeExecutable(opts.claudePath),
         // Its last words, so a crash says why (see shared/run-failure.ts): read by our own spawn when there is one.
         ...(tracked ? { spawnClaudeCodeProcess: tracked.spawn } : { stderr: keepStderr }),
         canUseTool: async (toolName, toolInput) => {
@@ -596,7 +596,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
       const idle = (async function* () {
         await new Promise(() => undefined);
       })() as AsyncIterable<never>;
-      const q = query({ prompt: idle, options: { cwd: opts.cwd, settingSources: [], ...(opts.claudePath ? { pathToClaudeCodeExecutable: opts.claudePath } : {}) } });
+      const q = query({ prompt: idle, options: { cwd: opts.cwd, settingSources: [], ...claudeExecutable(opts.claudePath) } });
       try {
         const timeout = new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), USAGE_TIMEOUT_MS).unref());
         const models = await Promise.race([q.supportedModels(), timeout]);
@@ -619,7 +619,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
       })() as AsyncIterable<never>;
       const q = query({
         prompt: idle,
-        options: { cwd: opts.cwd, settingSources: [], ...(opts.claudePath ? { pathToClaudeCodeExecutable: opts.claudePath } : {}) },
+        options: { cwd: opts.cwd, settingSources: [], ...claudeExecutable(opts.claudePath) },
       });
       const getUsage = (q as unknown as Record<string, unknown>).usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET;
       try {

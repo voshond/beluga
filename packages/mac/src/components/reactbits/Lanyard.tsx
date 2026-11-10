@@ -7,7 +7,10 @@
  * - a pull stops a little past the strap's length (MAX_PULL), so the card can't be stretched away;
  * - `passThrough`: the canvas takes the pointer only over the card, so it can be bigger than its
  *   place and the card swing over what's around it while all that stays clickable;
- * - `wiggle`: a new number gives the card a small wiggle by itself (Usage on opening: it's there to play with).
+ * - `wiggle`: a new number gives the card a small wiggle by itself (Usage on opening: it's there to play with);
+ * - `anchor` can be a number (0–1 across), so a layer can reach past its place and keep the card where it was;
+ * - the shine: the environment turns to face the card at rest, its bright stripes cross the card's
+ *   upper right instead of its middle, and the face's own gloss is softer (FACE_GLOSS).
  * Beluga draws the card it holds (views/usage/YourCard.tsx).
  */
 // @ts-nocheck
@@ -50,6 +53,12 @@ const BAND_BEND = [-0.95, -0.28, 0.28, 0.95];
 const FLIP_SPIN = 9;
 // Beluga: how far past the strap and card's own length a pull can take the card (1: not at all).
 const MAX_PULL = 1.15;
+// Beluga: where the environment's bright stripes are, seen from a card at rest (its upper right),
+// and how much the face's own (blurred) gloss shows, so the shine doesn't haze the face over.
+const STRIPE_NEAR = [0.35, 0.6, 9];
+const STRIPE_FAR = [0.85, 1.05, 9];
+const STRIPE_TURN = Math.PI / 5;
+const FACE_GLOSS = 0.5;
 
 const FOIL_VERTEX_HEAD = `
 varying vec2 vFoilUv;
@@ -331,8 +340,10 @@ const buildEnvironment = renderer => {
   panel(2.6, [0, 4.5, 8], [9, 4]);
   panel(6, [-5.5, 0.5, 7], [0.9, 14]);
   panel(4, [5, -0.5, 8], [0.6, 14]);
-  panel(3.5, [0, -1, 9], [24, 0.35], Math.PI / 3);
-  panel(2.5, [1, 2.5, 9], [24, 0.2], Math.PI / 3);
+  // Beluga: the two bright stripes cross the card's upper right at rest, not its middle (where
+  // your picture is); the environment is turned to face the card (frameView).
+  panel(5.5, STRIPE_NEAR, [24, 0.35], STRIPE_TURN);
+  panel(2.5, STRIPE_FAR, [24, 0.2], STRIPE_TURN);
   panel(1.4, [0, 6, -6], [12, 4]);
   panel(0.5, [0, -7, 1], [16, 6]);
   panel(0.9, [8, 0, -2], [4, 10]);
@@ -953,10 +964,16 @@ const Lanyard = ({
       foilUniforms.foilKey.value.set(-2.5, 4, 6).normalize().transformDirection(camera.matrixWorldInverse);
       foilUniforms.foilFill.value.set(3, -1, 4).normalize().transformDirection(camera.matrixWorldInverse);
       foilUniforms.foilTop.value.set(0.5, 4.5, 8).normalize().transformDirection(camera.matrixWorldInverse);
-      const anchorX = ((ANCHORS[s.anchor] ?? 0.5) - 0.5) * viewWidth;
+      // Beluga: `anchor` can also be a number, how far across (0–1) the strap hangs from.
+      const across = typeof s.anchor === 'number' ? clamp(s.anchor, 0, 1) : ANCHORS[s.anchor] ?? 0.5;
+      const anchorX = (across - 0.5) * viewWidth;
       const anchorY = viewHeight / 2 + 0.2;
       const cardTop = viewHeight / 2 - viewHeight * mix(0.12, 0.42, clamp(s.strapLength, 0, 1));
       const hangTop = cardTop + (layout.hangY - layout.height / 2);
+      // Beluga: turn the environment to face where the card rests, so its shine falls on the same
+      // part of the card wherever in the view it hangs.
+      const restY = cardTop - layout.height / 2;
+      scene.environmentRotation.set(-Math.atan2(restY, camera.position.z), Math.atan2(anchorX, camera.position.z), 0);
       sim.anchor.set(anchorX, anchorY, 0);
       configureSimulation(sim, layout, anchorY - hangTop);
       sim.nodes[0].copy(sim.anchor);
@@ -1020,6 +1037,7 @@ const Lanyard = ({
         material.clearcoat = finish.clearcoat;
         material.clearcoatRoughness = finish.clearcoatRoughness;
         material.anisotropy = finish.anisotropy;
+        material.specularIntensity = FACE_GLOSS;
       });
       foilUniforms.foilStrength.value = finish.foil;
       foilUniforms.foilAspect.value = layout.height / layout.width;

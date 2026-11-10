@@ -361,13 +361,13 @@ Signing Claude in on a server, the service, updating and removing, and what each
 
 ## Agents
 
-Your agent is Claude Code, signed in with your own subscription. It can also run on your own models (Ollama, or any Anthropic-compatible address): see [local models](docs/local-models.md). Or make it [OpenCode](docs/opencode.md), on the models you've set up in it. Codex is on the way.
+Your agent is Claude Code, signed in with your own subscription. It can also run on your own models (Ollama, or any Anthropic-compatible address): see [local models](docs/local-models.md). Or make it [OpenCode](docs/opencode.md), on the models you've set up in it, or [GitHub Copilot](docs/copilot.md), with your GitHub account (Copilot Free is enough). Codex is on the way.
 
 ## How it works
 
 The engine (projects, agents, terminals, friends) runs in the background on your computer, and the app is the window onto it. Claude runs through the [Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk/overview).
 
-More: [how it works](docs/how-it-works.md) · [security](docs/security.md) · [peer-to-peer connections](docs/p2p.md) · [updates](docs/updates.md) · [every action and where it is](docs/parity.md)
+More: [how it works](docs/how-it-works.md) · [security](docs/security.md) · [external agents](docs/external-agents.md) · [peer-to-peer connections](docs/p2p.md) · [updates](docs/updates.md) · [every action and where it is](docs/parity.md) · [earnings](docs/earnings.md)
 
 ## Development
 
