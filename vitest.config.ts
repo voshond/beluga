@@ -17,8 +17,8 @@ export default defineConfig({
     // overrides it), and a few runs at a time machine-wide (scripts/test-lock.mjs, KLAUD_TEST_SLOTS).
     maxWorkers: workerCount(),
     globalSetup: ['scripts/test-lock.mjs', 'tests/temp-root.global.ts'],
-    // The whole suite passing on a Mac prints a "Tested-on: macOS <tree>" line for the commit, and CI
-    // skips its macOS run for it (scripts/local-pass.mjs).
+    // The whole suite passing on a Mac prints a "Tested-on: macOS <tree>" line for the commit
+    // (scripts/local-pass.mjs). CI has no macOS run since ci.yml went Linux-only, so nothing reads it there.
     reporters: ['default', './scripts/local-pass.mjs'],
     // Real git, terminals and peer-to-peer links: GitHub's runners (and a busy Mac) need longer than
     // vitest's 5 s, or a slow moment fails the release. Windows' runners are the slowest by far (a

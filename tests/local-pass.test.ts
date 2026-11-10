@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -58,10 +58,5 @@ describe('a run that passed on a Mac, for the commit', () => {
 
   it('knows the size of the suite', () => {
     expect(suiteSize(path.join(import.meta.dirname, '..', 'tests'))).toBeGreaterThan(400);
-  });
-
-  it("is what CI's macOS run looks for", () => {
-    const ci = readFileSync(path.join(import.meta.dirname, '..', '.github', 'workflows', 'ci.yml'), 'utf8');
-    expect(ci).toContain(`grep -qxF "${TRAILER} $tree"`);
   });
 });
