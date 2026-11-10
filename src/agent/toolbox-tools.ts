@@ -29,7 +29,7 @@ export interface ToolboxTools {
    * Propose a new personal tool (createdBy: 'claude'): it appears as a NeedsYou card ("Keep /
    * Discard") and is saved only when the user keeps it. Never call without explicit user intent.
    */
-  propose(draft: { name: string; command: string; params?: Array<{ name: string; kind: 'host' | 'text' }>; projectRoot?: string }): string | Promise<string>;
+  propose(draft: { name: string; command: string; params?: Array<{ name: string; kind: 'host' | 'text' }>; projectRoot?: string; replaces?: string }): string | Promise<string>;
 }
 
 export function createToolboxToolDefs(toolbox: ToolboxTools) {
@@ -52,7 +52,7 @@ export function createToolboxToolDefs(toolbox: ToolboxTools) {
     ),
     tool(
       'tool_propose',
-      "Propose a new personal Toolbox tool for this project (only when the user explicitly asked for one, or agreed to your offer). It appears as a \"Keep / Discard\" card and is saved only when the user keeps it. Use {{param}} placeholders for values that change between runs.",
+      "Propose a new personal Toolbox tool for this project, or a revision of an existing one (pass `replaces`), only when the user explicitly asked for one or agreed to your offer. It appears as a \"Keep / Discard\" card (\"Update / Discard\" for a revision) and is saved only when the user keeps it. Use {{param}} placeholders for values that change between runs.",
       {
         name: z.string().trim().min(1).max(100).describe('Short, action-oriented name ("Deploy to <host>", "Run tests", "Start dev server")'),
         command: z.string().trim().min(1).max(2000).describe('The command to run; use {{param}} placeholders for host names and other varying values'),
@@ -62,8 +62,9 @@ export function createToolboxToolDefs(toolbox: ToolboxTools) {
           .optional()
           .describe('The params this command takes (kind "host" offers ~/.ssh/config hosts; "text" is free input)'),
         project_root: z.string().max(4096).optional().describe("The project root; leave out for the current worktree's project"),
+        replaces: z.string().min(1).max(100).optional().describe('The id (or exact name) of the existing tool this revises, from tool_list; Keep then updates it in place instead of adding a new tool'),
       },
-      (a) => guarded(() => toolbox.propose({ name: a.name, command: a.command, ...(a.params ? { params: a.params } : {}), ...(a.project_root ? { projectRoot: a.project_root } : {}) })),
+      (a) => guarded(() => toolbox.propose({ name: a.name, command: a.command, ...(a.params ? { params: a.params } : {}), ...(a.project_root ? { projectRoot: a.project_root } : {}), ...(a.replaces ? { replaces: a.replaces } : {}) })),
     ),
   ];
 }
