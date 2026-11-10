@@ -220,7 +220,7 @@ export const HANDLERS = {
   'workspaces.refresh': (s) => ctl(s)?.refresh(),
   'workspaces.newWorktree': async (s, projectId, name, opts) => (await ctl(s)?.newWorktree(projectId, name, { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.agent ? { agent: opts.agent } : {}) }))?.id,
   'workspaces.newChat': async (s, projectId, title, dir) => (await ctl(s)?.newChat(projectId, title, dir))?.id,
-  'workspaces.startChat': (s, projectId, text, dir, opts) => (maybeStatsOf(s)?.prompt(`new-chat:${projectId}`, text), ctl(s)?.startChat(projectId, text, dir ?? undefined, { ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.plan ? { plan: true } : {}) })),
+  'workspaces.startChat': (s, projectId, text, dir, opts) => (maybeStatsOf(s)?.prompt(`new-chat:${projectId}`, text), ctl(s)?.startChat(projectId, text, dir ?? undefined, { ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}) })),
   'workspaces.startWorktree': async (s, projectId, text, opts) => (maybeStatsOf(s)?.prompt(`new-worktree:${projectId}`, text, opts?.agent?.runtime), await ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.tasks ? { tasks: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.terminal ? { terminal: true } : {}), nameLater: true }))?.id,
   'workspaces.branches': (s, projectId) => ctl(s)?.branches(projectId),
   'workspaces.fork': async (s, id, name) => (await ctl(s)?.fork(id, name))?.id,

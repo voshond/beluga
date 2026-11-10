@@ -267,6 +267,8 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   const readOnly = state.view.kind === 'shared' && state.view.tab === 'chat' && runOn !== 'here' && (sharedWs?.role === 'view' || Boolean(state.waiting));
   // A new worktree: the branch it starts from and its name (empty: named from the task).
   const draftProject = state.view.kind === 'draft_worktree' ? state.view.projectId : undefined;
+  // A new chat: the agent picked for it (undefined: use the global default).
+  const [newChatAgent, setNewChatAgent] = useState<AgentRef | undefined>(undefined);
   // New work (a new chat or worktree): Runs on picks where it goes.
   const newWork = state.view.kind === 'draft_worktree' || state.view.kind === 'draft' ? { project: state.view.projectId === 'chats' ? undefined : state.view.projectId, folder: state.view.kind === 'draft' ? state.view.dir || undefined : undefined } : undefined;
   const startDeps = useStartDeps();
@@ -413,9 +415,18 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     // BLG-841): started there; held, never here instead, when the computer named can't take it.
     const v = client.store.getState().view;
     if (v.kind === 'draft' && !text.startsWith('/')) {
-      const sent = sendToComputer(startDeps, v.projectId, myRuntime(client.store.getState().prefs), { kind: 'chat', text }, v.dir || undefined);
+      const runtime = newChatAgent?.runtime ?? myRuntime(client.store.getState().prefs);
+      const sent = sendToComputer(startDeps, v.projectId, runtime, { kind: 'chat', text, ...(newChatAgent ? { agent: newChatAgent } : {}) }, v.dir || undefined);
       if (sent === 'held') return keepWords(text);
       if (sent === 'sent') return;
+      const plan = client.store.getState().planMode.draft === true;
+      const terminal = Boolean(text.trim()) && sendsToTerminal(client.store.getState(), getPrefs(), 'draft', runtime);
+      void api.workspaces.startChat(v.projectId, text, v.dir ?? null, {
+        ...(terminal && !plan ? { terminal: true } : {}),
+        ...(plan ? { plan: true } : {}),
+        ...(newChatAgent ? { agent: newChatAgent } : {}),
+      }).catch((err: unknown) => toast(client, `Couldn't start the chat: ${errorText(err)}`, 'error'));
+      return;
     }
     if (to && !text.startsWith('/')) {
       ui.patch({ to: undefined });
@@ -693,7 +704,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
             </ActionsDropdown>
           ) : null}
           {canRunHere && sharedWs ? <RunOnChip wsId={sharedWs.id} ownerName={state.sharedProjects.find((p) => p.owner === sharedWs.owner)?.ownerName ?? 'Their'} value={runOn} onChange={setRunOn} /> : null}
-          {!shared ? <ModelPicker channel={channel} {...(draftProject ? { draft: worktree.agent, onDraft: (agent: AgentRef | undefined) => setWorktree({ ...worktree, agent }) } : {})} /> : null}
+          {!shared ? <ModelPicker channel={channel} {...(draftProject ? { draft: worktree.agent, onDraft: (agent: AgentRef | undefined) => setWorktree({ ...worktree, agent }) } : state.view.kind === 'draft' ? { draft: newChatAgent, onDraft: setNewChatAgent } : {})} /> : null}
           {/* Where new work runs (BLG-786); a chat that runs somewhere already says where. Only with a computer paired. */}
           {shared ? null : newWork ? <RunsOnPicker {...(newWork.project ? { project: newWork.project } : {})} {...(worktree.agent?.runtime && draftProject ? { runtime: worktree.agent.runtime } : {})} {...(newWork.folder ? { folder: newWork.folder } : {})} /> : <RunsOnLabel />}
           {burning && state.prefs.effort === 'max' ? (

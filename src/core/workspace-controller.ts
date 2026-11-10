@@ -931,8 +931,8 @@ export class WorkspaceController {
   }
 
   /** `quiet`: made for something else's page (a plan's conversation), so it doesn't take you there. */
-  async newChat(projectId: string, title: string, inDir?: string, opts: { readonly quiet?: boolean; readonly dir?: string; readonly thread?: ThreadRecord } = {}): Promise<Workspace | undefined> {
-    const ws = await this.act("Couldn't start the chat", () => this.deps.manager.createChat(projectId, title, inDir, { ...(opts.dir ? { dir: opts.dir } : {}), ...(opts.thread ? { thread: opts.thread } : {}) }), undefined, { later: true });
+  async newChat(projectId: string, title: string, inDir?: string, opts: { readonly quiet?: boolean; readonly dir?: string; readonly thread?: ThreadRecord; readonly agent?: AgentRef } = {}): Promise<Workspace | undefined> {
+    const ws = await this.act("Couldn't start the chat", () => this.deps.manager.createChat(projectId, title, inDir, { ...(opts.dir ? { dir: opts.dir } : {}), ...(opts.thread ? { thread: opts.thread } : {}), ...(opts.agent ? { agent: opts.agent } : {}) }), undefined, { later: true });
     if (ws && !opts.quiet) this.open(ws.id);
     return ws;
   }
@@ -971,9 +971,9 @@ export class WorkspaceController {
   }
 
   /** Turn a draft into a real chat with your first message, then send it to Claude. */
-  async startChat(projectId: string, firstMessage: string, inDir?: string, opts: { terminal?: boolean; plan?: boolean } = {}): Promise<void> {
+  async startChat(projectId: string, firstMessage: string, inDir?: string, opts: { terminal?: boolean; plan?: boolean; agent?: AgentRef } = {}): Promise<void> {
     const title = firstMessage.replace(/\s+/g, ' ').trim().slice(0, 40);
-    const ws = await this.newChat(projectId, title, inDir);
+    const ws = await this.newChat(projectId, title, inDir, { ...(opts.agent ? { agent: opts.agent } : {}) });
     if (!ws) return;
     const channel = `${WS_PREFIX}${ws.id}`;
     if (opts.plan) this.deps.store.dispatch({ type: 'plan_mode', channel, on: true });

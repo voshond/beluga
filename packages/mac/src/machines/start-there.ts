@@ -24,7 +24,7 @@ import { noteStarted } from './started.js';
 
 export type WorkToStart =
   | { readonly kind: 'worktree'; readonly text: string; readonly opts: Record<string, unknown> }
-  | { readonly kind: 'chat'; readonly text: string }
+  | { readonly kind: 'chat'; readonly text: string; readonly agent?: { readonly runtime: string; readonly label: string; readonly model?: string } }
   | { readonly kind: 'plan'; readonly input: { readonly goal: string } & Record<string, unknown> }
   /** `ask`: words its Claude fills it in from (Describe It); `then`: a recipe's second one, run after it. */
   | { readonly kind: 'sentinel'; readonly draft: Record<string, unknown>; readonly ask?: string; readonly then?: { readonly draft: Record<string, unknown>; readonly on: string } };
@@ -152,7 +152,7 @@ async function make(client: SocketClient, projectId: string | undefined, what: W
       // In the project there, or (none) in the computer's own chats, outside any project.
       const space = projectId ?? 'chats';
       const before = new Set(client.store.getState().projects.flatMap((p) => p.workspaces.map((w) => w.id)));
-      await client.call('workspaces.startChat', space, what.text);
+      await client.call('workspaces.startChat', space, what.text, null, what.agent ? { agent: what.agent } : undefined);
       // The computer shows its new chat on the screen that asked; else the chat that wasn't there before.
       const shown = client.store.getState().view;
       if (shown.kind === 'workspace' && !before.has(shown.id)) return shown;

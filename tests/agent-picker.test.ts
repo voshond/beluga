@@ -63,9 +63,17 @@ describe('agentPicker', () => {
     const b = agentPicker(st, 'ws:b');
     expect(pickAction(b, b.groups[0]!, '')).toEqual({ kind: 'agent', agent: null });
     expect(pickAction(b, b.groups[0]!, 'opus')).toEqual({ kind: 'agent', agent: { runtime: 'claude', label: 'Claude', model: 'opus' } });
-    // New conversations take your default's models only.
+    // New conversations: pickAction returns undefined for non-default group (by design — the
+    // ModelPicker uses the onDraft branch instead, BLG-83).
     const d = agentPicker(st, 'draft');
     expect(pickAction(d, d.groups[1]!, 'gpt-5-codex')).toBeUndefined();
+    // But a new chat can carry a draft Codex agent via the picker's onDraft prop (BLG-83).
+    const withCodex = agentPicker(st, 'draft', 'claude', { runtime: 'codex', label: 'Codex', model: 'gpt-5-codex' });
+    expect(withCodex).toMatchObject({ runtime: 'codex', label: 'Codex · GPT-5 Codex' });
+    expect(withCodex.groups.find((g) => g.current)?.runtime).toBe('codex');
+    // Once Codex is the draft runtime, same-runtime picks are model changes (not undefined).
+    const codexGroup = withCodex.groups.find((g) => g.runtime === 'codex')!;
+    expect(pickAction(withCodex, codexGroup, 'gpt-5-codex')).toEqual({ kind: 'model', value: 'gpt-5-codex' });
   });
 });
 

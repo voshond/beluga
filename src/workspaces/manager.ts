@@ -1053,23 +1053,23 @@ export class WorkspaceManager {
   }
 
   /** `opts`: a thread's chat (core/threads): its record, and the folder it reads (a project chat's own: the main folder). */
-  async createChat(projectIdOrRoot: string, title: string, inDir?: string, opts: { readonly dir?: string; readonly thread?: ThreadRecord } = {}): Promise<Workspace> {
-    if (projectIdOrRoot === CHATS_PROJECT) return this.createStandaloneChat(title, opts.dir ?? inDir, opts.thread);
+  async createChat(projectIdOrRoot: string, title: string, inDir?: string, opts: { readonly dir?: string; readonly thread?: ThreadRecord; readonly agent?: AgentRef } = {}): Promise<Workspace> {
+    if (projectIdOrRoot === CHATS_PROJECT) return this.createStandaloneChat(title, opts.dir ?? inDir, opts.thread, opts.agent);
     const project = this.projects.find((p) => p.id === projectIdOrRoot || (p.root !== '' && p.root === projectIdOrRoot));
     if (!project) throw new WorkspaceError('Project not found');
-    const record: WorkspaceRecord = { id: `chat-${randomUUID().slice(0, 8)}`, projectRoot: project.root, name: title.trim().slice(0, 40) || 'chat', path: opts.dir ?? project.root, kind: 'chat', createdAt: Date.now(), ...(opts.thread ? { thread: opts.thread } : {}) };
+    const record: WorkspaceRecord = { id: `chat-${randomUUID().slice(0, 8)}`, projectRoot: project.root, name: title.trim().slice(0, 40) || 'chat', path: opts.dir ?? project.root, kind: 'chat', createdAt: Date.now(), ...agentFields(opts.agent), ...(opts.thread ? { thread: opts.thread } : {}) };
     this.saveRecord(record);
     // Questions only, like every chat in a project's main folder (see loadProject).
     return this.adopt(project, { ...record, projectId: project.id, external: false, askOnly: true });
   }
 
   /** A Claude chat with no project: its own scratch folder for anything Claude makes. */
-  async createStandaloneChat(title: string, inDir?: string, thread?: ThreadRecord): Promise<Workspace> {
+  async createStandaloneChat(title: string, inDir?: string, thread?: ThreadRecord, agent?: AgentRef): Promise<Workspace> {
     const id = `chat-${randomUUID().slice(0, 8)}`;
     // Runs in the folder you give it (e.g. where you started Beluga), or its own scratch folder.
     const dir = inDir || path.join(this.chatsDir, id);
     mkdirSync(dir, { recursive: true });
-    const record: WorkspaceRecord = { id, projectRoot: '', name: title.trim().slice(0, 40) || 'chat', path: real(dir), kind: 'chat', createdAt: Date.now(), ...(thread ? { thread } : {}) };
+    const record: WorkspaceRecord = { id, projectRoot: '', name: title.trim().slice(0, 40) || 'chat', path: real(dir), kind: 'chat', createdAt: Date.now(), ...agentFields(agent), ...(thread ? { thread } : {}) };
     this.saveRecord(record);
     const chats = this.projects.find((p) => p.id === CHATS_PROJECT);
     if (!chats) {
