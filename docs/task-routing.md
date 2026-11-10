@@ -119,6 +119,12 @@ The daemon and the screens decide with one rule (`routableRuntime`, `conversatio
   for the conversation; picking Auto (the old Default, `setModel('')`) turns it back on. The Thinking
   track keeps your saved effort; its line says what Auto picked for this task.
 - **The model sheet** (native) and **the task page's Agent** say the same.
+- **A worktree with no task yet** is routed too, sized medium (`UNTASKED_ROUTE`) until a task is
+  linked, so a new worktree's first run already orchestrates. Main-folder chats and plan milestone
+  worktrees never are (`isRoutedPlace`, shared by `BoardWork.forRun` and `conversationRoute`).
+- **New Worktree**: its picker offers Auto (checked by default) when the experiment is on. A model
+  picked there becomes that worktree's own (its agent ref), so it isn't routed, and your default
+  model for new conversations is left alone.
 - **Picking a model yourself** stays: every model is still in the list, and picking one turns Auto
   off for that conversation.
 - **The newest of each family only** (`src/shared/model-families.ts`, `latestModels`): Claude

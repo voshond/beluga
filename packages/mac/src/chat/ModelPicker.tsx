@@ -6,7 +6,7 @@ import { type AgentRef, CLAUDE_AGENT } from '@beluga/protocol.js';
 import { type HandoffMode, limitHit, needsHandoff } from '@beluga/shared/agent-handoff.js';
 import { type AgentMark, modelMark, runtimeMark } from '@beluga/shared/agent-marks.js';
 import { type AgentPicker, type AutoChoice, type PickerGroup, type PickerState, agentPicker, pickAction } from '@beluga/shared/agent-picker.js';
-import { conversationRoute, routeModelLabel, routeSummary } from '@beluga/core/board/routing.js';
+import { conversationRoute, draftSummary, routableRuntime, routeModelLabel, routeSummary } from '@beluga/core/board/routing.js';
 import type { RuntimeModel } from '@beluga/shared/agent-runtimes.js';
 import type { AgentOption } from '@beluga/ui/agent-choice.js';
 import { Icon } from '../components/Icon.js';
@@ -46,7 +46,13 @@ export const pickerState = (st: AppState): PickerState => ({ ...st, prefs: { mod
 export const autoChoice = (st: AppState, channel: string): AutoChoice | undefined => {
   const found = conversationRoute(st, channel, myRuntime(st.prefs));
   if (!found) return undefined;
-  return { runtime: found.runtime, chip: `Auto · ${routeModelLabel(found.route, found.runtime)}`, description: routeSummary(found.route, found.runtime), active: !found.picked };
+  return { runtime: found.runtime, chip: `Auto · ${routeModelLabel(found.route, found.runtime)}`, description: routeSummary(found.route, found.runtime, found.tasked), active: !found.picked };
+};
+
+export const draftAutoChoice = (st: AppState, draft: AgentRef | undefined): AutoChoice | undefined => {
+  const runtime = routableRuntime(st.prefs.experiments, draft?.runtime ?? myRuntime(st.prefs));
+  if (!runtime) return undefined;
+  return { runtime, chip: 'Auto', description: draftSummary(runtime), active: !draft?.model };
 };
 
 const routedEffort = (st: AppState, channel: string): Effort | undefined => {
@@ -139,10 +145,11 @@ interface Move {
  * scrolling inside a popover that never outgrows the window; effort below, Auto then Low to Max
  * on one track, what the level means above it. `draft`: a new worktree's pick (it has no conversation yet), kept by the New Worktree box.
  */
-export function ModelPicker({ channel, draft, onDraft }: { channel: string; draft?: AgentRef; onDraft?: (agent: AgentRef | undefined) => void }) {
+export function ModelPicker({ channel, draft, onDraft, forWorktree }: { channel: string; draft?: AgentRef; onDraft?: (agent: AgentRef | undefined) => void; forWorktree?: boolean }) {
   const api = useApi();
   // Only what the picker shows (not the whole state): not drawn again on every streamed event (KLD-48).
-  const picker = useApp((st) => agentPicker(pickerState(st), channel, myRuntime(st.prefs), draft, draft ? undefined : autoChoice(st, channel)), samePicker);
+  const picker = useApp((st) => agentPicker(pickerState(st), channel, myRuntime(st.prefs), draft, forWorktree ? draftAutoChoice(st, draft) : onDraft ? undefined : autoChoice(st, channel)), samePicker);
+  const draftAuto = useApp((st) => (forWorktree ? draftAutoChoice(st, draft)?.runtime : undefined));
   const chosenEffort = useApp((st) => st.prefs.effort);
   const routed = useApp((st) => (draft ? undefined : routedEffort(st, channel)));
   const effort = routed ?? chosenEffort;
@@ -159,6 +166,10 @@ export function ModelPicker({ channel, draft, onDraft }: { channel: string; draf
   const chip = `${label}${effort ? ` · ${EFFORT_INFO[effort].label}` : ''}`;
   const pick = (g: PickerGroup, value: string): void => {
     if (onDraft && !conversation) {
+      if (draftAuto === g.runtime) {
+        onDraft(g.isDefault && !value ? undefined : { runtime: g.runtime, label: g.label, ...(value ? { model: value } : {}) });
+        return;
+      }
       // A new worktree: your default's model is the default for new ones; another runtime is this worktree's own.
       if (g.isDefault) {
         onDraft(undefined);

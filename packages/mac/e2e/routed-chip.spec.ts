@@ -51,3 +51,30 @@ test('a routed task’s chip says Auto and the model it routed to; picking a mod
   await models.getByRole('radio', { name: /^Auto/ }).click();
   await expect(chip(page)).toContainText('Auto · Opus');
 });
+
+test('a new worktree’s picker offers Auto, and a model picked there is that worktree’s alone', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await expect(sidebar(page)).toBeVisible();
+  await turnOnRouting(page);
+
+  await sidebar(page).getByRole('button', { name: 'bob-api' }).first().hover();
+  await sidebar(page).getByRole('button', { name: 'New worktree in bob-api', exact: true }).click();
+  await expect(chip(page)).toContainText('Auto');
+  await chip(page).click();
+  await expect(page.getByText('for this worktree')).toBeVisible();
+  const models = page.getByRole('radiogroup', { name: 'Claude models' });
+  await expect(models.getByRole('radio', { name: /^Auto/ })).toHaveAttribute('aria-checked', 'true');
+  await page.screenshot({ path: shot('chip-05-new-worktree-auto.png') });
+
+  await models.getByRole('radio', { name: /^Haiku/ }).click();
+  await expect(chip(page)).toContainText('Haiku');
+  await expect(models.getByRole('radio', { name: /^Haiku/ })).toHaveAttribute('aria-checked', 'true');
+  await page.screenshot({ path: shot('chip-06-new-worktree-haiku.png') });
+  await models.getByRole('radio', { name: /^Auto/ }).click();
+  await expect(chip(page)).toContainText('Auto');
+  await page.keyboard.press('Escape');
+
+  await openHero(page);
+  await expect(chip(page)).toContainText('Auto · Opus');
+});

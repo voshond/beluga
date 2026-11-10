@@ -108,6 +108,9 @@ describe('worktrees and their tasks', () => {
     expect(work.forRun('ws:m1', 'p-me')!.brief).not.toContain('no task yet');
     expect(work.forRun('ws:w1', 'p-me', { plan: true })!.brief).not.toContain('no task yet');
     expect(work.forRun('room', 'p-me')!.brief).not.toContain('no task yet');
+    expect(work.forRun('ws:w1', 'p-me')!.route).toMatchObject({ size: 'medium' });
+    expect(work.forRun('ws:m1', 'p-me')!.route).toBeUndefined();
+    expect(work.forRun('room', 'p-me')!.route).toBeUndefined();
   });
 
   it('the task Claude opens for its worktree is linked, In Progress, yours and private, and Claude is told to say so', () => {
