@@ -65,6 +65,15 @@ All agents
   all                                  5    145     165       3,800          650  4,760
 ```
 
+## In the app
+
+The right panel's **This workspace › Agent** row opens the same report for one worktree (BLG-85). Click the token count to show the breakdown per provider and model, with this agent and its sub-agents apart. It is read when you open it, and again as the agent works.
+
+- It reads only that worktree's logs: its own folder under the Claude Code transcripts, and the Codex sessions whose folder is the worktree or one inside it.
+- The numbers come from the same code as the script (`src/core/usage-report.ts`, through `readFolderUsage` in `src/core/usage-files.ts`). So the panel and the script always agree.
+- The row's own number is Beluga's count without cache reads. The breakdown's total includes them, which is why it is bigger.
+- The API method is `workspaces.usageBreakdown`. It is the Mac's only: the phone doesn't show worktree usage yet.
+
 ## What an agent is
 
 An agent is a session's working folder. For Beluga that is a worktree, so each task's usage lands on its own line. Sub-agents that a session starts are listed separately as `<folder> (sub-agents)`.

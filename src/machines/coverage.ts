@@ -174,6 +174,7 @@ export const MACHINE: Record<Method, MachineSide> = {
   'workspaces.otherOrigins': 'drive',
   'workspaces.otherActivity': 'drive',
   'workspaces.worktreeInfo': 'drive',
+  'workspaces.usageBreakdown': 'drive',
   'workspaces.showConversation': 'drive',
   'workspaces.outsideConversations': 'drive',
   'workspaces.importOutside': 'drive',

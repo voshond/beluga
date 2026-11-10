@@ -37,7 +37,7 @@ export type UsageSummary = TokenCounts & {
 
 const ZERO_COUNTS: TokenCounts = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
-const SUB_AGENTS = ' (sub-agents)';
+export const SUB_AGENTS = ' (sub-agents)';
 
 const count = z.number().finite().nonnegative().catch(0).default(0);
 

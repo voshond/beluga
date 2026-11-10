@@ -2,6 +2,7 @@ import { git, tryGit } from '../workspaces/git.js';
 import { type WorktreeMover, worktreeMover } from '../core/worktree-move.js';
 import type { Session } from '../core/session.js';
 import { needFriendShares } from '../core/friend-share/launch.js';
+import { defaultClaudeDir, defaultCodexDir, readFolderUsage } from '../core/usage-files.js';
 import { remoteScratch } from '../core/friend-share/scratch.js';
 import type { AddResult, WorkspaceController } from '../core/workspace-controller.js';
 import type { Workbench } from '../core/workbench.js';
@@ -253,6 +254,10 @@ export const HANDLERS = {
   'workspaces.ports': (s, id) => {
     const ws = s.store.getState().projects.flatMap((p) => p.workspaces).find((w) => w.id === id);
     return ws ? worktreePorts(ws.path) : [];
+  },
+  'workspaces.usageBreakdown': (s, id) => {
+    const ws = s.store.getState().projects.flatMap((p) => p.workspaces).find((w) => w.id === id);
+    return ws ? readFolderUsage(ws.path, { claudeDir: defaultClaudeDir(), codexDir: defaultCodexDir() }) : undefined;
   },
   'workspaces.askClaudeToReview': (s, id) => ctl(s)?.askClaudeToReview(id),
   'workspaces.askClaudeToMerge': (s, id) => ctl(s)?.askClaudeToMerge(id),
