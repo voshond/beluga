@@ -27,6 +27,7 @@ import { cmdReturn, returnName, thisComputer, upFirst, yourComputer } from '../l
 import { ModelPicker, myRuntime } from './ModelPicker.js';
 import { ContextMeter } from './ContextMeter.js';
 import { McpChip } from './McpChip.js';
+import { plainWorktrees, worktreeNamesOf } from './worktree-box.js';
 import { RunsOnLabel, RunsOnPicker } from './RunsOn.js';
 import { sendToComputer, useStartDeps } from '../machines/start-there.js';
 import { QueueTray } from './QueueTray.js';
@@ -466,7 +467,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     const typed = buffer.trim();
     if (aside) {
       if (!typed) return;
-      askBtw(client, api, channel, typed);
+      askBtw(client, api, channel, plainWorktrees(typed, worktreeNamesOf(client.store.getState().projects)));
       setAsideIn(undefined);
       ui.patch({ buffer: '', cursor: 0, history: [...ui.get().history, `/btw ${typed}`].slice(-200), historyIndex: -1 });
       return;
