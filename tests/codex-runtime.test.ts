@@ -159,7 +159,10 @@ describe('a Codex run', () => {
     const profile = config['permissions.beluga'] as { filesystem: Record<string, string>; network: { enabled: boolean } };
     expect(start.approvalPolicy).toBe('never');
     expect(profile.network.enabled).toBe(false);
-    expect(profile.filesystem[os.homedir()]).toBe('deny');
+    if (process.platform === 'linux') {
+      expect(profile.filesystem[':minimal']).toBe('read');
+      expect(profile.filesystem[os.homedir()]).toBeUndefined();
+    } else expect(profile.filesystem[os.homedir()]).toBe('deny');
     expect(profile.filesystem[`${cwd}/**/.env*`]).toBe('deny');
     expect(config).toMatchObject({ 'mcp_servers.figma.enabled': false, 'features.plugins': false, 'features.apps': false, 'shell_environment_policy.inherit': 'core' });
     // Beluga's own tools stay, gated by the friend's limits.

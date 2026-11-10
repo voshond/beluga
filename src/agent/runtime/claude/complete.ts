@@ -57,7 +57,7 @@ export async function claudeComplete(req: CompletionRequest, claudePath?: string
     });
     for await (const msg of q) {
       if (msg.type !== 'result') continue;
-      if (msg.subtype === 'success') return msg.result;
+      if (msg.subtype === 'success' && !msg.is_error) return msg.result;
       throw new CompletionError(msg.subtype === 'error_max_turns' ? 'max_turns' : 'failed');
     }
     throw new CompletionError('no_answer');

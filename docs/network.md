@@ -40,6 +40,12 @@ A profile (`PeerInfo`) may carry `agents` and `defaultAgent`: the agents that pe
 The proofs bind both cards to that one connection (no replay, no one in the middle without the
 secret), and the invitee must dial with the address on its card. Friend invitations are
 single-use and last 24 h; five bad proofs in a minute pause an invitation for the rest of it.
+Using an invitation that fails says why. A failed hole-punch (`HOLEPUNCH_*`) means the inviter answered
+(a hole-punch only starts after that), so it says the two networks couldn't connect directly, names the
+code, and that the invitation still works. Anything else is "Nobody is waiting for that invitation":
+`PEER_NOT_FOUND`, no answer at all, and `PEER_CONNECTION_FAILED` (an invitation that closed while the DHT
+still remembers it) (`pairFailure` in `src/net/mesh/pairing.ts`). Pairing has no relay yet: nobody is
+linked to both of you before you're friends.
 Group invitations (`beluga://join#…`, `beluga://join?code=…`) work the same, are multi-use (the
 link for 7 days, the code for an hour), and either let people in at once (`auto`) or leave a
 request for an admin (`network.groups.approve`). Someone who was removed always needs an admin.
@@ -178,6 +184,18 @@ changes. Someone who doesn't have that picture yet asks once (`av_get { sha }`) 
 if it's the checksum that person announced, it hashes to it, and it is a small picture. Views carry the
 checksum (`PersonView.avatar`, `NetworkSelf.avatar`) and screens get the bytes with `network.avatar.get`,
 so a picture crosses the network once per change and still shows while its owner is away.
+
+## The leaderboard (BLG-904)
+
+Being friends means sharing three numbers a day with each other, for Usage › Leaderboard: the
+characters you wrote to your agents, the pull requests merged, and your agents' working time (the
+run's whole time, tests and waits included). Nothing else goes: no projects, prompts or agents.
+`src/core/leaderboard/` sends your last 400 days as a `stats` frame (`{ v: 1, at, days: { "2026-11-09":
+[chars, prs, agentMs] } }`, checked in `protocol.ts`) when a friend's link comes up and again when
+your numbers changed (looked at every 5 minutes); only friends' frames are taken. What each friend sent
+last is kept in `~/.beluga/leaderboard.json` so they still show while away, and dropped once they're no
+longer a friend. Macs that do it say `stats.board`; a friend's Beluga without it shows as needing an
+update. The Usage tab asks for everyone's with `stats.leaderboard`.
 
 ## Friends from your room (BLG-202)
 

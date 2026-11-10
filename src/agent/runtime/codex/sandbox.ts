@@ -150,6 +150,46 @@ function denyAt(filesystem: Record<string, string>, p: string): void {
   }
 }
 
+/**
+ * Linux masks denied paths with mounts. Masking a file inside an already denied directory can
+ * fail while creating its mount point. Inherit that denial instead, unless a nearer rule has
+ * reopened a shared folder. Other platforms keep their existing profiles.
+ */
+function linuxFilesystem(filesystem: Record<string, string>, minimal = false): Record<string, string> {
+  if (process.platform !== 'linux') return filesystem;
+  const kept = { ...filesystem };
+  if (minimal) {
+    kept[':minimal'] = 'read';
+    const inside = (file: string, root: string): boolean => {
+      const rel = path.relative(root, file);
+      return !path.isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${path.sep}`);
+    };
+    const grants = Object.entries(filesystem).filter(([, access]) => access !== 'deny').map(([file]) => file);
+    // Codex's :minimal system roots: a mask below one is still needed, even without an explicit grant.
+    const readable = [...grants, '/bin', '/sbin', '/usr', '/etc', '/lib', '/lib64', '/nix/store', '/run/current-system/sw'];
+    for (const [file, access] of Object.entries(kept)) {
+      // With no broad read baseline, a denied ancestor need not mask an explicitly granted child.
+      // Keep it if a broader grant exposes that ancestor: removing it would reveal private siblings.
+      if (access === 'deny' && grants.some((grant) => inside(grant, file)) && !readable.some((grant) => inside(file, grant))) delete kept[file];
+    }
+  }
+  for (const [file, access] of Object.entries(kept)) {
+    if (access !== 'deny') continue;
+    let parent = path.dirname(file);
+    while (parent !== file) {
+      const inherited = kept[parent];
+      if (inherited !== undefined) {
+        if (inherited === 'deny') delete kept[file];
+        break;
+      }
+      const next = path.dirname(parent);
+      if (next === parent) break;
+      parent = next;
+    }
+  }
+  return kept;
+}
+
 /** The run's confinement as Codex thread config (see the table above). */
 export function codexConfinement(origin: RunOrigin, scope: 'folder' | 'full', place: ConfinementPlace): CodexConfinement {
   const row = trustRow(origin, scope);
@@ -182,9 +222,12 @@ export function codexConfinement(origin: RunOrigin, scope: 'folder' | 'full', pl
     filesystem[path.join(g, 'config.worktree')] = 'read';
     filesystem[path.join(path.resolve(place.gitDirs.own), 'config.worktree')] = 'read';
   }
+  // Linux cannot reopen read-only descendants of a denied home. Start restricted runs from
+  // system-tool reads instead; only the declared folders and git config expose user files.
+  const minimalLinux = process.platform === 'linux' && row.home === 'denied';
   const config: Record<string, unknown> = {
     default_permissions: PROFILE,
-    [`permissions.${PROFILE}`]: { extends: writable.has(path.resolve(place.cwd)) ? ':workspace' : ':read-only', filesystem, network: { enabled: row.network } },
+    [`permissions.${PROFILE}`]: { ...(minimalLinux ? {} : { extends: writable.has(path.resolve(place.cwd)) ? ':workspace' : ':read-only' }), filesystem: linuxFilesystem(filesystem, minimalLinux), network: { enabled: row.network } },
   };
   if (!row.yourTools) {
     for (const name of place.yourServers ?? []) config[`mcp_servers.${name}.enabled`] = false;
@@ -203,10 +246,10 @@ export function codexConfinement(origin: RunOrigin, scope: 'folder' | 'full', pl
  */
 export function sideCallConfinement(cwd: string, opts: { readonly tools?: readonly string[]; readonly yourServers?: readonly string[]; readonly home?: string; readonly belugaHome?: string } = {}): CodexConfinement {
   const base = codexConfinement('friend', 'folder', { cwd, folders: [], writable: [], ...(opts.yourServers ? { yourServers: opts.yourServers } : {}), ...(opts.home ? { home: opts.home } : {}), ...(opts.belugaHome ? { belugaHome: opts.belugaHome } : {}) });
-  const profile = base.config[`permissions.${PROFILE}`] as { extends: string; filesystem: Record<string, string>; network: { enabled: boolean } };
+  const profile = base.config[`permissions.${PROFILE}`] as { extends?: string; filesystem: Record<string, string>; network: { enabled: boolean } };
   const tools = opts.tools ?? [];
   const filesystem = tools.length ? profile.filesystem : { ...profile.filesystem, [path.resolve(cwd)]: 'deny' };
-  return { ...base, config: { ...base.config, [`permissions.${PROFILE}`]: { ...profile, extends: ':read-only', filesystem, network: { enabled: tools.includes('Bash') } } } };
+  return { ...base, config: { ...base.config, [`permissions.${PROFILE}`]: { ...profile, ...(profile.extends ? { extends: ':read-only' } : {}), filesystem: linuxFilesystem(filesystem), network: { enabled: tools.includes('Bash') } } } };
 }
 
 /** The table as docs/security.md shows it. */

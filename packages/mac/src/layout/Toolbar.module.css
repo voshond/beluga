@@ -72,6 +72,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Where the branch stands, right after the worktree's name: never cut, the name gives way first. */
+.branchPill {
+  display: inline-flex;
+  flex: none;
+  align-self: center;
+  margin-left: 4px;
+}
+.branchPill:empty {
+  display: none;
+}
 .subtitle {
   display: flex;
   gap: 12px;

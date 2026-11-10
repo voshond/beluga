@@ -45,6 +45,7 @@ export async function copilotComplete(req: CompletionRequest, deps: CopilotSideD
   let text = '';
   const calls = new Map<string, { tool: string; raw: Record<string, unknown> }>();
   try {
+    if (req.signal?.aborted) throw new Error('aborted');
     const { rpc } = conn;
     rpc.onNotification((method, params) => {
       if (method !== 'session/update' || !sid || params.sessionId !== sid) return;

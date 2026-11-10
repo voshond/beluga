@@ -39,6 +39,8 @@ export interface CodexBackendOptions {
   readonly connect?: CodexConnect;
   /** Where Beluga's tools are served to the run over stdio (one per daemon). */
   readonly toolHost?: ToolHost;
+  /** Your saved variables for Settings' MCP check in a folder (RuntimeOptions.ownEnv). */
+  readonly ownEnv?: (cwd: string) => Readonly<Record<string, string>>;
 }
 
 const CODEX_AGENT = { runtime: 'codex', label: 'Codex' } as const;
@@ -167,8 +169,10 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
   const host = (): ToolHost => opts.toolHost ?? toolHost();
   // Your Codex MCP servers for Settings (BLG-518): asked of an app-server of their own, started where
   // Claude's list starts (Codex has no per-request folder for the list, so a project's own
-  // .codex/config.toml servers show only for that folder: the room's, here).
-  const mcp = new CodexMcp((cwd) => connect({ cwd, ...(opts.codexPath ? { bin: opts.codexPath } : {}) }));
+  // .codex/config.toml servers show only for that folder: the room's, here). It gets your saved
+  // variables over Beluga's, as your runs do, so a server's bearer_token_env_var or env_vars kept in
+  // Settings › Environment is found (#442).
+  const mcp = new CodexMcp((cwd) => connect({ cwd, env: { ...process.env, ...opts.ownEnv?.(cwd) }, ...(opts.codexPath ? { bin: opts.codexPath } : {}) }));
   const mcpCwd = (_projects: readonly string[]): string => opts.cwd;
 
   return {

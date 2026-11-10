@@ -10,15 +10,16 @@ import { dndActive, dndLabel } from '@beluga/shared/quiet.js';
 import { type NoticeFilter, type NoticeLook, NOTICE_FILTERS, filterNotices, foldPlanNotices, groupNotices, noticeAgo, noticeLook } from '@beluga/ui/notice-models.js';
 import { planTitle } from '@beluga/core/plans/model.js';
 import { Icon, type IconName } from '../components/Icon.js';
-import { Button, IconButton, Tip, cx } from '../components/ui.js';
+import { Button, Empty as EmptyState, IconButton, Tip, cx } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
 import { ActionsContext, type ActionItem } from '../components/SpecMenu.js';
 import { copyText } from '../lib/copy.js';
 import { brandNotice } from '../lib/brand.js';
 import { MachineProvider, toast, useApi, useApp, useBeluga, useUi } from '../lib/beluga.js';
 import { macNoticeTarget, openNoticeTarget } from '../lib/notices.js';
-import { sameDeep, sameFields } from '../lib/stable.js';
-import { type Waiting, type WaitingAction, bellCount, isCovered, noticeNeedView, waitingList } from './waiting-model.js';
+import { sameFields } from '../lib/stable.js';
+import { PartBoundary } from '../lib/part-boundary.js';
+import { type Waiting, type WaitingAction, bellCount, isCovered, noticeNeedView, sameWaiting, waitingList } from './waiting-model.js';
 import s from './notifications.module.css';
 
 /** A few marks the shared icon set doesn't have, drawn the same way (16 grid, 1.5 strokes). */
@@ -232,8 +233,6 @@ function Empty({ filter, any }: { filter: NoticeFilter; any: boolean }) {
   );
 }
 
-const sameWaiting = (a: readonly Waiting[], b: readonly Waiting[]): boolean => sameDeep(a, b, 10);
-
 /** What happened while you were elsewhere: Today and Earlier, filters, read, clear. */
 export function Center({ close }: { close: () => void }) {
   const api = useApi();
@@ -409,7 +408,27 @@ export function NotificationBell() {
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content className={s.popover} align="end" sideOffset={6} collisionPadding={12} aria-label="Notifications">
-          <Center close={() => ui.patch({ notices: false })} />
+          {/* One notification that can't be drawn shows here, not as a grey window (BLG-905). */}
+          <PartBoundary
+            part="notifications"
+            onCrash={(crash) => void client.api.diagnostics.windowCrash(crash).catch(() => undefined)}
+            fallback={(error, retry) => (
+              <div className={s.broken}>
+                <EmptyState
+                  icon="alert"
+                  title="Notifications ran into a problem"
+                  detail={error.message}
+                  action={
+                    <Button size="small" onClick={retry}>
+                      Try Again
+                    </Button>
+                  }
+                />
+              </div>
+            )}
+          >
+            <Center close={() => ui.patch({ notices: false })} />
+          </PartBoundary>
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>

@@ -286,16 +286,22 @@ export class Session {
   /** A made agent (the demo's, a test's) with `also` beside it: a turn whose place picked one of them runs there. */
   private beside(agent: AgentBackend, also: readonly AgentRuntime[]): AgentBackend {
     if (!also.length) return agent;
-    const options = { cwd: this.opts.agentCwd, autoEdit: true, additionalDirectories: [], bridge: this.bridge };
+    const options = { cwd: this.opts.agentCwd, autoEdit: true, additionalDirectories: [], bridge: this.bridge, ownEnv: this.ownEnv };
     return routedBackend(agent, 'claude', (id) => {
       const rt = also.find((r) => r.id === id);
       return rt ? guardedBackend(rt.create(options), rt.capabilities) : undefined;
     });
   }
 
+  /**
+   * Your saved variables for your agent's own checks in `cwd` (Settings' MCP servers, #442): as a
+   * run of yours there gets them (yours, then the project's), read when asked so a change counts.
+   */
+  private readonly ownEnv = (cwd: string): Record<string, string> => this.env.envFor({ dir: cwd }, { claude: true });
+
   /** Your default agent's backend, sending each turn whose place picked another runtime to that one's (agent/runtime/router.ts). */
   private routed(main: AgentRuntime, rt: NonNullable<SessionOptions['runtime']>): AgentBackend {
-    const make = (r: AgentRuntime): AgentBackend => guardedBackend(r.create({ ...rt.options, bridge: this.bridge }), r.capabilities);
+    const make = (r: AgentRuntime): AgentBackend => guardedBackend(r.create({ ...rt.options, bridge: this.bridge, ownEnv: this.ownEnv }), r.capabilities);
     // Every other runtime that has plan usage reports it too (Codex's windows on the usage tab).
     const withUsage = KNOWN_RUNTIMES.map((r) => r.id).filter((id) => id !== main.id && rt.runtimes(id)?.capabilities.hasUsage);
     return routedBackend(
@@ -325,7 +331,7 @@ export class Session {
     // A local endpoint is Claude Code pointed elsewhere (BLG-449), as in routed(): it runs wherever Claude does.
     const rt = runtime === LOCAL_RUNTIME ? (this.opts.runtime?.runtimes('claude') ? localRuntime((v) => this.local.resolve(v)) : undefined) : this.opts.runtime?.runtimes(runtime);
     if (!rt || !this.opts.runtime) return undefined;
-    const backend = guardedBackend(rt.create({ ...this.opts.runtime.options, bridge: this.bridge }), rt.capabilities);
+    const backend = guardedBackend(rt.create({ ...this.opts.runtime.options, bridge: this.bridge, ownEnv: this.ownEnv }), rt.capabilities);
     this.otherBackends.set(runtime, backend);
     return backend;
   }

@@ -18,7 +18,7 @@ import { MachineTag } from '../machines/MachineTag.js';
 import { sameDeep, sameFields } from '../lib/stable.js';
 import type { AppState } from '@beluga/core/store.js';
 import { type ToolAction, isPrStep, shortOf, toolbarActions } from './toolbar-actions.js';
-import { type BranchFold, BranchControl, pillHidden, shortLabel } from './BranchControl.js';
+import { type BranchFold, BranchControl, BranchPill, pillHidden, shortLabel } from './BranchControl.js';
 import { isPlanAction, runPlanAction } from '../lib/plan-task.js';
 import { askBeforeWork } from '../lib/work-confirm.js';
 import { getPrefs, setPrefs, usePrefs } from '../lib/prefs.js';
@@ -203,9 +203,9 @@ export function Toolbar() {
     }
     const { st } = state.made;
     const { branch, primary, icons, more } = state.made.tools;
-    // A narrow window: the icons that don't fit move under ⋯ first, then the branch pill keeps only
-    // its icon and number, then its step and the everyday action only their icons (words in their tips).
-    const pillW = (fold: BranchFold): number => (branch && !pillHidden(branch, fold) ? (fold === 'none' ? branch.label.length * 6.6 + 40 : 38) + (branch.pr ? 28 : 0) : 0);
+    // A narrow window: the icons that don't fit move under ⋯ first, then the branch pill (beside the
+    // name) keeps only its icon and number, then its step and the everyday action only their icons (words in their tips).
+    const pillW = (fold: BranchFold): number => (branch && !pillHidden(branch, fold) ? (fold === 'none' ? branch.label.length * 5.8 + 34 : 30) + (branch.pr ? 24 : 0) : 0);
     const stepW = (fold: BranchFold): number => (branch?.steps[0] ? (fold === 'all' ? shortLabel(branch.steps[0]).length * 7.4 + 42 : branch.steps[0].label.length * 7.4 + 42) + 34 : 0);
     const primaryW = (fold: BranchFold): number => (primary ? (fold === 'all' ? shortOf(primary).length * 7.4 + 48 : primary.label.length * 7.4 + 48) : 0);
     // The Chat · Terminal · Both switch (BLG-534): with its words while there's room, then its icons.
@@ -227,8 +227,8 @@ export function Toolbar() {
       actions.run({ type: 'ws', id: ws.id, action: a.action });
     };
     const pr = state.prs[ws.id];
-    // Where the branch stands (Merged, Conflicts, its PR) is said once, by the branch pill on the
-    // right: the subtitle keeps to what Claude is doing, or what needs you.
+    // Where the branch stands (Merged, Conflicts, its PR) is said once, by the branch pill beside the
+    // name: the subtitle keeps to what Claude is doing, or what needs you.
     const live = !branch || state.made.live;
     return (
       <Shell
@@ -237,6 +237,11 @@ export function Toolbar() {
           <>
             {project?.root ? <span className={s.crumb}>{project.name}</span> : null}
             <span className={s.name}>{ws.name}</span>
+            {branch ? (
+              <span className={s.branchPill}>
+                <BranchPill wsId={ws.id} branch={branch} fold={fold} />
+              </span>
+            ) : null}
           </>
         }
         subtitle={
