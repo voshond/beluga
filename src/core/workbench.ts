@@ -12,6 +12,7 @@ import { tilde } from './paths.js';
 import type { WorkspaceManager } from '../workspaces/manager.js';
 import type { Workspace } from '../workspaces/types.js';
 import { worktreeOrigin } from '../workspaces/origin.js';
+import { parseToolReport } from '../workspaces/toolbox.js';
 import { formatBytes, measureAll } from '../workspaces/disk.js';
 import { contentIn, fetchRemote, resetTo } from '../workspaces/git.js';
 import { type MergeOptions, type MergeProblem, type PrStepKind, buildPrPrompt, catchUpPrompt, commitSubjects, createPr, disableAutoMerge, prFromCommits, titleOfBranch, resolvePrConflictsPrompt, customPrPrompt, deleteRemoteBranch, ensurePrPromptFile, explainMergeError, findPr, fixChecksPrompt, forgetGh, ghState, gitSetup, hasGh, headCarries, listPrs, useHttpsRemote, mergePr, mergeToBase, prStep, pushForPr, remoteRef, rerunFailed, resetPrPrompt, setPrTarget, unpushedCommits } from '../workspaces/pr.js';
@@ -1361,7 +1362,24 @@ export class Workbench {
     if (!this.deps.terminals) return undefined;
     const existing = this.deps.terminals.get(termKey);
     if (existing) this.deps.terminals.close(termKey);
-    return this.openSession(termKey, { path: projectRoot }, command, size);
+    const session = this.openSession(termKey, { path: projectRoot }, command, size);
+    if (session) this.watchToolReports(termKey, session);
+    return session;
+  }
+
+  /** Every `::beluga status=…` line the tool prints becomes its report; a line split across chunks waits for its end. */
+  private watchToolReports(key: string, session: PtyProcess): void {
+    let pending = '';
+    const read = (line: string): void => {
+      const report = parseToolReport(line);
+      if (report && this.deps.terminals?.get(key) === session) this.deps.store.dispatch({ type: 'terminal_report', id: key, report });
+    };
+    session.onData((data) => {
+      const lines = (pending + data).split(/\r?\n/);
+      pending = (lines.pop() ?? '').slice(-4096);
+      lines.forEach(read);
+    });
+    session.onExit(() => read(pending));
   }
 
   sshShell(host: string, size?: { cols: number; rows: number }): PtyProcess | undefined {

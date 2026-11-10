@@ -1,6 +1,7 @@
 import { type RuntimeChoice, runtimeChoices } from '../shared/agent-runtimes.js';
 import type { NoticeKind, NoticeTag } from './notify.js';
 import type { ArchivePhase } from '../workspaces/archive.js';
+import type { ToolReport } from '../workspaces/toolbox.js';
 import type { Settings } from './settings.js';
 import { type EnvKeys, NO_ENV_KEYS } from '../shared/env-vars.js';
 import type { ShellChoice } from '../shared/shells.js';
@@ -186,6 +187,8 @@ export interface WorkState {
   readonly terminals: Readonly<Record<string, string>>;
   /** Terminal programs that ended (id → exit code; null: killed or couldn't start). */
   readonly termExits: Readonly<Record<string, number | null>>;
+  /** The last `::beluga status=…` line a Toolbox tool's terminal printed (id → report), cleared when it starts again. */
+  readonly termReports: Readonly<Record<string, ToolReport>>;
   /** Names you gave terminals (id → name), kept while the terminal is. */
   readonly termNames: Readonly<Record<string, string>>;
   /** Running terminals that started before you changed their variables (Settings › Environment): a restart gives them the new ones. */
@@ -225,6 +228,7 @@ export type WorkAction =
   | { type: 'templates'; templates: readonly Template[] }
   | { type: 'terminal'; id: string; title?: string }
   | { type: 'terminal_exit'; id: string; code: number | null }
+  | { type: 'terminal_report'; id: string; report: ToolReport }
   /** Name a terminal (no name: back to Shell N). */
   | { type: 'terminal_name'; id: string; name?: string }
   | { type: 'terminal_env_stale'; ids: readonly string[] }
@@ -257,6 +261,7 @@ export const initialWork: WorkState = {
   templates: [],
   terminals: {},
   termExits: {},
+  termReports: {},
   termNames: {},
   termEnvStale: [],
   agentTerms: {},
@@ -315,12 +320,15 @@ export function reduceWork(state: WorkState, action: WorkAction): WorkState {
     case 'terminal': {
       if (action.title !== undefined && state.terminals[action.id] === action.title && !(action.id in state.termExits)) return state;
       const termExits = without(state.termExits, action.id);
+      const termReports = without(state.termReports, action.id);
       // A closed terminal forgets its name; one that starts again keeps it.
-      if (action.title === undefined) return { ...state, termExits, terminals: without(state.terminals, action.id), termNames: without(state.termNames, action.id) };
-      return { ...state, termExits, terminals: { ...state.terminals, [action.id]: action.title } };
+      if (action.title === undefined) return { ...state, termExits, termReports, terminals: without(state.terminals, action.id), termNames: without(state.termNames, action.id) };
+      return { ...state, termExits, termReports, terminals: { ...state.terminals, [action.id]: action.title } };
     }
     case 'terminal_exit':
       return action.id in state.terminals ? { ...state, termExits: { ...state.termExits, [action.id]: action.code } } : state;
+    case 'terminal_report':
+      return action.id in state.terminals ? { ...state, termReports: { ...state.termReports, [action.id]: action.report } } : state;
     case 'terminal_name':
       if (!(action.id in state.terminals)) return state;
       return { ...state, termNames: action.name ? { ...state.termNames, [action.id]: action.name } : without(state.termNames, action.id) };

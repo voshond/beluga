@@ -462,14 +462,23 @@ button.rowPr:focus-visible {
   flex-shrink: 0;
 }
 
-.toolboxOk {
-  color: var(--ok);
+.toolbox_success,
+.toolbox_warn,
+.toolbox_fail {
+  display: flex;
   flex-shrink: 0;
 }
-
-.toolboxFail {
+.toolbox_success,
+.toolboxMessage_success {
+  color: var(--ok);
+}
+.toolbox_warn,
+.toolboxMessage_warn {
+  color: var(--warn);
+}
+.toolbox_fail,
+.toolboxMessage_fail {
   color: var(--red);
-  flex-shrink: 0;
 }
 
 .row:disabled {

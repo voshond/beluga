@@ -8,6 +8,20 @@ Open a project, scroll to the Toolbox section, and click any tool button. It ope
 
 The phone lists all tools and can run them, with output shown read-only. Creating, editing and deleting tools is Mac-only.
 
+While a tool runs, its row shows a spinner and it can't be started again; the last run's result stays on the row until the next run.
+
+## Reporting a result
+
+A tool's result comes from its exit code: 0 is ✓, anything else is ✗ with `exit N`. A script can say more by printing a line of its own:
+
+```
+::beluga status=success Deployed to arch
+::beluga status=warn Deployed, but m1arch was asleep
+::beluga status=fail m1arch build failed
+```
+
+The row shows the message in place of the command, with ✓, ⚠ or ✗. The last such line wins. A non-zero exit always fails: the message of a `fail` line is kept, any other report gives way to `exit N`. The line must start the output line (colors are ignored). `scripts/deploy-thin-clients.sh` ends with one.
+
 ## Creating and editing tools
 
 Go to Project Settings › Toolbox to create, rename or delete tools.
