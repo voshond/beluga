@@ -58,12 +58,13 @@ does apply is the *inside-a-task* split:
 | large | estimate ≥ 5, or ≥ 6 criteria, or label `important` | Opus, effort high | Sonnet | Haiku | Sonnet |
 
 The rule: the orchestrator sits a tier above the builder; reading the code is always the cheapest
-tier; checking matches the builder only when the work is big. Models are Claude Code aliases
-(`haiku`, `sonnet`, `opus`), so they follow the newest model of each family.
+tier; checking matches the builder only when the work is big. The tiers are written as Claude Code
+aliases (`haiku`, `sonnet`, `opus`), so on Claude they follow the newest model of each family; on
+Codex they are mapped onto its own list (§4a).
 
 **Who wins:** a model picked for the conversation (the picker) or set on the agent always wins
 and turns routing off for that run; an effort picked for the conversation wins over the routed
-effort. Only Claude runs are routed (other runtimes have no subagent model choice). A message sent
+effort. Claude Code and Codex runs are routed; other runtimes (Copilot, OpenCode, local models) run as before. A message sent
 into a live routed run keeps the orchestrator's model unless you pick one meanwhile.
 
 ### Routing each step
@@ -100,10 +101,37 @@ BoardWork.forRun ── route (taskSize) ──▶ AgentHost.runAgent
 - `src/core/board/work.ts`: `RunBoard.route` for a worktree doing a task (not plan runs, not friends).
 - `src/core/agent-host.ts`: `routedFor` decides; `lane.routedModel` keeps follow-ups on it.
 - `src/agent/runtime/claude/runner.ts`: `sdkAgents` → `Options.agents`.
+- `src/agent/runtime/codex/roles.ts` + the Codex runner: the same workers as Codex agent roles (§4a).
 - `src/shared/experiments.ts`: the `routing` experiment (the Mac's Experimental pane lists it by itself).
 - Tests: `tests/task-routing.test.ts`, `tests/board-work.test.ts`.
 
 No new API method, no protocol change, nothing on the phone.
+
+## 4a. Codex
+
+Codex has its own multi-agent (`features.multi_agent`, on for your own runs since BLG-519), and
+since 0.16x **agent roles**: `[agents.<name>]` with a `description` and a `config_file`, a config
+layer for that role (`model`, `model_reasoning_effort`, `developer_instructions`); `spawn_agent`
+takes the role as `agent_type`. Beluga passes the roles in `thread/start`'s `config`, so your own
+`~/.codex/config.toml` is never touched.
+
+- `src/agent/runtime/codex/roles.ts`: `codexTierModel` maps a tier onto Codex's `model/list`:
+  `haiku` → its fast model (`smallCodexModel`), `sonnet` → its default, `opus` → its frontier model
+  (falls back to the default). `codexRoleConfig` writes one role file per worker under
+  `~/.beluga/codex-roles/` (named by a hash of its content, so runs never clobber each other) and
+  returns the `agents.<name>` overrides.
+- The Codex runner resolves the lead's tier the same way and adds the roles to the thread's config,
+  only when the run has your Codex tools (`yourTools`: never a friend's).
+- The brief tells Codex to spawn with `agent_type` and names models by tier ("the most capable
+  model"), never Claude's names.
+
+**One difference that matters:** a role file's `sandbox_mode` is ignored: a spawned agent keeps
+the lead's sandbox (checked live: a `read-only` scout still wrote a file). Codex also has no
+per-role tool deny list like the SDK's `disallowedTools`. So on Codex the scout and checker are
+read-only and stay off the board **by instruction only**; on Claude it is enforced.
+
+Checked live on this machine (codex-cli 0.167): with the role files Beluga wrote, the lead ran on
+`gpt-6-astra` and its `beluga-scout` on `gpt-6-luna` at low effort.
 
 ## 5. Next
 

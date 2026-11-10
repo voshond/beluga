@@ -6,7 +6,7 @@ export type RouteTier = 'small' | 'medium' | 'large';
 
 export type TaskRoute = {
   readonly size: RouteTier;
-  readonly orchestrator: { readonly model: string; readonly effort: Effort };
+  readonly orchestrator: { readonly tier: RouteTier; readonly effort: Effort };
   readonly builder: RouteTier;
   readonly scout: RouteTier;
   readonly checker: RouteTier;
@@ -21,9 +21,9 @@ export type RoutedRun = {
 export const TIER_MODEL: Readonly<Record<RouteTier, string>> = { small: 'haiku', medium: 'sonnet', large: 'opus' };
 
 const ROUTES: Readonly<Record<RouteTier, TaskRoute>> = {
-  small: { size: 'small', orchestrator: { model: TIER_MODEL.medium, effort: 'medium' }, builder: 'small', scout: 'small', checker: 'small' },
-  medium: { size: 'medium', orchestrator: { model: TIER_MODEL.large, effort: 'medium' }, builder: 'medium', scout: 'small', checker: 'small' },
-  large: { size: 'large', orchestrator: { model: TIER_MODEL.large, effort: 'high' }, builder: 'medium', scout: 'small', checker: 'medium' },
+  small: { size: 'small', orchestrator: { tier: 'medium', effort: 'medium' }, builder: 'small', scout: 'small', checker: 'small' },
+  medium: { size: 'medium', orchestrator: { tier: 'large', effort: 'medium' }, builder: 'medium', scout: 'small', checker: 'small' },
+  large: { size: 'large', orchestrator: { tier: 'large', effort: 'high' }, builder: 'medium', scout: 'small', checker: 'medium' },
 };
 
 const LARGE_LABELS = ['important'];
@@ -79,19 +79,31 @@ const workerAgents = (route: TaskRoute): Readonly<Record<string, RunSubagent>> =
   },
 });
 
-export const routingBrief = (route: TaskRoute): string =>
+export const ROUTED_RUNTIMES = ['claude', 'codex'] as const;
+export type RoutedRuntime = (typeof ROUTED_RUNTIMES)[number];
+
+const TIER_WORDS: Readonly<Record<RouteTier, string>> = { small: 'the small, fast model', medium: 'the default model', large: 'the most capable model' };
+
+const SPAWN: Readonly<Record<RoutedRuntime, string>> = {
+  claude: 'Hand a step to a worker with the Agent tool, its subagent_type the worker’s name.',
+  codex: 'Hand a step to a worker by spawning a sub-agent with agent_type set to the worker’s name, and wait for its report. beluga-scout and beluga-checker are read-only by your word alone: tell them not to edit.',
+};
+
+const modelName = (runtime: RoutedRuntime, tier: RouteTier): string => (runtime === 'claude' ? TIER_MODEL[tier] : TIER_WORDS[tier]);
+
+export const routingBrief = (route: TaskRoute, runtime: RoutedRuntime = 'claude'): string =>
   [
-    `Routed run (Settings › Experimental › Routed task runs): this task was sized ${route.size}, so you run on ${route.orchestrator.model} as its orchestrator, and smaller models do the legwork as subagents. You decide, route and review.`,
-    `1. Understand: read the brief, then send beluga-scout (${TIER_MODEL[route.scout]}) to find what you need (files, how it works today, the tests that cover it) instead of reading widely yourself. Read yourself only what you must judge.`,
+    `Routed run (Settings › Experimental › Routed task runs): this task was sized ${route.size}, so you run on ${modelName(runtime, route.orchestrator.tier)} as its orchestrator, and smaller models do the legwork as workers. You decide, route and review. ${SPAWN[runtime]}`,
+    `1. Understand: read the brief, then send beluga-scout (${modelName(runtime, route.scout)}) to find what you need (files, how it works today, the tests that cover it) instead of reading widely yourself. Read yourself only what you must judge.`,
     '2. Plan: cut the work into steps a person could review one by one, and keep them as your todo list.',
-    `3. Route each step: beluga-builder (${TIER_MODEL[route.builder]}) for a step with a clear spec; do a step yourself when it needs judgment (an interface, a design decision, a subtle bug, a change across many files that must stay consistent) or after a builder failed it twice. Steps that touch different files may run side by side.`,
+    `3. Route each step: beluga-builder (${modelName(runtime, route.builder)}) for a step with a clear spec; do a step yourself when it needs judgment (an interface, a design decision, a subtle bug, a change across many files that must stay consistent) or after a builder failed it twice. Steps that touch different files may run side by side.`,
     '4. Brief a builder fully: it does not see this conversation. Name the files, the decisions already made, the acceptance criteria the step serves and the checks to run. Never pass on a vague step, and never resend a blocked or failed one unchanged: change the brief or do it yourself.',
-    `5. Verify: when the steps are done, send beluga-checker (${TIER_MODEL[route.checker]}) with the acceptance criteria and the checks to run, then read the diff yourself. You sign it off: tick the criteria, write the handoff, commit.`,
+    `5. Verify: when the steps are done, send beluga-checker (${modelName(runtime, route.checker)}) with the acceptance criteria and the checks to run, then read the diff yourself. You sign it off: tick the criteria, write the handoff, commit.`,
     'Questions only the user can answer, the task board and commits stay yours; workers never ask the user. Work found outside the task becomes a sub-task, not a builder step. A one-line fix needs no routing: just do it.',
   ].join('\n');
 
-export const routedRun = (route: TaskRoute): RoutedRun => ({
-  model: route.orchestrator.model,
+export const routedRun = (route: TaskRoute, runtime: RoutedRuntime = 'claude'): RoutedRun => ({
+  model: TIER_MODEL[route.orchestrator.tier],
   effort: route.orchestrator.effort,
-  routing: { brief: routingBrief(route), agents: workerAgents(route) },
+  routing: { brief: routingBrief(route, runtime), agents: workerAgents(route) },
 });

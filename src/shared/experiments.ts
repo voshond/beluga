@@ -40,13 +40,13 @@ export const EXPERIMENT_INFO: Readonly<Record<Experiment, ExperimentInfo>> = {
     title: 'Routed task runs',
     summary: 'Each task’s agent picks its model from the task’s size and orchestrates: it plans and reviews, and hands the legwork to smaller models.',
     changes: [
-      'A task’s agent is sized from its estimate, acceptance criteria and labels: small tasks run on Sonnet, bigger ones on Opus.',
+      'A task’s agent is sized from its estimate, acceptance criteria and labels: small tasks run on Sonnet, bigger ones on Opus. On Codex, the same sizes pick its default and frontier models.',
       'It cuts the task into steps and hands them to helpers on smaller models: a scout reads the code, a builder makes a step, a checker runs the checks against the criteria.',
       'It keeps what needs judgment for itself: design decisions, questions for you, the task board and the commit.',
-      'A model you picked for the conversation or the agent always wins, and only agents that run on Claude Code are routed. Plan milestones keep their own head agent and checkers.',
+      'A model you picked for the conversation or the agent always wins. Claude Code and Codex agents are routed; other agents run as before. Plan milestones keep their own head agent and checkers.',
     ],
     keywords: 'model routing orchestrator auto model haiku sonnet opus subagents cost workers',
-    cost: 'Nothing extra runs on this computer: the same Claude Code runs the helpers. Most of the work moves to smaller models, so a task usually uses less of your plan, though a big task’s orchestrator runs on Opus.',
+    cost: 'Nothing extra runs on this computer: the same Claude Code or Codex runs the helpers. Most of the work moves to smaller models, so a task usually uses less of your plan, though a big task’s orchestrator runs on the most capable model.',
   },
 };
 

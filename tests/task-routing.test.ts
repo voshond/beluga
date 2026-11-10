@@ -1,10 +1,12 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { AgentBackend, AgentRunInput } from '../src/agent/types.js';
 import { runInstructions } from '../src/agent/run-instructions.js';
 import { sdkAgents } from '../src/agent/runtime/claude/runner.js';
+import { codexRoleConfig, codexTierModel, roleToml } from '../src/agent/runtime/codex/roles.js';
+import type { Model } from '../src/agent/runtime/codex/protocol.js';
 import { AgentHost } from '../src/core/agent-host.js';
 import { criteriaCount, routeTask, routedRun, taskSize } from '../src/core/board/routing.js';
 import { Store, initialState } from '../src/core/store.js';
@@ -35,9 +37,9 @@ describe('sizing a task', () => {
   });
 
   it('the orchestrator sits a tier above the builder, the scout is always the smallest', () => {
-    expect(routeTask(task())).toMatchObject({ orchestrator: { model: 'sonnet' }, builder: 'small', scout: 'small' });
-    expect(routeTask(task({ estimate: 3 }))).toMatchObject({ orchestrator: { model: 'opus', effort: 'medium' }, builder: 'medium', scout: 'small' });
-    expect(routeTask(task({ estimate: 8 }))).toMatchObject({ orchestrator: { model: 'opus', effort: 'high' }, builder: 'medium', checker: 'medium' });
+    expect(routeTask(task())).toMatchObject({ orchestrator: { tier: 'medium' }, builder: 'small', scout: 'small' });
+    expect(routeTask(task({ estimate: 3 }))).toMatchObject({ orchestrator: { tier: 'large', effort: 'medium' }, builder: 'medium', scout: 'small' });
+    expect(routeTask(task({ estimate: 8 }))).toMatchObject({ orchestrator: { tier: 'large', effort: 'high' }, builder: 'medium', checker: 'medium' });
   });
 });
 
@@ -68,7 +70,7 @@ const ME = 'me';
 const FRIEND = 'friend';
 const TREE = 'ws:tree';
 
-function setup(opts: { readonly experiments?: readonly string[]; readonly picked?: string } = {}) {
+function setup(opts: { readonly experiments?: readonly string[]; readonly picked?: string; readonly runtime?: string } = {}) {
   const store = new Store(initialState('room', 'auto'));
   store.dispatch({ type: 'prefs', prefs: { experiments: [...(opts.experiments ?? [])], model: 'claude-default-pick' } });
   const dir = mkdtempSync(path.join(os.tmpdir(), 'beluga-routing-'));
@@ -95,6 +97,7 @@ function setup(opts: { readonly experiments?: readonly string[]; readonly picked
     refreshUsage: async () => undefined,
     workspaces: { place, refreshWorkspace: async () => undefined, manager: { list: [] } } as never,
     board: (channel, from) => (from === ME ? { tools: { channel } as never, brief: 'the task', route: routeTask(task({ estimate: 3 })) } : undefined),
+    ...(opts.runtime ? { agentRef: () => ({ runtime: opts.runtime!, label: opts.runtime! }) } : {}),
   });
   const ask = async (from = ME): Promise<AgentRunInput> => {
     const before = runs.length;
@@ -124,5 +127,47 @@ describe('a task run through the shared workflow', () => {
     const run = await setup({ experiments: ['routing'], picked: 'haiku' }).ask();
     expect(run.routing).toBeUndefined();
     expect(run.model).toBe('haiku');
+  });
+});
+
+const model = (id: string, description: string, over: Partial<Model> = {}): Model => ({ id, model: id, displayName: id, description, hidden: false, isDefault: false, supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'medium' }, { reasoningEffort: 'high' }], ...over });
+
+const CODEX_MODELS: readonly Model[] = [
+  model('gpt-6.1-sol', 'Latest workhorse model for coding and everyday work.', { isDefault: true }),
+  model('gpt-6-astra', 'Frontier intelligence for the most demanding work.'),
+  model('gpt-6-luna', 'Fast and affordable model for easier tasks.'),
+  model('gpt-reserve', 'Fast and affordable agentic coding model.', { hidden: true }),
+];
+
+describe('routing on Codex', () => {
+  it('maps the tiers onto Codex’s own models: fast, default, frontier', () => {
+    expect(codexTierModel('haiku', CODEX_MODELS)).toBe('gpt-6-luna');
+    expect(codexTierModel('sonnet', CODEX_MODELS)).toBe('gpt-6.1-sol');
+    expect(codexTierModel('opus', CODEX_MODELS)).toBe('gpt-6-astra');
+    expect(codexTierModel('opus', [CODEX_MODELS[0]!])).toBe('gpt-6.1-sol');
+    expect(codexTierModel('gpt-x', CODEX_MODELS)).toBeUndefined();
+  });
+
+  it('writes each worker as a Codex agent role with its model, effort and instructions', async () => {
+    const routing = routedRun(routeTask(task({ estimate: 3 })), 'codex').routing;
+    expect(roleToml(routing.agents['beluga-scout']!, CODEX_MODELS)).toBe(`model = "gpt-6-luna"\nmodel_reasoning_effort = "low"\ndeveloper_instructions = ${JSON.stringify(routing.agents['beluga-scout']!.prompt)}\n`);
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'beluga-codex-roles-'));
+    const config = await codexRoleConfig(routing, CODEX_MODELS, dir);
+    expect(Object.keys(config)).toEqual(['agents.beluga-scout', 'agents.beluga-builder', 'agents.beluga-checker']);
+    expect(readFileSync(config['agents.beluga-builder']!.config_file, 'utf8')).toContain('model = "gpt-6.1-sol"');
+  });
+
+  it('tells Codex how to spawn its workers, in model words rather than Claude’s names', () => {
+    const brief = routedRun(routeTask(task({ estimate: 3 })), 'codex').routing.brief;
+    expect(brief).toContain('agent_type');
+    expect(brief).toContain('you run on the most capable model');
+    expect(brief).not.toContain('opus');
+  });
+
+  it('a Codex task run is routed, another runtime is not', async () => {
+    const codex = await setup({ experiments: ['routing'], runtime: 'codex' }).ask();
+    expect(codex.routing?.brief).toContain('agent_type');
+    const copilot = await setup({ experiments: ['routing'], runtime: 'copilot' }).ask();
+    expect(copilot.routing).toBeUndefined();
   });
 });

@@ -40,7 +40,7 @@ import { agentForAsk } from './gateway/serve.js';
 import { fromMachine } from './client-context.js';
 import { buildPreviewAppend } from '../agent/preview-prompt.js';
 import { experimentOn } from '../shared/experiments.js';
-import { type RoutedRun, type TaskRoute, routedRun } from './board/routing.js';
+import { ROUTED_RUNTIMES, type RoutedRun, type TaskRoute, routedRun } from './board/routing.js';
 
 /** How an external agent's message goes in, and what happened to it. */
 export type ExternalSendMode = 'auto' | 'queue' | 'steer' | 'restart';
@@ -1744,10 +1744,11 @@ export class AgentHost {
   }
 
   private routedFor(route: TaskRoute | undefined, runtime: AgentRef, place: AgentPlace | undefined, named: AgentRef | undefined): RoutedRun | undefined {
-    if (!route || runtime.runtime !== CLAUDE_AGENT.runtime) return undefined;
+    const routable = ROUTED_RUNTIMES.find((id) => id === runtime.runtime);
+    if (!route || !routable) return undefined;
     if (place?.model || (place?.agent ?? named)?.model) return undefined;
     if (!experimentOn(this.store.getState().prefs.experiments, 'routing')) return undefined;
-    return routedRun(route);
+    return routedRun(route, routable);
   }
 
   /** The requester's trust now: every check on a run reads it here, never from the people book. */
