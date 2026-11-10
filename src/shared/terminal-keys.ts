@@ -3,6 +3,8 @@
 export const shellId = (wsId: string): string => wsId;
 export const setupId = (wsId: string): string => `${wsId}:setup`;
 export const runId = (wsId: string): string => `${wsId}:run`;
+/** A Toolbox tool run in a terminal, keyed by project id + tool id (BLG-75). */
+export const toolboxTermId = (projectId: string, toolId: string): string => `toolbox:${projectId}:${toolId}`;
 /** A GitHub setup step Beluga runs where you can see it (installing gh, logging in), BLG-213. */
 export const githubId = (wsId: string): string => `${wsId}:github`;
 /** The agent's own terminal (Claude Code's or Codex's) on a workspace's conversation, BLG-534. */
@@ -50,5 +52,6 @@ export function terminalLabel(key: string, names: Readonly<Record<string, string
   if (named) return named;
   if (isGlobalShell(key)) return `Shell ${globalShellNumber(key)}`;
   if (isSshShell(key)) return sshHostOf(key);
+  if (key.startsWith('toolbox:')) return key.split(':')[3] ?? 'Tool';
   return key.endsWith(':setup') ? 'Setup' : key.endsWith(':run') ? 'Run' : key.endsWith(':github') ? 'GitHub' : isAgentTerm(key) ? 'Agent' : 'Shell';
 }

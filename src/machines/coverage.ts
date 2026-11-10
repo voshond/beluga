@@ -681,6 +681,17 @@ export const MACHINE: Record<Method, MachineSide> = {
   'web.public': 'refuse',
   'web.tailscale': 'refuse',
   'web.stop': 'refuse',
+
+  // ---- project Toolbox (BLG-75): drive all of them (same as the Mac's access)
+  'toolbox.list': 'drive',
+  'toolbox.create': 'drive',
+  'toolbox.update': 'drive',
+  'toolbox.delete': 'drive',
+  'toolbox.run': 'drive',
+  'toolbox.approve': 'drive',
+  'toolbox.sshHosts': 'drive',
+  'toolbox.dismissSuggestion': 'drive',
+  'toolbox.acceptProposal': 'drive',
 };
 
 /** A method a screen driving a computer may not call (unknown names are left to the API, which refuses them). */

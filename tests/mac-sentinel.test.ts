@@ -211,8 +211,8 @@ describe('Sentinel on the Mac', () => {
     // Every kind's starting trigger is one the daemon takes as it is.
     for (const c of triggers) expect(TriggerSchema.safeParse(triggerOfKind(c.value, { kind: 'manual' })).success).toBe(true);
     const steps = stepChoices('look');
-    expect(steps).toHaveLength(10);
-    expect(steps.filter((c) => !c.disabled).map((c) => c.kind)).toEqual(['claude', 'script', 'notify', 'http', 'message', 'friend', 'trigger', 'measure']);
+    expect(steps).toHaveLength(11);
+    expect(steps.filter((c) => !c.disabled).map((c) => c.kind)).toEqual(['claude', 'script', 'notify', 'http', 'message', 'friend', 'trigger', 'measure', 'tool']);
     expect(steps.find((c) => c.kind === 'pr')!.hint).toBe('Needs Work access');
     expect(steps.find((c) => c.kind === 'merge')!.hint).toBe('Needs Ship access');
     expect(stepChoices('ship').every((c) => !c.disabled)).toBe(true);

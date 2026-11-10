@@ -507,6 +507,37 @@ export const RECIPES: readonly Recipe[] = [
       ],
     },
   },
+  {
+    id: 'toolbox-scout',
+    name: 'Toolbox scout',
+    icon: 'toolbox',
+    line: 'Every week, finds repeated agent commands and proposes Toolbox tools for them',
+    sentinel: {
+      name: 'Toolbox scout',
+      icon: 'toolbox',
+      recipe: 'toolbox-scout',
+      trigger: { kind: 'schedule', every: 'week', at: '09:00', days: [1], missed: 'skip' },
+      access: 'look',
+      notify: 'mac',
+      steps: [
+        {
+          kind: 'claude',
+          name: 'Find repeated commands',
+          where: 'project',
+          prompt: [
+            "Look at the commands your agents ran in this project over the last two weeks (check the git log, the worktrees, and any patterns you can see from the project's recent commits and runs).",
+            '',
+            'Identify commands that were run more than twice and that would make useful one-click Toolbox tools — deployments, test runs, build steps, SSH commands to known hosts, cleanup scripts.',
+            '',
+            'For each one, call tool_propose with a short action-oriented name and the command. Use {{host}} or {{param}} placeholders where the value changes between runs. Only propose tools the user would actually click — skip one-off diagnostic commands.',
+            '',
+            'If you find nothing worth proposing, say so in one line and stop.',
+          ].join('\n'),
+        },
+        { kind: 'notify', name: 'Tell me', phone: false },
+      ],
+    },
+  },
 ];
 
 export const recipeById = (id: string): Recipe | undefined => RECIPES.find((r) => r.id === id);

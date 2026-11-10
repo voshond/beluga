@@ -104,7 +104,7 @@ describe('the sentinel.* API', () => {
     expect(updated.projectId).toBeUndefined();
     const copy = SENTINEL_HANDLERS['sentinel.duplicate'](session, made.id);
     expect(copy).toMatchObject({ name: 'Renamed copy', paused: true });
-    expect(SENTINEL_HANDLERS['sentinel.recipes'](session).map((r) => r.id)).toEqual(['morning-brief', 'fix-what-broke', 'fix-and-ship', 'nightly-tests', 'dependency-updates', 'release-notes', 'issues-to-tasks', 'uptime-guard', 'watch-the-web', 'fetch-analyse-send', 'review-new-prs', 'customers-this-week', 'youtube-subscribers', 'last-job-run', 'site-speed', 'open-issues-prs']);
+    expect(SENTINEL_HANDLERS['sentinel.recipes'](session).map((r) => r.id)).toEqual(['morning-brief', 'fix-what-broke', 'fix-and-ship', 'nightly-tests', 'dependency-updates', 'release-notes', 'issues-to-tasks', 'uptime-guard', 'watch-the-web', 'fetch-analyse-send', 'review-new-prs', 'customers-this-week', 'youtube-subscribers', 'last-job-run', 'site-speed', 'open-issues-prs', 'toolbox-scout']);
     expect(SENTINEL_HANDLERS['sentinel.setRunAtOnce'](session, 3)).toBe(3);
     expect(() => (SENTINEL_HANDLERS['sentinel.rotateSecret'] as (s: Session, ...a: unknown[]) => unknown)(session, made.id)).toThrow('doesn’t start from a webhook');
     expect(() => (SENTINEL_HANDLERS['sentinel.webhookUrl'] as (s: Session, ...a: unknown[]) => unknown)(session, made.id)).toThrow('doesn’t start from a webhook');
@@ -134,7 +134,7 @@ describe('recipes', () => {
   });
 
   it('are the design’s eleven and five for numbers, each with what its steps need, and the second sentinel runs after the first', () => {
-    expect(RECIPES).toHaveLength(16);
+    expect(RECIPES).toHaveLength(17);
     expect(RECIPES.filter((r) => r.group === 'numbers').map((r) => r.id)).toEqual(['customers-this-week', 'youtube-subscribers', 'last-job-run', 'site-speed', 'open-issues-prs']);
     for (const r of RECIPES) {
       const steps = r.sentinel.steps ?? [];

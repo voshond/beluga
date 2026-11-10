@@ -110,6 +110,8 @@ export const StepInputSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('trigger'), id: stepId, name: stepName, sentinelId: z.string().max(80).default('') }),
   // Its source may be filled in later (none: a run says to pick one).
   z.object({ kind: z.literal('measure'), id: stepId, name: stepName, from: z.enum(MEASURE_FROM).default('previous'), source: SourceSchema.optional(), metrics: z.array(MetricSpecSchema).max(40).default([]), keep: z.number().int().min(1).max(ROWS_KEPT).optional(), filesKeepDays: z.number().int().min(1).max(FILES_KEEP_MAX).optional() }),
+  // toolName may be empty until filled in (a new step from Add a Step): a run says so.
+  z.object({ kind: z.literal('tool'), id: stepId, name: stepName, toolName: text(100).default(''), params: z.record(z.string(), z.string().max(500)).optional(), timeoutSec: z.number().int().min(1).max(3600).default(120) }),
 ]);
 
 export const LimitsSchema = z.object({

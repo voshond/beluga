@@ -240,6 +240,18 @@ export interface Approval {
   readonly channel?: string;
 }
 
+/** A pending Toolbox suggestion: either an agent-proposed tool or a detection-based suggestion. */
+export interface ToolboxSuggestion {
+  readonly id: string;
+  readonly kind: 'propose' | 'detection';
+  readonly projectRoot: string;
+  readonly name: string;
+  readonly command: string;
+  readonly params?: ReadonlyArray<{ readonly name: string; readonly kind: 'host' | 'text' }>;
+  readonly count?: number;
+  readonly askedAt: number;
+}
+
 export interface Location {
   readonly owner: string;
   readonly share: string;
@@ -594,6 +606,8 @@ export interface DomainState extends CollabState, WorkState, NetworkSlice, Suppo
   readonly peers: readonly PeerInfo[];
   readonly log: readonly LogItem[];
   readonly approvals: readonly Approval[];
+  /** Pending Toolbox suggestions: agent proposals (kind 'propose') and auto-detected repeated commands (kind 'detection'). */
+  readonly toolboxSuggestions: readonly ToolboxSuggestion[];
   readonly browser: BrowserDomain;
   readonly viewer?: ViewerDomain;
   /** When each watched file was last written (fileKey), so a preview of it reads it again: a picture shows the new one. */
@@ -692,6 +706,8 @@ export type Action =
   | { type: 'port_shares'; shares: readonly PortShare[]; onComputers: Readonly<Record<string, string>> }
   | { type: 'approval_add'; approval: Approval }
   | { type: 'approval_remove'; id: string }
+  | { type: 'toolbox_suggestion_add'; suggestion: ToolboxSuggestion }
+  | { type: 'toolbox_suggestion_remove'; id: string }
   | { type: 'browser_root' }
   | { type: 'browser_loading'; at: Location }
   | { type: 'browser_entries'; at: Location; entries: readonly FsEntry[] }
@@ -825,6 +841,7 @@ export function initialState(room: string, policy: Policy = 'ask', prefs: Partia
     peers: [],
     log: [],
     approvals: [],
+    toolboxSuggestions: [],
     browser: { rows: [], loading: false },
     written: {},
     focus: {},
@@ -1227,6 +1244,10 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
       };
     case 'approval_remove':
       return { ...state, approvals: state.approvals.filter((a) => a.id !== action.id) };
+    case 'toolbox_suggestion_add':
+      return { ...state, toolboxSuggestions: [...state.toolboxSuggestions.filter((s) => s.id !== action.suggestion.id), action.suggestion] };
+    case 'toolbox_suggestion_remove':
+      return { ...state, toolboxSuggestions: state.toolboxSuggestions.filter((s) => s.id !== action.id) };
     case 'browser_root':
       return { ...state, browser: { rows: rootRows(state), loading: false } };
     case 'browser_loading':

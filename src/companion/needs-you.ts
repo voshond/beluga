@@ -1,4 +1,4 @@
-import type { Approval, DomainState } from '../core/store.js';
+import type { Approval, DomainState, ToolboxSuggestion } from '../core/store.js';
 import { OFFER_DETAIL, knockWords, offerWords } from '../core/team/model.js';
 import type { PendingQuestion } from '../core/collab-store.js';
 import type { TaskView as GwTask } from '../core/gateway/model.js';
@@ -599,6 +599,38 @@ function dialogueItems(state: DomainState): NeedsYou[] {
   });
 }
 
+function toolboxSuggestionItems(state: DomainState): NeedsYou[] {
+  return (state.toolboxSuggestions ?? []).map((s: ToolboxSuggestion): NeedsYou => {
+    const root = s.projectRoot;
+    if (s.kind === 'propose') {
+      return {
+        id: `toolbox-propose:${s.id}`,
+        kind: 'decision',
+        from: 'Claude',
+        title: `Save tool "${clip(s.name, 60)}" to your Toolbox?`,
+        detail: clip(s.command, 200),
+        askedAt: s.askedAt,
+        actions: [
+          { label: 'Keep', tone: 'main' as const, method: 'toolbox.acceptProposal', args: [root, { name: s.name, command: s.command, ...(s.params ? { params: s.params } : {}), source: 'personal', createdBy: 'claude' }] },
+          { label: 'Discard', tone: 'danger' as const, method: 'toolbox.dismissSuggestion', args: [root, s.id] },
+        ],
+      };
+    }
+    return {
+      id: `toolbox-detect:${s.id}`,
+      kind: 'decision',
+      from: 'Beluga',
+      title: `Turn repeated command into a Toolbox tool?`,
+      detail: clip(s.command, 200),
+      askedAt: s.askedAt,
+      actions: [
+        { label: 'Make tool', tone: 'main' as const, method: 'toolbox.acceptProposal', args: [root, { name: s.name, command: s.command, source: 'personal' }] },
+        { label: 'Not this', tone: 'plain' as const, method: 'toolbox.dismissSuggestion', args: [root, s.id] },
+      ],
+    };
+  });
+}
+
 /** Everything waiting for you, in no order and uncut (needsYou sorts and keeps 50), minus what you dismissed. */
 export function allNeeds(state: DomainState): NeedsYou[] {
   const dismissed = state.dismissedNeeds ?? [];
@@ -624,6 +656,7 @@ export function waitingNeeds(state: DomainState): NeedsYou[] {
     ...sharedPlanItems(state),
     ...sentinelItems(state),
     ...dialogueItems(state),
+    ...toolboxSuggestionItems(state),
   ];
 }
 

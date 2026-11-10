@@ -614,6 +614,15 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `sentinel.chatOpen` | ✓ Sentinel › Chat: the chat's name, a picker of the chats when there are several |
 | `sentinel.chatClear` | ✓ Sentinel › Chat › ⋯ › Clear (its messages go, the agent starts afresh; the chat stays) |
 | `sentinel.chatDelete` | ✓ Sentinel › Chat › ⋯ › Delete Chat… (confirms; the next chat opens, or a fresh first one) |
+| `toolbox.list` | ✓ Project › Toolbox: all tools (personal + team) for the project; the phone lists them read-only (BLG-75) |
+| `toolbox.create` | ✓ Project Settings › Toolbox › New Tool: name, command with {{params}}, personal or Share with team (saves to beluga.json) · Mac only |
+| `toolbox.update` | ✓ Project Settings › Toolbox › a tool's pencil: change its name, command, params or source · Mac only |
+| `toolbox.delete` | ✓ Project Settings › Toolbox › a tool's ✕: removes it from projects.json or beluga.json · Mac only |
+| `toolbox.run` | ✓ Project › Toolbox: a tool's Run button (Mac) or Run button (phone, read-only output); opens a Terminal tab, streams output, shows ok/failed badge |
+| `toolbox.approve` | ✓ Project › Toolbox: team tools (from beluga.json) show an Approve button on first run, same flow as setup/run script approval · Mac only |
+| `toolbox.sshHosts` | ✓ Project Settings › Toolbox: host-param dropdowns read ~/.ssh/config (arch, m1arch, nas, …) · Mac only |
+| `toolbox.dismissSuggestion` | ✓ NeedsYou card "Make tool / Let Claude make it / Not this" on a repeated command: Not this dismisses its signature · Mac only |
+| `toolbox.acceptProposal` | ✓ NeedsYou card: Keep (saves the agent-proposed tool) · Mac only |
 | `issues.list` | ✓ Issues (Work in the sidebar › Issues, Go › Issues, ⌘K › Go to Issues): a project's open or closed GitHub issues, newest activity first, through gh (GraphQL, so pull requests never take up the page); the search box asks GitHub; each shows what Beluga is doing about it; a project's home lists the latest four |
 | `issues.pulls` | ✓ Pull Requests on a project's home: its open pull requests on GitHub (anyone's, not only your worktrees'), newest activity first, the latest four with their author, branch, Draft, review and checks; one on a worktree's branch opens that worktree, any other opens on GitHub (or in a worktree with Open in Worktree); See All opens Work › Pull Requests (every one read, a project switcher, Ask GitHub Again), See All on GitHub opens them there (through gh, GraphQL, a minute's cache) |
 | `issues.openPull` | ✓ Open in Worktree on a pull request's row (Project Home) and in its ••• menu: its branch checked out in a new worktree that opens (one from this repository tracks origin's branch, so a push updates it; one from a fork comes from GitHub's pull ref, on its branch's name or pr-<n>); the worktree already on its branch opens instead |

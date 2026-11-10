@@ -293,6 +293,7 @@ const STEP_FIELDS: Readonly<Record<StepKind, string>> = {
   friend: 'peerId, prompt, project?',
   trigger: 'sentinelId',
   measure: 'from: previous | source | claude, source? (a view source), metrics: [{ name, label?, pick? (a JSON path or column), unit? (count | currency:USD | percent | ms | bytes | plain), better? (up | down | none), kind? (number | series: a whole array, with x and y columns | rows | output: the step’s raw output or the picked part) }]',
+  tool: 'toolName (from tool_list), params?: { name: value, ... }, timeoutSec',
 };
 
 /**

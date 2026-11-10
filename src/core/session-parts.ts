@@ -34,6 +34,8 @@ import { ghRepoEnv } from '../workspaces/github.js';
 import { AgentTerminals } from './agent-term.js';
 import { claudeHome } from './claude-code/launch.js';
 import { callNotesToolsOf } from './calls/launch.js';
+import { toolboxOf } from './toolbox/registry.js';
+import type { ToolboxTools } from '../agent/types.js';
 
 /** Everything a session is made of, wired to each other and to the session. */
 export interface SessionParts {
@@ -247,6 +249,43 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       phoneUse: () => companionOf(session)?.control.useLevel() ?? 'off',
       setup: (channel) => workbench?.setupForRun(channel.slice(3)),
       terminalDriving: (channel) => agentTerms?.driving(channel) ?? false,
+      toolbox: (channel) => {
+        const service = toolboxOf(session);
+        if (!service) return undefined;
+        const wsId = channel.startsWith('ws:') ? channel.slice(3) : undefined;
+        const root = wsId ? opts.store.getState().projects.find((p) => p.id === wsId || p.workspaces?.some((w) => w.id === wsId))?.root : undefined;
+        if (!root) return undefined;
+        const projectId = opts.store.getState().projects.find((p) => p.root === root)?.id ?? (wsId ?? channel);
+        return {
+          list: (projectRoot?: string) => {
+            const r = projectRoot ?? root;
+            const tools = service.list(r);
+            if (!tools.length) return 'No Toolbox tools for this project.';
+            return tools.map((t) => `${t.name}  [${t.id}]  ${t.command}  (${t.source})`).join('\n');
+          },
+          run: (nameOrId: string, params?: Readonly<Record<string, string>>, projectRoot?: string) => {
+            const r = projectRoot ?? root;
+            const all = service.list(r);
+            const tool = all.find((t) => t.name === nameOrId || t.id === nameOrId);
+            if (!tool) return Promise.reject(new Error(`No tool named "${nameOrId}" in this project. Use tool_list to see available tools.`));
+            const termKey = service.run(r, projectId, tool.id, params ?? {});
+            return `Running "${tool.name}" in terminal ${termKey}.`;
+          },
+          propose: (draft: { name: string; command: string; params?: Array<{ name: string; kind: 'host' | 'text' }>; projectRoot?: string }) => {
+            const r = draft.projectRoot ?? root;
+            const id = `propose-${Date.now().toString(36)}`;
+            opts.store.dispatch({ type: 'toolbox_suggestion_add', suggestion: { id, kind: 'propose', projectRoot: r, name: draft.name, command: draft.command, ...(draft.params ? { params: draft.params } : {}), askedAt: Date.now() } });
+            return `Proposed tool "${draft.name}". It will appear as a "Keep / Discard" card.`;
+          },
+        } satisfies ToolboxTools;
+      },
+      onBashCommand: (projectRoot, command) => {
+        const service = toolboxOf(session);
+        if (!service) return;
+        const sig = service.recordBashCommand(projectRoot, command);
+        if (!sig) return;
+        opts.store.dispatch({ type: 'toolbox_suggestion_add', suggestion: { id: sig.id, kind: 'detection', projectRoot, name: sig.command.split(' ')[0] ?? sig.command, command: sig.command, count: sig.count, askedAt: sig.lastSeenMs } });
+      },
     });
     const terminals = opts.terminals;
     const agentTerms =

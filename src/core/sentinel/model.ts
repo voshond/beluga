@@ -92,7 +92,7 @@ export type Trigger = ScheduleTrigger | ManualTrigger | AfterTrigger | BelugaTri
 
 // ---------------------------------------------------------------- steps
 
-export const STEP_KINDS = ['claude', 'script', 'notify', 'http', 'pr', 'merge', 'message', 'friend', 'trigger', 'measure'] as const;
+export const STEP_KINDS = ['claude', 'script', 'notify', 'http', 'pr', 'merge', 'message', 'friend', 'trigger', 'measure', 'tool'] as const;
 export type StepKind = (typeof STEP_KINDS)[number];
 
 interface StepBase {
@@ -274,7 +274,15 @@ export interface MeasureStep extends StepBase {
   readonly filesKeepDays?: number;
 }
 
-export type Step = ClaudeStep | ScriptStep | NotifyStep | HttpStep | PrStep | MergeStep | MessageStep | FriendStep | TriggerStep | MeasureStep;
+export interface ToolStep extends StepBase {
+  readonly kind: 'tool';
+  /** May be empty when just added (a run says so). */
+  readonly toolName: string;
+  readonly params?: Readonly<Record<string, string>>;
+  readonly timeoutSec: number;
+}
+
+export type Step = ClaudeStep | ScriptStep | NotifyStep | HttpStep | PrStep | MergeStep | MessageStep | FriendStep | TriggerStep | MeasureStep | ToolStep;
 
 // ---------------------------------------------------------------- a sentinel
 
@@ -914,6 +922,7 @@ export const STEP_INFO: Readonly<Record<StepKind, { readonly label: string; read
   friend: { label: 'Ask a friend’s agent', hint: 'As you; their trust applies', needs: 'look', phase: 2 },
   trigger: { label: 'Run another sentinel', hint: 'Starts it with this run’s last output', needs: 'look', phase: 2 },
   measure: { label: 'Keep the numbers', hint: 'Numbers or rows from the step before, a source, or the agent, kept over time', needs: 'look', phase: 5 },
+  tool: { label: 'Run a Toolbox tool', hint: "A named command from this project's Toolbox", needs: 'look', phase: 1 },
 };
 
 /** The steps and triggers this Beluga runs (phase 5: every one); later ones show, but a run says they aren't available yet. */
@@ -1217,6 +1226,8 @@ export function stepSentence(step: Step, nameOf: (id: string) => string | undefi
       const from = step.from === 'previous' ? ' from the step before' : step.from === 'source' ? ` from ${step.source ? `a ${step.source.kind} source` : 'a source (pick one)'}` : '';
       return `Keeps ${what}${step.from === 'claude' && names.length ? ' that the agent measures' : from}`;
     }
+    case 'tool':
+      return `Runs Toolbox tool "${step.toolName}"`;
   }
 }
 

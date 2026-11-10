@@ -41,6 +41,7 @@ import { VOICE_API } from './voice-api.js';
 import { CALLS_API } from './calls-api.js';
 import { TERMINAL_IMPORT_API } from './terminal-import-api.js';
 import { AGENT_TERM_API } from './agent-term-api.js';
+import { TOOLBOX_API } from './toolbox-api.js';
 import { HANDOFF_MODES } from '../shared/agent-handoff.js';
 
 /**
@@ -573,6 +574,8 @@ export const API = {
   ...DEVICES_API,
   // ---- your agents' shared skills, the global AGENTS.md and Beluga's built-in instructions (agent-setup-api.ts)
   ...AGENT_SETUP_API,
+  // ---- project Toolbox: named, parameterized commands that run without an agent (toolbox-api.ts, BLG-75)
+  ...TOOLBOX_API,
 } as const;
 
 export type Api = typeof API;

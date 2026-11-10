@@ -1331,6 +1331,17 @@ export class Workbench {
     return readSshHosts();
   }
 
+  /**
+   * Run a Toolbox tool command in a terminal tab (BLG-75). The key is `toolboxTermId(projectId, toolId)`;
+   * the terminal opens with the project root as cwd. If a previous run is still alive it is restarted.
+   */
+  runToolCommand(projectRoot: string, projectId: string, termKey: string, command: string, title: string, size = START_SIZE): PtyProcess | undefined {
+    if (!this.deps.terminals) return undefined;
+    const existing = this.deps.terminals.get(termKey);
+    if (existing) this.deps.terminals.close(termKey);
+    return this.openSession(termKey, { path: projectRoot }, command, size);
+  }
+
   sshShell(host: string, size?: { cols: number; rows: number }): PtyProcess | undefined {
     if (!SSH_HOST.test(host)) return undefined;
     const key = sshShellId(host);
