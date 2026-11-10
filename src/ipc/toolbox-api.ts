@@ -27,6 +27,7 @@ export const TOOLBOX_API = {
   'toolbox.sshHosts': { args: z.tuple([]) },
   // Dismiss a repeated-command NeedsYou suggestion (by its sig id).
   'toolbox.dismissSuggestion': { args: z.tuple([root, z.string().min(1).max(40)]) },
-  // Create a tool from an agent's proposal (NeedsYou card "Let Claude make it") → Tool.
-  'toolbox.acceptProposal': { args: z.tuple([root, ToolDraftSchema]) },
+  // Create a tool from an agent's proposal (NeedsYou card "Let Claude make it") → Tool. With a
+  // tool id, the proposal revises that tool: its name, command and params change in place.
+  'toolbox.acceptProposal': { args: z.tuple([root, ToolDraftSchema, id.optional()]) },
 };

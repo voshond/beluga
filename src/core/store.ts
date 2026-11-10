@@ -254,6 +254,8 @@ export interface ToolboxSuggestion {
   readonly command: string;
   readonly params?: ReadonlyArray<{ readonly name: string; readonly kind: 'host' | 'text' }>;
   readonly count?: number;
+  /** A proposal that revises an existing tool (its id): Keep updates it in place. */
+  readonly replaces?: string;
   readonly askedAt: number;
 }
 

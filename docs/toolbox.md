@@ -39,9 +39,13 @@ Agents in your own runs get three tools in the `beluga_tools` MCP server:
 |------|--------------|
 | `tool_list` | Lists all Toolbox tools for the current project |
 | `tool_run` | Runs a tool by name, with optional param values |
-| `tool_propose` | Proposes a new tool — shows as a "Keep / Discard" card |
+| `tool_propose` | Proposes a new tool — shows as a "Keep / Discard" card. With `replaces` (a tool's id), it proposes a new version of that tool — an "Update / Discard" card |
 
-`tool_propose` creates a pending proposal in Needs You. You review it on the Mac or phone and choose Keep (saves the tool) or Discard.
+`tool_propose` creates a pending proposal in Needs You. You review it on the Mac or phone and choose Keep (saves the tool), Update (changes the existing tool's name, command and params in place; a team tool stays a team tool) or Discard.
+
+### Create or update a tool with an agent
+
+In the Toolbox sheet, **Create with Agent** asks what the tool should do; each tool's ✨ button asks what should change about it. Ask Agent starts a project chat whose agent reads the project, works out the command and calls `tool_propose` (with `replaces` for an update). Nothing is saved until you keep the card it leaves.
 
 ## Detection
 

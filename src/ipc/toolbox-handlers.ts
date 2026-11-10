@@ -30,8 +30,11 @@ export const TOOLBOX_HANDLERS: ToolboxHandlers = {
     needToolbox(s).dismissSig(root, sigId);
     s.store.dispatch({ type: 'toolbox_suggestion_remove', id: sigId });
   },
-  'toolbox.acceptProposal': (s, root, draft) => {
-    const result = needToolbox(s).create(root, draft);
+  'toolbox.acceptProposal': (s, root, draft, replaces) => {
+    const tb = needToolbox(s);
+    const result = replaces
+      ? tb.update(root, replaces, { name: draft.name, command: draft.command, params: draft.params ?? [] })
+      : tb.create(root, draft);
     const suggestion = s.store.getState().toolboxSuggestions.find((sg) => sg.projectRoot === root && sg.command === draft.command && sg.name === draft.name);
     if (suggestion) s.store.dispatch({ type: 'toolbox_suggestion_remove', id: suggestion.id });
     return result;
