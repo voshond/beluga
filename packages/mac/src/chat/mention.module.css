@@ -220,3 +220,11 @@ a.chip:hover {
   max-width: none;
   line-height: inherit;
 }
+
+/* A worktree's link takes more room than its name: the chip hugs its words from the start of that
+   room, never stretched to it (BLG-878). */
+.chipFace.chipHug {
+  right: auto;
+  max-width: 100%;
+  justify-content: flex-start;
+}

@@ -161,9 +161,10 @@ function portrait(ctx: CanvasRenderingContext2D, f: CardFace, cx: number, cy: nu
 /** The band at the top of the front: the title's colour, deep at the top, a big beluga leaping across it. */
 function band(ctx: CanvasRenderingContext2D, color: string, w: number, h: number): void {
   const g = ctx.createLinearGradient(0, 0, w, h);
+  // Only a little lighter at the far end: much more and the band looks washed out once lit.
   g.addColorStop(0, shade(color, 0.28));
   g.addColorStop(0.55, color);
-  g.addColorStop(1, shade(color, -0.35));
+  g.addColorStop(1, shade(color, -0.1));
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
   // Soft rings, like ripples.
@@ -174,7 +175,7 @@ function band(ctx: CanvasRenderingContext2D, color: string, w: number, h: number
     ctx.arc(w * 0.12, h * 0.95, r, 0, Math.PI * 2);
     ctx.stroke();
   }
-  drawBeluga(ctx, w * 0.36, -h * 0.08, w * 0.86, 'rgba(255,255,255,0.2)', -0.12);
+  drawBeluga(ctx, w * 0.36, -h * 0.08, w * 0.86, 'rgba(255,255,255,0.15)', -0.12);
 }
 
 export function drawFront(f: CardFace): string {
@@ -354,10 +355,10 @@ export function drawStrap(color: string): string {
   ctx.font = `800 62px ${FONT}`;
   ctx.textBaseline = 'middle';
   ctx.letterSpacing = '14px';
-  ctx.fillText('BELUGA', 70, 100);
-  ctx.fillText('BELUGA', 582, 100);
+  // The strip's right end goes into the clamp: a beluga just before it, the gap after it hidden.
+  for (const x of [-44, 468, 980]) ctx.fillText('BELUGA', x, 100);
   ctx.letterSpacing = '0px';
-  for (const x of [400, 912]) drawBeluga(ctx, x, 34, 124, '#ffffff');
+  for (const x of [286, 798]) drawBeluga(ctx, x, 34, 124, '#ffffff');
   return c.toDataURL('image/png');
 }
 

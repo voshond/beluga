@@ -20,22 +20,15 @@
   cursor: grab;
 }
 /*
- * The pass hangs here: over the words, a little past the box's sides and well below it, so it
- * swings out of its box. Only the card takes the pointer (Lanyard's passThrough); the rest of the
- * layer lets everything under it be clicked.
+ * The pass hangs here: out to the page's left edge, over the words, a little past the box's right
+ * side and well below it (YourCard measures and sets these), so the card hangs past the box's
+ * bottom and swings out of it without being cut off. Only the card takes the pointer (Lanyard's
+ * passThrough); the rest of the layer lets everything under it be clicked.
  */
 .layer {
   position: absolute;
   z-index: 4;
-  top: 0;
-  left: -40px;
-  right: -40px;
-  height: calc(100% + 280px);
   pointer-events: none;
-}
-/* Narrow: the pass above the words, hanging from the middle. */
-.layerNarrow {
-  height: calc(400px + 280px);
 }
 .words {
   display: flex;
@@ -165,25 +158,7 @@
   .lanyard {
     min-height: 400px;
   }
-  /*
- * The pass hangs here: over the words, a little past the box's sides and well below it, so it
- * swings out of its box. Only the card takes the pointer (Lanyard's passThrough); the rest of the
- * layer lets everything under it be clicked.
- */
-.layer {
-  position: absolute;
-  z-index: 4;
-  top: 0;
-  left: -40px;
-  right: -40px;
-  height: calc(100% + 280px);
-  pointer-events: none;
-}
-/* Narrow: the pass above the words, hanging from the middle. */
-.layerNarrow {
-  height: calc(400px + 280px);
-}
-.words {
+  .words {
     padding: 0 0 28px;
   }
 }

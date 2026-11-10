@@ -79,7 +79,8 @@ describe('the black box on disk', () => {
     const r = new Recorder(4);
     const box = startBlackbox({ version: '1', recorder: r, paths, everyMs: 20, journalMax: 600 });
     for (let i = 0; i < 3; i++) r.record('log', `line ${i}`);
-    await new Promise((res) => setTimeout(res, 60));
+    // Its next save, however late a busy machine runs it.
+    await waitFor(() => readJournal(paths.current)?.entries.at(-1)?.text === 'line 2', 5_000).catch(() => undefined);
     expect(readJournal(paths.current)?.entries.map((e) => e.text)).toEqual(['Beluga 1 started (pid ' + process.pid + ', Node ' + process.version + ', ' + process.platform + ' ' + process.arch + ')', 'line 0', 'line 1', 'line 2']);
     for (let i = 3; i < 30; i++) r.record('log', `line ${i} ${'x'.repeat(40)}`);
     await new Promise((res) => setTimeout(res, 60));
@@ -140,6 +141,15 @@ describe('a problem report', () => {
     expect(text).toContain('heap out of memory');
     expect(made.summary).toMatchObject({ version: '2.1.0', problems: 2 });
     expect(existsSync(made.path)).toBe(true);
+  });
+
+  it('says where quitting stuck when the app had to end itself (#426, src-tauri/src/quit.rs)', () => {
+    const paths = blackboxPaths(path.join(dir, 'logs'));
+    mkdirSync(paths.incidents, { recursive: true });
+    const reason = 'Quitting Beluga stuck while stopping the engine (12 s): Beluga ended itself';
+    writeFileSync(path.join(paths.incidents, '7-quit.json'), JSON.stringify({ kind: 'quit', at: 7, stage: 'stopping the engine', reason }));
+    const made = makeReport({ version: '3.0.0', recorder: new Recorder(10), paths, home: '/Users/someone', now: Date.UTC(2026, 10, 10, 12) });
+    expect(made.summary).toMatchObject({ problems: 1, lastProblem: reason });
   });
 
   it('opens an issue with the summary filled in', () => {

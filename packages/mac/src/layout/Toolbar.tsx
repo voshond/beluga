@@ -33,6 +33,7 @@ import { ContextNote } from '../chat/ContextMeter.js';
 import { PeopleHere } from './PeopleHere.js';
 import { ForkToMacButton } from '../dialogs/native/ForkToMacSheet.js';
 import { PrivateMark, shareWithTeamItems } from '../team/Team.js';
+import { copyLinkItems } from './worktree-link.js';
 import s from './Toolbar.module.css';
 import { shortcutKeys } from '../lib/shortcuts.js';
 import { sentinelSubtitle } from '../sentinel/sentinel-model.js';
@@ -217,6 +218,8 @@ export function Toolbar() {
     const menu = overflow.flatMap((section, k) => section.map((a, i) => ({ a, separate: k > 0 && i === 0 })));
     // A team project's conversation is yours alone until you share it (core/team, BLG-226).
     const teamItems = shareWithTeamItems(state, client, ws.id, project?.id);
+    // Copy Link, to mention it in another chat (BLG-878).
+    const linkItems = copyLinkItems(ws, client);
     const run = (a: ToolAction): void => {
       if (a.disabled) return toast(client, a.hint, 'info');
       if (isPrStep(a.action)) return askBeforeWork(ws.id, a.action);
@@ -287,8 +290,8 @@ export function Toolbar() {
               {icons.slice(0, fit).map((a) => (
                 <IconButton key={a.id} icon={a.icon} label={a.disabled ? `${a.label}: ${a.hint}` : (a.tip ?? `${a.label} · ${a.hint}`)} keys={a.keys} aria-disabled={a.disabled} data-tool={a.action} data-tool-ws={ws.id} className={cx(a.disabled && s.off, a.tone === 'error' && s.toolError)} onClick={() => run(a)} />
               ))}
-              {overflow.length || teamItems.length || continueItem ? (
-                <ActionsDropdown items={[...menu.map(({ a, separate }) => ({ label: a.label, icon: a.icon, hint: a.disabled ? a.hint : undefined, keys: a.keys, disabled: a.disabled, danger: a.danger, separate, onSelect: () => requestAnimationFrame(() => run(a)) })), ...teamItems, ...(continueItem ? [continueItem] : [])]}>
+              {overflow.length || teamItems.length || continueItem || linkItems.length ? (
+                <ActionsDropdown items={[...menu.map(({ a, separate }) => ({ label: a.label, icon: a.icon, hint: a.disabled ? a.hint : undefined, keys: a.keys, disabled: a.disabled, danger: a.danger, separate, onSelect: () => requestAnimationFrame(() => run(a)) })), ...teamItems, ...(continueItem ? [continueItem] : []), ...linkItems]}>
                   <IconButton icon="more" label="More for this workspace" data-tool="more" data-tool-ws={ws.id} />
                 </ActionsDropdown>
               ) : null}
@@ -346,9 +349,9 @@ export function Toolbar() {
   }
 
   if (view.kind === 'room') {
+    // The room's group chat (BLG-871: no page while you're alone), and its call (BLG-716) while there's someone to call.
     const solo = state.peers.length <= 1;
-    // A call in the room (BLG-716): once there's someone to call.
-    return <Shell headerRef={headerRef} title={solo ? 'Chat' : state.room} subtitle={<span className={s.meta}>{solo ? 'You and your agent' : `${state.peers.length} people · everyone’s agent can join in`}</span>} right={solo ? undefined : <CallButton id="room" label="the Room" />} />;
+    return <Shell headerRef={headerRef} title={state.room || 'Group chat'} subtitle={<span className={s.meta}>{solo ? 'Everyone else has left the room' : `${state.peers.length} people · everyone’s agent can join in`}</span>} right={solo ? undefined : <CallButton id="room" label="the Room" />} />;
   }
 
   if (view.kind === 'draft' || view.kind === 'draft_worktree') {

@@ -47,7 +47,7 @@ const RULES: readonly Rule[] = [
   { id: 'talkative', name: 'Talkative', icon: 'send', color: '#6ea8f5', test: (x) => ({ score: x.all.prompts / 1000, why: `${x.all.prompts.toLocaleString()} prompts sent` }) },
   { id: 'novelist', name: 'The Novelist', icon: 'book', color: '#5fb3d9', test: (x) => ({ score: share(x.all.chars, x.all.prompts) / 450, why: `${Math.round(share(x.all.chars, x.all.prompts))} characters a prompt` }) },
   { id: 'paste-wizard', name: 'Copy-Paste Wizard', icon: 'clip', color: '#f2b84b', test: (x) => ({ score: x.all.pasted / 250_000, why: `${compact(x.all.pasted)} characters pasted` }) },
-  { id: 'voice', name: 'Voice Commander', icon: 'mic', color: '#ef8fb4', test: (x) => ({ score: x.all.dictationMs / HOUR, why: `${Math.round(x.all.dictationMs / 60_000)} minutes dictated` }) },
+  { id: 'voice', name: 'Voice Commander', icon: 'mic', color: '#ea7b70', test: (x) => ({ score: x.all.dictationMs / HOUR, why: `${Math.round(x.all.dictationMs / 60_000)} minutes dictated` }) },
   {
     id: 'night-owl',
     name: 'Night Owl',

@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
   await expect(sidebar(page)).toBeVisible();
 });
 
-test('the top of the sidebar is Your Mac, Overview, Work (tasks, issues and actions), Plans, Sentinel, the chat and Files', async ({ page }) => {
+test('the top of the sidebar is Your Mac, Overview, Work (tasks, issues and actions), Plans, Sentinel and Files', async ({ page }) => {
   // The places themselves: a running plan's row sits under Plans (KLD-18) and isn't one of them, nor are the
   // sentinels listed under Sentinel (their rows, runs and fold toggles).
   const notPlaces = ':not([data-plan-row]):not([data-sentinel-side]):not([data-sentinel-side] *):not([data-sentinel-run]):not([aria-label^="Show all "]):not([aria-label^="Show only the sentinels"])';
@@ -19,8 +19,9 @@ test('the top of the sidebar is Your Mac, Overview, Work (tasks, issues and acti
   await expect(top.nth(2)).toHaveAccessibleName(/^Work/);
   await expect(top.nth(3)).toHaveAccessibleName(/^Plans/);
   await expect(top.nth(4)).toHaveAccessibleName(/^Sentinel/);
-  await expect(top.nth(5)).toHaveAccessibleName(/^Group chat/);
-  await expect(top.nth(6)).toHaveAccessibleName(/^Files/);
+  // The room's chat is no place up here (BLG-871): its group chat is under Channels.
+  await expect(sidebar(page).locator('section').first().getByRole('button', { name: /^(Chat|Group chat)/ })).toHaveCount(0);
+  await expect(sidebar(page).locator('section').first().getByRole('button', { name: /^Files/ })).toBeVisible();
   for (const gone of ['Search', 'Usage', 'Terminal']) await expect(sidebar(page).locator('section').first().getByRole('button', { name: gone, exact: true })).toHaveCount(0);
 });
 

@@ -12,6 +12,7 @@ import { thisComputer } from '../lib/os-words.js';
 export const INSTALLS: Readonly<Record<string, { readonly page: string; readonly command: string }>> = {
   codex: { page: 'https://developers.openai.com/codex', command: 'npm i -g @openai/codex' },
   opencode: { page: 'https://opencode.ai/download', command: 'npm i -g opencode-ai' },
+  copilot: { page: 'https://github.com/features/copilot/cli', command: 'npm i -g @github/copilot' },
 };
 
 /** Codex's own install: the app, or its CLI from npm. */
@@ -43,7 +44,7 @@ export const STATE_WORDS: Readonly<Record<RuntimeState, string>> = {
 
 export const FIX_LABEL: Readonly<Record<AgentFix, string>> = { sign_in: 'Sign In', install: 'Get Codex', set_up: 'Set Up…' };
 
-/** A row's button: "Sign In", "Get Codex", "Get OpenCode", "Set Up…". */
+/** A row's button: "Sign In", "Get Codex", "Get OpenCode", "Get Copilot", "Set Up…". */
 export const fixLabel = (row: Pick<AgentRow, 'label' | 'fix'>): string => (row.fix === 'install' ? `Get ${row.label}` : row.fix ? FIX_LABEL[row.fix] : '');
 
 /** Where a runtime stands: what it said once asked, else ready when it runs here; undefined: not asked yet. */
@@ -68,6 +69,11 @@ const DETAIL: Readonly<Record<string, Partial<Record<RuntimeState, string>> & { 
     ready: 'The open-source coding agent, on the models you set up in it (its free ones too).',
     signed_out: 'Installed. Add a model provider once (opencode auth login).',
     missing: 'Install OpenCode, or in Terminal:',
+  },
+  copilot: {
+    ready: 'GitHub’s coding agent, through Copilot CLI. Copilot Free works, on Auto.',
+    signed_out: 'Installed. Sign in once with your GitHub account (copilot login), and turn on Copilot for it (Free is enough).',
+    missing: 'Install GitHub Copilot CLI, or in Terminal:',
   },
   local: {
     ready: `A model of your own: Ollama on ${thisComputer()}, or an endpoint you added. Free.`,

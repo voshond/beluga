@@ -1,6 +1,7 @@
 import { joinPath } from '@beluga/shared/os-path.js';
 import { useEffect, useState } from 'react';
 import { Button } from '../components/ui.js';
+import { useActions } from '../lib/actions.js';
 import { inApp } from '../lib/boot.js';
 import { useApi } from '../lib/beluga.js';
 import { pickFolders } from '../lib/projects.js';
@@ -9,6 +10,7 @@ import s from './add-project.module.css';
 
 export const CloneProject = ({ onDone }: { onDone: () => void }) => {
   const api = useApi();
+  const actions = useActions();
   const [repositories, setRepositories] = useState<Awaited<ReturnType<typeof api.projects.github>>>();
   const [listError, setListError] = useState('');
   const [refreshing, setRefreshing] = useState(true);
@@ -44,8 +46,9 @@ export const CloneProject = ({ onDone }: { onDone: () => void }) => {
     setError('');
     setProgress('Starting clone…');
     try {
-      await api.projects.clone(remote.trim(), target.trim());
+      const cloned = await api.projects.clone(remote.trim(), target.trim());
       onDone();
+      actions.run({ type: 'new_worktree', projectId: cloned.id });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setBusy(false);

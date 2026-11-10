@@ -22,34 +22,58 @@ type LanyardProps = import('../../components/reactbits/lanyard-props.js').Lanyar
 /** Your pass on its lanyard (one at a time: the recap's last slide takes it while it's open). */
 const pass = (faces: Faces, color: string, size: number, more: Partial<LanyardProps> = {}) => <Lanyard frontImage={faces.front} backImage={faces.back} strapImage={faces.strap} cardColor="#fbfbfd" strapColor={color} finish="glossy" metal="silver" size={size} strapLength={0.42} breeze={0} {...more} />;
 
-/** How tall the card hangs (px) and how far down its top is, whatever the size of the layer it's drawn in. */
+/** How tall the card hangs (px), and how far below the box's bottom it reaches (so it hangs out of its box). */
 const CARD_PX = 430;
-const CARD_TOP_PX = 96;
+const OVERHANG_PX = 56;
+/** When narrow, how far down the card's top is from the box's. */
+const NARROW_TOP_PX = 96;
 /** The layer reaches this far below your card's box, so the card can swing out over the page. */
 export const BLEED_BELOW = 280;
 
+/** How far past the box's right side the layer reaches. */
+const BLEED_RIGHT = 40;
+
+/** The nearest box around `el` that clips what spills out of it (the page that scrolls). */
+function clipperOf(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p; p = p.parentElement) if (getComputedStyle(p).overflowX !== 'visible') return p;
+  return null;
+}
+
 /**
- * Your pass hangs in a layer bigger than its place (over the words, past the edges, down into
- * the next chapter) so it can swing out of its box; the layer takes the pointer only over the card.
- * Lanyard sizes the card to the layer, so it's given the size that keeps the card as it was.
+ * Your pass hangs in a layer bigger than its place (out to the page's left edge, over the words,
+ * down into the next chapter): its strap starts at the box's top, the card hangs a little past the
+ * box's bottom, and it swings out of the box without being cut off; the layer takes the pointer only
+ * over the card. Lanyard sizes the card to the layer and hangs it a share of the way across, so it's
+ * given the size and the place that keep the card where it belongs.
  */
-function useLayer(): { ref: React.RefObject<HTMLElement | null>; size: number; strapLength: number; narrow: boolean } {
+function useLayer(): { ref: React.RefObject<HTMLElement | null>; size: number; strapLength: number; anchor: number; style: React.CSSProperties } {
   const ref = useRef<HTMLElement | null>(null);
-  const [box, setBox] = useState({ width: 1000, height: 580 });
+  // `left`: from the box's left side to the left edge of the page around it.
+  const [box, setBox] = useState({ width: 1000, height: 580, left: 40 });
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setBox({ width: el.clientWidth, height: el.clientHeight }));
+    const clipper = clipperOf(el);
+    const measure = (): void => {
+      const left = clipper ? el.getBoundingClientRect().left - clipper.getBoundingClientRect().left - clipper.clientLeft : 40;
+      setBox({ width: el.clientWidth, height: el.clientHeight, left: Math.max(0, Math.round(left)) });
+    };
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
+    if (clipper) ro.observe(clipper);
     return () => ro.disconnect();
   }, []);
   const narrow = box.width < 736;
-  // The layer: the box's height and the bleed (when narrow, the pass's own place: 400 px).
+  // The layer: the box (when narrow, the pass's own place: 400 px) and the bleed below.
   const tall = (narrow ? 400 : box.height) + BLEED_BELOW;
   const size = Math.min(0.9, CARD_PX / tall);
   // Lanyard puts the card's top at 0.12–0.42 of the layer's height (strapLength 0–1).
-  const strapLength = Math.min(1, Math.max(0, (CARD_TOP_PX / tall - 0.12) / 0.3));
-  return { ref, size, strapLength, narrow };
+  const cardTop = narrow ? NARROW_TOP_PX : Math.max(NARROW_TOP_PX, box.height + OVERHANG_PX - CARD_PX);
+  const strapLength = Math.min(1, Math.max(0, (cardTop / tall - 0.12) / 0.3));
+  // Where the strap hangs, from the box's left side: the middle when narrow, else over the left column.
+  const hangX = narrow ? box.width / 2 : 0.27 * (box.width + 80) - 40;
+  const anchor = (box.left + hangX) / (box.left + box.width + BLEED_RIGHT);
+  return { ref, size, strapLength, anchor, style: { top: 0, left: -box.left, right: -BLEED_RIGHT, height: tall } };
 }
 
 interface Faces {
@@ -154,8 +178,8 @@ export function YourCard({ state, stats, now }: { state: AppState; stats: StatsS
     <section ref={layer.ref} className={s.hero} aria-label="Your card">
       {/* Its place in the layout; the pass itself hangs in the layer below. */}
       <div className={s.lanyard} />
-      <div className={cx(s.layer, layer.narrow && s.layerNarrow)}>
-        {faces && !recap ? <Suspense fallback={null}>{pass(faces, title.color, layer.size, { strapLength: layer.strapLength, passThrough: true, anchor: layer.narrow ? 'center' : 'left', wiggle: 1 })}</Suspense> : null}
+      <div className={s.layer} style={layer.style}>
+        {faces && !recap ? <Suspense fallback={null}>{pass(faces, title.color, layer.size, { strapLength: layer.strapLength, passThrough: true, anchor: layer.anchor, wiggle: 1 })}</Suspense> : null}
       </div>
       <div className={s.words}>
         <span className={s.brand}>
@@ -200,7 +224,7 @@ export function YourCard({ state, stats, now }: { state: AppState; stats: StatsS
           </span>
         </div>
       </div>
-      {recap ? <Recap state={state} stats={stats} now={now} title={title} pass={faces ? <Suspense fallback={null}>{pass(faces, title.color, 0.5)}</Suspense> : undefined} onShare={() => (setRecap(false), setSharing(true))} onClose={() => setRecap(false)} /> : null}
+      {recap ? <Recap state={state} stats={stats} now={now} title={title} pass={faces ? <Suspense fallback={null}>{pass(faces, title.color, 0.5, { passThrough: true, anchor: 0.69 })}</Suspense> : undefined} onShare={() => (setRecap(false), setSharing(true))} onClose={() => setRecap(false)} /> : null}
       {sharing && shareInput ? <ShareSheet input={shareInput} onClose={() => setSharing(false)} /> : null}
     </section>
   );

@@ -178,7 +178,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         "Go",
         true,
         &[
-            // The places' order (⌘1…7 in the window too; see lib/go.ts. Never ⌥ and a digit: ⌥3 types # on many keyboards).
+            // The places' order (⌘1…7 in the window too, ⌘3 free since the room's Chat went (BLG-871); see lib/go.ts. Never ⌥ and a digit: ⌥3 types # on many keyboards).
             &item(app, "go-overview", "Overview", Some("CmdOrCtrl+1"))?,
             &item(app, "go-tasks", "Tasks", Some("CmdOrCtrl+2"))?,
             // A project's GitHub issues (no ⌘ key: the places keep theirs).
@@ -189,7 +189,6 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             &item(app, "go-sentinel", "Sentinel", None)?,
             // Its Dashboard: the numbers sentinels keep (docs/sentinel.md §10).
             &item(app, "go-dashboard", "Dashboard", None)?,
-            &item(app, "go-room", "Chat", Some("CmdOrCtrl+3"))?,
             &item(app, "go-search", "Search", Some("CmdOrCtrl+4"))?,
             &item(app, "go-usage", "Usage", Some("CmdOrCtrl+5"))?,
             &item(app, "go-terminal", "Terminal", Some("CmdOrCtrl+6"))?,
@@ -386,7 +385,7 @@ pub fn apply_keys<R: Runtime>(menu: &Menu<R>, keys: &HashMap<String, Option<Stri
 
 pub fn on_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
     match id {
-        "quit" => app.exit(0),
+        "quit" => crate::quit::quit(app),
         "show" => {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();

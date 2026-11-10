@@ -18,10 +18,12 @@ import type { AskForApproval } from './protocol.js';
  * to you through canUseTool, the same prompt as Claude's. A friend's task never can.
  */
 
-/** Whose run it is: yours, a friend's (their agent asked, or a task from them), or a guest's. */
-export type RunOrigin = 'own' | 'friend' | 'guest';
+/** Whose run it is: yours (an external agent's at full too: it is you, from another UI), an external agent's below full, a friend's (their agent asked, or a task from them), or a guest's. */
+export type RunOrigin = 'own' | 'agent' | 'friend' | 'guest';
 
-export function originOf(input: Pick<AgentRunInput, 'guest' | 'vetTool' | 'viaAgent'>): RunOrigin {
+export function originOf(input: Pick<AgentRunInput, 'guest' | 'vetTool' | 'viaAgent' | 'asOwner'> & Partial<Pick<AgentRunInput, 'scope'>>): RunOrigin {
+  // Read when the run starts: Codex does not stop at Beluga's gate, so a level changed later counts at the next run.
+  if (input.asOwner) return input.scope === 'full' ? 'own' : 'agent';
   return input.guest ? 'guest' : input.vetTool || input.viaAgent ? 'friend' : 'own';
 }
 
@@ -44,6 +46,8 @@ export interface TrustRow {
 
 export const CODEX_TRUST_TABLE: readonly TrustRow[] = [
   { origin: 'own', trust: '—', scope: 'any', sandbox: ':workspace', home: 'read', network: true, approval: 'on-request', yourTools: true },
+  // Its commands run with no gate of Beluga's: a level below full has to hold in the sandbox. Network stays on for normal work, with home out of reach.
+  { origin: 'agent', trust: 'An external agent below Full trust (Ask me each time needs Claude)', scope: 'any', sandbox: ':workspace', home: 'denied', network: true, approval: 'on-request', yourTools: false },
   { origin: 'friend', trust: 'Ask me each time, Trusted', scope: 'folder', sandbox: ':workspace', home: 'denied', network: false, approval: 'never', yourTools: false },
   { origin: 'friend', trust: 'Full trust', scope: 'full', sandbox: ':workspace', home: 'read', network: false, approval: 'never', yourTools: false },
   { origin: 'guest', trust: 'invited into one project', scope: 'any', sandbox: 'refused', home: 'denied', network: false, approval: 'never', yourTools: false },
@@ -56,11 +60,12 @@ export function trustRow(origin: RunOrigin, scope: 'folder' | 'full'): TrustRow 
 /**
  * When this run's Codex asks you, beyond the row: while planning, never (it only looks; anything
  * past its read-only sandbox is declined anyway); your own run with "My agent asks before
- * commands" on, for every command that isn't plainly read-only ('untrusted'). Friends' rows never change.
+ * commands" on, for every command that isn't plainly read-only ('untrusted'); the same for an
+ * external agent's run its level makes ask. Friends' rows never change.
  */
 export function approvalFor(row: TrustRow, opts: { readonly planning?: boolean; readonly askBeforeCommands?: boolean }): AskForApproval {
   if (opts.planning) return 'never';
-  return row.origin === 'own' && opts.askBeforeCommands ? 'untrusted' : row.approval;
+  return row.approval === 'on-request' && opts.askBeforeCommands ? 'untrusted' : row.approval;
 }
 
 /** Credential stores in your home, denied to every Codex run (shares.ts's secret paths). */
@@ -207,7 +212,7 @@ export function sideCallConfinement(cwd: string, opts: { readonly tools?: readon
 /** The table as docs/security.md shows it. */
 export function trustTableMarkdown(): string {
   const yes = (b: boolean): string => (b ? 'on' : 'off');
-  const who: Record<RunOrigin, string> = { own: 'Your own run', friend: "A friend's task", guest: 'A guest' };
+  const who: Record<RunOrigin, string> = { own: 'Your own run', agent: "An external agent's run", friend: "A friend's task", guest: 'A guest' };
   const lines = [
     '| Who asks | Trust | Files | Rest of your home | Network | `.env`, keys, credential stores | Going past the sandbox | Your Codex tools |',
     '| --- | --- | --- | --- | --- | --- | --- | --- |',

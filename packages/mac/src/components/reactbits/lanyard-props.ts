@@ -13,7 +13,8 @@ export interface LanyardProps {
   readonly finish?: 'glossy' | 'matte' | 'holographic' | 'metallic';
   readonly cornerRadius?: number;
   readonly size?: number;
-  readonly anchor?: 'left' | 'center' | 'right';
+  /** Where the strap hangs from: a side, or how far across (0–1). */
+  readonly anchor?: 'left' | 'center' | 'right' | number;
   readonly strapLength?: number;
   readonly strapColor?: string;
   readonly strapWidth?: number;

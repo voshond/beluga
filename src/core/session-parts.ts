@@ -36,6 +36,9 @@ import { claudeHome } from './claude-code/launch.js';
 import { callNotesToolsOf } from './calls/launch.js';
 import { toolboxOf } from './toolbox/registry.js';
 import type { ToolboxTools } from '../agent/types.js';
+import { guestPlace, sharedWorktreeBrief } from './shared-guest.js';
+import { belugaHome } from './home.js';
+import { peerName } from './store.js';
 
 /** Everything a session is made of, wired to each other and to the session. */
 export interface SessionParts {
@@ -131,6 +134,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
         confirm: (title, detail) => session.ask('request', title, detail),
         open: opts.open,
         listModels: async () => (await session.backend?.listModels?.()) as readonly ModelChoice[] | undefined,
+        ...(opts.updateAgent ? { updateAgent: opts.updateAgent } : {}),
         switchAgent: (channel, agent, mode) =>
           switchAgent(
             {
@@ -244,6 +248,11 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       threads: (channel) => threadsOf(session)?.forRun(channel),
       // "Your Mac"'s chats, and your own asks in friends' chats (BLG-207): both work in its folder.
       assistant: (channel, from) => assistantOf(session)?.forRun(channel, from) ?? assistantOf(session)?.forChat(channel, from),
+      // Your "@claude" in a worktree a friend shared with you: your agent, here, reading theirs (core/shared-guest).
+      guestRun: (channel, from) => {
+        const ws = from === session.selfId ? sharing.sharedFor(channel) : undefined;
+        return ws?.role === 'contribute' ? { place: guestPlace(belugaHome()), brief: sharedWorktreeBrief(ws, peerName(opts.store.getState(), ws.owner)) } : undefined;
+      },
       phone: (scratchDir) => companionOf(session)?.control.toolsFor(scratchDir),
       callNotes: () => callNotesToolsOf(session),
       phoneUse: () => companionOf(session)?.control.useLevel() ?? 'off',

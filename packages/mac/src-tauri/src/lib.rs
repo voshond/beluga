@@ -18,6 +18,7 @@ mod popup;
 #[cfg(target_os = "macos")]
 mod power;
 mod privacy;
+mod quit;
 mod remote;
 mod rename;
 mod requests;
@@ -273,12 +274,10 @@ pub fn run() {
             w.url = tauri::WebviewUrl::App(remote::PAGE.into());
         }
     }
-    let window_state = if background {
-        tauri_plugin_window_state::StateFlags::all()
-            - tauri_plugin_window_state::StateFlags::VISIBLE
-    } else {
-        tauri_plugin_window_state::StateFlags::all()
-    };
+    // Whether the window shows comes from the config (hidden only for the background relaunch),
+    // never from the last run: quitting hides it first (quit.rs), so that would always say hidden.
+    let window_state = tauri_plugin_window_state::StateFlags::all()
+        - tauri_plugin_window_state::StateFlags::VISIBLE;
     let builder = tauri::Builder::default();
     #[cfg(target_os = "macos")]
     let builder = builder.activate_ignoring_other_apps(!background);
@@ -338,6 +337,7 @@ pub fn run() {
             frame::own_title_bar,
             frame::window_control
         ]))
+        .manage(quit::Quitting::default())
         .manage(updater::Updates::default())
         .manage(requests::TrayState::default())
         .manage(popup::PopupState::default())
@@ -507,10 +507,14 @@ pub fn run() {
         #[cfg(target_os = "macos")]
         RunEvent::Reopen { .. } => focus_main(app),
         // Quitting leaves the room (unless this app didn't start Beluga; it's left running then),
-        // then puts a downloaded update in place.
+        // then puts a downloaded update in place. However it began, it ends: if a step hangs,
+        // the watchdog ends Beluga itself (quit.rs, #426).
         RunEvent::Exit => {
+            quit::guard(app);
+            quit::at(app, quit::Stage::StoppingEngine);
             daemon::stop(app);
             updater::on_exit(app);
+            quit::at(app, quit::Stage::Leaving);
         }
         _ => {}
     });

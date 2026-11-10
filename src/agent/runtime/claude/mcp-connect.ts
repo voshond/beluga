@@ -2,6 +2,7 @@ import path from 'node:path';
 import { type McpServerStatus, type Options, query } from '@anthropic-ai/claude-agent-sdk';
 import type { McpServerRow, McpSignIn } from '../../../shared/mcp.js';
 import { type OwnerMcpEntry, ownerMcpEntries } from './owner-mcp.js';
+import { claudeExecutable } from '../../claude-code.js';
 
 /** How long Claude Code gets to say how each server is (a local one may take a while to start). */
 const SETTLE_MS = 12_000;
@@ -25,7 +26,7 @@ export function claudeMcpSession(claudePath?: string): OpenMcpSession {
     const idle = (async function* () {
       await new Promise(() => undefined);
     })() as AsyncIterable<never>;
-    return query({ prompt: idle, options: { cwd, settingSources: [], mcpServers, ...(claudePath ? { pathToClaudeCodeExecutable: claudePath } : {}) } }) as unknown as McpSession;
+    return query({ prompt: idle, options: { cwd, settingSources: [], mcpServers, ...claudeExecutable(claudePath) } }) as unknown as McpSession;
   };
 }
 

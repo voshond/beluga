@@ -19,6 +19,7 @@ export const PANES: ReadonlyArray<PaneInfo<SettingsPane> & { icon: IconName; key
   { id: 'environment', label: 'Environment', icon: 'lock', keywords: 'env .env variables secrets api keys' },
   { id: 'people', label: 'People & access', icon: 'people', keywords: 'friends trust network permissions' },
   { id: 'phone', label: 'Phone', icon: 'phone', keywords: 'android iphone mobile companion' },
+  { id: 'external', label: 'External agents', icon: 'bot', keywords: 'mcp grokbot claude code codex pairing code token oauth remote' },
   { id: 'computers', label: 'Your Computers', icon: 'server', keywords: 'machines servers mac mini aws cloud ssh remote linux pair' },
   { id: 'voice', label: 'Voice', icon: 'mic', keywords: 'dictation speech microphone talk transcribe' },
   { id: 'keyboard', label: 'Keyboard', icon: 'command', keywords: 'shortcuts keys hotkeys bindings' },
@@ -264,6 +265,28 @@ export const SETTINGS: readonly Entry[] = [
     ['Take new people', 'Anyone with the link can come in.', 'room open closed join knock'],
     ['Invite link', undefined, 'invite copy link new link'],
   ]),
+
+  // External agents
+  ...rows('external', undefined, [
+    ['Let other agents connect', 'Turn on the MCP server for agents outside Beluga.', 'mcp server listener on off'],
+    ['Pause all agents', 'Refuses every agent and keeps their grants.', 'pause refuse'],
+    ['MCP URL', 'The address to give an MCP client.', 'url copy address'],
+  ]),
+  group('external', 'Connect an agent', 'Make a pairing code: what it may do, and where.', 'pair pairing code connect'),
+  ...rows('external', 'Connect an agent', [
+    ['For an agent outside this Mac', 'A hosted agent, or one on another computer.', 'remote hosted tailscale public'],
+    ['What it may do', 'Its level: ask each time, trusted or full trust.', 'level trust'],
+    ['Full trust for this code', 'An explicit choice for a remote agent.', 'remote full warning'],
+    ['All projects and chats', 'Or choose what it reaches.', 'projects reach scope'],
+    ['Your chats with no project', 'Chats outside any project.', 'chats standalone'],
+    ['Direct messages', 'It reads and sends yours.', 'dm messages friends'],
+    ['Groups', 'It reads and sends in your groups.', 'groups'],
+    ['Pairing code', 'Works once, for 10 minutes.', 'code'],
+  ]),
+  group('external', 'Connected agents', 'Each agent with a grant: stop or revoke it.', 'revoke stop agents grants'),
+  ...rows('external', 'Connected agents', [['Stop all agents', 'Ends their runs now. Their grants stay.', 'stop all']]),
+  group('external', 'Activity', 'What agents did, and who decided.', 'audit log activity'),
+  ...rows('external', 'Activity', [['Show', 'All, allowed, asked or refused.', 'filter']]),
 
   // Phone
   group('computers', 'Where new work runs', 'This computer, one of yours, or the least busy.', 'run new work machine best available'),

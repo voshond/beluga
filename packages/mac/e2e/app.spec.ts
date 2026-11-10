@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './fixtures.js';
-import { personRow, pick } from './helpers.js';
+import { openGroupChat, personRow, pick } from './helpers.js';
 
 /** The Mac app's web view against a real Beluga (the demo): what you click does what it says. */
 
@@ -30,7 +30,20 @@ test.beforeEach(async ({ page }) => {
 test('shows the room, its people and projects', async ({ page }) => {
   await expect(personRow(page, 'bob')).toBeVisible();
   await expect(sidebar(page).getByText('bob-api', { exact: true }).first()).toBeVisible();
+  await openGroupChat(page);
   await expect(page.getByText('hey! just pushed my API notes')).toBeVisible();
+});
+
+test('the room’s chat is no place of its own: Overview first, its group chat under Channels (BLG-871)', async ({ page }) => {
+  await expect(page.locator('header').first()).toContainText('Overview');
+  // No Chat row at the top, nor in the Go menu's keys: ⌘3 goes nowhere.
+  await expect(sidebar(page).getByRole('button', { name: 'Chat', exact: true })).toHaveCount(0);
+  await page.keyboard.press('Meta+Digit3');
+  await expect(page.locator('header').first()).toContainText('Overview');
+  // bob is in the room: its group chat is the first of Channels, with the room's call.
+  await openGroupChat(page);
+  await expect(page.getByText('hey! just pushed my API notes')).toBeVisible();
+  await expect(page.locator('header').first().getByRole('button', { name: /Call the Room/ })).toBeVisible();
 });
 
 test("talks to Claude in a workspace and shows its run", async ({ page }) => {
@@ -60,7 +73,7 @@ test('the palette goes anywhere', async ({ page }) => {
   await page.keyboard.press('Meta+K');
   await page.keyboard.type('usage');
   await page.keyboard.press('Enter');
-  // Usage has its heading and its hero line both now: either one says the palette got there.
+  // The Usage page: its title, or its space hero (both, once its numbers are in).
   await expect(page.getByRole('heading', { level: 1 }).or(page.getByText('in worktrees')).first()).toBeVisible();
 });
 
@@ -308,6 +321,7 @@ async function pasteImage(page: Page): Promise<void> {
 }
 
 test("shows a friend's screenshot in the chat and opens it full size", async ({ page }) => {
+  await openGroupChat(page);
   const thumb = page.getByRole('button', { name: /^Open image 1/ }).first();
   await expect(thumb).toBeVisible({ timeout: 15_000 });
   // Fetched from bob's computer through Beluga, and drawn.
@@ -321,6 +335,7 @@ test("shows a friend's screenshot in the chat and opens it full size", async ({ 
 });
 
 test('shows pasted images before sending, and in the message after', async ({ page }) => {
+  await openGroupChat(page);
   await composer(page).click();
   await pasteImage(page);
   const pending = page.getByLabel('Images to send');

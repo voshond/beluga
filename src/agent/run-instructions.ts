@@ -34,6 +34,7 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
   { id: 'task', label: 'Task brief', when: 'Runs with the task board (a worktree doing a task, a main folder)', source: 'src/core/board/prompt.ts', text: (c) => c.input.taskBrief ?? '' },
   { id: 'plan', label: 'Plan brief', when: 'A plan’s conversations', source: 'src/core/plans/prompt.ts', text: (c) => c.input.planBrief ?? '' },
   { id: 'mac', label: 'Your Mac', when: 'Your Mac’s assistant', source: 'src/core/assistant', text: (c) => c.input.macBrief ?? '' },
+  { id: 'shared', label: 'A friend’s worktree', when: 'Your agent in a worktree a friend shared with you', source: 'src/core/shared-guest.ts', text: (c) => c.input.sharedBrief ?? '' },
   { id: 'phone', label: 'Your phone', when: 'Your own runs, with a phone set up', source: 'src/core/phone', text: (c) => c.input.phoneBrief ?? '' },
   { id: 'preview', label: 'Live previews', when: 'Your own runs, with Live previews on (Settings › Experimental)', source: 'src/core/previews', text: (c) => (c.input.terminal ? '' : (c.input.previewBrief ?? '')) },
   { id: 'sentinel', label: 'Sentinel', when: 'Your own runs (a sentinel run gets its brief)', source: 'src/core/sentinel/prompt.ts', text: (c) => c.input.sentinelBrief ?? '' },
