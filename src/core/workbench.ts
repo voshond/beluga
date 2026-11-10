@@ -14,7 +14,8 @@ import type { Workspace } from '../workspaces/types.js';
 import { worktreeOrigin } from '../workspaces/origin.js';
 import { parseToolReport } from '../workspaces/toolbox.js';
 import { formatBytes, measureAll } from '../workspaces/disk.js';
-import { contentIn, fetchRemote, resetTo } from '../workspaces/git.js';
+import { contentIn, resetTo } from '../workspaces/git.js';
+import { fetchRemote } from '../workspaces/sync.js';
 import { type MergeOptions, type MergeProblem, type PrStepKind, buildPrPrompt, catchUpPrompt, commitSubjects, createPr, disableAutoMerge, prFromCommits, titleOfBranch, resolvePrConflictsPrompt, customPrPrompt, deleteRemoteBranch, ensurePrPromptFile, explainMergeError, findPr, fixChecksPrompt, forgetGh, ghState, gitSetup, hasGh, headCarries, listPrs, useHttpsRemote, mergePr, mergeToBase, prStep, pushForPr, remoteRef, rerunFailed, resetPrPrompt, setPrTarget, unpushedCommits } from '../workspaces/pr.js';
 import { prTargetOf, pullOfBranch } from '../workspaces/github.js';
 import { failedRunIds, prOnOriginal } from './branch-state.js';
@@ -726,11 +727,9 @@ export class Workbench {
     if ((ws.status?.changed ?? 0) > 0) return this.deps.toast(`${ws.name} has uncommitted changes: commit them first`, 'warn');
     const base = this.prBase(ws);
     const target = `origin/${base}`;
-    try {
-      await fetchRemote(ws.path);
-    } catch (err) {
-      return this.deps.toast(`Couldn’t fetch ${target}: ${err instanceof Error ? err.message : String(err)}`, 'error');
-    }
+    // Over SSH when https can't and SSH can (sync.ts).
+    const fetched = await fetchRemote(ws.path);
+    if (!fetched.ok) return this.deps.toast(`Couldn’t fetch ${target}: ${fetched.message}`, 'error');
     const done = await contentIn(ws.path, 'HEAD', target);
     this.manager.setPrDone(id, pr.number, { url: pr.url, into: base, ...(pr.head ? { head: pr.head } : {}) });
     this.deps.store.dispatch({ type: 'pr', id, pr: undefined });

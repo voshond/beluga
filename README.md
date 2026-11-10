@@ -8,9 +8,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/kayraucklnc/beluga/releases/latest"><img src="https://img.shields.io/github/v/release/kayraucklnc/beluga?label=Download%20for%20Mac&logo=apple&color=0a84ff&style=for-the-badge" alt="Download Beluga for Mac"></a>
-  <a href="https://github.com/kayraucklnc/beluga/releases/latest"><img src="https://img.shields.io/github/v/release/kayraucklnc/beluga?label=Download%20for%20Linux&logo=linux&logoColor=white&color=e8a33d&style=for-the-badge" alt="Download Beluga for Linux"></a>
-  <a href="https://github.com/kayraucklnc/beluga/releases/latest"><img src="https://img.shields.io/github/v/release/kayraucklnc/beluga?label=Download%20for%20Windows&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0wIDMuNCA5LjggMnY5LjRIMHptMTEgLTEuNkwyNCAwdjExLjNIMTF6TTAgMTIuNmg5LjhWMjJMMCAyMC42em0xMSAwaDEzVjI0bC0xMy0xLjh6Ii8%2BPC9zdmc%2B&color=4f9de0&style=for-the-badge" alt="Download Beluga for Windows"></a>
+  <a href="https://github.com/beluga-labs/beluga/releases/latest"><img src="https://img.shields.io/github/v/release/beluga-labs/beluga?label=Download%20for%20Mac&logo=apple&color=0a84ff&style=for-the-badge" alt="Download Beluga for Mac"></a>
+  <a href="https://github.com/beluga-labs/beluga/releases/latest"><img src="https://img.shields.io/github/v/release/beluga-labs/beluga?label=Download%20for%20Linux&logo=linux&logoColor=white&color=e8a33d&style=for-the-badge" alt="Download Beluga for Linux"></a>
+  <a href="https://github.com/beluga-labs/beluga/releases/latest"><img src="https://img.shields.io/github/v/release/beluga-labs/beluga?label=Download%20for%20Windows&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0wIDMuNCA5LjggMnY5LjRIMHptMTEgLTEuNkwyNCAwdjExLjNIMTF6TTAgMTIuNmg5LjhWMjJMMCAyMC42em0xMSAwaDEzVjI0bC0xMy0xLjh6Ii8%2BPC9zdmc%2B&color=4f9de0&style=for-the-badge" alt="Download Beluga for Windows"></a>
 </p>
 <p align="center">
   <sub>macOS 13+ (Apple Silicon) · Linux x64 (AppImage, .deb, .rpm) · Windows 10+ x64 · updates itself</sub>
@@ -27,7 +27,7 @@
 
 ## Install
 
-1. **[Download Beluga](https://github.com/kayraucklnc/beluga/releases/latest)** for your computer.
+1. **[Download Beluga](https://github.com/beluga-labs/beluga/releases/latest)** for your computer.
 2. Open it:
    - **Mac:** open the `.dmg` and drag Beluga into Applications. The first time you open it, macOS blocks it because Beluga isn't notarized by Apple yet: click **Done**, then go to **System Settings › Privacy & Security** and click **Open Anyway**.
      If macOS says Beluga **"is damaged"** (older downloads), run this once in Terminal and open it again:
@@ -277,7 +277,7 @@ Beluga also runs with no window, on a computer that stays on: a Linux server, a 
 On the server (Linux or macOS, x64 or arm64, with git; no sudo, Node comes with it):
 
 ```sh
-curl -fsSL https://github.com/kayraucklnc/beluga/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/beluga-labs/beluga/releases/latest/download/install.sh | sh
 beluga setup
 ```
 
@@ -301,7 +301,7 @@ beluga web revoke <name>
 
 #### Phone
 
-`beluga setup` already paired one. For another phone, get the app (Android: `Beluga-<version>.apk` from the [latest release](https://github.com/kayraucklnc/beluga/releases/latest)), run this on the server and scan the QR code (or type the code under it):
+`beluga setup` already paired one. For another phone, get the app (Android: `Beluga-<version>.apk` from the [latest release](https://github.com/beluga-labs/beluga/releases/latest)), run this on the server and scan the QR code (or type the code under it):
 
 ```sh
 beluga pair
@@ -372,7 +372,7 @@ More: [how it works](docs/how-it-works.md) · [security](docs/security.md) · [e
 ## Development
 
 ```bash
-git clone https://github.com/kayraucklnc/beluga.git && cd beluga
+git clone https://github.com/beluga-labs/beluga.git && cd beluga
 npm install && npm test
 
 cd packages/mac && npm install
@@ -395,11 +395,11 @@ docs/                guides and design notes
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=kayraucklnc%2Fbeluga&type=date&legend=top-right">
+<a href="https://www.star-history.com/?repos=beluga-labs%2Fbeluga&type=date&legend=top-right">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=kayraucklnc/beluga&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=kayraucklnc/beluga&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=kayraucklnc/beluga&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=beluga-labs/beluga&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=beluga-labs/beluga&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=beluga-labs/beluga&type=date&legend=top-left" />
  </picture>
 </a>
 

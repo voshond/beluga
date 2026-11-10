@@ -369,9 +369,25 @@ function NewProject({ onDone }: { onDone: () => void }) {
           Cancel
         </Button>
         <Button variant="primary" type="submit" disabled={!name.trim() || busy}>
-          {busy ? 'Creating…' : 'Create Project'}
+          <Steady now={busy ? 'Creating…' : 'Create Project'} all={['Create Project', 'Creating…']} />
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * A button's words that keep it as wide as its widest wording: "Clone Project" turning into the
+ * shorter "Cloning…" no longer shrinks it (WebKit left a strip of the wider blue button behind).
+ */
+function Steady({ now, all }: { now: string; all: readonly string[] }) {
+  return (
+    <span className={s.steady}>
+      {all.map((w) => (
+        <span key={w} className={w === now ? undefined : s.steadyOff} aria-hidden={w === now ? undefined : true}>
+          {w}
+        </span>
+      ))}
+    </span>
   );
 }
