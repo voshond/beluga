@@ -1,0 +1,246 @@
+.flex {
+  flex: 1;
+}
+
+.name {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.status {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
+  overflow: hidden;
+}
+.listItem {
+  display: flex;
+  align-items: center;
+  padding-right: 8px;
+  transition: background 1.2s var(--ease-out);
+}
+.listItem + .listItem {
+  border-top: 0.5px solid var(--hairline);
+}
+.listItem:hover {
+  background: var(--bg-hover);
+}
+.listItem.flash_success {
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+  transition-duration: var(--dur-fast);
+}
+.listItem.flash_warn {
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  transition-duration: var(--dur-fast);
+}
+.listItem.flash_fail {
+  background: color-mix(in srgb, var(--error) 16%, transparent);
+  transition-duration: var(--dur-fast);
+}
+
+.listRow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 6px 4px 6px 12px;
+  text-align: left;
+  color: inherit;
+}
+.listRow:active:not(:disabled) .runMark {
+  transform: scale(0.92);
+}
+.listRow:focus-visible {
+  outline: none;
+}
+.listItem:has(.listRow:focus-visible) {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.listRow:disabled {
+  cursor: default;
+}
+
+.runMark {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  transition: background var(--dur-fast), color var(--dur-fast), transform var(--dur-fast);
+}
+.runMark > * {
+  grid-area: 1 / 1;
+}
+.runGo {
+  opacity: 0;
+}
+.listRow:hover:not(:disabled) .runMark {
+  background: var(--accent);
+  color: white;
+}
+.listRow:hover:not(:disabled) .runIdle {
+  opacity: 0;
+}
+.listRow:hover:not(:disabled) .runGo {
+  opacity: 1;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.nameLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.param {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.trail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+.runWord {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity var(--dur-fast);
+}
+.listRow:hover:not(:disabled) .runWord {
+  opacity: 1;
+}
+
+.iconButton {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-s);
+  color: var(--text-3);
+  transition: background var(--dur-fast), color var(--dur-fast), opacity var(--dur-fast);
+}
+.iconButton:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-press);
+}
+.iconButton:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.watch {
+  margin-left: 2px;
+  opacity: 0;
+}
+.listItem:hover .watch,
+.watch:focus-visible,
+.watchOn {
+  opacity: 1;
+}
+.watchOn {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.popover {
+  z-index: 60;
+  width: min(620px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop), 0 18px 50px rgba(0, 0, 0, 0.22);
+  animation: rise var(--dur) var(--ease-out);
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.popHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border-bottom: 0.5px solid var(--hairline);
+}
+.popState {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  font-size: 0.86rem;
+}
+.termBox {
+  height: 280px;
+  display: flex;
+  flex-direction: column;
+  background: var(--term-bg);
+}
+
+.picker {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 6px 4px 6px 12px;
+}
+.picker .name {
+  flex: 1;
+}
+.pickerIcon {
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.hostSelect {
+  flex-shrink: 0;
+  min-width: 100px;
+  max-width: 160px;
+}
+
+.tone_success {
+  color: var(--ok);
+}
+.tone_warn {
+  color: var(--warn);
+}
+.tone_fail {
+  color: var(--error);
+}

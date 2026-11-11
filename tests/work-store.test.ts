@@ -106,6 +106,15 @@ describe('reduceWork: other actions', () => {
     expect(reduceWork(initialWork, { type: 'terminal_report', id: 'gone', report })).toBe(initialWork);
   });
 
+  it('a tool trail is the last line it showed, cleared when it starts again or closes', () => {
+    const s = reduceWork(reduceWork(initialWork, { type: 'terminal', id: 't1', title: 'deploy' }), { type: 'terminal_trail', id: 't1', line: 'Building…' });
+    expect(s.termTrails).toEqual({ t1: 'Building…' });
+    const ended = reduceWork(s, { type: 'terminal_exit', id: 't1', code: 0 });
+    expect(reduceWork(ended, { type: 'terminal', id: 't1', title: 'deploy' }).termTrails).toEqual({});
+    expect(reduceWork(s, { type: 'terminal', id: 't1' }).termTrails).toEqual({});
+    expect(reduceWork(initialWork, { type: 'terminal_trail', id: 'gone', line: 'x' })).toBe(initialWork);
+  });
+
   it('models falls back to the built-in list when empty', () => {
     const models = [{ value: 'opus', label: 'Opus', description: 'big', efforts: ['high'] }];
     expect(reduceWork(initialWork, { type: 'models', models }).models).toBe(models);
