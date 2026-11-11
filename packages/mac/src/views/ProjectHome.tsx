@@ -14,11 +14,9 @@ import {
 import { Icon } from "../components/Icon.js";
 import { ProjectIcon } from "../components/ProjectIcon.js";
 import { Select } from "../components/Select.js";
-import { Button, Dot, Empty, Segmented, Tip, Working, cx } from "../components/ui.js";
+import { Button, Dot, Empty, Segmented, Tip, cx } from "../components/ui.js";
 import { useActions } from "../lib/actions.js";
 import { toast, useApi, useApp, useBeluga } from "../lib/beluga.js";
-import { type Tool, type ToolReport, toolOutcome } from "@beluga/workspaces/toolbox.js";
-import { toolboxTermId } from "@beluga/shared/terminal-keys.js";
 import { agentName, useMyAgent } from "../lib/agent-words.js";
 import { agentMark } from "@beluga/shared/agent-marks.js";
 import { projectAgent } from "@beluga/shared/agent-picker.js";
@@ -29,7 +27,7 @@ import { myRuntime } from "../chat/ModelPicker.js";
 import { useStartWith } from "../components/agent-options.js";
 import { SplitButton } from "../components/SplitButton.js";
 import type { AgentRef } from "@beluga/protocol.js";
-import { sameDeep, sameFields } from "../lib/stable.js";
+import { sameDeep } from "../lib/stable.js";
 import { getPrefs, usePrefs } from "../lib/prefs.js";
 import { sendsToTerminal } from "../lib/convo-mode.js";
 import { chordLabel } from "../lib/shortcuts-model.js";
@@ -55,6 +53,8 @@ import { DictationStrip, MicButton } from "../chat/Dictation.js";
 import { useDictationTarget } from "../lib/dictation.js";
 import { HomeHistory } from "./history/HomeHistory.js";
 import { GitHubRow } from "./project/GitHubRow.js";
+import { HomeToolbox } from "./project/HomeToolbox.js";
+import { Section } from "./project/HomeSection.js";
 import { GitHubMark } from "../components/GitHubMark.js";
 import { PullRow, usePullList } from "./project/PullRow.js";
 import { RunRow } from "../ci/parts.js";
@@ -613,6 +613,7 @@ function Lists({ model }: { model: HomeModel }) {
   const asks = model.asks.filter((w) => !planHomes.has(`ws:${w.id}`));
   return (
     <div className={s.lists}>
+      <HomeToolbox projectId={project.id} projectRoot={project.root} />
       <HomePlans projectId={project.id} />
       <Section
         title="Worktrees"
@@ -657,7 +658,6 @@ function Lists({ model }: { model: HomeModel }) {
       <HomePulls projectId={project.id} />
       <HomeIssues projectId={project.id} />
       <HomeActions projectId={project.id} />
-      <HomeToolbox projectId={project.id} projectRoot={project.root} />
       <HomeHistory projectId={project.id} />
       {archived.length ? (
         <Section
@@ -879,140 +879,6 @@ function HomeActions({ projectId }: { projectId: string }) {
   );
 }
 
-/** Where a tool's last run is: still going, or how it ended (its exit code and its own `::beluga status=` line). */
-type ToolRunState = { readonly running: true; readonly report?: ToolReport } | { readonly running: false; readonly outcome: ToolReport };
-
-const TOOL_STATUS_ICON = { success: 'check', warn: 'alert', fail: 'x' } as const;
-
-/**
- * The project's Toolbox: named commands run without an agent. Each tool is a button that opens in
- * a Terminal tab; host-param tools show the SSH host dropdown before running. The row shows the
- * last run's result until the tool runs again.
- */
-function HomeToolbox({ projectId, projectRoot }: { projectId: string; projectRoot: string }) {
-  const api = useApi();
-  const { ui, client } = useBeluga();
-  const [tools, setTools] = useState<Tool[]>([]);
-  const [hosts, setHosts] = useState<string[]>([]);
-  const [hostFor, setHostFor] = useState<string | null>(null);
-  const [hostValue, setHostValue] = useState('');
-  const [startingId, setStartingId] = useState<string | null>(null);
-  const terms = useApp((st) => ({ terminals: st.terminals, termExits: st.termExits, termReports: st.termReports }), sameFields);
-  const late = useLateArrival(projectId, tools.length > 0);
-
-  useEffect(() => {
-    void api.toolbox.list(projectRoot).then((ts) => setTools(ts as Tool[]));
-    void api.toolbox.sshHosts().then((hs) => setHosts(hs as string[]));
-  }, [projectRoot]);
-
-  if (!tools.length) return null;
-
-  const runStateOf = (tool: Tool): ToolRunState | undefined => {
-    const key = toolboxTermId(projectId, tool.id);
-    if (!(key in terms.terminals)) return undefined;
-    const report = terms.termReports[key];
-    if (!(key in terms.termExits)) return { running: true, ...(report ? { report } : {}) };
-    return { running: false, outcome: toolOutcome(terms.termExits[key] ?? null, report) };
-  };
-
-  const run = (tool: Tool, params: Record<string, string> = {}): void => {
-    setStartingId(tool.id);
-    void api.toolbox.run(projectRoot, tool.id, params)
-      .catch((err: unknown) => toast(client, err instanceof Error ? err.message : String(err), 'error'))
-      .finally(() => setStartingId(null));
-  };
-
-  const handleRun = (tool: Tool): void => {
-    if (startingId !== null || runStateOf(tool)?.running) return;
-    const hostParams = tool.params?.filter((p) => p.kind === 'host') ?? [];
-    if (hostParams.length > 0 && hosts.length > 0) {
-      setHostFor(tool.id);
-      setHostValue(hosts[0] ?? '');
-      return;
-    }
-    run(tool);
-  };
-
-  return (
-    <Section
-      arrive={late}
-      title="Toolbox"
-      count={tools.length}
-      hint="Commands that run without an agent"
-      action={
-        <Button
-          size="small"
-          variant="quiet"
-          onClick={() => ui.openMenu({ kind: 'toolbox', projectId, projectRoot })}
-        >
-          Manage
-        </Button>
-      }
-    >
-      {tools.map((tool) => {
-        const needsHost = (tool.params?.some((p) => p.kind === 'host') ?? false) && hosts.length > 0;
-        const pickingHost = hostFor === tool.id;
-        const runState = runStateOf(tool);
-        const isRunning = startingId === tool.id || Boolean(runState?.running);
-        const result = runState && !runState.running ? runState.outcome : undefined;
-        const message = runState?.running ? runState.report?.message : result?.message;
-
-        return (
-          <div key={tool.id} role="listitem" className={s.toolboxItem}>
-            {pickingHost ? (
-              <div className={s.toolboxRunRow}>
-                <Icon name="wrench" size={12} className={s.toolboxIcon} />
-                <span className={s.toolboxName}>{tool.name}</span>
-                <Select
-                  className={s.hostSelect}
-                  value={hostValue}
-                  options={hosts.map((h) => ({ value: h, label: h }))}
-                  onChange={setHostValue}
-                  label="Host"
-                />
-                <Button
-                  size="small"
-                  disabled={isRunning}
-                  onClick={() => {
-                    setHostFor(null);
-                    const hostParam = tool.params?.find((p) => p.kind === 'host');
-                    run(tool, hostParam ? { [hostParam.name]: hostValue } : {});
-                  }}
-                >
-                  {isRunning ? <Working /> : 'Run'}
-                </Button>
-                <Button size="small" variant="quiet" onClick={() => setHostFor(null)}>Cancel</Button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className={s.row}
-                onClick={() => handleRun(tool)}
-                disabled={startingId !== null || isRunning}
-                aria-label={result ? `Run ${tool.name} (last run: ${result.status}${result.message ? `, ${result.message}` : ''})` : `Run ${tool.name}`}
-                aria-busy={isRunning}
-              >
-                <span className={s.rowIcon}><Icon name="wrench" size={13} /></span>
-                <span className={s.rowMain}>
-                  <span className={s.rowTitle}><span className={s.rowName}>{tool.name}</span></span>
-                  <span className={cx(s.rowLast, result && message && s[`toolboxMessage_${result.status}`])}>{message || tool.command}</span>
-                </span>
-                {needsHost && !isRunning && !result && <span className={s.rowWhen}>picks host</span>}
-                {isRunning
-                  ? <span className={s.toolboxWorking}><Working /></span>
-                  : result
-                    ? <span className={s[`toolbox_${result.status}`]}><Icon name={TOOL_STATUS_ICON[result.status]} size={11} /></span>
-                    : <Icon name="chevronRight" size={11} className={s.rowChevron} />
-                }
-              </button>
-            )}
-          </div>
-        );
-      })}
-    </Section>
-  );
-}
-
 /** How many plans Project Home lists before "Show All". */
 const HOME_PLANS = 3;
 
@@ -1078,39 +944,6 @@ function PlanRow({ plan }: { plan: Plan }) {
         <Icon name="chevronRight" size={11} className={s.rowChevron} />
       </button>
     </div>
-  );
-}
-
-function Section({
-  title,
-  count,
-  hint,
-  action,
-  arrive,
-  children,
-}: {
-  /** It came after the page opened: it settles in. */
-  arrive?: boolean;
-  title: string;
-  count: number;
-  hint?: string;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className={cx(s.section, arrive && a.arrive)} aria-label={title}>
-      <div className={s.sectionHead}>
-        <h3 className={s.sectionTitle}>
-          {title} <span className={s.count}>{count}</span>
-        </h3>
-        {hint ? <span className={s.sectionHint}>{hint}</span> : null}
-        <span className={s.flex} />
-        {action}
-      </div>
-      <div className={s.rows} role="list">
-        {children}
-      </div>
-    </section>
   );
 }
 

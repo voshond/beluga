@@ -631,7 +631,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `sentinel.chatOpen` | ✓ Sentinel › Chat: the chat's name, a picker of the chats when there are several |
 | `sentinel.chatClear` | ✓ Sentinel › Chat › ⋯ › Clear (its messages go, the agent starts afresh; the chat stays) |
 | `sentinel.chatDelete` | ✓ Sentinel › Chat › ⋯ › Delete Chat… (confirms; the next chat opens, or a fresh first one) |
-| `toolbox.list` | ✓ Project › Toolbox: all tools (personal + team) for the project; the phone lists them read-only (BLG-75) |
+| `toolbox.list` | ✓ Project › Toolbox: all tools (personal + team) for the project, first on Project Home, shown as a List, Tiles or Chips (the header's switcher, kept per Mac); the phone lists them read-only (BLG-75) |
 | `toolbox.create` | ✓ Project Settings › Toolbox › New Tool: name, command with {{params}}, personal or Share with team (saves to beluga.json) · Mac only |
 | `toolbox.update` | ✓ Project Settings › Toolbox › a tool's pencil: change its name, command, params or source · Mac only |
 | `toolbox.delete` | ✓ Project Settings › Toolbox › a tool's ✕: removes it from projects.json or beluga.json · Mac only |

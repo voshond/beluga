@@ -1,0 +1,211 @@
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.name {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.command,
+.message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+}
+.command {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+.message {
+  font-size: 0.86rem;
+}
+.hint {
+  color: var(--text-3);
+  font-size: 0.82rem;
+  flex-shrink: 0;
+}
+.status {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.tone_success {
+  color: var(--ok);
+}
+.tone_warn {
+  color: var(--warn);
+}
+.tone_fail {
+  color: var(--error);
+}
+
+.runMark {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.runMark > * {
+  grid-area: 1 / 1;
+}
+.runGo {
+  opacity: 0;
+}
+:is(.listRow, .tile):hover:not(:disabled) .runMark {
+  background: var(--accent);
+  color: white;
+}
+:is(.listRow, .tile):hover:not(:disabled) .runIdle {
+  opacity: 0;
+}
+:is(.listRow, .tile):hover:not(:disabled) .runGo {
+  opacity: 1;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
+  overflow: hidden;
+}
+.listItem + .listItem {
+  border-top: 0.5px solid var(--hairline);
+}
+.listRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 6px 12px;
+  text-align: left;
+  transition: background var(--dur-fast);
+}
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.runWord {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+  opacity: 0;
+  transition: opacity var(--dur-fast);
+}
+.listRow:hover:not(:disabled) .runWord {
+  opacity: 1;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+.tile {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  text-align: left;
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
+  transition: background var(--dur-fast), box-shadow var(--dur-fast);
+}
+.tileHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tileHead .name {
+  flex: 1;
+}
+.tile:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong);
+}
+.tileLive {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  max-width: 260px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px 0 10px;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
+  font-size: 0.88rem;
+  transition: background var(--dur-fast), box-shadow var(--dur-fast);
+}
+.chipPlay {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.chip:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong);
+}
+
+:is(.listRow, .tile, .chip):hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+:is(.listRow, .tile, .chip):active:not(:disabled) {
+  background: var(--bg-press);
+}
+:is(.listRow, .tile, .chip):focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+:is(.listRow, .tile, .chip):disabled {
+  cursor: default;
+}
+
+.pickerBox {
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
+}
+.picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 6px 12px;
+}
+.picker .name {
+  flex: 1;
+}
+.pickerIcon {
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.hostSelect {
+  flex-shrink: 0;
+  min-width: 100px;
+  max-width: 160px;
+}

@@ -423,64 +423,6 @@ button.rowPr:focus-visible {
   opacity: 1;
 }
 
-.toolboxItem {
-  display: contents;
-}
-
-.toolboxRunRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  min-height: 46px;
-}
-
-.toolboxIcon {
-  color: var(--text-3);
-  flex-shrink: 0;
-}
-
-.toolboxName {
-  font-size: 0.88rem;
-  font-weight: 500;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hostSelect {
-  flex-shrink: 0;
-  min-width: 100px;
-  max-width: 160px;
-}
-
-.toolboxWorking {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.toolbox_success,
-.toolbox_warn,
-.toolbox_fail {
-  display: flex;
-  flex-shrink: 0;
-}
-.toolbox_success,
-.toolboxMessage_success {
-  color: var(--ok);
-}
-.toolbox_warn,
-.toolboxMessage_warn {
-  color: var(--warn);
-}
-.toolbox_fail,
-.toolboxMessage_fail {
-  color: var(--red);
-}
-
 .row:disabled {
   opacity: 0.6;
   cursor: not-allowed;
