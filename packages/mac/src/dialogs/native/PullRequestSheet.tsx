@@ -5,6 +5,7 @@ import type { AppState } from '@beluga/core/store.js';
 import type { MergeMethod } from '@beluga/workspaces/pr.js';
 import { findWorkspace } from '@beluga/ui/workspace-models.js';
 import { CommandLine, Field, FormSheet, TextArea, formStyles as f } from '../../components/FormSheet.js';
+import { Checkbox } from '../../components/Alert.js';
 import { Icon } from '../../components/Icon.js';
 import { ActionsDropdown } from '../../components/SpecMenu.js';
 import { Button, Tip, cx } from '../../components/ui.js';
@@ -276,7 +277,11 @@ export function PullRequestSheet({ menu, close }: NativeMenuProps<'pr'>) {
   const pr = useApp((st) => st.prs[menu.id]);
   const gh = useApp((st) => st.gh);
   const custom = useApp((st) => st.prCustom);
-  const [note, setNote] = useState('');
+  const project = useApp((st) => st.projects.find((p) => p.workspaces.some((w) => w.id === menu.id)));
+  // Your saved instructions for this project come back here, to change or keep.
+  const saved = project?.scripts?.yourPrPrompt ?? '';
+  const [note, setNote] = useState(saved);
+  const [keep, setKeep] = useState(Boolean(saved));
   const [checking, setChecking] = useState(false);
   if (!ws) return null;
   const instructions = (
@@ -332,8 +337,11 @@ export function PullRequestSheet({ menu, close }: NativeMenuProps<'pr'>) {
       }
       submitLabel="Create Pull Request"
       onSubmit={() => {
+        const text = note.trim();
+        // Kept: saved for the project first, then every PR there (this one too) follows them.
+        if (project && (keep ? text !== saved : Boolean(saved))) void api.workbench.setPrInstructions(project.id, keep ? text : '').then(() => api.workbench.createPr(menu.id, keep ? '' : text));
         // The same as /pr with extra words (or the plain option without them).
-        if (note.trim()) void api.workbench.createPr(menu.id, note.trim());
+        else if (text && !keep) void api.workbench.createPr(menu.id, text);
         else pick('pr-create');
         close();
       }}
@@ -343,6 +351,7 @@ export function PullRequestSheet({ menu, close }: NativeMenuProps<'pr'>) {
       <Field label="Instructions" htmlFor="pr-note" hint={`Optional: anything extra for this pull request. ${cmdReturn()} creates it.`}>
         <TextArea id="pr-note" value={note} onChange={setNote} rows={3} placeholder="e.g. Open it as a draft and mention issue #42" />
       </Field>
+      {project ? <Checkbox checked={keep} onChange={setKeep} label={`Use these for every pull request in ${project.name}`} detail="Your agent follows them in every pull request it writes there, from tasks and issues too. Kept in Beluga, not in the repo." /> : null}
     </FormSheet>
   );
 }

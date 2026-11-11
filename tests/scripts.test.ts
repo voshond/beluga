@@ -214,6 +214,12 @@ describe('resolveScripts', () => {
     expect(resolveScripts(dir)).toEqual({ prPrompt: 'Link the ticket.' });
   });
 
+  it('keeps your own PR instructions apart from beluga.json’s', () => {
+    touch('beluga.json', JSON.stringify({ prPrompt: 'Link the ticket.' }));
+    expect(resolveScripts(dir, { prPrompt: '  Write it in German. ' })).toEqual({ prPrompt: 'Link the ticket.', yourPrPrompt: 'Write it in German.' });
+    expect(resolveScripts(dir, { prPrompt: '  ' })).not.toHaveProperty('yourPrPrompt');
+  });
+
   it('ignores an empty prPrompt', () => {
     touch('beluga.json', JSON.stringify({ prPrompt: '' }));
     expect(resolveScripts(dir)).not.toHaveProperty('prPrompt');

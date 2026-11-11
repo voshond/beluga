@@ -439,7 +439,9 @@ export class Workbench {
       return;
     }
     const project = this.manager.list.find((p) => p.id === ws.projectId);
-    const prompt = buildPrPrompt({ branch: ws.branch, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', projectPrompt: project?.scripts?.prPrompt, extra });
+    // Read now, not from the last refresh: instructions saved a moment ago (the PR sheet) apply to this one.
+    const scripts = project ? this.manager.scripts(project.id) : {};
+    const prompt = buildPrPrompt({ branch: ws.branch, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', projectPrompt: scripts.prPrompt, yourPrompt: scripts.yourPrPrompt, extra });
     if (!this.deps.store.getState().prs[ws.id]) this.prAsked.add(ws.id);
     this.deps.controller.open(ws.id);
     const ask = (): void => this.deps.askClaude(prompt, `ws:${ws.id}`);
@@ -1822,6 +1824,19 @@ export class Workbench {
         return `Saved: new worktrees of ${project.name} run \`${value}\` (the owner approves it once the first time it runs by itself).`;
       },
     };
+  }
+
+  /** Your own instructions for every pull request your agent writes in this project (empty: none). Kept in Beluga, not in the repo. */
+  setPrInstructions(projectId: string, text: string): void {
+    try {
+      const value = text.trim() || undefined;
+      this.manager.setScripts(projectId, { prPrompt: value });
+      void this.deps.controller.refresh();
+      const name = this.manager.list.find((x) => x.id === projectId)?.name ?? 'this project';
+      this.deps.toast(value ? `Pull requests in ${name} follow your instructions from now on` : `Your pull request instructions for ${name} are cleared`, 'success');
+    } catch (err) {
+      this.deps.toast(err instanceof Error ? err.message : String(err), 'error');
+    }
   }
 
   /** Put your commands in the project's beluga.json (or its older klaud.json) so teammates get them. */

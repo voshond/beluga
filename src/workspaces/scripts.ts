@@ -14,6 +14,8 @@ export interface ProjectScripts {
   readonly looked?: boolean;
   /** Which of your commands Claude worked out (setting one yourself takes it off). */
   readonly byClaude?: ReadonlyArray<'setup' | 'run'>;
+  /** Yours only: what your agent is told for every pull request it writes in this project. */
+  readonly prPrompt?: string;
 }
 
 /** The project's own file: beluga.json, or klaud.json from before the rename (read, and kept up to date, where it's the one there). */
@@ -27,6 +29,8 @@ export interface ResolvedScripts {
   readonly run?: { readonly command: string; readonly source: ScriptSource };
   /** Extra pull request instructions for this project (beluga.json "prPrompt"). */
   readonly prPrompt?: string;
+  /** Your own pull request instructions for this project (kept in Beluga, not committed). */
+  readonly yourPrPrompt?: string;
 }
 
 const Command = z.string().trim().min(1).max(2000);
@@ -211,7 +215,7 @@ export function resolveScripts(root: string, yours: ProjectScripts = {}): Resolv
   };
   const setup = yours.skipSetup && !yours.setup ? undefined : pick('setup', detectSetup);
   const run = pick('run', detectRun);
-  return { ...(setup ? { setup } : {}), ...(run ? { run } : {}), ...(file?.prPrompt ? { prPrompt: file.prPrompt } : {}) };
+  return { ...(setup ? { setup } : {}), ...(run ? { run } : {}), ...(file?.prPrompt ? { prPrompt: file.prPrompt } : {}), ...(yours.prPrompt?.trim() ? { yourPrPrompt: yours.prPrompt.trim() } : {}) };
 }
 
 /** Write the scripts into the project's beluga.json (or its older klaud.json) so teammates get them too (keeps other fields). */

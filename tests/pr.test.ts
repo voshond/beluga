@@ -54,6 +54,12 @@ describe('buildPrPrompt', () => {
     expect(out).toBe('T\n\nProject guidelines for pull requests (from the project\'s beluga.json):\nLink the Linear ticket.\n\nFor this pull request, also: mention the migration');
   });
 
+  it('puts your own project instructions after the team ones and before this PR’s', () => {
+    const out = buildPrPrompt({ ...ctx, projectPrompt: 'Team.', yourPrompt: '  Write it in German. ', extra: 'draft' }, 'T');
+    expect(out).toBe('T\n\nProject guidelines for pull requests (from the project\'s beluga.json):\nTeam.\n\nThe owner\'s own instructions for this project\'s pull requests:\nWrite it in German.\n\nFor this pull request, also: draft');
+    expect(buildPrPrompt({ ...ctx, yourPrompt: ' \n ' }, 'T')).toBe('T');
+  });
+
   it('skips blank project prompt and extra', () => {
     expect(buildPrPrompt({ ...ctx, projectPrompt: '   ', extra: '\n' }, 'T')).toBe('T');
   });

@@ -296,6 +296,7 @@ export const HANDLERS = {
   'workbench.runSetup': (s, wsId) => bench(s)?.runSetup(wsId),
   'workbench.setScript': (s, projectId, kind, command, team) => bench(s)?.setScript(projectId, kind, command, team),
   'workbench.shareScripts': (s, projectId) => bench(s)?.shareScripts(projectId),
+  'workbench.setPrInstructions': (s, projectId, text) => bench(s)?.setPrInstructions(projectId, text),
   'workbench.setAgent': (s, channel, agent, mode) => s.workbench?.setAgent(channel, agent ?? undefined, mode) ?? false,
   'workbench.setModel': (s, channel, value) => (s.workbench ? s.workbench.setModel(channel, value) : s.setPrefs({ model: value || undefined })),
   'workbench.createPr': (s, id, extra) => bench(s)?.createPr(id, extra),

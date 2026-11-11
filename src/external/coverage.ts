@@ -27,6 +27,7 @@ const VIEW_SOURCE = 'It runs a view\'s source, which can be a command: sentinel_
 const AGENT_TERM = 'A terminal app for a person to type in: an agent works through beluga_chat_send.';
 const STATS = 'The Usage tab counts the person\'s work in every project, past any grant\'s scope.';
 const WEB_SESSION = 'A browser session can answer approvals and read secret values, which no agent does (BLG-244).';
+const PR_INSTRUCTIONS = 'A person\'s own standing instructions to their agent: an agent passes one-off instructions with pr_create.';
 const WINDOW_LOAD = 'The window notes a part of itself that did not load: an agent has no window.';
 const PREVIEW = 'A live preview is built for a window\'s frame and drawn there: an agent has no frame.';
 const SAVE_PANEL = 'It writes a file where a person chose in the Save panel.';
@@ -170,6 +171,7 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'workbench.runSetup': 'covered',
   'workbench.setScript': 'covered',
   'workbench.shareScripts': 'gated',
+  'workbench.setPrInstructions': { refused: PR_INSTRUCTIONS },
   'workbench.setModel': 'covered',
   'workbench.setAgent': 'covered',
   'workbench.createPr': 'covered',
