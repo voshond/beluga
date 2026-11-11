@@ -9,6 +9,7 @@ import { useActions } from '../lib/actions.js';
 import { useApi } from '../lib/beluga.js';
 import { MERGE_METHODS } from '../lib/pr-checks.js';
 import { showGitTrouble } from '../lib/git-trouble.js';
+import { isPrWay, rememberPrWay, usePrWay, withPrWayFirst } from '../lib/pr-way.js';
 import { openSheet } from '../lib/sheets.js';
 import { askBeforeWork } from '../lib/work-confirm.js';
 import { useWsBusy, whileBusy } from '../lib/ws-busy.js';
@@ -81,7 +82,8 @@ export function BranchControl({ wsId, branch, fold = 'none' }: BranchProps) {
   const [method, setMethod] = useState<MergeMethod>(lastMethod);
   // This worktree's, not the component's: it's the same one when you switch to another worktree.
   const busy = useWsBusy(wsId);
-  const [main, ...rest] = branch.steps;
+  // The way you last created a pull request leads, in every worktree.
+  const [main, ...rest] = withPrWayFirst(branch.steps, usePrWay());
 
   const merge = (how: MergeMethod, mode?: 'auto' | 'admin'): void => {
     setMethod(how);
@@ -92,6 +94,7 @@ export function BranchControl({ wsId, branch, fold = 'none' }: BranchProps) {
   };
   const run = (step: BranchStep): void => {
     if (busy) return;
+    if (isPrWay(step.id)) rememberPrWay(step.id);
     switch (step.id) {
       case 'merge_pr':
         return merge(method);

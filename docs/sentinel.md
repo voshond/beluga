@@ -53,7 +53,7 @@ Each step has an `id`, a `name` the window shows ("Read what changed"), and its 
 | `script` | Run a script | `command` (one shell line or a script's path), `cwd: 'project' \| 'home'`, `timeoutSec` (120 by default, up to 3600) | 1 |
 | `notify` | Notify me | `title?`, `body?` (templates), `phone: boolean`; the run's report is attached | 1 |
 | `http` | Call a service | `method`, `url`, `headers` (`$VAR` from Settings › Environment), `body?`, `timeoutSec`; a **service preset** fills these (Groqbot, Slack webhook, Discord webhook, any URL) | 2 |
-| `pr` | Open a pull request | `draft?: boolean`; uses the project's PR instructions (`buildPrPrompt`, `beluga.json` `prPrompt`) and the worktree the run's agent step made | 2 |
+| `pr` | Open a pull request | `draft?: boolean`; uses the project's PR instructions (`buildPrPrompt`, `beluga.json` `prPrompt` and your own saved for the project) and the worktree the run's agent step made | 2 |
 | `merge` | Merge if acceptable | `require: { checks: true, approval: boolean }`, `method: 'squash' \| 'merge'`; see §5 | 2 |
 | `message` | Message a chat | `to: 'dm:<peerId>' \| 'group:<id>'`, `text` (templates; `@name` tags people and tells them) | 2 |
 | `friend` | Ask a friend's agent | `peerId`, `prompt`, `project?`; the gateway's `ask` as you; their trust applies | 2 |

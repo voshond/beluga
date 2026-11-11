@@ -2,7 +2,7 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type { Review } from '@beluga/workspaces/git.js';
 import { parseDiff } from '@beluga/shared/diff-lines.js';
 import { findWorkspace } from '@beluga/ui/workspace-models.js';
-import { Icon } from '../../components/Icon.js';
+import { Icon, type IconName } from '../../components/Icon.js';
 import { ActionsContext, ActionsDropdown } from '../../components/SpecMenu.js';
 import { Button, Empty, IconButton, Segmented, Tip, cx } from '../../components/ui.js';
 import { useActions } from '../../lib/actions.js';
@@ -14,6 +14,7 @@ import { dirOf, groupByFolder, shownOrder } from '../../lib/changes-model.js';
 import { setPrefs, usePrefs } from '../../lib/prefs.js';
 import { chordLabel } from '../../lib/shortcuts-model.js';
 import { useWsBusy, whileBusy } from '../../lib/ws-busy.js';
+import { type PrWay, rememberPrWay, usePrWay } from '../../lib/pr-way.js';
 import { STATE, UnifiedDiff, useCommitItems, useFileItems } from '../../views/DiffView.js';
 import { type ChangeLook, ChangedFileView, canShowFile, changeLocation, fileLookLabel, onlyAsFile, useChangeLocation } from '../../views/ChangedFile.js';
 import { aheadOnHover, readAhead } from '../../views/reader/streamed.js';
@@ -106,7 +107,9 @@ function Summary({ data, loading, grouped, onReload }: { data: Review; loading: 
   );
 }
 
-/** Commit, a pull request, Claude's review: what you do with changes, right under them. */
+type PrWayItem = { readonly way: PrWay; readonly label: string; readonly tip: string; readonly icon: IconName; readonly go: () => void };
+
+/** Commit, a pull request, Claude's review: what you do with changes, right under them. The way you last created a PR leads. */
 function Actions({ wsId }: { wsId: string }) {
   const agent = useMyAgentName();
   const actions = useActions();
@@ -115,12 +118,24 @@ function Actions({ wsId }: { wsId: string }) {
   const opening = useWsBusy(wsId);
   const ws = useApp((st) => findWorkspace(st.projects, wsId));
   const pr = useApp((st) => st.prs[wsId]);
+  const prWay = usePrWay();
   if (!ws) return null;
   const changed = ws.status?.changed ?? 0;
   const ahead = ws.status?.ahead ?? 0;
   const worktree = ws.kind === 'worktree';
   const run = (action: 'commit' | 'pr' | 'review_claude'): void => actions.run({ type: 'ws', id: wsId, action });
   const quick = (draft = false): void => void whileBusy(wsId, async () => showGitTrouble(wsId, await api.workbench.quickPr(wsId, draft ? { draft: true } : {}), draft ? 'pr_draft' : 'pr'));
+  const ways: readonly PrWayItem[] = [
+    { way: 'pr', label: 'Create PR', tip: 'Pushes and opens a pull request, titled from its commits', icon: 'pr', go: () => quick() },
+    { way: 'pr_claude', label: `Create PR with ${agent}`, tip: 'Your agent writes the title and description: what, why, how to test', icon: 'claude', go: () => void api.workbench.createPr(wsId) },
+    { way: 'pr_custom', label: 'Create PR with Instructions…', tip: 'Tell your agent anything extra, or save instructions for this project', icon: 'claude', go: () => requestAnimationFrame(() => run('pr')) },
+    { way: 'pr_draft', label: 'Create Draft PR', tip: 'It can’t merge until it’s marked ready', icon: 'pr', go: () => quick(true) },
+  ];
+  const pick = (item: PrWayItem): void => {
+    rememberPrWay(item.way);
+    item.go();
+  };
+  const lead = ways.find((item) => item.way === prWay) ?? ways[0]!;
   return (
     <div className={s.actions}>
       {worktree && changed ? (
@@ -138,18 +153,12 @@ function Actions({ wsId }: { wsId: string }) {
         </Tip>
       ) : worktree && (ahead || changed) ? (
         <>
-          <Tip label="Pushes and opens a pull request, titled from its commits">
-            <Button size="small" icon="pr" disabled={opening} onClick={() => quick()}>
-              {opening ? 'Opening…' : 'Create PR'}
+          <Tip label={lead.tip}>
+            <Button size="small" icon={lead.icon} disabled={opening} onClick={() => pick(lead)}>
+              {opening ? 'Opening…' : lead.label}
             </Button>
           </Tip>
-          <ActionsDropdown
-            items={[
-              { label: `Create PR with ${agent}`, hint: 'Your agent writes the title and description: what, why, how to test', icon: 'claude', onSelect: () => void api.workbench.createPr(wsId) },
-              { label: 'Create PR with Instructions…', hint: 'Tell your agent anything extra for this one', icon: 'claude', onSelect: () => requestAnimationFrame(() => run('pr')) },
-              { label: 'Create Draft PR', hint: 'It can’t merge until it’s marked ready', icon: 'pr', onSelect: () => quick(true) },
-            ]}
-          >
+          <ActionsDropdown items={ways.filter((item) => item !== lead).map((item) => ({ label: item.label, hint: item.tip, icon: item.icon, onSelect: () => pick(item) }))}>
             <Button size="small" variant="quiet" disabled={opening} aria-label="Other ways to create the pull request">
               <Icon name="chevronDown" size={11} />
             </Button>

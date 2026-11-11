@@ -395,6 +395,8 @@ export const API = {
   'workbench.runSetup': args(id),
   'workbench.setScript': args(id, z.enum(['setup', 'run']), z.string().max(2000), opt(bool)),
   'workbench.shareScripts': args(id),
+  // Your own instructions for every pull request your agent writes in a project ('' clears them); kept in Beluga, not committed.
+  'workbench.setPrInstructions': args(id, z.string().max(8000)),
   'workbench.setModel': args(opt(channel), z.string().max(80)),
   /**
    * A conversation's agent (BLG-446): its runtime and model; null goes back to your default agent (nullish: over the socket a null arrives as undefined, see daemon/dispatch.ts).

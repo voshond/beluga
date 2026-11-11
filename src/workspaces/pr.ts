@@ -69,6 +69,8 @@ export interface PrContext {
   readonly project: string;
   /** Project-specific additions from beluga.json. */
   readonly projectPrompt?: string;
+  /** Your own instructions for this project's pull requests (saved in Beluga). */
+  readonly yourPrompt?: string;
   /** What you typed for this one PR ("/pr mention the migration"). */
   readonly extra?: string;
 }
@@ -78,8 +80,9 @@ export function buildPrPrompt(ctx: PrContext, template = customPrPrompt() ?? DEF
   const baseBranch = ctx.base.replace(/^origin\//, '');
   const filled = template.replaceAll('{{branch}}', ctx.branch).replaceAll('{{baseBranch}}', baseBranch).replaceAll('{{base}}', ctx.base).replaceAll('{{project}}', ctx.project);
   const project = ctx.projectPrompt?.trim() ? `\n\nProject guidelines for pull requests (from the project's beluga.json):\n${ctx.projectPrompt.trim()}` : '';
+  const yours = ctx.yourPrompt?.trim() ? `\n\nThe owner's own instructions for this project's pull requests:\n${ctx.yourPrompt.trim()}` : '';
   const extra = ctx.extra?.trim() ? `\n\nFor this pull request, also: ${ctx.extra.trim()}` : '';
-  return `${filled}${project}${extra}`;
+  return `${filled}${project}${yours}${extra}`;
 }
 
 /** Ask Claude to fix the failing checks on a PR. */
