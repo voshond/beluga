@@ -4,11 +4,11 @@ Each project can have a Toolbox of named, parameterized commands — "Deploy to 
 
 ## Running tools
 
-Open a project, scroll to the Toolbox section, and click any tool button. It opens in a Terminal tab with live output. Tools with a `{{host}}` param show a dropdown of your `~/.ssh/config` hosts.
+The Toolbox is the first section on a project's page. Each row shows the tool's name and its params (`{{host}}`); click the row to run it. Its terminal button runs it in a popup where you watch the live output (and can type into it, a password prompt say), or opens the run that's there. Tools with a `{{host}}` param show a dropdown of your `~/.ssh/config` hosts.
 
 The phone lists all tools and can run them, with output shown read-only. Creating, editing and deleting tools is Mac-only.
 
-While a tool runs, its row shows a spinner and it can't be started again; the last run's result stays on the row until the next run.
+While a tool runs, its row shows a spinner and the last line it printed, and it can't be started again. When it ends the row turns green, amber or red for a few seconds; the result and its last line stay on the row until the next run.
 
 ## Reporting a result
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseToolReport, toolOutcome } from '../src/workspaces/toolbox.js';
+import { parseToolReport, toolOutcome, toolTrailLine } from '../src/workspaces/toolbox.js';
 
 describe('parseToolReport', () => {
   it('reads a status and its message', () => {
@@ -37,5 +37,19 @@ describe('toolOutcome', () => {
     expect(toolOutcome(1, { status: 'success', message: 'lied' })).toEqual({ status: 'fail', message: 'exit 1' });
     expect(toolOutcome(1, { status: 'fail', message: 'build broke' })).toEqual({ status: 'fail', message: 'build broke' });
     expect(toolOutcome(null, undefined)).toEqual({ status: 'fail', message: 'exit ?' });
+  });
+});
+
+describe('toolTrailLine', () => {
+  it('keeps the text a line shows last, without colors or controls', () => {
+    expect(toolTrailLine('\x1b[32mRemoter stopped\x1b[0m\r')).toBe('Remoter stopped');
+    expect(toolTrailLine('Downloading 10%\rDownloading 55%\r')).toBe('Downloading 55%');
+    expect(toolTrailLine('x'.repeat(300))).toHaveLength(200);
+  });
+
+  it('skips blank lines and status markers', () => {
+    expect(toolTrailLine('   ')).toBeUndefined();
+    expect(toolTrailLine('\x1b[0m\r')).toBeUndefined();
+    expect(toolTrailLine('::beluga status=success done')).toBeUndefined();
   });
 });

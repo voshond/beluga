@@ -1,7 +1,5 @@
-.actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.flex {
+  flex: 1;
 }
 
 .name {
@@ -11,39 +9,66 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.command,
-.message {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-3);
-}
-.command {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-}
-.message {
-  font-size: 0.86rem;
-}
-.hint {
-  color: var(--text-3);
-  font-size: 0.82rem;
-  flex-shrink: 0;
-}
 .status {
   display: flex;
   align-items: center;
   flex-shrink: 0;
 }
-.tone_success {
-  color: var(--ok);
+
+.list {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
+  overflow: hidden;
 }
-.tone_warn {
-  color: var(--warn);
+.listItem {
+  display: flex;
+  align-items: center;
+  padding-right: 8px;
+  transition: background 1.2s var(--ease-out);
 }
-.tone_fail {
-  color: var(--error);
+.listItem + .listItem {
+  border-top: 0.5px solid var(--hairline);
+}
+.listItem:hover {
+  background: var(--bg-hover);
+}
+.listItem.flash_success {
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+  transition-duration: var(--dur-fast);
+}
+.listItem.flash_warn {
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  transition-duration: var(--dur-fast);
+}
+.listItem.flash_fail {
+  background: color-mix(in srgb, var(--error) 16%, transparent);
+  transition-duration: var(--dur-fast);
+}
+
+.listRow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 6px 4px 6px 12px;
+  text-align: left;
+  color: inherit;
+}
+.listRow:active:not(:disabled) .runMark {
+  transform: scale(0.92);
+}
+.listRow:focus-visible {
+  outline: none;
+}
+.listItem:has(.listRow:focus-visible) {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.listRow:disabled {
+  cursor: default;
 }
 
 .runMark {
@@ -55,7 +80,7 @@
   border-radius: var(--radius-s);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
-  transition: background var(--dur-fast), color var(--dur-fast);
+  transition: background var(--dur-fast), color var(--dur-fast), transform var(--dur-fast);
 }
 .runMark > * {
   grid-area: 1 / 1;
@@ -63,43 +88,48 @@
 .runGo {
   opacity: 0;
 }
-:is(.listRow, .tile):hover:not(:disabled) .runMark {
+.listRow:hover:not(:disabled) .runMark {
   background: var(--accent);
   color: white;
 }
-:is(.listRow, .tile):hover:not(:disabled) .runIdle {
+.listRow:hover:not(:disabled) .runIdle {
   opacity: 0;
 }
-:is(.listRow, .tile):hover:not(:disabled) .runGo {
+.listRow:hover:not(:disabled) .runGo {
   opacity: 1;
 }
 
-.list {
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--radius);
-  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
-  overflow: hidden;
-}
-.listItem + .listItem {
-  border-top: 0.5px solid var(--hairline);
-}
-.listRow {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 46px;
-  padding: 6px 12px;
-  text-align: left;
-  transition: background var(--dur-fast);
-}
 .main {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+.nameLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.param {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.trail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
 }
 .runWord {
   flex-shrink: 0;
@@ -113,89 +143,84 @@
   opacity: 1;
 }
 
-.tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 8px;
-}
-.tile {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  text-align: left;
-  border-radius: var(--radius);
-  background: var(--bg-raised);
-  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
-  transition: background var(--dur-fast), box-shadow var(--dur-fast);
-}
-.tileHead {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.tileHead .name {
-  flex: 1;
-}
-.tile:hover:not(:disabled) {
-  box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong);
-}
-.tileLive {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.chip {
-  max-width: 260px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 12px 0 10px;
-  border-radius: 999px;
-  background: var(--bg-raised);
-  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
-  font-size: 0.88rem;
-  transition: background var(--dur-fast), box-shadow var(--dur-fast);
-}
-.chipPlay {
-  color: var(--accent);
+.iconButton {
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-s);
+  color: var(--text-3);
+  transition: background var(--dur-fast), color var(--dur-fast), opacity var(--dur-fast);
 }
-.chip:hover:not(:disabled) {
-  box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong);
-}
-
-:is(.listRow, .tile, .chip):hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-:is(.listRow, .tile, .chip):active:not(:disabled) {
+.iconButton:hover:not(:disabled) {
+  color: var(--text);
   background: var(--bg-press);
 }
-:is(.listRow, .tile, .chip):focus-visible {
+.iconButton:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
 }
-:is(.listRow, .tile, .chip):disabled {
-  cursor: default;
+.watch {
+  margin-left: 2px;
+  opacity: 0;
+}
+.listItem:hover .watch,
+.watch:focus-visible,
+.watchOn {
+  opacity: 1;
+}
+.watchOn {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
-.pickerBox {
-  border-radius: var(--radius);
-  box-shadow: inset 0 0 0 var(--hair) var(--hairline);
+.popover {
+  z-index: 60;
+  width: min(620px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop), 0 18px 50px rgba(0, 0, 0, 0.22);
+  animation: rise var(--dur) var(--ease-out);
 }
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.popHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border-bottom: 0.5px solid var(--hairline);
+}
+.popState {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  font-size: 0.86rem;
+}
+.termBox {
+  height: 280px;
+  display: flex;
+  flex-direction: column;
+  background: var(--term-bg);
+}
+
 .picker {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 8px;
   min-height: 46px;
-  padding: 6px 12px;
+  padding: 6px 4px 6px 12px;
 }
 .picker .name {
   flex: 1;
@@ -208,4 +233,14 @@
   flex-shrink: 0;
   min-width: 100px;
   max-width: 160px;
+}
+
+.tone_success {
+  color: var(--ok);
+}
+.tone_warn {
+  color: var(--warn);
+}
+.tone_fail {
+  color: var(--error);
 }

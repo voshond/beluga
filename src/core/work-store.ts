@@ -189,6 +189,8 @@ export interface WorkState {
   readonly termExits: Readonly<Record<string, number | null>>;
   /** The last `::beluga status=…` line a Toolbox tool's terminal printed (id → report), cleared when it starts again. */
   readonly termReports: Readonly<Record<string, ToolReport>>;
+  /** The last line a Toolbox tool's terminal showed (id → line), cleared when it starts again. */
+  readonly termTrails: Readonly<Record<string, string>>;
   /** Names you gave terminals (id → name), kept while the terminal is. */
   readonly termNames: Readonly<Record<string, string>>;
   /** Running terminals that started before you changed their variables (Settings › Environment): a restart gives them the new ones. */
@@ -229,6 +231,7 @@ export type WorkAction =
   | { type: 'terminal'; id: string; title?: string }
   | { type: 'terminal_exit'; id: string; code: number | null }
   | { type: 'terminal_report'; id: string; report: ToolReport }
+  | { type: 'terminal_trail'; id: string; line: string }
   /** Name a terminal (no name: back to Shell N). */
   | { type: 'terminal_name'; id: string; name?: string }
   | { type: 'terminal_env_stale'; ids: readonly string[] }
@@ -262,6 +265,7 @@ export const initialWork: WorkState = {
   terminals: {},
   termExits: {},
   termReports: {},
+  termTrails: {},
   termNames: {},
   termEnvStale: [],
   agentTerms: {},
@@ -321,14 +325,17 @@ export function reduceWork(state: WorkState, action: WorkAction): WorkState {
       if (action.title !== undefined && state.terminals[action.id] === action.title && !(action.id in state.termExits)) return state;
       const termExits = without(state.termExits, action.id);
       const termReports = without(state.termReports, action.id);
+      const termTrails = without(state.termTrails, action.id);
       // A closed terminal forgets its name; one that starts again keeps it.
-      if (action.title === undefined) return { ...state, termExits, termReports, terminals: without(state.terminals, action.id), termNames: without(state.termNames, action.id) };
-      return { ...state, termExits, termReports, terminals: { ...state.terminals, [action.id]: action.title } };
+      if (action.title === undefined) return { ...state, termExits, termReports, termTrails, terminals: without(state.terminals, action.id), termNames: without(state.termNames, action.id) };
+      return { ...state, termExits, termReports, termTrails, terminals: { ...state.terminals, [action.id]: action.title } };
     }
     case 'terminal_exit':
       return action.id in state.terminals ? { ...state, termExits: { ...state.termExits, [action.id]: action.code } } : state;
     case 'terminal_report':
       return action.id in state.terminals ? { ...state, termReports: { ...state.termReports, [action.id]: action.report } } : state;
+    case 'terminal_trail':
+      return action.id in state.terminals ? { ...state, termTrails: { ...state.termTrails, [action.id]: action.line } } : state;
     case 'terminal_name':
       if (!(action.id in state.terminals)) return state;
       return { ...state, termNames: action.name ? { ...state.termNames, [action.id]: action.name } : without(state.termNames, action.id) };

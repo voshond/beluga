@@ -115,8 +115,6 @@ export interface UiPrefs {
   readonly phoneScreen: boolean;
   /** How Scratch lists its files: newest first, or pictures, videos, PDFs and web pages first (BLG-111). */
   readonly scratchSort: 'newest' | 'viewable';
-  /** How Project Home shows the Toolbox: a list, a grid of tiles, or one line of chips. */
-  readonly toolboxLook: ToolboxLook;
   /** The icon you picked for each sidebar group (by name; unset: a folder). */
   readonly groupIcons: Readonly<Record<string, string>>;
   /** Plans (by id) whose task chats you asked to see in the sidebar under them (a plan is one row otherwise). */
@@ -212,7 +210,6 @@ export const DEFAULT_PREFS: UiPrefs = {
   scratchTab: true,
   phoneScreen: false,
   scratchSort: 'newest',
-  toolboxLook: 'list',
   groupIcons: {},
   planTaskChats: [],
   maxFire: DEFAULT_FIRE,
@@ -225,10 +222,6 @@ export const DEFAULT_PREFS: UiPrefs = {
   voiceMic: '',
   shortcuts: {},
 };
-
-export type ToolboxLook = 'list' | 'tiles' | 'chips';
-
-const toolboxLookOf = (look: string): ToolboxLook => (look === 'tiles' || look === 'chips' ? look : 'list');
 
 const KEY = 'beluga.prefs.v1';
 const listeners = new Set<() => void>();
@@ -244,7 +237,7 @@ function load(): UiPrefs {
   try {
     // Older versions docked the terminal beside or under the chat: see migratePrefs.
     const saved = { ...DEFAULT_PREFS, ...(migratePrefs(JSON.parse(localStorage.getItem(KEY) ?? '{}') as Record<string, unknown>) as Partial<UiPrefs>) };
-    return { ...saved, sendDuringTurn: saved.sendDuringTurn === 'steer' ? 'steer' : 'queue', panelLayout: normalizeLayout(saved.panelLayout), maxFire: fireLookOf(saved.maxFire), menuBar: menuBarLookOf(saved.menuBar), termTheme: themeOf(saved.termTheme), shortcuts: overridesOf(saved.shortcuts), convoModes: saved.convoModes && typeof saved.convoModes === 'object' ? saved.convoModes : {}, chatWidth: chatWidthOf(saved), convoDefault: saved.convoDefaultPicked === true && isConvoMode(saved.convoDefault) ? saved.convoDefault : 'terminal', bothChat: clampBoth(saved.bothChat), termKeys: termKeysOf(saved.termKeys), termKeysFirst: saved.termKeysFirst !== false, termView: saved.termView === true, lightTheme: themeIdOf(saved.lightTheme, 'light'), darkTheme: themeIdOf(saved.darkTheme, 'dark'), accent: saved.accent in ACCENTS ? saved.accent : 'system', toolboxLook: toolboxLookOf(saved.toolboxLook) };
+    return { ...saved, sendDuringTurn: saved.sendDuringTurn === 'steer' ? 'steer' : 'queue', panelLayout: normalizeLayout(saved.panelLayout), maxFire: fireLookOf(saved.maxFire), menuBar: menuBarLookOf(saved.menuBar), termTheme: themeOf(saved.termTheme), shortcuts: overridesOf(saved.shortcuts), convoModes: saved.convoModes && typeof saved.convoModes === 'object' ? saved.convoModes : {}, chatWidth: chatWidthOf(saved), convoDefault: saved.convoDefaultPicked === true && isConvoMode(saved.convoDefault) ? saved.convoDefault : 'terminal', bothChat: clampBoth(saved.bothChat), termKeys: termKeysOf(saved.termKeys), termKeysFirst: saved.termKeysFirst !== false, termView: saved.termView === true, lightTheme: themeIdOf(saved.lightTheme, 'light'), darkTheme: themeIdOf(saved.darkTheme, 'dark'), accent: saved.accent in ACCENTS ? saved.accent : 'system' };
   } catch {
     return DEFAULT_PREFS;
   }

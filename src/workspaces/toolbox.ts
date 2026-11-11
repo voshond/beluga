@@ -108,6 +108,16 @@ export function parseToolReport(line: string): ToolReport | undefined {
   return { status: match[1] as ToolReportStatus, message: (match[2] ?? '').trim().slice(0, 200) };
 }
 
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\x00-\x1f\x7f]/g;
+
+/** The text one line of a tool's output shows last (a progress bar redraws after `\r`), or undefined when blank or a marker. */
+export function toolTrailLine(line: string): string | undefined {
+  const shown = line.replace(ANSI, '').split('\r').map((part) => part.replace(CONTROL, '').trim()).filter(Boolean).pop();
+  if (!shown || parseToolReport(shown)) return undefined;
+  return shown.slice(0, 200);
+}
+
 /**
  * How a tool's last run ended. A non-zero exit always fails; otherwise the script's own report
  * decides, and a run that reported nothing succeeded.

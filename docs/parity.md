@@ -631,11 +631,11 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `sentinel.chatOpen` | ✓ Sentinel › Chat: the chat's name, a picker of the chats when there are several |
 | `sentinel.chatClear` | ✓ Sentinel › Chat › ⋯ › Clear (its messages go, the agent starts afresh; the chat stays) |
 | `sentinel.chatDelete` | ✓ Sentinel › Chat › ⋯ › Delete Chat… (confirms; the next chat opens, or a fresh first one) |
-| `toolbox.list` | ✓ Project › Toolbox: all tools (personal + team) for the project, first on Project Home, shown as a List, Tiles or Chips (the header's switcher, kept per Mac); the phone lists them read-only (BLG-75) |
+| `toolbox.list` | ✓ Project › Toolbox: all tools (personal + team) for the project, first on Project Home: each tool's name with its {{params}} and the last line it printed; the phone lists them read-only (BLG-75) |
 | `toolbox.create` | ✓ Project Settings › Toolbox › New Tool: name, command with {{params}}, personal or Share with team (saves to beluga.json) · Mac only |
 | `toolbox.update` | ✓ Project Settings › Toolbox › a tool's pencil: change its name, command, params or source · Mac only |
 | `toolbox.delete` | ✓ Project Settings › Toolbox › a tool's ✕: removes it from projects.json or beluga.json · Mac only |
-| `toolbox.run` | ✓ Project › Toolbox: a tool's Run button (Mac) or Run button (phone, read-only output); opens a Terminal tab, streams output; the row shows the last run's result (✓/⚠/✗ from its exit code and its `::beluga status=` line, with the message) until the next run |
+| `toolbox.run` | ✓ Project › Toolbox: a click on the tool's row runs it (Mac), its terminal button runs it in a popup to watch (or shows the run that's there), or Run button (phone, read-only output); the row shows the last line it printed live, then the last run's result (✓/⚠/✗ from its exit code and its `::beluga status=` line, with the message), tinted green, amber or red for a few seconds when a run ends |
 | `toolbox.approve` | ✓ Project › Toolbox: team tools (from beluga.json) show an Approve button on first run, same flow as setup/run script approval · Mac only |
 | `toolbox.sshHosts` | ✓ Project Settings › Toolbox: host-param dropdowns read ~/.ssh/config (arch, m1arch, nas, …) · Mac only |
 | `toolbox.dismissSuggestion` | ✓ NeedsYou card "Make tool / Let Claude make it / Not this" on a repeated command: Not this dismisses its signature · Mac only |

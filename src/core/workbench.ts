@@ -12,7 +12,7 @@ import { tilde } from './paths.js';
 import type { WorkspaceManager } from '../workspaces/manager.js';
 import type { Workspace } from '../workspaces/types.js';
 import { worktreeOrigin } from '../workspaces/origin.js';
-import { parseToolReport } from '../workspaces/toolbox.js';
+import { parseToolReport, toolTrailLine } from '../workspaces/toolbox.js';
 import { formatBytes, measureAll } from '../workspaces/disk.js';
 import { contentIn, resetTo } from '../workspaces/git.js';
 import { fetchRemote } from '../workspaces/sync.js';
@@ -1368,19 +1368,41 @@ export class Workbench {
     return session;
   }
 
-  /** Every `::beluga status=…` line the tool prints becomes its report; a line split across chunks waits for its end. */
+  /**
+   * Every `::beluga status=…` line the tool prints becomes its report; a line split across chunks waits for its end.
+   * The last line it shows (one still being drawn, too) is its trail, sent at most every 300ms.
+   */
   private watchToolReports(key: string, session: PtyProcess): void {
     let pending = '';
+    let trail: string | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const current = (): boolean => this.deps.terminals?.get(key) === session;
+    const flush = (): void => {
+      timer = undefined;
+      if (trail !== undefined && current()) this.deps.store.dispatch({ type: 'terminal_trail', id: key, line: trail });
+    };
+    const follow = (line: string): void => {
+      const shown = toolTrailLine(line);
+      if (shown === undefined || shown === trail) return;
+      trail = shown;
+      timer ??= setTimeout(flush, 300);
+    };
     const read = (line: string): void => {
       const report = parseToolReport(line);
-      if (report && this.deps.terminals?.get(key) === session) this.deps.store.dispatch({ type: 'terminal_report', id: key, report });
+      if (report && current()) this.deps.store.dispatch({ type: 'terminal_report', id: key, report });
+      follow(line);
     };
     session.onData((data) => {
       const lines = (pending + data).split(/\r?\n/);
       pending = (lines.pop() ?? '').slice(-4096);
       lines.forEach(read);
+      follow(pending);
     });
-    session.onExit(() => read(pending));
+    session.onExit(() => {
+      read(pending);
+      clearTimeout(timer);
+      flush();
+    });
   }
 
   sshShell(host: string, size?: { cols: number; rows: number }): PtyProcess | undefined {
