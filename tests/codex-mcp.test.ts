@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CodexConnect } from '../src/agent/runtime/codex/app-server.js';
 import { CodexMcp, shortMcpError, toCodexRow } from '../src/agent/runtime/codex/mcp.js';
 import { createCodexBackend } from '../src/agent/runtime/codex/runner.js';
+import { GatePasses, mcpToolCallOf } from '../src/agent/runtime/codex/tool-questions.js';
 import { routedBackend } from '../src/agent/runtime/router.js';
+import type { ToolGate, ToolHost } from '../src/agent/tool-host.js';
 import type { AgentBackend, AgentRunInput } from '../src/agent/types.js';
 import { FakeCodex } from './fake-codex.js';
 import { room } from './runtime-conformance.js';
@@ -131,5 +133,102 @@ describe('Codex MCP servers in Settings (BLG-518)', () => {
         'MCP startup failed: handshaking with MCP server failed: Send message error Transport [codex_rmcp_client::tool_list_changes::ToolListChanges<rmcp::transport::worker::WorkerTransport<x>>] error: Client error: HTTP request failed: http/request failed: error sending request for url (http://127.0.0.1:9/mcp), when send initialize request: Send message error Transport [y] error: …',
       ),
     ).toBe('handshaking with MCP server failed: Client error: HTTP request failed: http/request failed: error sending request for url (http://127.0.0.1:9/mcp)');
+  });
+});
+
+describe('Codex asks before an MCP tool call (BLG-242)', () => {
+  /** A run with a tool server whose gate the scripted Codex calls, as the real stdio server does. */
+  function gated(codex: FakeCodex) {
+    let gate: ToolGate = async () => undefined;
+    const toolHost = { mount: async (_suites: unknown, g: ToolGate) => ((gate = g), { token: 't', servers: { beluga: { type: 'stdio', command: 'x', args: [], env: {} } }, close: () => undefined }) } as unknown as ToolHost;
+    const denials: Array<string | undefined> = [];
+    codex.mcpCall = async (server, tool, args) => void denials.push(await gate(`mcp__${server}__${tool}`, { ...args, timeout_sec: 120 }));
+    return { denials, gate: () => gate, b: createCodexBackend({ cwd, autoEdit: true, additionalDirectories: [], bridge: room, connect: codex.connect, toolHost }) };
+  }
+  const own = (answer: boolean, asked: string[], extra: Partial<AgentRunInput> = {}): Partial<AgentRunInput> => ({
+    scope: 'full',
+    canUseTool: async (name) => {
+      asked.push(name);
+      return answer;
+    },
+    ...extra,
+  });
+
+  it('an allowed tool is accepted, and one call asks you one time', async () => {
+    const codex = new FakeCodex();
+    const { b, denials, gate } = gated(codex);
+    const asked: string[] = [];
+    await b.run(input('mcp run_on_peer', own(true, asked)));
+    expect(codex.approvals).toEqual([{ action: 'accept', content: {} }]);
+    expect(asked).toEqual(['mcp__beluga__run_on_peer']);
+    // The tool server's gate adds the schema's default, and still lets the call through without asking again.
+    expect(denials).toEqual([undefined]);
+    // The pass was for one call: a second call asks.
+    await gate()('mcp__beluga__run_on_peer', { peer: 'mia', command: 'uptime', timeout_sec: 120 });
+    expect(asked).toEqual(['mcp__beluga__run_on_peer', 'mcp__beluga__run_on_peer']);
+  });
+
+  it('a denied tool is declined, and the call never reaches the tool server', async () => {
+    const codex = new FakeCodex();
+    const { b, denials } = gated(codex);
+    const asked: string[] = [];
+    await b.run(input('mcp run_on_peer', own(false, asked)));
+    expect(codex.approvals).toEqual([{ action: 'decline' }]);
+    expect(asked).toHaveLength(1);
+    expect(denials).toEqual([]);
+  });
+
+  it('a pass fits only the same name and arguments', () => {
+    const passes = new GatePasses();
+    passes.add('t', { a: 1, b: [{ c: 2, d: 3 }] });
+    expect(passes.take('t', { a: 2 })).toBe(false);
+    expect(passes.take('other', { a: 1, b: [{ c: 2, d: 3 }] })).toBe(false);
+    expect(passes.take('t', { b: [{ d: 3, c: 2 }], a: 1 })).toBe(true);
+    expect(passes.take('t', { a: 1, b: [{ c: 2, d: 3 }] })).toBe(false);
+  });
+
+  it('another elicitation still fails, and asks nobody', async () => {
+    const codex = new FakeCodex();
+    const { b } = gated(codex);
+    const asked: string[] = [];
+    await b.run(input('question', own(true, asked)));
+    expect(codex.approvals).toEqual([undefined]);
+    expect(asked).toEqual([]);
+  });
+
+  it.each([
+    ['another mode', { mode: 'url' }],
+    ['no approval kind', { _meta: { tool_params: {} } }],
+    ['fields to fill in', { requestedSchema: { type: 'object', properties: { name: { type: 'string' } } } }],
+    ['a server that is not the one named', { serverName: 'other' }],
+    ['other words', { message: 'Please run "x"?' }],
+  ])('a question with %s is not a tool call', (_why, change) => {
+    const real = { serverName: 'beluga', mode: 'form', _meta: { codex_approval_kind: 'mcp_tool_call', tool_params: {} }, message: 'Allow the beluga MCP server to run tool "x"?', requestedSchema: { type: 'object', properties: {} } };
+    expect(mcpToolCallOf(real)).toEqual({ name: 'mcp__beluga__x', server: 'beluga', tool: 'x', args: {} });
+    expect(mcpToolCallOf({ ...real, ...change })).toBeUndefined();
+  });
+
+  it('while planning, a tool call is declined, whoever would allow it', async () => {
+    const codex = new FakeCodex();
+    const { b } = gated(codex);
+    const asked: string[] = [];
+    await b.run(input('mcp run_on_peer', own(true, asked, { plan: true })));
+    expect(codex.approvals).toEqual([{ action: 'decline' }]);
+    expect(asked).toEqual([]);
+  });
+
+  it.each([
+    ['a friend', { viaAgent: true }],
+    ['a full-trust friend', { viaAgent: true, scope: 'full' as const }],
+    ['a friend with limits', { vetTool: () => undefined }],
+    ['a guest', { guest: true }],
+  ])('the run of %s gets no more tools than before: the question still fails', async (_who, who) => {
+    const codex = new FakeCodex();
+    const { b, denials } = gated(codex);
+    const asked: string[] = [];
+    await b.run(input('mcp run_on_peer', { ...own(true, asked), scope: 'folder', ...who }));
+    expect(codex.approvals).toEqual([undefined]);
+    expect(asked).toEqual([]);
+    expect(denials).toEqual([]);
   });
 });

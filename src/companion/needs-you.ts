@@ -56,7 +56,8 @@ function approvalItem(state: DomainState, a: Approval): NeedsYou {
   return {
     id: `approval:${a.id}`,
     ...threadPlace(state, a.channel),
-    kind: a.kind === 'request' ? 'request' : 'approval',
+    // Agents hit a limit on messages to each other: your decision, with its own words on the buttons.
+    kind: a.kind === 'chain' ? 'decision' : a.kind === 'request' ? 'request' : 'approval',
     title: clip(a.title, 500),
     ...(a.detail ? { detail: clip(plainLine(a.detail, 64_000), 64_000) } : {}),
     from,
@@ -64,8 +65,8 @@ function approvalItem(state: DomainState, a: Approval): NeedsYou {
     ...(a.askedAt !== undefined ? { askedAt: a.askedAt } : {}),
     ...(a.timeoutMs !== undefined ? { timeoutMs: a.timeoutMs } : {}),
     actions: [
-      { label: a.once ? 'Allow once' : 'Approve', tone: 'main', method: 'host.answerApproval', args: ['yes', a.id] },
-      { label: 'Decline', tone: 'danger', method: 'host.answerApproval', args: ['no', a.id] },
+      { label: a.kind === 'chain' ? 'Continue' : a.once ? 'Allow once' : 'Approve', tone: 'main', method: 'host.answerApproval', args: ['yes', a.id] },
+      { label: a.kind === 'chain' ? 'Stop' : 'Decline', tone: 'danger', method: 'host.answerApproval', args: ['no', a.id] },
       // A friend's request for a secret is asked each time: no Always.
       ...(a.once ? [] : [{ label: 'Always', tone: 'plain' as const, method: 'host.answerApproval', args: ['always', a.id] }]),
     ],

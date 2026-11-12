@@ -52,16 +52,19 @@ const PhoneView = lazyView('phone/PhoneView', () => import('../phone/PhoneView.j
  */
 function MakingWorktree() {
   const ws = useApp((st) => (st.view.kind === 'workspace' ? findWorkspace(st.projects, st.view.id) : undefined));
+  const parent = useApp((st) => (ws?.forkedFrom ? findWorkspace(st.projects, ws.forkedFrom)?.name : undefined));
   const asked = useApp((st) => (ws ? st.log.some((l) => l.channel === `ws:${ws.id}`) : false));
   if (!ws) return null;
   const from = ws.base ?? 'the latest origin';
+  // A fork (BLG-921): a copy of another worktree, its conversation shown already.
+  const fork = ws.forkedFrom ? (parent ?? 'its parent') : undefined;
   if (!asked) {
     return (
       <Empty
         icon="branch"
         mark={<span className={side.making} style={{ width: 18, height: 18 }} aria-hidden="true" />}
-        title={`Making ${ws.name}…`}
-        detail={`A new worktree from ${from}. Its conversation opens here in a moment; anything you asked your agent starts then.`}
+        title={fork ? `Forking ${fork}…` : `Making ${ws.name}…`}
+        detail={fork ? `${ws.name} gets a copy of its commits, uncommitted changes, Scratch and conversation. It opens here in a moment.` : `A new worktree from ${from}. Its conversation opens here in a moment; anything you asked your agent starts then.`}
       />
     );
   }
@@ -70,7 +73,7 @@ function MakingWorktree() {
       <ChatLog key={ws.id} channel={`ws:${ws.id}`} />
       <div className={s.makingLine} role="status">
         <span className={side.making} aria-hidden="true" />
-        Making {ws.name} from {from}. Your agent starts as soon as its folder is ready.
+        {fork ? `Forking ${fork} into ${ws.name}: copying its changes, Scratch and conversation. You can write here in a moment.` : `Making ${ws.name} from ${from}. Your agent starts as soon as its folder is ready.`}
       </div>
     </div>
   );

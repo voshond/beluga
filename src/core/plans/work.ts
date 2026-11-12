@@ -1,4 +1,4 @@
-import type { PlanAskInput, PlanTools } from '../../agent/types.js';
+import type { ChatChain, PlanAskInput, PlanTools } from '../../agent/types.js';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { AgentRef } from '../../protocol.js';
@@ -34,10 +34,15 @@ export interface PlansWorkDeps {
   readonly plans: Plans;
   readonly board: BoardWork;
   readonly controller?: WorkspaceController;
-  /** Ask your Claude in a conversation; returns the request's id, when it can (to follow a steered message). */
-  readonly askClaude: (prompt: string, channel: string, echo: boolean) => string | void;
+  /** Ask your Claude in a conversation; returns the request's id, when it can (to follow a steered message). `chain`: the chain it goes on in (BLG-303). */
+  readonly askClaude: (prompt: string, channel: string, echo: boolean, chain?: ChatChain) => string | void;
   /** Steer a waiting message in now: the agent host's Steer Now (AgentHost.promote). */
   readonly promote?: (requestId: string) => boolean;
+  /**
+   * A message the plan's agent sends on to a task, in the chain of its run: the chain it goes on
+   * in (one hop on), or why the chat-links guard refuses it (ChatSendService.sendOn). Default: one hop on.
+   */
+  readonly sendOn?: (chain: ChatChain) => { readonly chain: ChatChain } | { readonly refused: string };
   /** Stop your Claude in one conversation (its queued messages too): the agent host's Stop. */
   readonly stopRun?: (channel: string) => void;
   readonly intend: (intent: Intent) => void;
@@ -617,8 +622,8 @@ export class PlansWork {
 
   // ------------------------------------------------------------------ for Claude
 
-  /** A run in a plan's home conversation (yours): the plan's tools, and how to plan or run it. `said`: what you asked in it (kept as the plan's request until it's approved). */
-  forRun(channel: string, from: string, said?: string): { readonly tools?: PlanTools; readonly brief?: string; readonly checker?: boolean } | undefined {
+  /** A run in a plan's home conversation (yours): the plan's tools, and how to plan or run it. `said`: what you asked in it (kept as the plan's request until it's approved); `chain`: the chat chain the run is in. */
+  forRun(channel: string, from: string, said?: string, chain?: () => ChatChain): { readonly tools?: PlanTools; readonly brief?: string; readonly checker?: boolean } | undefined {
     const me = this.deps.board.me();
     if (me.kind !== 'person' || from !== me.id) return undefined;
     // A milestone's checker: its brief, and only plan_get and plan_gate.
@@ -639,7 +644,7 @@ export class PlansWork {
     const view = this.pilot.view(plan);
     const planning = planningBrief(plan, board, this.plans.planningStyle, this.repoInfos(plan), this.nearRepos(plan));
     const brief = plan.body ? headBrief(view) + planning : planning;
-    return { tools: this.toolsFor(plan.id), brief };
+    return { tools: this.toolsFor(plan.id, undefined, chain), brief };
   }
 
   /**
@@ -898,7 +903,8 @@ export class PlansWork {
     };
   }
 
-  private toolsFor(planId: string, external?: Actor): PlanTools {
+  /** `chain`: the chain of the run that has the tools; a message to a task goes on in it, one hop on (BLG-303). */
+  private toolsFor(planId: string, external?: Actor, chain?: () => ChatChain): PlanTools {
     const by = (): Actor => external ?? this.claude();
     const plans = this.plans;
     const after = (change: () => Plan): string => {
@@ -949,10 +955,13 @@ export class PlansWork {
         const w = issue.worktrees.at(-1);
         if (!w || issue.worktreeGone) throw new Error(`${issue.key} hasn't started: nothing to tell yet (start it, or change its brief)`);
         const steer = mode === 'steer';
+        const now = chain?.();
+        const on = now && (this.deps.sendOn?.(now) ?? { chain: { chainId: now.chainId, hop: now.hop + 1 } });
+        if (on && 'refused' in on) throw new Error(`Not sent to ${issue.key}: ${on.refused}`);
         // Shown there as the plan's message, not as yours.
         this.deps.store.dispatch({ type: 'system', channel: `${WS}${w}`, text: `${steer ? 'Urgent, from' : 'From'} the plan’s agent: ${text.trim().slice(0, 2000)}`, level: 'info' });
         const prompt = `${steer ? 'An urgent message' : 'A message'} from the head of the plan “${plan.body?.title ?? ''}” (another agent coordinating the plan, not the user):\n\n${text.trim()}`;
-        const id = this.deps.askClaude(prompt, `${WS}${w}`, false);
+        const id = this.deps.askClaude(prompt, `${WS}${w}`, false, on?.chain);
         if (!steer) return `Queued for the agent working on ${issue.key}: it reads it when its current turn ends (its card shows it waiting; use mode "steer" if it can't wait)`;
         // Steered: in now (interrupting a long command or a dead run), and followed until it's read.
         if (id) this.pilot.steer(planId, hit.task.id, id, prompt);

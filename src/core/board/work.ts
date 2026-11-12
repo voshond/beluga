@@ -5,7 +5,7 @@ import { personMentions } from '../person-mentions.js';
 import { teammatesOf } from '../team/model.js';
 import { slugify } from '../../agent/namer.js';
 import { isSecretPath } from '../shares.js';
-import type { Action, LogItem, Store } from '../store.js';
+import { type Action, type LogItem, type Store, busyChannels } from '../store.js';
 import type { Workspace } from '../../workspaces/types.js';
 import type { WorkspaceController, WorktreeEvent } from '../workspace-controller.js';
 import { Board, type IssuePatch, type NewIssue } from './board.js';
@@ -979,14 +979,9 @@ export interface RunBoard {
   readonly planApproved?: () => void;
 }
 
-const issueForWorkspaceOf = (board: Board, channel: string): Issue | undefined => (channel.startsWith(WS) ? issueForWorkspace(board.state(), channel.slice(WS.length)) : undefined);
+export { busyChannels };
 
-/** Conversations where a Claude is working right now. */
-export function busyChannels(log: readonly LogItem[]): Set<string> {
-  const last = new Map<string, string>();
-  for (const l of log) if (l.type === 'agent') last.set(l.channel, l.status);
-  return new Set([...last].filter(([, s]) => s === 'queued' || s === 'awaiting_approval' || s === 'started' || s === 'answered').map(([c]) => c));
-}
+const issueForWorkspaceOf = (board: Board, channel: string): Issue | undefined => (channel.startsWith(WS) ? issueForWorkspace(board.state(), channel.slice(WS.length)) : undefined);
 
 /** A checklist from lines or text ("- [ ] …" each; ticks kept). */
 export function checklistOf(input: string | readonly string[] | undefined): string | undefined {

@@ -304,18 +304,22 @@ export class WorkspaceController {
 
   /** Re-scan projects and publish them; every workspace's folder becomes a private share. */
   async refresh(): Promise<void> {
-    const projects = await this.deps.manager.refresh();
-    const members = this.deps.store.getState().members;
-    for (const p of projects) {
-      for (const w of p.workspaces) {
-        const name = shareNameOf(w.id);
-        // People you invited into a workspace can browse its folder; nobody else can.
-        const allowed = Object.keys(members[w.id] ?? {});
-        if (w.archived) this.deps.shares.remove(name);
-        else this.deps.shares.upsert({ name, root: w.path, writable: false, private: true, allowed });
+    try {
+      const projects = await this.deps.manager.refresh();
+      const members = this.deps.store.getState().members;
+      for (const p of projects) {
+        for (const w of p.workspaces) {
+          const name = shareNameOf(w.id);
+          // People you invited into a workspace can browse its folder; nobody else can.
+          const allowed = Object.keys(members[w.id] ?? {});
+          if (w.archived) this.deps.shares.remove(name);
+          else this.deps.shares.upsert({ name, root: w.path, writable: false, private: true, allowed });
+        }
       }
+      this.publish();
+    } finally {
+      if (!this.deps.store.getState().projectsLoaded) this.deps.store.dispatch({ type: 'projects_loaded' });
     }
-    this.publish();
     this.checkEnvSoon();
   }
 
@@ -1157,14 +1161,46 @@ export class WorkspaceController {
     if (this.inChannel(channel)) this.deps.askClaude(typeof prompt === 'function' ? prompt() : prompt, channel, echo === true ? undefined : { echo });
   }
 
+  /**
+   * Fork a worktree whole (its commits, uncommitted work, Scratch, conversation and Claude's
+   * session) into a new one. Its row and page show at once, with the conversation so far, while git
+   * makes the copy; the real worktree then takes the row's place under the same id. If it can't be
+   * made, the row and page go again and the toast says why.
+   */
   async fork(id: string, name: string): Promise<Workspace | undefined> {
-    const ws = await this.act("Couldn't fork", () => this.deps.manager.fork(id, name));
-    if (ws) {
-      this.deps.toast(`Forked into ${ws.name}, with the conversation so far`, 'success');
-      this.loaded.delete(`${WS_PREFIX}${ws.id}`);
-      this.open(ws.id);
-      this.created(ws, { from: id });
+    const source = this.deps.manager.find(id);
+    const project = source ? this.deps.manager.list.find((p) => p.id === source.projectId && p.root) : undefined;
+    const newId = this.deps.manager.newWorktreeId();
+    const to = `${WS_PREFIX}${newId}`;
+    const from = `${WS_PREFIX}${id}`;
+    // The copy gets everything said so far, and shows it while it's made.
+    this.ensureLoaded(id);
+    this.saver.flush();
+    if (source && project) {
+      this.ahead.making.set(newId, pendingWorktree({ id: newId, project, name: slugify(name) || 'fork', base: source.branch ?? source.base ?? project.base, forkedFrom: id }));
+      const said = this.deps.store.getState().log.filter((l) => l.channel === from);
+      if (said.length) this.deps.store.dispatch({ type: 'history', channel: to, items: said.map((l) => settleRun(l)) });
+      this.publish();
+      this.deps.intend({ type: 'navigate', view: { kind: 'workspace', id: newId, tab: 'chat' } });
     }
+    const ws = await this.act("Couldn't fork", () => this.deps.manager.fork(id, name, { id: newId }), undefined, { later: true });
+    const shown = this.ahead.making.delete(newId);
+    this.publish();
+    if (!ws) {
+      this.deps.store.dispatch({ type: 'history', channel: to, items: [] });
+      if (shown) this.deps.intend({ type: 'close_tab', id: newId });
+      return undefined;
+    }
+    // Claude Code looks for a conversation under the folder it runs in: bring it along.
+    if (source?.sessionId) carrySession(source.sessionId, source.path, ws.path);
+    this.loaded.delete(`${WS_PREFIX}${ws.id}`);
+    // Its page is open already (you may have gone elsewhere since: you stay there).
+    if (shown && ws.id === newId) this.ensureLoaded(ws.id);
+    else this.open(ws.id);
+    const carried = source?.kind === 'worktree' ? 'its commits, uncommitted changes, Scratch and conversation' : 'its conversation';
+    this.deps.store.dispatch({ type: 'system', channel: `${WS_PREFIX}${ws.id}`, text: `Forked from “${source?.name ?? 'its parent'}” with ${carried}. “${source?.name ?? 'Its parent'}” stays as it was.` });
+    this.deps.toast(`Forked into ${ws.name}, with the conversation so far`, 'success');
+    this.created(ws, { from: id });
     return ws;
   }
 

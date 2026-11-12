@@ -24,6 +24,8 @@ export type NativeSheet =
   | { readonly kind: 'confirm_option'; readonly menu: MenuKind; readonly index: number; readonly id: string }
   /** "Are you sure?" for something that isn't a menu option (from the palette). */
   | { readonly kind: 'confirm'; readonly title: string; readonly message: string; readonly confirm: string; readonly cancel?: string; readonly destructive?: boolean; readonly run: () => void }
+  /** At Send, in a chat another person owns, when the words name chats of yours: give their agent a copy, or not (BLG-152). */
+  | { readonly kind: 'share_copy'; readonly titles: readonly string[]; readonly person: string; readonly share: () => void; readonly without: () => void }
   /** What a workspace action that starts Claude or changes git will do, before it does (see work-confirm.ts). */
   | { readonly kind: 'work'; readonly wsId: string; readonly action: AskedWork }
   /** A project's worktrees made outside Beluga that can go, ticked, before removing them. */

@@ -11,7 +11,7 @@ import { type EnvChange, applyEnvChanges, copyEnvFiles, envChanges, envChangesAs
 import { WorkspaceStore } from './store.js';
 import { migrateMainConversations } from './main-migration.js';
 import { stopTestProcesses } from './test-procs.js';
-import { applySnapshot, dropSnapshots, snapshotBase } from './snapshots.js';
+import { applySnapshot, dropSnapshots, forkRef, snapshot, snapshotBase } from './snapshots.js';
 import { type ArchiveManifest, type ArchivePhase, type ArchivePreview, archiveWorktree, dropArchive, freeSpace, planArchive, previewOf, readManifest, restoreWorktree, sweepPartialArchives } from './archive.js';
 import { worktreeOrigin } from './origin.js';
 import { deleteFolderInBackground, removeWorktreeKeepingBranch, sweepSetAside } from './others.js';
@@ -32,7 +32,7 @@ import { ArrangeError, type Item, type Layout, MAX_GROUP_NAME, arrangedOrder, gr
 export type ArrangeTarget = { readonly project: string } | { readonly group: string };
 import { type ProjectScripts, type ResolvedScripts, resolveScripts, saveProjectFile } from './scripts.js';
 import { PROJECT_DIR, sentFolder } from '../shared/scratch-dir.js';
-import { dropSent } from './scratch.js';
+import { copyScratch, dropSent } from './scratch.js';
 import { BRANCH_PREFIX_DEFAULT } from '../shared/settings-schema.js';
 import { envRecord, parseEnvText } from '../shared/env-vars.js';
 import type { ThreadRecord } from '../shared/threads.js';
@@ -1084,29 +1084,48 @@ export class WorkspaceManager {
 
   /**
    * Copy a workspace into a new worktree that starts from its current state, with its conversation.
+   * A worktree goes whole: its commits, its uncommitted work (still uncommitted in the copy, taken
+   * without touching a file or the index of the source) and its Scratch folder.
    * `at`: from an earlier snapshot of it instead (see snapshots.ts), with `session` (Claude's, cut to
    * there; null: none) and `history` (the conversation up to there) in place of the whole of them.
+   * `id`: the id it gets (from newWorktreeId: its row shows under it while it's made), else a fresh one.
    */
-  async fork(id: string, name: string, opts: { base?: string; at?: string; session?: string | null; history?: readonly unknown[] } = {}): Promise<Workspace> {
+  async fork(id: string, name: string, opts: { base?: string; at?: string; session?: string | null; history?: readonly unknown[]; id?: string } = {}): Promise<Workspace> {
     const source = this.require(id);
     const project = this.projectOf(source);
     const s = slug(name);
     const dir = this.freeDir(project, s);
-    // `opts.base`: start from there (e.g. the latest origin) instead of the source's own commits.
-    const from = opts.at ? await snapshotBase(source.path, opts.at) : (opts.base ?? (source.kind === 'chat' ? project.base : (source.branch ?? 'HEAD')));
-    const branch = await this.freeBranch(project.root, `${this.branchPrefix()}${s}`);
-    await g.addWorktree(project.root, dir, branch, from);
-    await g.excludeProjectDir(dir);
-    if (opts.at) await applySnapshot(dir, opts.at);
-    await copyEnvFiles(source.kind === 'chat' ? project.root : source.path, dir);
+    const newId = opts.id && !this.records.some((r) => r.id === opts.id) ? opts.id : freshId();
+    const worktree = source.kind === 'worktree' && existsSync(source.path);
+    // As it is now, uncommitted work too (`opts.base`: from there instead, e.g. the latest origin).
+    const ref = forkRef(newId);
+    const now = worktree && !opts.at && opts.base === undefined ? await snapshot(source.path, ref, 'Beluga: uncommitted work, forked') : undefined;
+    const at = opts.at ?? now;
+    try {
+      const from = at ? await snapshotBase(source.path, at) : (opts.base ?? (source.kind === 'chat' ? project.base : (source.branch ?? 'HEAD')));
+      const branch = await this.freeBranch(project.root, `${this.branchPrefix()}${s}`);
+      await g.addWorktree(project.root, dir, branch, from);
+      await g.excludeProjectDir(dir);
+      if (at) await applySnapshot(dir, at);
+      if (worktree) await copyScratch(source.path, dir);
+      await copyEnvFiles(source.kind === 'chat' ? project.root : source.path, dir);
+      return await this.recordFork(source, { id: newId, name: s, dir, branch, base: opts.base ?? source.base ?? project.base, root: project.root }, opts);
+    } finally {
+      if (now) await g.git(source.path, ['update-ref', '-d', ref]).catch(() => undefined);
+    }
+  }
+
+  /** fork's record of the new worktree, its conversation (a copy of the source's, or `opts.history`) and the refreshed list. */
+  private async recordFork(source: Workspace, made: { id: string; name: string; dir: string; branch: string; base: string; root: string }, opts: { session?: string | null; history?: readonly unknown[] }): Promise<Workspace> {
+    const { dir, branch } = made;
     const record: WorkspaceRecord = {
-      id: freshId(),
-      projectRoot: project.root,
-      name: s,
+      id: made.id,
+      projectRoot: made.root,
+      name: made.name,
       path: dir,
       kind: 'worktree',
       branch,
-      base: opts.base ?? source.base ?? project.base,
+      base: made.base,
       createdAt: Date.now(),
       forkedFrom: source.id,
       ...forkSessionOf(source, opts.session),

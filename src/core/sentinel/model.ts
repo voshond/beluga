@@ -5,6 +5,7 @@ import type { Row, Source } from '../../shared/view-spec.js';
 import type { MetricColumn } from './columns.js';
 import type { Dashboard } from './dashboard-model.js';
 import { ASSISTANT_TITLE } from '../../shared/assistant.js';
+import { chatMentionsAsTitles } from '../../shared/chat-ref.js';
 
 /**
  * Sentinel (docs/sentinel.md): watchers that run on a schedule, by hand, or when something
@@ -605,10 +606,10 @@ export const activeSentinelChat = (c: SentinelChats | undefined): string => {
   const chat = c?.chats.find((x) => x.id === c.active) ?? c?.chats[0];
   return chat?.channel ?? sentinelChatChannel(FIRST_SENTINEL_CHAT);
 };
-/** A chat's name: the first line you wrote in it, short; "New chat" until then. */
+/** A chat's name: the first line you wrote in it, short; "New chat" until then. A chat it names shows by its title, not its ref. */
 export function sentinelChatTitle(channel: string, log: ReadonlyArray<{ readonly channel: string; readonly type: string; readonly byAgent?: boolean; readonly text?: string }>, max = 40): string {
   const first = log.find((l) => l.channel === channel && l.type === 'chat' && !l.byAgent && l.text?.trim());
-  const line = first?.text?.split('\n').map((l) => l.trim()).find(Boolean) ?? '';
+  const line = chatMentionsAsTitles(first?.text ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? '';
   if (!line) return 'New chat';
   return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
 }

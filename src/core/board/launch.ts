@@ -119,13 +119,15 @@ export function launchBoard(host: BoardHost): () => void {
     plans,
     board: work,
     ...(session.workspaces ? { controller: session.workspaces } : {}),
-    askClaude: (prompt, channel, echo) => session.askForPlan(prompt, channel, echo),
+    askClaude: (prompt, channel, echo, chain) => session.askForPlan(prompt, channel, echo, chain),
     intend: (intent) => session.intend(intent),
     // A task whose Claude stopped: is its process there, and taking over to wake it.
     alive: (channel) => session.host.runningIn(channel),
     takeOver: (channel) => session.host.takeOver(channel),
     // The head Claude's steered messages go in the way Steer does, and stop a long command or a dead run (yours never do: see AgentHost.rush).
     promote: (requestId) => session.host.promote(requestId, { interrupt: true }),
+    // A message to a task goes on in the chain of the plan's run, under the chat-links limits.
+    sendOn: (chain) => session.host.chatSends.sendOn(chain),
     // The head Claude stopping a task's Claude (plan_stop_task).
     stopRun: (channel) => void session.host.stopRun(channel),
     // A milestone check you passed past: its run stops, so nothing the plan asks next waits behind it.

@@ -1019,6 +1019,11 @@ export const NOT_EXPOSED: Readonly<Record<string, 'chat_only' | 'checker_only'>>
   tool_list: 'chat_only',
   tool_propose: 'chat_only',
   tool_run: 'chat_only',
+  // The chat tools act on your own chats (chat links). External agents are refused them.
+  list_chats: 'chat_only',
+  read_chat: 'chat_only',
+  send_to_chat: 'chat_only',
+  wait_for_chat: 'chat_only',
   // A milestone's checker records its verdict. An outside agent never passes its own work.
   plan_gate: 'checker_only',
   // A draft's reviewer records what it found (BLG-772): a fresh agent, not the one that wrote it.

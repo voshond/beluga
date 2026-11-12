@@ -659,4 +659,6 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'toolbox.dismissSuggestion': { refused: NO_TOOL },
   'toolbox.acceptProposal': { refused: NO_TOOL },
   'devices.list': { refused: COMPUTERS },
+  'chats.resolve': { refused: NO_TOOL },
+  'chats.snapshot': { refused: NO_TOOL },
 };
