@@ -6,8 +6,10 @@ import { localDirKey } from '@beluga/core/local-key.js';
 import { workspaceMentions } from '@beluga/core/mentions.js';
 import { composeState, queueIn } from '@beluga/ui/compose.js';
 import { isRunning } from '@beluga/ui/format.js';
-import { localDirOf, mentionDir, openTarget, suggest, type Suggestion } from '@beluga/ui/suggest.js';
+import { localDirOf, mentionDir, openTarget, suggest, type Suggestion, typedMention } from '@beluga/ui/suggest.js';
 import { worktreeMode } from '@beluga/ui/submit.js';
+import { resolveChat } from '@beluga/core/chat-links/resolve.js';
+import { chatChipOf, chatLinksToMentions, chatMentionsIn, isAddressableChannel, parseChatRef, withChatWords } from '@beluga/shared/chat-ref.js';
 import { roomAgentTags } from '@beluga/shared/agent-tags.js';
 import { shareNameOf } from '@beluga/shared/share-names.js';
 import { secretIn } from '@beluga/shared/secret-text.js';
@@ -27,7 +29,7 @@ import { cmdReturn, returnName, thisComputer, upFirst, yourComputer } from '../l
 import { ModelPicker, myRuntime } from './ModelPicker.js';
 import { ContextMeter } from './ContextMeter.js';
 import { McpChip } from './McpChip.js';
-import { plainWorktrees, worktreeNamesOf } from './worktree-box.js';
+import { boxChats, plainWords } from './chat-box.js';
 import { RunsOnLabel, RunsOnPicker } from './RunsOn.js';
 import { sendToComputer, useStartDeps } from '../machines/start-there.js';
 import { QueueTray } from './QueueTray.js';
@@ -41,9 +43,10 @@ import { useWaitingComments } from '../views/DiffComment.js';
 import { takeComments, withComments } from '../views/diff-comments.js';
 import { MentionHighlighter } from './MentionHighlighter.js';
 import { useSuggestions } from './Suggestions.js';
-import { useMentionWorld, worktreeOf } from './Mention.js';
+import { useChatMentions, useMentionWorld, worktreeOf } from './Mention.js';
 import { useSkills } from './use-skills.js';
-import { MentionedTasks } from './MentionedTasks.js';
+import { caretAfterDraw, useDraftChips } from './draft-chips.js';
+import { MentionedChats, MentionedTasks } from './MentionedTasks.js';
 import { DictationStrip, MicButton } from './Dictation.js';
 import { dictatingInto, useDictation, useDictationTarget } from '../lib/dictation.js';
 import { ActionsDropdown } from '../components/SpecMenu.js';
@@ -205,7 +208,13 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   // Comments on the changes waiting above the box (CommentCards): enough to send on their own.
   const commentsWaiting = useWaitingComments(draftKey).length > 0;
   const ready = !!buffer.trim() || commentsWaiting;
-  const att = useAttachments({ channel: draftKey, box: ref, text: () => ui.get().buffer, setText: (buffer, cursor) => ui.patch({ buffer, cursor }) });
+  // A chat's link pasted here becomes a chip. In a friend's worktree, one of yours can take a copy along (see send).
+  const chipLinks = (text: string): string | undefined => {
+    if (!client.store.getState().prefs.chatLinks) return undefined;
+    const words = chatLinksToMentions(text, (r) => chatChipOf(resolveChat(client.store.getState(), r)).label);
+    return words && boxChats(words);
+  };
+  const att = useAttachments({ channel: draftKey, box: ref, text: () => ui.get().buffer, setText: (buffer, cursor) => ui.patch({ buffer, cursor }), chipLinks });
   // A plan or a question waiting above the box: what you type answers it (the turn is waiting on you, not working).
   const answering = state.answering;
   // During a turn, the preference selects the main action. The secondary action uses the other choice.
@@ -304,6 +313,8 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   }, [wsId, atDir, state.selfId]);
   // "@BLG-24": a task on your board (not in a workspace someone shared with you: their Claude has its own).
   const mentionWorld = useMentionWorld(channel, { tasks: !shared, project: state.project });
+  // "@login": a chat of yours, or one shared with you (in a friend's worktree too: a copy of yours can go along, see send).
+  const chats = useChatMentions(channel, typedMention(buffer) !== undefined);
   // "/fron…": Claude's skills and custom commands here, beside Beluga's commands.
   const skills = useSkills(channel, !shared && buffer.startsWith('/') && !buffer.includes(' '));
   // On Codex they're translated: each says what doesn't carry over (BLG-461).
@@ -336,12 +347,13 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
             projects: state.projects.filter((p) => p.root),
             ...(wsId ? { entries: (dir: string) => state.dirCache[`${state.selfId}:${shareNameOf(wsId)}/${dir}`] } : {}),
             ...(mentionWorld.tasks ? { tasks: mentionWorld.tasks } : {}),
+            chats,
             skills,
             skillsOn,
             ...(canBtw ? {} : { without: ['btw'] }),
             ...(claudeHere ? { claudeHere } : {}),
           }),
-    [buffer, state.peers, state.selfId, state.dirCache, state.view.kind, state.projects, state.friends, wsId, mentionWorld.tasks, skills, skillsOn, canBtw, runtimes, claudeHere?.hint],
+    [buffer, state.peers, state.selfId, state.dirCache, state.view.kind, state.projects, state.friends, wsId, mentionWorld.tasks, chats, skills, skillsOn, canBtw, runtimes, claudeHere?.hint],
   );
   const sug = useSuggestions(suggestions, buffer, (picked) => accept(picked));
 
@@ -372,6 +384,14 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     }
     boxOf = boxKey;
   }, [boxKey]);
+  // A chat's row dropped here: its chip at the cursor. It waits in the words: it never sends.
+  useDraftChips(draftKey, (words) => {
+    const text = ui.get().buffer;
+    const at = ref.current?.value === text ? ref.current.selectionStart : text.length;
+    const next = withChatWords(text, at, boxChats(words));
+    ui.patch({ buffer: next.text, cursor: next.caret });
+    caretAfterDraw(ref, next.caret);
+  });
   useEffect(() => {
     const text = ui.get().buffer;
     if (text) drafts.set(boxKey, text);
@@ -462,12 +482,39 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     }
     actions.submit(text, urgent);
   };
-  const send = (secondary = false): void => {
+  /** Chats of yours that the words name, when this chat is another person's and goes to their agent. */
+  const ownChatsNamed = (typed: string): Array<{ readonly ref: string; readonly title: string }> => {
+    if (state.view.kind !== 'shared' || runOn === 'here' || typed.startsWith('/') || !client.store.getState().prefs.chatLinks) return [];
+    const now = client.store.getState();
+    const mine = chatMentionsIn(typed).flatMap((m) => {
+      const ref = parseChatRef(m.ref);
+      const chat = ref && ref.owner === now.selfId ? resolveChat(now, ref) : undefined;
+      return chat && chat.state !== 'removed' ? [{ ref: m.ref, title: chat.title ?? m.title }] : [];
+    });
+    return mine.filter((c, i) => mine.findIndex((x) => x.ref === c.ref) === i);
+  };
+  const shareCopyPerson = state.view.kind === 'shared' ? peerName(state, state.view.owner) : '';
+  /** Share Copy: each copy is made now and waits as a file, then goes with the message. False when one couldn't be made. */
+  const shareCopies = async (ours: ReadonlyArray<{ readonly ref: string; readonly title: string }>): Promise<boolean> => {
+    try {
+      for (const c of ours) {
+        const copy = await api.chats.snapshot(c.ref);
+        if (!copy) throw new Error(`“${c.title}” is not a chat of yours`);
+        att.addCopy(copy);
+      }
+      return true;
+    } catch (err) {
+      toast(client, `Couldn’t make the copy: ${errorText(err)}`, 'error');
+      return false;
+    }
+  };
+  /** `copied`: you answered the copy question for these words already. */
+  const send = (secondary = false, copied = false): void => {
     const urgent = sendsUrgent(prefs.sendDuringTurn, { busy: queueing, canSteer, secondary });
     const typed = buffer.trim();
     if (aside) {
       if (!typed) return;
-      askBtw(client, api, channel, plainWorktrees(typed, worktreeNamesOf(client.store.getState().projects)));
+      askBtw(client, api, channel, plainWords(typed, client.store.getState()));
       setAsideIn(undefined);
       ui.patch({ buffer: '', cursor: 0, history: [...ui.get().history, `/btw ${typed}`].slice(-200), historyIndex: -1 });
       return;
@@ -480,6 +527,12 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
       return;
     }
     secretWarned.current = undefined;
+    // Chats of yours named in a chat another person owns: their agent can't read them, so you say if a copy goes (BLG-152).
+    const ours = copied ? [] : ownChatsNamed(plainWords(typed, client.store.getState()));
+    if (ours.length) {
+      openSheet({ kind: 'share_copy', titles: ours.map((c) => c.title), person: shareCopyPerson, share: () => void shareCopies(ours).then((ok) => ok && send(secondary, true)), without: () => send(secondary, true) });
+      return;
+    }
     // Images stay where you referenced them in the words; any you took the reference out of go after them.
     const { text: words, images, shown, putBack: putFilesBack } = att.take(typed);
     // Comments on the changes waiting above the box go after the words (views/diff-comments.ts).
@@ -538,7 +591,8 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
       if (!handleInvite(client, ui, picked.value)) actions.submit(picked.value);
       return;
     }
-    set(picked.value);
+    // A chat picked: its mention written short, a chip with its title.
+    set(picked.kind === 'chat' ? boxChats(picked.value) : picked.value);
   }
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -621,6 +675,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
         className={cx(s.box, burning ? (prefs.maxFire.border ? m.max : m.maxPlain) : effects && m.fxOnly, pending && s.asking, readOnly && s.readOnly, att.dropping && s.dropping, (plan || tasksMode || aside || answering === 'plan') && s.planning)}
         data-plan={plan || tasksMode || aside || answering === 'plan' || undefined}
         data-mode={aside ? 'btw' : answering === 'plan' ? 'plan' : mode}
+        data-chat-box={shared ? (readOnly ? undefined : draftKey) : (isAddressableChannel(channel) || state.view.kind === 'draft' || state.view.kind === 'draft_worktree') ? draftKey : undefined}
         {...att.dropProps}
       >
         {effects ? <MaxFire box={boxRef} input={ref} /> : null}
@@ -683,6 +738,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
         {att.waiting}
         <CommentCards box={draftKey} />
         <MentionedTasks text={buffer} world={mentionWorld} />
+        <MentionedChats text={buffer} world={mentionWorld} />
         <DictationStrip box={ref} />
         <div className={s.inputWrap}>
           <MentionHighlighter text={buffer} world={mentionWorld} input={ref} className={s.input ?? ""} />

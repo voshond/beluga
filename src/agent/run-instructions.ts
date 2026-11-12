@@ -1,11 +1,11 @@
 import type { AgentRef } from '../protocol.js';
 import type { InstructionPieceView } from '../shared/agent-setup.js';
 import { buildGraphAppend } from './graph-prompt.js';
-import { buildAskOnlyAppend, buildCommitAppend, buildKeepAppend, buildMachineAppend, buildScratchAppend, buildSetupAppend, buildShellAppend, buildShippedAppend, buildSystemAppend } from './prompt.js';
+import { buildAskOnlyAppend, buildChatSendAppend, buildCommitAppend, buildKeepAppend, buildMachineAppend, buildScratchAppend, buildSetupAppend, buildShellAppend, buildShippedAppend, buildSystemAppend } from './prompt.js';
 import { buildSyncMainAppend } from './sync-main.js';
 import { buildTerminalAppend } from './terminal-prompt.js';
 import type { AgentRunInput } from './types.js';
-import { buildViewAppend } from './view-prompt.js';
+import { buildChatLinkAppend, buildViewAppend } from './view-prompt.js';
 
 type PieceContext = {
   readonly input: AgentRunInput;
@@ -31,6 +31,8 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
   { id: 'machine', label: 'About this machine', when: 'Your own runs, when About this machine is on', source: 'Settings › Skills', text: (c) => c.input.machineBrief ?? '' },
   { id: 'graphs', label: 'Graphs', when: 'Every run', source: 'src/agent/graph-prompt.ts', text: (c) => buildGraphAppend(Boolean(c.input.terminal)), sample: () => buildGraphAppend() },
   { id: 'views', label: 'Views', when: 'Every run', source: 'src/agent/view-prompt.ts', text: (c) => buildViewAppend(Boolean(c.input.terminal)), sample: () => buildViewAppend() },
+  { id: 'chat-link', label: 'This chat’s address', when: 'Runs in a chat, with chat links on', source: 'src/agent/view-prompt.ts', text: (c) => (c.input.chatLink ? buildChatLinkAppend(c.input.chatLink) : '') },
+  { id: 'chat-send', label: 'Messages to other chats', when: 'Your own runs, with chat links on', source: 'src/agent/prompt.ts', text: (c) => (c.input.chatTools ? buildChatSendAppend() : ''), sample: () => buildChatSendAppend() },
   { id: 'task', label: 'Task brief', when: 'Runs with the task board (a worktree doing a task, a main folder)', source: 'src/core/board/prompt.ts', text: (c) => c.input.taskBrief ?? '' },
   { id: 'routing', label: 'Routed task run', when: 'A worktree doing a task, with Routed task runs on (Settings › Experimental)', source: 'src/core/board/routing.ts', text: (c) => c.input.routing?.brief ?? '' },
   { id: 'plan', label: 'Plan brief', when: 'A plan’s conversations', source: 'src/core/plans/prompt.ts', text: (c) => c.input.planBrief ?? '' },

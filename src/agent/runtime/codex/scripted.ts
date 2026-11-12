@@ -32,6 +32,8 @@ export class ScriptedCodex {
   readonly threads = new Set<string>();
   /** Answers for server requests Codex sends (approvals), by item. */
   readonly approvals: unknown[] = [];
+  /** A tool call that Codex's question let through reaches the run's tool server. */
+  mcpCall?: (server: string, tool: string, args: Record<string, unknown>) => Promise<unknown>;
   /** Set: a command step asks for approval before running (the prompt's words start with "ask"). */
   connections = 0;
   /** Signed in (account/read says who), or not. */
@@ -154,6 +156,19 @@ export class ScriptedCodex {
         this.approvals.push(await ask('item/fileChange/requestApproval', { threadId, turnId, itemId: item.id, reason: 'outside the workspace' }));
       }
       // Asks also when the request asked, under a note after it (a plan's turn ends with its note).
+      // `mcp T`: asks about the tool call T, as codex-cli 0.163 does. `question`: a server's own question to the user.
+      const planned = /^Request from [^\n]*:\n(mcp \S+)/m.exec(text)?.[1];
+      if (words.startsWith('mcp ') || planned || words.startsWith('question')) {
+        const tool = (planned ?? words).slice(4);
+        const verdict = (await ask(
+          'mcpServer/elicitation/request',
+          tool && !words.startsWith('question')
+            ? { threadId, turnId, serverName: 'beluga', mode: 'form', _meta: { codex_approval_kind: 'mcp_tool_call', persist: ['session', 'always'], tool_description: 'A tool', tool_params: { peer: 'mia', command: 'uptime' }, tool_params_display: [] }, message: `Allow the beluga MCP server to run tool "${tool}"?`, requestedSchema: { type: 'object', properties: {} } }
+            : { threadId, turnId, serverName: 'beluga', mode: 'form', _meta: null, message: 'What is your name?', requestedSchema: { type: 'object', properties: { name: { type: 'string' } } } },
+        )) as { action?: string } | undefined;
+        this.approvals.push(verdict);
+        if (verdict?.action === 'accept') await this.mcpCall?.('beluga', tool, { peer: 'mia', command: 'uptime' });
+      }
       if (words.startsWith('ask') || /^Request from [^\n]*:\nask/m.test(text)) {
         const verdict = (await ask('item/commandExecution/requestApproval', { threadId, turnId, itemId: cmd, command: `echo ${words}`, cwd: process.cwd() })) as { decision?: string } | undefined;
         this.approvals.push(verdict);

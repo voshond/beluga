@@ -244,7 +244,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       sentinel: (channel, from) => sentinelOf(session)?.forRun(channel, from),
       sentinelChat: (channel, from) => sentinelOf(session)?.chatPlace(channel, from),
       confirmTool: (toolName, input) => sentinelOf(session)?.confirmWords(toolName, input),
-      plans: (channel, from, said) => plansOf(session)?.forRun(channel, from, said),
+      plans: (channel, from, said, chain) => plansOf(session)?.forRun(channel, from, said, chain),
       threads: (channel) => threadsOf(session)?.forRun(channel),
       // "Your Mac"'s chats, and your own asks in friends' chats (BLG-207): both work in its folder.
       assistant: (channel, from) => assistantOf(session)?.forRun(channel, from) ?? assistantOf(session)?.forChat(channel, from),

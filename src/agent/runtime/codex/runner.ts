@@ -18,6 +18,7 @@ import { codexComplete } from './complete.js';
 import { CodexEvents, type TurnSink, contextEvent, usageEvent } from './events.js';
 import { type AskForApproval, type Model, REASONING_EFFORTS, type ReasoningEffort, type ThreadStartResponse, type ThreadTokenUsage, type Turn, type UserInput } from './protocol.js';
 import { approvalFor, codexConfinement, originOf, trustRow } from './sandbox.js';
+import { ELICITATION, GatePasses, argsOnServer, mcpToolCallOf } from './tool-questions.js';
 import { CODEX_USAGE_AGENT, type CodexRateLimits, fromRateLimits } from './rate-limits.js';
 import { findCodex } from './app-server.js';
 import { CodexMcp } from './mcp.js';
@@ -212,7 +213,9 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
       };
 
       // Beluga's tools, served for this run alone and gated per call (vetTool, policy, you).
-      const mounted = await host().mount(runToolSuites(input, bridge, shelf, cwd), (name, args) => gateTool(name, args, input, policy));
+      const passes = new GatePasses();
+      const suites = runToolSuites(input, bridge, shelf, cwd);
+      const mounted = await host().mount(suites, (name, args) => (passes.take(name, args) ? Promise.resolve(undefined) : gateTool(name, args, input, policy)));
       let conn: CodexConnection | undefined;
       // Codex's sub-agents (BLG-519): rows and steps on the request's card, as Claude's are.
       const subAgents = new CodexSubAgents(cwd, { onSub: (e) => input.onEvent('sub', JSON.stringify(e)), ...(input.onStep ? { onStep: input.onStep } : {}), onFileTouched: input.onFileTouched });
@@ -279,7 +282,15 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
               for (const file of files) if (await gateTool('Edit', { file_path: file }, input, policy)) return { decision: 'decline' };
               return { decision: 'accept' };
             }
-            // Anything else (more permissions, questions, elicitations) isn't Beluga's to grant.
+            // Codex asking before an MCP tool call (your own runs only): the same gate, and one question for the call.
+            const call = method === ELICITATION && trustRow(origin, input.scope).yourTools ? mcpToolCallOf(params) : undefined;
+            if (call) {
+              const served = argsOnServer(suites, call);
+              if (planning || (await gateTool(call.name, served ?? call.args, input, policy))) return { action: 'decline' };
+              if (served) passes.add(call.name, served);
+              return { action: 'accept', content: {} };
+            }
+            // Anything else (more permissions, questions, other elicitations) isn't Beluga's to grant.
             throw new Error(`${method} isn’t supported in Beluga`);
           });
           // A friend's task gets none of your own Codex MCP servers: their names, to switch them off.

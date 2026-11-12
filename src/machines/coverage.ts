@@ -697,6 +697,9 @@ export const MACHINE: Record<Method, MachineSide> = {
   'toolbox.dismissSuggestion': 'drive',
   'toolbox.acceptProposal': 'drive',
 
+  // ---- chats (chat links: a chat's chip, a chat's copy)
+  'chats.resolve': 'drive',
+  'chats.snapshot': 'drive',
   // ---- external agents: letting one in stays with the computer itself.
   'external.activity': 'drive',
   'external.agents': 'drive',

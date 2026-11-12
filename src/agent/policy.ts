@@ -53,6 +53,9 @@ const ALWAYS_OK = new Set([
   // dashboards' tiles and read the numbers (a tile removed takes nothing kept with it).
   // dashboard_remove isn't here: deleting a dashboard asks you.
   ...['sentinel_measure', 'dashboard_list', 'dashboard_create', 'dashboard_update', 'dashboard_add_tile', 'dashboard_update_tile', 'dashboard_move_tile', 'dashboard_remove_tile', 'metric_list', 'metric_read'].map((n) => `mcp__beluga_dashboard__${n}`),
+  // Other chats (core/chat-links): only your own runs have them. core/chat-links/access.ts decides each read and send,
+  // and guard.ts limits sends. A message approves nothing in the chat that reads it.
+  ...['list_chats', 'read_chat', 'send_to_chat', 'wait_for_chat'].map((n) => `mcp__beluga_chats__${n}`),
   // A plan's tools: only its home conversation has them (core/plans); changes to an approved plan wait for you.
   // A milestone's Claude gets plan_ask (a question for you, BLG-6) and plan_handback (work outside its tasks, BLG-7): both only ask.
   ...['plan_get', 'plan_write', 'plan_update', 'plan_gate', 'plan_review', 'plan_start_task', 'plan_message_task', 'plan_stop_task', 'plan_pause', 'plan_ask', 'plan_handback'].map((n) => `mcp__beluga_plan__${n}`),

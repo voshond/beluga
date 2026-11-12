@@ -150,6 +150,14 @@ const AGENT_FIRST_CHECK_MS = 60_000;
 const AGENT_CHECK_EVERY_MS = 6 * 60 * 60_000;
 /** How often to see which PRs are due a look (cheap: no gh unless one is). */
 const PR_TICK_MS = 5_000;
+
+/** How a command ended, in words: its exit code, or the signal that stopped it ("stopped by SIGHUP"). */
+export function endedWords(code: number | null, signal?: number): string {
+  if (code !== null) return `exit code ${code}`;
+  if (!signal) return 'exit code ?';
+  const name = Object.entries(os.constants.signals).find(([, n]) => n === signal)?.[0];
+  return `stopped by ${name ?? `signal ${signal}`}`;
+}
 /** PRs with checks running, or a branch just pushed. */
 export const PR_FAST_MS = 15_000;
 /** Other open PRs, and worktrees with commits but no PR yet. */
@@ -1594,14 +1602,15 @@ export class Workbench {
         this.deps.toast(`${ws.name} is set up`, 'success');
         return;
       }
-      if (learn && this.deps.fixSetup) return void this.retrySetup(ws, command, code, session.backlog());
-      this.setupFailed(ws, command, code, session.backlog());
+      if (learn && this.deps.fixSetup) return void this.retrySetup(ws, command, code, session.backlog(), session.exited?.signal);
+      this.setupFailed(ws, command, code, session.backlog(), session.exited?.signal);
     });
   }
 
-  private setupFailed(ws: Workspace, command: string, code: number | null, output = ''): void {
-    this.deps.store.dispatch({ type: 'setup', id: ws.id, run: { status: 'failed', command, detail: `exit code ${code ?? '?'}` } });
-    this.deps.notify({ kind: 'problems', title: `Setup failed in ${ws.name}`, body: `${command} (exit code ${code ?? '?'}). See its Terminal tab`, channel: `ws:${ws.id}` });
+  private setupFailed(ws: Workspace, command: string, code: number | null, output = '', signal?: number): void {
+    const ended = endedWords(code, signal);
+    this.deps.store.dispatch({ type: 'setup', id: ws.id, run: { status: 'failed', command, detail: ended } });
+    this.deps.notify({ kind: 'problems', title: `Setup failed in ${ws.name}`, body: `${command} (${ended}). See its Terminal tab`, channel: `ws:${ws.id}` });
     this.offerFix(ws, 'setup', command, code, output);
   }
 
@@ -1654,11 +1663,11 @@ export class Workbench {
   }
 
   /** Setup failed: ask what it should be, remember the answer, and run that (once). */
-  private async retrySetup(ws: Workspace, command: string, code: number | null, output: string): Promise<void> {
+  private async retrySetup(ws: Workspace, command: string, code: number | null, output: string, signal?: number): Promise<void> {
     this.deps.toast(`Setup failed in ${ws.name}. Looking for the right one…`);
     const fix = await this.deps.fixSetup!(ws.path, command, output);
     const project = this.manager.find(ws.id) && this.manager.list.find((p) => p.id === ws.projectId);
-    if (!project || !fix || ('command' in fix && fix.command === command)) return this.setupFailed(ws, command, code, output);
+    if (!project || !fix || ('command' in fix && fix.command === command)) return this.setupFailed(ws, command, code, output, signal);
     if ('none' in fix) {
       this.deps.store.dispatch({ type: 'setup', id: ws.id });
       return this.learnSetup(project.id, fix, `${project.name} needs no setup. New worktrees skip it from now on`);

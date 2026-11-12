@@ -29,11 +29,11 @@ const ws = (id: string, projectId: string, name: string, kind: Workspace['kind']
 const project = (id: string, name: string, workspaces: Workspace[] = []): Project => ({ id, name, root: `/tmp/${name}`, base: 'main', workspaces });
 const tick = (ms = 0): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-function setup(opts: { dir?: string; combine?: PlansWorkDeps['combine']; git?: PlanGit; titlePlan?: (goal: string) => Promise<string | undefined>; workers?: 'milestone' | 'task'; forYou?: PlansWorkDeps['forYou']; cancel?: PlansWorkDeps['cancel']; rescueMs?: number; now?: () => number } = {}) {
+function setup(opts: { dir?: string; sendOn?: PlansWorkDeps['sendOn']; combine?: PlansWorkDeps['combine']; git?: PlanGit; titlePlan?: (goal: string) => Promise<string | undefined>; workers?: 'milestone' | 'task'; forYou?: PlansWorkDeps['forYou']; cancel?: PlansWorkDeps['cancel']; rescueMs?: number; now?: () => number } = {}) {
   const store = new Store(initialState('room'));
   store.dispatch({ type: 'projects', projects: [project('api', 'bob-api', [ws('main', 'api', 'bob-api', 'chat', { askOnly: true } as Partial<Workspace>)])] });
   const listeners: Array<(e: WorktreeEvent) => void> = [];
-  const asked: Array<{ prompt: string; channel: string; echo: boolean }> = [];
+  const asked: Array<{ prompt: string; channel: string; echo: boolean; chain?: { chainId: string; hop: number } }> = [];
   const made: Array<{ name: string; base?: string; quiet?: boolean }> = [];
   const archived: string[] = [];
   let n = 0;
@@ -70,7 +70,7 @@ function setup(opts: { dir?: string; combine?: PlansWorkDeps['combine']; git?: P
   const boardWork = new BoardWork({ store, board, controller, selfId: () => 'p-me', selfName: () => 'Kay', askClaude: (prompt, channel) => void asked.push({ prompt, channel, echo: true }) });
   const plans = new Plans({ store, dir: opts.dir ?? null });
   const intents: unknown[] = [];
-  const work = new PlansWork({ store, plans, board: boardWork, controller, askClaude: (prompt, channel, echo) => `ask-${asked.push({ prompt, channel, echo })}`, intend: (i) => void intents.push(i), delayMs: 0, ...(opts.combine ? { combine: opts.combine } : {}), ...(opts.git ? { git: opts.git } : {}), ...(opts.titlePlan ? { titlePlan: opts.titlePlan } : {}), ...(opts.workers ? { workers: opts.workers } : {}), ...(opts.forYou ? { forYou: opts.forYou } : {}), ...(opts.cancel ? { cancel: opts.cancel } : {}), ...(opts.rescueMs !== undefined ? { rescueMs: opts.rescueMs } : {}), ...(opts.now ? { now: opts.now } : {}) });
+  const work = new PlansWork({ store, plans, board: boardWork, controller, askClaude: (prompt, channel, echo, chain) => `ask-${asked.push({ prompt, channel, echo, ...(chain ? { chain } : {}) })}`, intend: (i) => void intents.push(i), delayMs: 0, ...(opts.sendOn ? { sendOn: opts.sendOn } : {}), ...(opts.combine ? { combine: opts.combine } : {}), ...(opts.git ? { git: opts.git } : {}), ...(opts.titlePlan ? { titlePlan: opts.titlePlan } : {}), ...(opts.workers ? { workers: opts.workers } : {}), ...(opts.forYou ? { forYou: opts.forYou } : {}), ...(opts.cancel ? { cancel: opts.cancel } : {}), ...(opts.rescueMs !== undefined ? { rescueMs: opts.rescueMs } : {}), ...(opts.now ? { now: opts.now } : {}) });
   const claude = boardWork.myClaude();
   const me = boardWork.me();
   /** Claude in a worktree finishes its run, or works. */
@@ -723,6 +723,40 @@ describe('review fixes', () => {
     const sent = t.asked.at(-1)!;
     expect(sent.echo).toBe(false);
     expect(sent.prompt).toContain('not the user');
+  });
+
+  it('a message to a task’s Claude carries the chain of the plan’s run, one hop on', async () => {
+    const t = setup();
+    const plan = t.plans.create({ projectId: 'api', home: 'ws:main' }, t.claude);
+    t.work.forRun('ws:main', 'p-me')!.tools!.write(BODY);
+    t.work.approve(plan.id);
+    await tick(5);
+    t.work.forRun('ws:main', 'p-me', undefined, () => ({ chainId: 'c-7', hop: 3 }))!.tools!.message('auth', 'Use signed cookies');
+    expect(t.asked.at(-1)!.chain).toEqual({ chainId: 'c-7', hop: 4 });
+  });
+
+  it('a message to a task’s Claude that the chat-links guard refuses is not sent, and the plan’s agent reads why', async () => {
+    const t = setup({ sendOn: () => ({ refused: 'hop_limit: too many agents in a row passed this on. Stop sending and end your turn.' }) });
+    const plan = t.plans.create({ projectId: 'api', home: 'ws:main' }, t.claude);
+    t.work.forRun('ws:main', 'p-me')!.tools!.write(BODY);
+    t.work.approve(plan.id);
+    await tick(5);
+    const before = t.asked.length;
+    const tools = t.work.forRun('ws:main', 'p-me', undefined, () => ({ chainId: 'c-7', hop: 4 }))!.tools!;
+    expect(() => tools.message('auth', 'Use signed cookies', 'steer')).toThrow(/^Not sent to [A-Z]+-\d+: hop_limit: too many agents in a row/);
+    expect(t.asked.length).toBe(before);
+  });
+
+  it('a message to a task’s Claude goes on in the chain the chat-links guard gives it', async () => {
+    const seen: unknown[] = [];
+    const t = setup({ sendOn: (chain) => (seen.push(chain), { chain: { chainId: chain.chainId, hop: 9 } }) });
+    const plan = t.plans.create({ projectId: 'api', home: 'ws:main' }, t.claude);
+    t.work.forRun('ws:main', 'p-me')!.tools!.write(BODY);
+    t.work.approve(plan.id);
+    await tick(5);
+    t.work.forRun('ws:main', 'p-me', undefined, () => ({ chainId: 'c-7', hop: 3 }))!.tools!.message('auth', 'Use signed cookies');
+    expect(seen).toEqual([{ chainId: 'c-7', hop: 3 }]);
+    expect(t.asked.at(-1)!.chain).toEqual({ chainId: 'c-7', hop: 9 });
   });
 });
 

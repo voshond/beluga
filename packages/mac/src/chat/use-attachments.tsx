@@ -11,7 +11,8 @@ import { type Box, MAX_DROPPED, dropHits, droppedFiles, sameBox } from './drop-m
 import { imageLinksIn } from '@beluga/shared/attachment-links.js';
 import { type RefKey, boxRef, plainRefs, refKey, referencedImages, withoutRef } from './image-refs.js';
 import { keepPreview, openLightbox, pendingImage, previewOf } from './images.js';
-import { plainWorktrees, toBox, worktreeNamesOf } from './worktree-box.js';
+import { toBox, worktreeNamesOf } from './worktree-box.js';
+import { boxChats, plainWords } from './chat-box.js';
 import { type ImageInText, type PathInfo, insertText, usePastePaths } from './paste-paths.js';
 import s from './composer.module.css';
 import img from './images.module.css';
@@ -32,8 +33,12 @@ import img from './images.module.css';
 
 /** Images waiting to be sent, per conversation. */
 const waitingImages = new Map<string, readonly number[]>();
-/** Other files (their paths were pasted) waiting to go with the message, per conversation. */
-const waitingFiles = new Map<string, readonly PathInfo[]>();
+/**
+ * Other files (their paths were pasted) waiting to go with the message, per conversation. A copy
+ * of a chat (`copy`, BLG-152) goes as its words: the computer it goes to can't read a path here.
+ */
+type WaitingFile = PathInfo & { readonly copy?: string };
+const waitingFiles = new Map<string, readonly WaitingFile[]>();
 /** The file name each image came with (the end of it shows on its chip in the words). */
 const imageNames = new Map<number, string>();
 /** The name Beluga saved each image under (for opening it full size before it goes). */
@@ -72,7 +77,9 @@ const imagesOf = (items: DataTransferItemList | undefined): File[] =>
 
 export interface Attachments {
   readonly images: readonly number[];
-  readonly files: readonly PathInfo[];
+  readonly files: readonly WaitingFile[];
+  /** A copy of a chat, waiting as a file chip; it goes with the message as its text. */
+  readonly addCopy: (copy: { readonly name: string; readonly text: string }) => void;
   /** Something is being dragged over the box (or, from Finder, over the conversation). */
   readonly dropping: boolean;
   /** Over the conversation while files from Finder are dragged on it: where they'll go. */
@@ -107,7 +114,7 @@ export interface Attachments {
  * `text`/`setText`: the words in the box (the composer keeps them in the window's UI state, the
  * plan chat in its own).
  */
-export function useAttachments({ channel, box, text, setText, finderDrops = true }: { channel: string; box: RefObject<HTMLTextAreaElement | null>; text: () => string; setText: (text: string, cursor: number) => void; finderDrops?: boolean }): Attachments {
+export function useAttachments({ channel, box, text, setText, finderDrops = true, chipLinks }: { channel: string; box: RefObject<HTMLTextAreaElement | null>; text: () => string; setText: (text: string, cursor: number) => void; finderDrops?: boolean; chipLinks?: (text: string) => string | undefined }): Attachments {
   // What waits in the box is kept per computer too (BLG-784): `channel` stays what the computer calls it.
   const memo = useScopedKey(channel);
   const { client } = useBeluga();
@@ -120,9 +127,9 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
     setImagesState(next);
   };
   const pendingImages = images.filter((n) => previewOf(n));
-  const [files, setFilesState] = useState<readonly PathInfo[]>(() => waitingFiles.get(memo) ?? []);
+  const [files, setFilesState] = useState<readonly WaitingFile[]>(() => waitingFiles.get(memo) ?? []);
   useEffect(() => setFilesState(waitingFiles.get(memo) ?? []), [memo]);
-  const setFiles = (next: readonly PathInfo[]): void => {
+  const setFiles = (next: readonly WaitingFile[]): void => {
     if (next.length) waitingFiles.set(memo, next);
     else waitingFiles.delete(memo);
     setFilesState(next);
@@ -218,6 +225,14 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
     const sent = await uploadFiles(picked.slice(0, MAX_DROPPED), (file, err) => toast(client, `Couldn't upload ${file.name}: ${errorText(err)}`, 'error'));
     if (sent.length) await addPaths(sent.map((u) => ({ path: u.path, name: u.name, kind: 'file' as const, size: u.size, image: false })));
     box.current?.focus();
+  };
+
+  /** A chat's copy (chats.snapshot), in a fence longer than any run of backticks in it, so it stays one block. */
+  const addCopy = (copy: { readonly name: string; readonly text: string }): void => {
+    const fence = '`'.repeat(Math.max(3, ...[...copy.text.matchAll(/`+/g)].map((m) => m[0].length + 1)));
+    const words = `${copy.name}:\n${fence}text\n${copy.text.trimEnd()}\n${fence}`;
+    const now = (waitingFiles.get(memo) ?? []).filter((f) => f.name !== copy.name);
+    setFiles([...now, { path: `copy:${copy.name}`, name: copy.name, kind: 'file', size: copy.text.length, image: false, copy: words }]);
   };
 
   /**
@@ -326,6 +341,7 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
       words += pasted.slice(from);
       if (box.current) insertText(box.current, words, at);
     },
+    chipLinks,
   );
 
   /** The waiting images full size (the lightbox: Esc or a click outside closes), from image `n`. */
@@ -394,22 +410,23 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
         out += sent.slice(link.start, link.end);
       }
     }
-    // Worktrees' links back short, as they were typed.
-    return toBox(out + sent.slice(at), worktreeNamesOf(client.store.getState().projects));
+    // Worktrees' links and chats' mentions back short, as they were typed.
+    return boxChats(toBox(out + sent.slice(at), worktreeNamesOf(client.store.getState().projects)));
   };
 
   const take = (boxed: string): { text: string; images: readonly number[]; shown: readonly number[]; putBack: () => void } => {
-    // Worktrees' links written short in the box go out whole ("worktree:wt-…").
-    const typed = plainWorktrees(boxed, worktreeNamesOf(client.store.getState().projects));
+    // Worktrees' links and chats' mentions written short in the box go out whole ("worktree:wt-…", "@Title (chat: …)").
+    const typed = plainWords(boxed, client.store.getState());
     if (typed.startsWith('/')) return { text: typed, images: [], shown: [], putBack: () => undefined };
     const pictures = pendingImages;
     const placed = referencedImages(typed);
     const unplaced = pictures.filter((n) => !placed.includes(shownOf(n)));
-    // Other files go as their paths (Claude reads them from this Mac).
-    const others = files;
+    // Other files go as their paths (Claude reads them from this Mac), a chat's copy as its words.
+    // From the map, not this render's state: a copy added just before Send is there.
+    const others = waitingFiles.get(memo) ?? [];
     // The chips' names stay in the box: out they go as "[image N]".
     const words = plainRefs(typed);
-    const out = pictures.length || others.length ? [words, unplaced.map((n) => boxRef(shownOf(n))).join(' '), others.map((f) => `\`${f.path}\``).join('\n')].filter(Boolean).join('\n\n') : words;
+    const out = pictures.length || others.length ? [words, unplaced.map((n) => boxRef(shownOf(n))).join(' '), [others.filter((f) => !f.copy).map((f) => `\`${f.path}\``).join('\n'), ...others.flatMap((f) => (f.copy ? [f.copy] : []))].filter(Boolean).join('\n\n')].filter(Boolean).join('\n\n') : words;
     if (pictures.length) setImages([]);
     if (others.length) setFiles([]);
     return {
@@ -480,6 +497,7 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
   return {
     images: pendingImages,
     files,
+    addCopy,
     dropping: dropping || Boolean(dragOver),
     dropTarget,
     dropProps: {

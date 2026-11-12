@@ -18,6 +18,9 @@ const done = z.unknown();
 export const AskResult = z.object({ topic: z.string() });
 export const AskPersonResult = z.object({ topic: z.string(), task: z.string() });
 export const OlderResult = z.union([z.object({ turns: z.array(TurnView), more: z.boolean() }), z.object({ messages: z.array(ChatMessageView), more: z.boolean() })]);
+/** What a chat's address is now (src/core/chat-links/resolve.ts); null for a malformed ref or with chat links off. Where it opens stays the Mac's: the phone opens /conv/<channel>. */
+export const ChatResolveResult = z.object({ title: z.string().optional(), kind: z.string(), state: z.enum(['idle', 'working', 'archived', 'removed', 'loading']), ownership: z.enum(['own', 'shared', 'unknown']) }).passthrough().nullable();
+export type ChatResolveResult = z.infer<typeof ChatResolveResult>;
 /** Open on your Mac: it came to the front, or why not. */
 export const OpenOnMacResult = z.object({ opened: z.boolean(), why: z.string().optional() });
 /** A project's small icon (PNG, or a small SVG), by checksum. */
@@ -159,6 +162,7 @@ export const PhoneCalls = {
   // 1.14: Your Mac's chats: a new one (its id comes back), or one deleted for good.
   'assistant.newChat': entry('assistant.newChat', z.string()),
   'assistant.deleteChat': entry('assistant.deleteChat', done),
+  'chats.resolve': entry('chats.resolve', ChatResolveResult),
   'companion.openOnMac': entry('companion.openOnMac', OpenOnMacResult),
   'companion.icon': entry('companion.icon', IconResult),
   'companion.mergeCheck': entry('companion.mergeCheck', MergeCheckView),

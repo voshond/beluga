@@ -51,6 +51,7 @@ import { FILES_EDIT_HANDLERS } from './files-handlers.js';
 import { COMPANION_HANDLERS } from './companion-handlers.js';
 import { MACHINE_HANDLERS } from './machine-handlers.js';
 import { ASSISTANT_HANDLERS } from './assistant-handlers.js';
+import { CHATS_HANDLERS } from './chats-handlers.js';
 import { VOICE_HANDLERS } from './voice-handlers.js';
 import { CALLS_HANDLERS } from './calls-handlers.js';
 import { TERMINAL_IMPORT_HANDLERS } from './terminal-import-handlers.js';
@@ -496,6 +497,7 @@ export const HANDLERS = {
   ...COMPANION_HANDLERS,
   ...MACHINE_HANDLERS,
   ...ASSISTANT_HANDLERS,
+  ...CHATS_HANDLERS,
   ...VOICE_HANDLERS,
   ...CALLS_HANDLERS,
   ...TERMINAL_IMPORT_HANDLERS,
