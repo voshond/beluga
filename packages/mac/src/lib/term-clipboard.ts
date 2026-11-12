@@ -2,9 +2,9 @@ import type { Terminal } from '@xterm/xterm';
 import { copyText } from './copy.js';
 import { getPrefs } from './prefs.js';
 import { keyPlatform } from './shortcuts-model.js';
-import { OSC_CLIPBOARD, clipboardChord, osc52Text } from './term-clipboard-model.js';
+import { OSC_CLIPBOARD, canReadClipboard, clipboardChord, osc52Text, readClipboard } from './term-clipboard-model.js';
 
-export const canReadClipboard = (): boolean => typeof navigator.clipboard?.readText === 'function';
+export { canReadClipboard };
 
 export const copySelection = (term: Terminal): void => {
   if (!term.hasSelection()) return;
@@ -13,7 +13,7 @@ export const copySelection = (term: Terminal): void => {
 
 export const pasteClipboard = (term: Terminal): void => {
   if (!canReadClipboard()) return;
-  void navigator.clipboard.readText().then((text) => text && term.paste(text), () => undefined);
+  void readClipboard().then((text) => text && term.paste(text), () => undefined);
 };
 
 export const clipboardKey = (e: KeyboardEvent, term: Terminal): boolean | undefined => {

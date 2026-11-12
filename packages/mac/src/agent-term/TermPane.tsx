@@ -32,6 +32,7 @@ const keyFor = (keys: readonly TermKey[], action: TermAction): string | undefine
 };
 import s from './agent-term.module.css';
 import { copyText } from '../lib/copy.js';
+import { pasteClipboard } from '../lib/term-clipboard.js';
 
 /** What a pane is: the agent's own terminal on the conversation, or a shell beside it. */
 export type PaneKind = 'agent' | 'shell';
@@ -236,7 +237,7 @@ export function TermPane({ wsId, termKey, kind, cwd, split, focusOnMount, onSpli
     else if (a === 'clear') t?.clear();
     else if (a === 'select_all') t?.selectAll();
     else if (a === 'copy') void copyText(t?.getSelection() ?? '').catch(() => undefined);
-    else if (a === 'paste') void navigator.clipboard?.readText().then((text) => t?.paste(text)).catch(() => undefined);
+    else if (a === 'paste') { if (t) pasteClipboard(t); }
     else if (a === 'split_right' || a === 'split_down') onSplit(a === 'split_right' ? 'right' : 'down');
     else if (a === 'newest_visual') {
       // The newest link the terminal shows (else the newest it ever showed).
