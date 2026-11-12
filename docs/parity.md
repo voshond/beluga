@@ -364,7 +364,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `workspaces.commit` | ✓ |
 | `workspaces.merge` | ✓ |
 | `workspaces.prepareRemoval` | ✓ |
-| `workspaces.applyEnvBack` | ✓ (and Copy to Main Folder on a worktree's env bar) |
+| `workspaces.applyEnvBack` | ✓ (and Copy to Main Folder on a worktree's env bar; Archive/Delete's “Also remove … there” takes removed keys out too) |
 | `workspaces.keepEnvHere` | ✓ a worktree's env bar ••• › Keep in This Worktree Only (project page, worktree) |
 | `workspaces.saveEnvInBeluga` | ✓ Save in Beluga on a worktree's env bar, and Archive/Delete's “Save them in Beluga” |
 | `workspaces.checkEnv` | ✓ when a project's page or a worktree opens |
@@ -447,10 +447,16 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `agentTerm.open` | ✓ with Settings › Terminal › Advanced on: the Chat · Terminal · Both switch in a worktree's or chat's header (or ⇧⌘T): the agent's own terminal app on the same conversation (BLG-534) |
 | `agentTerm.takeOver` | ✓ Take over on the chat's “The terminal is driving” banner; closing the terminal (phone: Take over on the conversation's banner) |
 | `agentTerm.visual` | ✓ a graph or view link in the terminal, or ⌘↩ for the newest: opens it in the panel beside the terminal (BLG-535) |
-| `env.get` | ✓ Settings › Environment, and a project's Environment… (••• menu, project page) (values only go to the screen that asks) |
-| `env.set` | ✓ Settings › Environment, and a project's Environment… |
+| `env.get` | ✓ Settings › Environment (yours), and a project's Settings › Environment tab (••• › Environment…, the project page's pill and Environment section, Settings › Environment's project list) (values only go to the screen that asks) |
+| `env.set` | ✓ Settings › Environment, and a project's Settings › Environment tab |
 | `env.importDotenv` | ✓ a project's Environment › Keep a Copy in Beluga |
-| `env.newKeysBack` | ✓ a project's Environment › Worktrees › New keys go to the main folder |
+| `env.newKeysBack` | ✓ a project's Settings › Worktrees tab › New keys go to the main folder |
+| `env.worktree` | ✓ a worktree's ••• › Environment… (and its row in the project's Settings › Worktrees tab and Environment section): its own variables, with what it gets from below greyed (BLG-924) |
+| `env.setWorktree` | ✓ a worktree's ••• › Environment… |
+| `env.carryWorktree` | ✓ Archive/Delete a worktree with variables of its own: “Carry its variables to the project” (on) |
+| `env.overview` | ✓ the project page's Environment section: names and counts, never a value (BLG-926) |
+| `env.addToExample` | ✓ a project's Environment tab and Environment section: Add to .env.example / Create .env.example (placeholders, never values; BLG-925) |
+| `env.exampleSync` | ✓ a project's Settings › Worktrees tab › Keep .env.example in step |
 | `env.endpoints` | ✓ Settings › Claude › Local models |
 | `env.saveEndpoint` | ✓ Settings › Claude › Local models › Add Endpoint / Save |
 | `env.removeEndpoint` | ✓ Settings › Claude › Local models › Remove |
@@ -858,9 +864,9 @@ The same scenarios run on every runtime (`tests/runtime-conformance.ts`, `npx vi
 | Terminal look (font, size, line height, cursor style and blink, scrollback) | Mac (`lib/prefs.ts`, Settings › Terminal) |
 | Your own shells everywhere: the drawer (⌘J) opens on every page but the Terminal view, a friend's workspace included (your shells there); in a workspace or project your own shells and SSH shells sit after its tabs, so one you opened elsewhere stays a click away | Mac (`layout/panel/TerminalPane.tsx`, `lib/shells.ts`, `views/SshMenu.tsx`) |
 | A terminal's clipboard: right-click Copy, Paste, Select All, Clear and Copy on Select (also in Settings › Terminal); Ctrl+Shift+C and V off a Mac; what a program copies with OSC 52 (Claude Code's own copy) goes to the clipboard, reading it never; ⌥-drag selects past a program that takes the mouse (⇧-drag off a Mac) | Mac (`lib/term-clipboard.ts`, `views/term-menu.ts`) |
-| Environment variable editor (masked values, paste KEY=value lines, per-project scope; a project's main folder .env loads by default and shows beside its own variables, each marked where it comes from, an edit to a .env one overriding it and Use .env undoing that, Keep a Copy in Beluga) | Mac (Settings › Environment; a project's ••• › Environment… and its page's Environment pill: `dialogs/EnvironmentSheet.tsx`) |
-| A worktree changed a .env the main folder doesn't have: an env bar (its keys as +added ~changed −removed tags) with Copy to Main Folder and Keep Here, on the project page and in the worktree; untouched copies follow the main folder's .env on their own | Mac (`views/project/EnvAsks.tsx`) |
-| Confirmations as alerts (archive/delete with “Commit & Archive” and an env-changes table, clear, agent worktrees, hide project, leave a shared workspace), each with Cancel | Mac (`dialogs/native/*Alert.tsx`, `components/Alert.tsx`) |
+| Environment variable editor (masked values, a copy button, paste KEY=value lines, search past ten, Undo after removing; a project's main folder .env loads by default and shows beside its own variables, with yours greyed below, each marked where it comes from, an edit to one overriding it and Use … undoing that, Keep a Copy in Beluga; names .env.example asks for that nothing sets shown empty as needed; a worktree's own variables over everything else) | Mac (Settings › Environment: yours and a list of projects; a project's Settings sheet with General, Environment and Worktrees tabs from the gear on its page, ••• › Project Settings… and Environment…, ⌘K › Project Settings… and its page's Environment pill and section; a worktree's ••• › Environment…: `dialogs/EnvEditor.tsx`, `dialogs/EnvironmentSheet.tsx`, `dialogs/native/ProjectSettingsSheet.tsx`). The phone gets none of it: settings stay the Mac's |
+| A worktree changed a .env the main folder doesn't have: an env bar (its keys as +added ~changed −removed tags) with Copy to Main Folder and Keep Here, in the project page's Environment section and in the worktree; untouched copies follow the main folder's .env on their own; keys a worktree adds or removes reach its own .env.example (BLG-925) | Mac (`views/project/EnvAsks.tsx`, `views/project/EnvSection.tsx`) |
+| Confirmations as alerts (archive/delete with “Commit & Archive”, an env-changes table, and boxes to carry a worktree's own variables to the project, copy its .env changes, and also remove keys it took out; clear, agent worktrees, hide project, leave a shared workspace), each with Cancel | Mac (`dialogs/native/*Alert.tsx`, `components/Alert.tsx`) |
 | Inviting, people and sharing as sheets and cards: the Invite People sheet (Invite to popup, Watch / Prompt / Edit, Copy Invite Link with “Copied”, people waiting, active links with Copy and Revoke), a person's card beside their row (trust as a segmented control, Message / Ask Your Agent / Run / Follow / Files, usage meters, Remove with an alert), your account card (rename in place, who may use your agent), a right-click Trust ▸ submenu, the Share sheet for a workspace (an access popup per person), Share a Folder (Open panel, your projects, only some people, the agent may edit, Stop Sharing), the room's card from the sidebar's status | Mac (`dialogs/native/InviteSheet.tsx`, `PersonPopover.tsx`, `PersonCards.tsx`, `PersonMenu.tsx`, `WorkspaceShare.tsx`, `ShareFolderSheet.tsx`, `SharedSheet.tsx`, `RoomPopover.tsx`) |
 | Addressing a message with a chip (“To bob”, “To bob's agent”, “To your agent”) | Mac (`MacUi.to`, the composer) |
 | Run a command on a friend's computer from a sheet with a command field | Mac (`dialogs/native/PeerSheets.tsx`) |

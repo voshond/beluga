@@ -62,6 +62,8 @@ export interface AgentRunInput {
   readonly env?: Readonly<Record<string, string>>;
   /** Your own runs: your own MCP servers from Claude Code (agent/owner-mcp.ts); never a friend's or a guest's. */
   readonly ownerMcp?: boolean;
+  /** Claude in Chrome (agent/chrome.ts): as usual on a run you typed, asking you on any other. Unset: no Chrome (a guest's run). */
+  readonly chrome?: import('./chrome.js').ChromeAccess;
   /** Auto-compact threshold (percent) for Claude Code's own compaction; unset: auto-compact is off. */
   readonly autoCompactAt?: number;
   /** A folder (relative to the run's folder, git-ignored) for screenshots and scratch output; the owner watches it live. */

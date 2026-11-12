@@ -22,6 +22,7 @@ import { claudeComplete } from './complete.js';
 import { askBtw } from './btw.js';
 import { claudeTerminal } from './terminal.js';
 import { claudeLaunch } from './launch-args.js';
+import { chromeGate, isChromeTool } from '../../chrome.js';
 import { ViewShelf } from '../../view-tools.js';
 import { runToolSuites } from '../../run-tools.js';
 import { sdkServers } from './sdk-mount.js';
@@ -223,7 +224,9 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
         return own && mayBeCommand(msg.prompt) ? expandCommand(msg.prompt, cwd, home).then(build) : build(msg.prompt);
       };
       // Your `claude` flags (Settings › Agents): how it asks, in the SDK's words; the rest as they are.
-      const launch = claudeLaunch(input.launchArgs?.claude ?? [], { plan: Boolean(input.plan), autoEdit });
+      const launch = claudeLaunch(input.launchArgs?.claude ?? [], { plan: Boolean(input.plan), autoEdit, chrome: Boolean(input.chrome) });
+      // Claude in Chrome: as usual on a run you typed; any other asks you once before it first uses it (agent/chrome.ts).
+      const chrome = chromeGate(input.chrome);
       const options: Options = {
         cwd,
         additionalDirectories: [...extraDirs, ...(fixup ? [fixup] : [])],
@@ -248,6 +251,11 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
                   const toolInput = (hookInput.tool_input ?? {}) as Record<string, unknown>;
                   const veto = input.vetTool?.(hookInput.tool_name, toolInput);
                   if (veto) return verdict('deny', veto);
+                  if (isChromeTool(hookInput.tool_name)) {
+                    const said = await chrome(hookInput.tool_name, toolInput);
+                    if (said.kind === 'deny') return verdict('deny', said.reason);
+                    if (said.kind === 'allow') return verdict('allow', 'Approved by the machine owner.');
+                  }
                   const decision = decideTool(hookInput.tool_name, toolInput, policy);
                   if (decision === 'deny') return verdict('deny', denyReason(hookInput.tool_name, toolInput, policy));
                   // A sub-agent is told where its own scratch folder is, so what it makes shows on its page.

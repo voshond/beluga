@@ -1,4 +1,5 @@
 import { git, tryGit } from '../workspaces/git.js';
+import { byYourHand } from '../core/by-hand.js';
 import { type WorktreeMover, worktreeMover } from '../core/worktree-move.js';
 import type { Session } from '../core/session.js';
 import { needFriendShares } from '../core/friend-share/launch.js';
@@ -91,7 +92,8 @@ export const HANDLERS = {
   // Your prompts count for your stats here, where you typed them (core/stats/counter.ts).
   'session.submit': (s, raw, opts) => {
     maybeStatsOf(s)?.prompt(opts?.channel, raw);
-    return s.submit(raw, opts);
+    // What you sent yourself: its run uses Claude in Chrome as usual (core/by-hand.ts).
+    return byYourHand(raw, () => s.submit(raw, opts));
   },
   'session.copyInvite': (s) => s.copyInvite(),
   'session.copyLastAnswer': (s) => s.copyLastAnswer(),
@@ -224,8 +226,8 @@ export const HANDLERS = {
   'workspaces.refresh': (s) => ctl(s)?.refresh(),
   'workspaces.newWorktree': async (s, projectId, name, opts) => (await ctl(s)?.newWorktree(projectId, name, { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.agent ? { agent: opts.agent } : {}) }))?.id,
   'workspaces.newChat': async (s, projectId, title, dir) => (await ctl(s)?.newChat(projectId, title, dir))?.id,
-  'workspaces.startChat': (s, projectId, text, dir, opts) => (maybeStatsOf(s)?.prompt(`new-chat:${projectId}`, text), ctl(s)?.startChat(projectId, text, dir ?? undefined, { ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}) })),
-  'workspaces.startWorktree': async (s, projectId, text, opts) => (maybeStatsOf(s)?.prompt(`new-worktree:${projectId}`, text, opts?.agent?.runtime), await ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.tasks ? { tasks: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.terminal ? { terminal: true } : {}), nameLater: true }))?.id,
+  'workspaces.startChat': (s, projectId, text, dir, opts) => (maybeStatsOf(s)?.prompt(`new-chat:${projectId}`, text), byYourHand(text, () => ctl(s)?.startChat(projectId, text, dir ?? undefined, { ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}) }))),
+  'workspaces.startWorktree': async (s, projectId, text, opts) => (maybeStatsOf(s)?.prompt(`new-worktree:${projectId}`, text, opts?.agent?.runtime), await byYourHand(text, () => ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.tasks ? { tasks: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.terminal ? { terminal: true } : {}), nameLater: true })))?.id,
   'workspaces.branches': (s, projectId) => ctl(s)?.branches(projectId),
   'workspaces.fork': async (s, id, name) => (await ctl(s)?.fork(id, name))?.id,
   'workspaces.editPrompt': (s, id, line, text, mode) => ctl(s)?.editPrompt(id, line, text, mode),
@@ -248,7 +250,7 @@ export const HANDLERS = {
   'workspaces.commit': (s, id, message) => ctl(s)?.commit(id, message),
   'workspaces.merge': (s, id) => ctl(s)?.merge(id),
   'workspaces.prepareRemoval': (s, id) => ctl(s)?.prepareRemoval(id),
-  'workspaces.applyEnvBack': (s, id) => ctl(s)?.applyEnvBack(id),
+  'workspaces.applyEnvBack': (s, id, removed) => ctl(s)?.applyEnvBack(id, removed),
   'workspaces.keepEnvHere': (s, id) => ctl(s)?.keepEnvHere(id),
   'workspaces.saveEnvInBeluga': (s, id) => ctl(s)?.saveEnvInBeluga(id),
   'workspaces.checkEnv': (s, projectId) => ctl(s)?.checkEnv(projectId, false),
@@ -349,6 +351,12 @@ export const HANDLERS = {
   'env.testDatabase': (s, projectId) => testDatabase(s.env.viewEnvOf(projectId)),
   'env.importDotenv': (s, projectId) => s.env.importDotenv(projectId),
   'env.newKeysBack': (s, projectId, on) => s.env.setNewKeysBack(projectId, on),
+  'env.worktree': (s, id) => s.env.worktree(id),
+  'env.setWorktree': (s, id, rows) => s.env.setWorktree(id, rows),
+  'env.carryWorktree': (s, id) => s.env.carryWorktree(id),
+  'env.overview': (s, projectId) => s.env.overview(projectId),
+  'env.addToExample': (s, projectId) => s.env.addToExample(projectId),
+  'env.exampleSync': (s, projectId, on) => s.env.setExampleSync(projectId, on),
   'env.endpoints': (s) => s.local.views(),
   'env.saveEndpoint': async (s, change) => {
     const saved = s.env.saveEndpoint(change);

@@ -1,4 +1,9 @@
 import { useEffect, useState } from 'react';
+import { Segmented } from '../../components/ui.js';
+import { EnvEditor } from '../EnvEditor.js';
+import { EnvAgentGroups } from '../EnvironmentSettings.js';
+import { EnvWorktreeGroups } from '../EnvWorktreeGroups.js';
+import e from '../env-settings.module.css';
 import type { ResolvedScripts } from '@beluga/workspaces/scripts.js';
 import { Checkbox, Field, FormSheet, SourceTag, TextInput } from '../../components/FormSheet.js';
 import { useApi, useApp } from '../../lib/beluga.js';
@@ -16,13 +21,29 @@ const SOURCE: Record<Source, { label: string; tone: 'team' | 'mine' | 'guess'; d
   detected: { label: 'Guessed', tone: 'guess', detail: 'Beluga guessed it from the project. Change it if it’s wrong' },
 };
 
-/**
- * A project's Setup and Run commands, as a form: where each one comes from now, and whether to
- * keep yours to yourself or save them in the project's beluga.json for the whole team.
- */
+export type ProjectTab = 'general' | 'environment' | 'worktrees';
+
+const TABS: ReadonlyArray<{ value: ProjectTab; label: string; hint: string }> = [
+  { value: 'general', label: 'General', hint: 'Setup, Run and its agent' },
+  { value: 'environment', label: 'Environment', hint: 'Its variables and .env' },
+  { value: 'worktrees', label: 'Worktrees', hint: 'How worktrees share env' },
+];
+
+/** ⌘K › Project Settings…, a terminal's Commands…: the General tab. */
 export function ProjectSettingsSheet({ menu, close }: NativeMenuProps<'scripts'>) {
+  return <ProjectSettings projectId={menu.projectId} tab={menu.tab ?? 'general'} close={close} />;
+}
+
+/**
+ * A project's settings in one sheet (BLG-926), on three tabs: General (its Setup and Run commands,
+ * where each one comes from now and whether they go in beluga.json, and its agent), Environment
+ * (its variables beside its main folder's .env, saved as you go) and Worktrees (how they share env,
+ * and the ones with variables of their own). Done saves General's changes too.
+ */
+export function ProjectSettings({ projectId, tab: first, close }: { projectId: string; tab: ProjectTab; close: () => void }) {
   const api = useApi();
-  const project = useApp((st) => st.projects.find((p) => p.id === menu.projectId));
+  const [tab, setTab] = useState<ProjectTab>(first);
+  const project = useApp((st) => st.projects.find((p) => p.id === projectId));
   const autoSetup = useApp((st) => st.prefs.autoSetup);
   const scripts = project?.scripts ?? {};
   const [values, setValues] = useState<Record<Kind, string>>({ setup: scripts.setup?.command ?? '', run: scripts.run?.command ?? '' });
@@ -65,18 +86,41 @@ export function ProjectSettingsSheet({ menu, close }: NativeMenuProps<'scripts'>
     close();
   };
 
+  const general = tab === 'general';
+  const tabs = (
+    <div className={e.tabs}>
+      <Segmented label="Project settings" value={tab} options={TABS} onChange={setTab} />
+    </div>
+  );
+  if (!general) {
+    return (
+      <FormSheet title={`${project.name} Settings`} icon={tab === 'environment' ? 'lock' : 'branch'} intro={tab === 'environment' ? 'Given to shells, setup and run commands in its workspaces, and your agent, over yours for everywhere. They stay on this computer.' : undefined} submitLabel={changed ? 'Save' : 'Done'} onSubmit={save} onCancel={close} cancelLabel={changed ? 'Cancel' : 'Close'} width={640}>
+        {tabs}
+        <div className={e.sheetBody}>
+          {tab === 'environment' ? (
+            <>
+              <EnvEditor projectId={project.id} />
+              <EnvAgentGroups projectId={project.id} />
+            </>
+          ) : (
+            <EnvWorktreeGroups projectId={project.id} />
+          )}
+        </div>
+      </FormSheet>
+    );
+  }
   return (
     <FormSheet
       title={`${project.name} Settings`}
       icon="terminal"
       intro="The commands every workspace of this project uses. Leave one empty for none."
-      submitLabel="Save"
-      canSubmit={changed}
+      submitLabel={changed ? 'Save' : 'Done'}
       onSubmit={save}
       onCancel={close}
-      width={560}
+      width={640}
       footer={<Checkbox checked={team} onChange={setTeam} label="Save to beluga.json" detail="Everyone on the project gets them (commit the file)" />}
     >
+      {tabs}
       <Field label="Setup" htmlFor="script-setup" hint={hint('setup', 'Runs in each new worktree, e.g. to install dependencies.')} aside={tag('setup')}>
         <TextInput id="script-setup" value={values.setup} onChange={(v) => (setTouched(true), setValues({ ...values, setup: v }))} mono placeholder="npm install" />
       </Field>

@@ -1,7 +1,9 @@
+import type { ReactNode } from "react";
 import { cx } from "../../components/ui.js";
 import s from "../project-home.module.css";
 import a from "../../lib/arrive.module.css";
 
+/** One of Project Home's lists: its title and count, a hint, one action, then its rows. */
 export function Section({
   title,
   count,
@@ -16,10 +18,10 @@ export function Section({
   title: string;
   count: number;
   hint?: string;
-  action?: React.ReactNode;
+  action?: ReactNode;
   /** The children lay themselves out: no bordered list around them. */
   bare?: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section className={cx(s.section, arrive && a.arrive)} aria-label={title}>

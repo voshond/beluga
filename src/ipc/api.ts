@@ -341,7 +341,7 @@ export const API = {
   'workspaces.commit': args(id, opt(z.string().max(2000))),
   'workspaces.merge': args(id),
   'workspaces.prepareRemoval': args(id),
-  'workspaces.applyEnvBack': args(id),
+  'workspaces.applyEnvBack': args(id, opt(bool)),
   // A worktree's env changes stay there: not asked about again until they change (BLG-369).
   'workspaces.keepEnvHere': args(id),
   // Save a worktree's env changes as the project's own variables in Beluga (every worktree gets them; the main .env is left alone).
@@ -474,6 +474,17 @@ export const API = {
   'env.importDotenv': args(id),
   // Keys a worktree adds go into the project's main .env on their own (on by default).
   'env.newKeysBack': args(id, bool),
+  // A worktree's own variables, over its project's (BLG-924) → them, with what it gets from below and its .env.example.
+  'env.worktree': args(id),
+  'env.setWorktree': args(id, EnvRows),
+  // Before a worktree goes: its own variables into the project's (same name: the worktree's wins) → how many.
+  'env.carryWorktree': args(id),
+  // A project's environment in names and counts (its page, the phone): never a value.
+  'env.overview': args(id),
+  // List in the main folder's .env.example what's set and it doesn't list (placeholders, never values) → the names added.
+  'env.addToExample': args(id),
+  // Keys a worktree adds to or removes from its .env reach its .env.example (on by default, BLG-925).
+  'env.exampleSync': args(id, bool),
   // Local and bring-your-own endpoints (BLG-449): → each with its URL and models, never its key (hasKey).
   'env.endpoints': args(),
   // Add (no id) or change one; key unset keeps it, '' removes it → its id.
