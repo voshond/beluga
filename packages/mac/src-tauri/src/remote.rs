@@ -87,6 +87,8 @@ pub struct ClientView {
 pub struct ClientState {
     dir: PathBuf,
     granted: Mutex<HashSet<String>>,
+    /// Origins the server's page loads frames from (its live previews), for this run only.
+    frames: Mutex<HashSet<String>>,
 }
 
 /// Where Tauri keeps this app's config (its `app_config_dir`), known before the app is built.
@@ -115,7 +117,12 @@ impl ClientState {
         Self {
             dir,
             granted: Mutex::new(HashSet::new()),
+            frames: Mutex::new(HashSet::new()),
         }
+    }
+
+    pub fn frame_origins(&self) -> HashSet<String> {
+        self.frames.lock().map(|f| f.clone()).unwrap_or_default()
     }
 
     pub fn config(&self) -> ClientConfig {
@@ -311,13 +318,15 @@ pub fn user_agent(version: &str) -> Option<String> {
     Some(format!("Mozilla/5.0 ({engine} BelugaApp/{version}"))
 }
 
-/// Where the main window may go: the app's own pages and the saved server stay in it; any other
-/// web address opens in your browser. Only in server mode; Run here is left as it was.
-pub fn navigation(config: &ClientConfig, url: &Url, app_page: bool) -> Navigation {
+/// Where the main window may go: the app's own pages, the saved server and the origins its frames
+/// load from stay in it (WebKitGTK asks for a frame's loads too); any other web address opens in
+/// your browser. Only in server mode; Run here is left as it was.
+pub fn navigation(config: &ClientConfig, url: &Url, app_page: bool, frames: &HashSet<String>) -> Navigation {
     if app_page || config.mode != Some(Mode::Server) || matches!(url.scheme(), "about" | "data" | "blob") {
         return Navigation::Stay;
     }
-    if config.server_url.as_deref() == Some(url.origin().ascii_serialization().as_str()) {
+    let origin = url.origin().ascii_serialization();
+    if config.server_url.as_deref() == Some(origin.as_str()) || frames.contains(&origin) {
         return Navigation::Stay;
     }
     if matches!(url.scheme(), "http" | "https" | "mailto" | "tel") {
@@ -358,8 +367,8 @@ where
                 return true;
             }
             let app = webview.app_handle();
-            let config = app.state::<ClientState>().config();
-            match navigation(&config, url, is_app_page(app, url)) {
+            let state = app.state::<ClientState>();
+            match navigation(&state.config(), url, is_app_page(app, url), &state.frame_origins()) {
                 Navigation::Stay => true,
                 Navigation::External => {
                     let _ = app.opener().open_url(url.as_str(), None::<&str>);
@@ -504,6 +513,21 @@ pub fn client_set_device_name(
     Ok(name)
 }
 
+/// The server's live previews load from this origin (src/preview/public.ts): its frames stay in the window.
+#[tauri::command]
+pub fn allow_frame_origin(state: tauri::State<'_, ClientState>, origin: String) -> Result<(), String> {
+    let url = Url::parse(&origin).map_err(|_| format!("{origin} isn't an address"))?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+        return Err(format!("{origin} isn't a web address"));
+    }
+    state
+        .frames
+        .lock()
+        .map_err(|e| e.to_string())?
+        .insert(url.origin().ascii_serialization());
+    Ok(())
+}
+
 /// Back to the connect page to pick another server (or Run here), from the server's Settings.
 #[tauri::command]
 pub fn client_change_server(app: AppHandle) -> Result<(), String> {
@@ -589,21 +613,25 @@ mod tests {
     #[test]
     fn the_window_keeps_to_the_server_and_sends_the_rest_to_the_browser() {
         let url = |u: &str| Url::parse(u).unwrap();
+        let none = HashSet::new();
         let server = ClientConfig {
             mode: Some(Mode::Server),
             server_url: Some("https://box.example.com".into()),
             device_name: None,
         };
-        assert_eq!(navigation(&server, &url("https://box.example.com/join/x"), false), Navigation::Stay);
-        assert_eq!(navigation(&server, &url("tauri://localhost/connect.html"), true), Navigation::Stay);
-        assert_eq!(navigation(&server, &url("https://github.com/x"), false), Navigation::External);
-        assert_eq!(navigation(&server, &url("https://box.example.com:8443/"), false), Navigation::External);
-        assert_eq!(navigation(&server, &url("file:///etc/passwd"), false), Navigation::Block);
+        assert_eq!(navigation(&server, &url("https://box.example.com/join/x"), false, &none), Navigation::Stay);
+        assert_eq!(navigation(&server, &url("tauri://localhost/connect.html"), true, &none), Navigation::Stay);
+        assert_eq!(navigation(&server, &url("https://github.com/x"), false, &none), Navigation::External);
+        assert_eq!(navigation(&server, &url("https://box.example.com:8443/"), false, &none), Navigation::External);
+        assert_eq!(navigation(&server, &url("file:///etc/passwd"), false, &none), Navigation::Block);
+        let previews = HashSet::from(["https://preview.example.com".to_string()]);
+        assert_eq!(navigation(&server, &url("https://preview.example.com/p/ab/?v=2"), false, &previews), Navigation::Stay);
+        assert_eq!(navigation(&server, &url("https://preview.example.com/p/ab/"), false, &none), Navigation::External);
         let here = ClientConfig {
             mode: Some(Mode::Local),
             ..ClientConfig::default()
         };
-        assert_eq!(navigation(&here, &url("https://github.com/x"), false), Navigation::Stay);
+        assert_eq!(navigation(&here, &url("https://github.com/x"), false, &none), Navigation::Stay);
     }
 
     #[test]
