@@ -3,6 +3,7 @@ import { type AddressInfo, isIP } from 'node:net';
 import { hostname, userInfo } from 'node:os';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { previewPublic } from '../preview/public.js';
 import { MAX_FRAME_BYTES } from './server.js';
 import { StaticFiles, defaultWebRoot } from './web-static.js';
 
@@ -52,6 +53,8 @@ export interface WebServerOptions {
   readonly authedRoutes?: readonly WebRoute[];
   /** What a request that isn't let in gets (default: a plain 401). */
   readonly locked?: (req: IncomingMessage, res: ServerResponse, url: URL) => void;
+  /** Where this page's previews load from (default: src/preview/public.ts's, when set up). */
+  readonly previewOrigin?: string;
   readonly log?: (line: string) => void;
 }
 
@@ -69,10 +72,12 @@ const SECURITY_HEADERS: Readonly<Record<string, string>> = {
  * with every file. The socket's origin is named too, for browsers whose 'self' doesn't cover ws:.
  * Tauri's IPC (ipc:, http://ipc.localhost) is let through for the desktop app as a client (BLG-52):
  * a browser has neither, and the app grants IPC to the server's origin alone (remote.rs).
+ * With a public preview origin (src/preview/public.ts) the page may frame that origin too.
  */
-export function appCsp(host: string, https: boolean): string {
+export function appCsp(host: string, https: boolean, previewOrigin?: string): string {
   const socket = `${https ? 'wss' : 'ws'}://${host}`;
-  return `default-src 'self'; connect-src 'self' ${socket} ipc: http://ipc.localhost; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+  const frames = previewOrigin ? ` frame-src 'self' ${previewOrigin};` : '';
+  return `default-src 'self'; connect-src 'self' ${socket} ipc: http://ipc.localhost; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:;${frames} object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 }
 
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
@@ -120,10 +125,12 @@ export class WebServer {
   private readonly files?: StaticFiles;
   /** Open sockets by session, so a revoked one is cut off at once. */
   private readonly sockets = new Map<string, Set<WebSocket>>();
+  private readonly previewOrigin?: string;
 
   constructor(private readonly opts: WebServerOptions) {
     const root = opts.root ?? defaultWebRoot();
     if (root) this.files = new StaticFiles(root);
+    this.previewOrigin = opts.previewOrigin ?? previewPublic()?.origin;
   }
 
   get root(): string | undefined {
@@ -182,13 +189,13 @@ export class WebServer {
       const open = (req.method === 'GET' || req.method === 'HEAD') && (this.opts.publicFiles?.(url.pathname) ?? false);
       if (!open && !this.opts.authorize(req)) return this.opts.locked ? this.opts.locked(req, res, url) : end(res, 401, 'Not signed in');
       for (const route of this.opts.authedRoutes ?? []) if (await route(req, res, url)) return;
-      if (url.pathname === '/__beluga/endpoint') return json(res, 200, { web: true });
+      if (url.pathname === '/__beluga/endpoint') return json(res, 200, { web: true, ...(this.previewOrigin ? { previewOrigin: this.previewOrigin } : {}) });
       if (req.method !== 'GET' && req.method !== 'HEAD') return end(res, 405, 'Method not allowed');
       if (!this.files) return url.pathname === '/' || url.pathname === '/index.html' ? html(res, 503, NOT_BUILT) : end(res, 404, 'Not found');
       const file = this.files.serve(url.pathname, { acceptEncoding: header(req, 'accept-encoding'), ifNoneMatch: header(req, 'if-none-match') });
       if (!file) return end(res, 404, 'Not found');
       const https = req.headers['x-forwarded-proto'] === 'https';
-      res.writeHead(file.status, { ...file.headers, 'content-security-policy': appCsp(req.headers.host!, https) });
+      res.writeHead(file.status, { ...file.headers, 'content-security-policy': appCsp(req.headers.host!, https, this.previewOrigin) });
       res.end(req.method === 'HEAD' ? undefined : file.body);
     } catch (err) {
       this.opts.log?.(`web: ${req.method} ${req.url?.slice(0, 200)} failed: ${err instanceof Error ? err.message : String(err)}`);

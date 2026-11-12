@@ -5,12 +5,14 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { isSecretPath } from '../core/shares.js';
 import { hostName } from '../daemon/web.js';
+import { type PreviewPublic, previewPublic } from './public.js';
 
 /**
  * Where preview frames load from (Settings › Experimental › Live previews): a server of its own
  * on 127.0.0.1 at a port the system picks, apart from the daemon's socket and the web port, that
  * serves nothing but previews. Each preview is at /p/<id>/, an id nobody can guess; only the
- * Beluga window may frame it, and only under a loopback host name (no DNS rebinding).
+ * Beluga window may frame it, and only under a loopback host name (no DNS rebinding), or the
+ * public preview origin when one is set up for the web port's pages (public.ts).
  */
 
 export const PREVIEW_HOST = '127.0.0.1';
@@ -25,11 +27,19 @@ export const PREVIEW_PORT = 47791;
 /** Who may frame a preview: the Mac app (tauri://localhost), its dev server, the demo's browser. */
 export const FRAME_ANCESTORS = "tauri://localhost http://tauri.localhost https://tauri.localhost http://localhost:* http://127.0.0.1:*";
 
+/** The app's own framers, and the web port's pages when a public preview origin is set up. */
+export const frameAncestors = (pub: PreviewPublic | undefined): string => [FRAME_ANCESTORS, ...(pub?.framedBy ?? [])].join(' ');
+
 /** A component's frame: only what this server serves, so nothing in it can be sent off this computer. */
-export const COMPONENT_CSP = `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-ancestors ${FRAME_ANCESTORS}`;
+export const componentCsp = (ancestors: string): string =>
+  `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-ancestors ${ancestors}`;
 
 /** An HTML file's frame: a page you made, so its inline scripts and CDNs run too, but it connects only here. */
-export const PAGE_CSP = `default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; connect-src 'self'; base-uri 'self'; form-action 'none'; frame-ancestors ${FRAME_ANCESTORS}`;
+export const pageCsp = (ancestors: string): string =>
+  `default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; connect-src 'self'; base-uri 'self'; form-action 'none'; frame-ancestors ${ancestors}`;
+
+export const COMPONENT_CSP = componentCsp(frameAncestors(previewPublic()));
+export const PAGE_CSP = pageCsp(frameAncestors(previewPublic()));
 
 const TYPES: Readonly<Record<string, string>> = {
   '.html': 'text/html; charset=utf-8',
@@ -108,8 +118,11 @@ export class PreviewServer {
   private starting?: Promise<number>;
   private readonly sites = new Map<string, PreviewSite>();
 
-  /** `port`: the one to ask for first (0: any free one). */
-  constructor(private readonly wanted = PREVIEW_PORT) {}
+  /** `port`: the one to ask for first (0: any free one). `pub`: also reached at a public origin (public.ts). */
+  constructor(
+    private readonly wanted = PREVIEW_PORT,
+    private readonly pub: PreviewPublic | undefined = previewPublic(),
+  ) {}
 
   /** Whether it's listening (it closes when no preview is left). */
   get open(): boolean {
@@ -147,7 +160,7 @@ export class PreviewServer {
       const server = createServer((req, res) => void this.request(req, res).catch(() => res.destroy()));
       server.on('clientError', (_err, socket) => socket.destroy());
       server.once('error', reject);
-      server.listen(port, PREVIEW_HOST, () => {
+      server.listen(port, this.pub?.listen ?? PREVIEW_HOST, () => {
         this.server = server;
         this.port = (server.address() as AddressInfo).port;
         // Never what keeps the daemon running.
@@ -160,7 +173,7 @@ export class PreviewServer {
   private async request(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const host = hostName(req.headers.host);
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'text/plain', 'GET only');
-    if (host !== PREVIEW_HOST && host !== 'localhost') return send(res, 421, 'text/plain', 'Not here');
+    if (host !== PREVIEW_HOST && host !== 'localhost' && host !== this.pub?.host) return send(res, 421, 'text/plain', 'Not here');
     let url: URL;
     try {
       url = new URL(req.url ?? '/', `http://${PREVIEW_HOST}`);

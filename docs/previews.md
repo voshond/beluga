@@ -127,6 +127,25 @@ milliseconds), through `src/preview/plugins.ts`:
 
 The window's policy (`tauri.conf.json`) allows frames from `127.0.0.1` and `localhost` only.
 
+### From another computer (the web port)
+
+A page from the web port (a browser, or the app as a client of a Beluga server) can't reach the
+server's loopback, so by default it shows a card instead. Give the preview server an origin of its
+own, behind the same kind of proxy as the web port, and those pages draw previews too:
+
+```sh
+BELUGA_PREVIEW_ORIGIN=https://preview.example.com      # the proxy sends this host to port 47791
+BELUGA_PREVIEW_FRAMED_BY=https://beluga.example.com    # the web port's origins (several: spaces)
+BELUGA_PREVIEW_LISTEN=0.0.0.0                          # where the server listens then (default)
+```
+
+It's an origin apart from the web port's on purpose: a component's code never shares Beluga's
+session. With both set (`src/preview/public.ts`), the server answers to that host name besides
+loopback, lets those origins frame it, and the web port tells its pages where previews are
+(`/__beluga/endpoint`'s `previewOrigin`) and lets them frame it (`frame-src`); the page loads each
+preview from there. Pages on a dev server stay on their own computer and show a card. Listening
+beyond loopback, each preview is still only at its id nobody can guess.
+
 ## In the window
 
 `packages/mac/src/components/preview/`: the block builds only once it scrolls into view and only
@@ -165,4 +184,5 @@ drew one: with a phone paired, each drawing's picture is kept in the worktree's
 ## Not yet
 
 SwiftUI (that needs Xcode's previews), wrappers for Vue and Svelte, and previews from a paired
-computer elsewhere (the frame loads from this computer's loopback; noted on BLG-767).
+computer elsewhere without a public preview origin (the frame loads from this computer's
+loopback; noted on BLG-767).

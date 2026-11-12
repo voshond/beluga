@@ -126,6 +126,9 @@ Either way, let the web port answer to that name and take a link under it:
 `beluga.example.com`. The join limits there are the local port's (Caddy's requests all come from
 loopback, so they share one count): keep the proxy for yourself.
 
+Live previews need a host name of their own next to it (`preview.example.com` to port 47791):
+see [Live previews › From another computer](previews.md#from-another-computer-the-web-port).
+
 ## The app's native bits in a browser
 
 A page served by the web port knows it (`webServed()` in `lib/boot.ts`); one from the development

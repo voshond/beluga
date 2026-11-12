@@ -85,7 +85,7 @@ abstract class Live {
 
   /** The frame's events: the version now, then each new one (or why the newest build failed). */
   protected events(req: IncomingMessage, res: ServerResponse): true {
-    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'x-content-type-options': 'nosniff' });
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'x-content-type-options': 'nosniff', 'x-accel-buffering': 'no' });
     res.write(`retry: 1500\ndata: ${JSON.stringify({ v: this.version })}\n\n`);
     this.clients.add(res);
     this.lastUsed = Date.now();

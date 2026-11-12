@@ -1,5 +1,5 @@
 // Relative, not @beluga/shared: the root's tests and typecheck read this file too.
-import type { PreviewProblem } from '../../../../../src/shared/preview/opened.js';
+import type { PreviewProblem, PreviewResult } from '../../../../../src/shared/preview/opened.js';
 import { type Field, type Shape, choicesOf, isFlatRows, isNumberGrid, required } from '../../../../../src/shared/preview/shape.js';
 import { MARK, isMark, pictureOf, sampleValue } from '../../../../../src/shared/preview/samples.js';
 
@@ -172,4 +172,16 @@ export interface FiredEvent {
 /** The newest few events, newest first. */
 export function addEvent(events: readonly FiredEvent[], name: string, detail: string, id: number, keep = 4): FiredEvent[] {
   return [{ id, name, detail }, ...events].slice(0, keep);
+}
+
+/**
+ * What a page from the web port loads (src/preview/public.ts): the server's preview at its public
+ * origin. A dev server's page is on that computer's localhost, which this one can't reach.
+ */
+export function atPreviewOrigin(opened: PreviewResult, origin: string): PreviewResult {
+  if (!opened.ok) return opened;
+  if (opened.kind === 'url') return { ok: false, kind: 'elsewhere', title: 'Dev server pages show on the computer that runs them', detail: 'Open the page in a browser there, or ask for a preview of the component.' };
+  const u = new URL(opened.url);
+  const at = new URL(origin);
+  return { ...opened, url: `${at.origin}${u.pathname}${u.search}${u.hash}` };
 }
