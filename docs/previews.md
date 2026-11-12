@@ -146,6 +146,16 @@ loopback, lets those origins frame it, and the web port tells its pages where pr
 preview from there. Pages on a dev server stay on their own computer and show a card. Listening
 beyond loopback, each preview is still only at its id nobody can guess.
 
+At the public origin a preview also needs your Beluga session. `preview.open` (only on a signed-in
+socket) hands out a one-time ticket that lasts 2 minutes. The frame's first load trades it for an
+HttpOnly cookie for that preview's `/p/<id>/`, and is sent on to the same address without the
+ticket. Anything else there gets a 401, so an id from a proxy's log is useless on its own.
+
+The app as a client keeps those frames in its window once the page names the origin to it
+(`allow_frame_origin`, remote.rs): WebKitGTK asks the window's navigation rule about a frame's
+loads too, and that rule sends every other address to your browser. An older app refuses the
+command, and keeps showing the card.
+
 ## In the window
 
 `packages/mac/src/components/preview/`: the block builds only once it scrolls into view and only

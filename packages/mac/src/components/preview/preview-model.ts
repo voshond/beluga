@@ -182,6 +182,7 @@ export function atPreviewOrigin(opened: PreviewResult, origin: string): PreviewR
   if (!opened.ok) return opened;
   if (opened.kind === 'url') return { ok: false, kind: 'elsewhere', title: 'Dev server pages show on the computer that runs them', detail: 'Open the page in a browser there, or ask for a preview of the component.' };
   const u = new URL(opened.url);
-  const at = new URL(origin);
-  return { ...opened, url: `${at.origin}${u.pathname}${u.search}${u.hash}` };
+  const at = new URL(`${new URL(origin).origin}${u.pathname}${u.search}${u.hash}`);
+  if (opened.ticket) at.searchParams.set('beluga_ticket', opened.ticket);
+  return { ...opened, url: at.toString() };
 }

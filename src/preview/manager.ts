@@ -280,6 +280,12 @@ export class PreviewManager {
     private readonly opts: { readonly idleMs?: number; readonly maxLive?: number; readonly fetcher?: typeof fetch } = {},
   ) {}
 
+  /** A ticket for its frame at the public origin, when there is one (server.ts). */
+  private ticketFor(id: string): { readonly ticket?: string } {
+    const ticket = this.server.ticket(id);
+    return ticket ? { ticket } : {};
+  }
+
   /**
    * Where the server listens and the worktrees with a preview live now: on one of your computers,
    * the app forwards that port to the Mac that shows them (src/machines/forward.ts).
@@ -306,7 +312,7 @@ export class PreviewManager {
       const live = (this.byKey.get(key) as LivePage | undefined) ?? this.keep(new LivePage(key, root, found.abs));
       live.lastUsed = Date.now();
       if (this.closed) return problem('off', 'Live previews are off', 'Turn them on in Settings › Experimental.');
-      return { ok: true, id: live.id, url: `${await this.server.origin()}/p/${live.id}/`, kind: 'html', version: live.version };
+      return { ok: true, id: live.id, url: `${await this.server.origin()}/p/${live.id}/`, kind: 'html', version: live.version, ...this.ticketFor(live.id) };
     }
     const info = await stat(found.abs);
     if (info.size > MAX_SOURCE) return problem('build', `${found.rel.split('/').pop()} is too big to preview`, 'Previews are for components, not whole bundles.');
@@ -354,6 +360,7 @@ export class PreviewManager {
       url: `${await this.server.origin()}/p/${live.id}/?v=${live.version}`,
       kind: 'component',
       version: live.version,
+      ...this.ticketFor(live.id),
       component: { name: comp.name, exports: components.map((c) => c.name), props: comp.props, framework, ...(wrapper ? { wrapper: path.relative(realpathSync(root), wrapper) } : {}) },
       props: live.props,
       // Every component of the file with its own samples, for Show All (React: one build has them all).

@@ -47,6 +47,8 @@ export interface PreviewOpened {
   readonly kind: 'component' | 'html' | 'url';
   /** Changes with each new build. */
   readonly version: number;
+  /** A one-time pass for its frame's first load at the public preview origin (src/preview/public.ts). */
+  readonly ticket?: string;
   /** The component drawn, the others the file exports, and its props. */
   readonly component?: {
     readonly name: string;

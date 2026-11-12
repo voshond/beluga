@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
@@ -23,6 +24,20 @@ export const PREVIEW_HOST = '127.0.0.1';
  * up under a new one each time. Taken (another Beluga, a demo): any free one.
  */
 export const PREVIEW_PORT = 47791;
+
+/** How long a ticket for the public origin may wait for its frame to load. */
+export const TICKET_MS = 2 * 60_000;
+/** The query parameter a frame's first load at the public origin carries its ticket in. */
+export const TICKET_PARAM = 'beluga_ticket';
+const PASS_COOKIE = 'beluga_preview';
+
+const cookieOf = (req: IncomingMessage, name: string): string | undefined => {
+  for (const part of (req.headers.cookie ?? '').split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k === name) return v.join('=');
+  }
+  return undefined;
+};
 
 /** Who may frame a preview: the Mac app (tauri://localhost), its dev server, the demo's browser. */
 export const FRAME_ANCESTORS = "tauri://localhost http://tauri.localhost https://tauri.localhost http://localhost:* http://127.0.0.1:*";
@@ -117,6 +132,9 @@ export class PreviewServer {
   private port?: number;
   private starting?: Promise<number>;
   private readonly sites = new Map<string, PreviewSite>();
+  /** At the public origin: each preview's pass (its cookie), and the one-time tickets that hand it out. */
+  private readonly passes = new Map<string, string>();
+  private readonly tickets = new Map<string, { readonly id: string; readonly until: number }>();
 
   /** `port`: the one to ask for first (0: any free one). `pub`: also reached at a public origin (public.ts). */
   constructor(
@@ -145,6 +163,46 @@ export class PreviewServer {
 
   remove(id: string): void {
     this.sites.delete(id);
+    this.passes.delete(id);
+    for (const [t, v] of this.tickets) if (v.id === id) this.tickets.delete(t);
+  }
+
+  /**
+   * A one-time ticket for preview `id` at the public origin, handed out only through `preview.open`
+   * (a signed-in Beluga session): its frame's first load trades it for the preview's cookie.
+   * Undefined without a public origin (loopback needs none).
+   */
+  ticket(id: string): string | undefined {
+    if (!this.pub) return undefined;
+    const now = Date.now();
+    for (const [t, v] of this.tickets) if (v.until < now) this.tickets.delete(t);
+    if (!this.passes.has(id)) this.passes.set(id, randomBytes(24).toString('hex'));
+    const ticket = randomBytes(24).toString('hex');
+    this.tickets.set(ticket, { id, until: now + TICKET_MS });
+    return ticket;
+  }
+
+  /** At the public origin: let in with the preview's cookie, or trade a ticket for it (and say so). */
+  private admit(id: string, url: URL, req: IncomingMessage, res: ServerResponse): boolean {
+    const pass = this.passes.get(id);
+    if (pass && cookieOf(req, PASS_COOKIE) === pass) return true;
+    const ticket = url.searchParams.get(TICKET_PARAM);
+    const held = ticket ? this.tickets.get(ticket) : undefined;
+    if (!pass || !ticket || !held || held.id !== id || held.until < Date.now()) {
+      send(res, 401, 'text/plain', 'Open this preview from Beluga');
+      return false;
+    }
+    this.tickets.delete(ticket);
+    url.searchParams.delete(TICKET_PARAM);
+    const secure = this.pub?.origin.startsWith('https:') ? '; Secure' : '';
+    res.writeHead(303, {
+      location: `${url.pathname}${url.search}`,
+      'set-cookie': `${PASS_COOKIE}=${pass}; Path=/p/${id}/; HttpOnly; SameSite=Lax${secure}`,
+      'cache-control': 'no-store',
+      'referrer-policy': 'no-referrer',
+    });
+    res.end();
+    return false;
   }
 
   private start(): Promise<number> {
@@ -183,6 +241,7 @@ export class PreviewServer {
     const m = /^\/p\/([0-9a-f]{32})\/(.*)$/.exec(url.pathname);
     const site = m ? this.sites.get(m[1]!) : undefined;
     if (!site) return send(res, 404, 'text/plain', 'This preview has closed');
+    if (this.pub && host === this.pub.host && !this.admit(m![1]!, url, req, res)) return;
     try {
       if (!(await site.serve(`${m![2]!}${url.search}`, req, res))) send(res, 404, 'text/plain', 'Not part of this preview');
     } catch {
