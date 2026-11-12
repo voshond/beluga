@@ -111,7 +111,20 @@ export const checkFailed = (c: PrCheck): boolean => c.state === 'completed' && F
  * services (a commit status) aren't Actions runs, so they aren't here.
  */
 export function failedRunIds(pr: Pick<PullRequest, 'checkRuns'>): number[] {
-  const ids = (pr.checkRuns ?? []).filter(checkFailed).map((c) => Number(/\/actions\/runs\/(\d+)/.exec(c.url ?? '')?.[1]));
+  return runIdsOf(pr, checkFailed);
+}
+
+/**
+ * The GitHub Actions runs behind a PR's checks that haven't finished (queued or running): what
+ * Merge Now, Skipping Checks cancels once the PR merged, since nothing waits on them anymore.
+ */
+export function runningRunIds(pr: Pick<PullRequest, 'checkRuns'>): number[] {
+  return runIdsOf(pr, (c) => c.state !== 'completed');
+}
+
+/** The Actions run ids (each once) in the pages of the checks that `keep` picks. */
+function runIdsOf(pr: Pick<PullRequest, 'checkRuns'>, keep: (c: PrCheck) => boolean): number[] {
+  const ids = (pr.checkRuns ?? []).filter(keep).map((c) => Number(/\/actions\/runs\/(\d+)/.exec(c.url ?? '')?.[1]));
   return [...new Set(ids.filter((n) => Number.isSafeInteger(n) && n > 0))];
 }
 
@@ -188,7 +201,7 @@ export function branchState(state: Pick<DomainState, 'projects' | 'gh' | 'prs' |
   };
   const finish: BranchStep[] = [archive, { id: 'continue_after_merge', label: 'Continue After Merge…', hint: `Keep working here instead: start ${ws.branch} again from the latest ${into}, keeping the conversation; the next change gets a new PR` }, remove];
   const auto: BranchStep = { id: 'merge_auto', label: 'Merge When Ready', hint: `Beluga merges PR #${pr?.number} once its checks pass, and tells you if they fail` };
-  const admin: BranchStep = { id: 'merge_admin', label: 'Merge Now, Skipping Checks', hint: 'Past its checks and reviews (needs admin rights on the repository)', danger: true };
+  const admin: BranchStep = { id: 'merge_admin', label: 'Merge Now, Skipping Checks', hint: 'Past its checks and reviews, and stops the checks still running (needs admin rights on the repository)', danger: true };
   const openPr: BranchStep | false = Boolean(pr) && { id: 'open_pr', label: `Open PR #${pr?.number}`, hint: 'Its checks, review and every way to merge' };
 
   const conflicts = state.conflicts[ws.id] ?? [];

@@ -7,7 +7,7 @@ import { type CameraSize, type LineState, Peer } from './peer.js';
 import { demoCamera, demoClicked, demoPointer, demoScreen, demoVoice } from './demo-media.js';
 import { NoiseFilter } from './noise-filter.js';
 import { repeat } from './repeat.js';
-import { wakeSound } from './ringtone.js';
+import { setCallSpeaker, wakeSound } from './ringtone.js';
 import { type NotePhrase, Scribe, type Words, demoPhrases, scribeModels } from './scribe.js';
 import { type ScribeStatus, bestModel, pickScribe } from '@beluga/shared/scribe-plan.js';
 import type { LanguageCount } from '@beluga/shared/call-language.js';
@@ -136,6 +136,8 @@ export class CallEngine {
   private readonly offs: Array<() => void> = [];
 
   constructor(private readonly client: SocketClient) {
+    // The ringback and the bells come out of the speaker you picked, with the voices.
+    setCallSpeaker(this.speakerId);
     this.offs.push(
       client.store.subscribe(() => this.follow()),
       client.onIntent((i) => this.onIntent(i)),
@@ -255,6 +257,7 @@ export class CallEngine {
   pickSpeaker(id: string | undefined): void {
     this.speakerId = id;
     writePref(SPEAKER_PREF, id);
+    setCallSpeaker(id);
     // Back to macOS's own is the only time the default is asked for by name.
     for (const el of this.audio.values()) sink(el, id ?? '');
   }

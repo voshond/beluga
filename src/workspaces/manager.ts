@@ -1724,10 +1724,10 @@ export class WorkspaceManager {
   }
 
   /** Copy a worktree's env changes back into the main folder; they're in step again, so nothing is asked. */
-  applyEnvBack(id: string): number {
+  applyEnvBack(id: string, opts: { readonly removed?: boolean } = {}): number {
     const ws = this.require(id);
     const changes = this.envChanges(id, true);
-    applyEnvChanges(ws.path, ws.projectRoot, changes);
+    applyEnvChanges(ws.path, ws.projectRoot, changes, opts);
     const files = changes.map((c) => c.file);
     this.patchRecord(id, { envSnapshot: { ...ws.envSnapshot, ...envHashes(ws.path, files) }, envKept: dropKeys(ws.envKept, files) });
     return changes.length;

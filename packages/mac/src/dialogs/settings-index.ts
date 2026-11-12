@@ -245,8 +245,7 @@ export const SETTINGS: readonly Entry[] = [
   ]),
 
   // Environment
-  ...rows('environment', undefined, [['Variables for', 'Yours, or one project’s workspaces.', 'env variables scope project api keys']]),
-  ...rows('environment', 'Worktrees', [['New keys go to the main folder', 'A key a worktree adds to its .env goes to the main folder too.', '.env worktree keys']]),
+  group('environment', 'Projects', 'Each project’s own variables, beside its .env: open one from its row.', 'env variables scope project api keys .env.example worktree'),
   ...rows('environment', 'Your agent', [['Read .env files without asking', 'Your agent reads a project’s .env without a request.', 'dotenv secrets read env files']]),
   ...rows('environment', 'Database', [['Postgres for your agent’s views', 'The database your agent’s views read.', 'postgres database sql supabase database url']]),
 

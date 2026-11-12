@@ -6,6 +6,7 @@ import { Icon, type IconName } from '../components/Icon.js';
 import { ActionsContext, type ActionItem } from '../components/SpecMenu.js';
 import { cx } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
+import { openSheet } from '../lib/sheets.js';
 import { type ReactNode, memo, useEffect, useRef, useState } from 'react';
 import { toast, useApp, useBeluga } from '../lib/beluga.js';
 import { sameDeep } from '../lib/stable.js';
@@ -47,6 +48,8 @@ export function workspaceItems(state: AppState, ws: Workspace, run: ReturnType<t
     ...(ws.kind === 'chat' && regenerate ? [{ label: regenerate.pending ? 'Regenerating title…' : 'Regenerate title', icon: 'refresh' as const, disabled: regenerate.pending, onSelect: regenerate.run }] : []),
     // Its colour in the sidebar (a project's, unless it has its own).
     ...(color ? [color] : []),
+    // Variables for this worktree alone, over its project's (BLG-924).
+    ...(ws.kind === 'worktree' && !ws.archived && !isAgentWorktree(ws) ? [{ label: 'Environment…', icon: 'lock' as const, onSelect: () => openSheet({ kind: 'worktree_env', workspaceId: ws.id }) }] : []),
     // Its link, to mention it in another chat (BLG-878).
     ...copyLinkItems(ws, client).map((item) => ({ ...item, separate: false })),
     ...sections.flatMap((section) =>

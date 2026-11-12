@@ -617,6 +617,11 @@ export async function rerunFailed(dir: string, runId: number): Promise<void> {
   await runGh(['run', 'rerun', String(runId), '--failed'], dir, 30_000);
 }
 
+/** Stop a workflow run that's still queued or running (`gh run cancel <id>`): a skipped check after Merge Now, Skipping Checks. Throws gh's error. */
+export async function cancelRun(dir: string, runId: number): Promise<void> {
+  await runGh(['run', 'cancel', String(runId)], dir, 30_000);
+}
+
 export type PrStepKind = 'update_branch' | 'ready';
 
 /** Take one of those steps. Throws gh's error. */

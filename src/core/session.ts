@@ -1,4 +1,5 @@
 import { actingVia, asActingAgent } from './acting-agent.js';
+import { takeYourHand } from './by-hand.js';
 import { closePreviews } from '../preview/off.js';
 import { experimentOn } from '../shared/experiments.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -677,6 +678,8 @@ export class Session {
   requestAgent(target: string, prompt: string, viaAgent: boolean, channel = 'room', urgent = false, project?: string, requestId: string = randomUUID(), agent?: AgentRef, via: MessageVia | undefined = actingVia(), chain?: ChatChain): string {
     const plan = this.store.getState().planMode[channel] === true;
     this.questions.track(requestId, target, channel);
+    // The message you just sent from a screen (core/by-hand.ts): its run uses Claude in Chrome as usual. Before it's sent: the run may start at once.
+    if (target === this.selfId && !via && !chain && takeYourHand(prompt)) this.host.markYours(requestId);
     // "@bob:codex" (BLG-520): the agent rides the ask, in the room only; their Mac runs it or says which one did (see namedAsks).
     const named = agent && channel === 'room' ? { agent: { runtime: agent.runtime, label: agent.label, ...(agent.model ? { model: agent.model } : {}) } } : {};
     if (named.agent) {

@@ -1,6 +1,6 @@
 import { NewLabelSheet } from '../../tasks/NewLabelSheet.js';
 import { ProjectContextSheet } from '../../tasks/ProjectContextSheet.js';
-import { EnvironmentSheet } from '../EnvironmentSheet.js';
+import { EnvironmentSheet, WorktreeEnvSheet } from '../EnvironmentSheet.js';
 import { ProjectAgentSheet } from '../ProjectAgentSheet.js';
 import { NewTaskSheet } from '../../tasks/NewTaskSheet.js';
 import { BoardSheet } from '../../tasks/boards.js';
@@ -205,9 +205,11 @@ export function NativeSheets() {
     case 'project_context':
       return <ProjectContextSheet key={sheet.projectId} projectId={sheet.projectId} close={close} />;
     case 'project_env':
-      return <EnvironmentSheet key={sheet.projectId} projectId={sheet.projectId} close={close} />;
+      return <EnvironmentSheet key={sheet.projectId} projectId={sheet.projectId} {...(sheet.tab ? { tab: sheet.tab } : {})} close={close} />;
     case 'project_agent':
       return <ProjectAgentSheet key={sheet.projectId} projectId={sheet.projectId} close={close} />;
+    case 'worktree_env':
+      return <WorktreeEnvSheet key={sheet.workspaceId} workspaceId={sheet.workspaceId} close={close} />;
     case 'new_plan':
       return <NewPlanSheet {...(sheet.projectId ? { projectId: sheet.projectId } : {})} {...(sheet.projectIds ? { projectIds: sheet.projectIds } : {})} close={close} />;
     case 'new_sentinel':
