@@ -131,10 +131,10 @@ export function Sidebar() {
     <SidebarChatSelection>
     {chatDrag}
     <nav ref={drop.ref} className={cx(s.sidebar, drop.over && s.dropping)} aria-label="Sidebar">
-      <div className={s.titlebar} data-tauri-drag-region>
+      <div className={s.titlebar} data-tauri-drag-region="deep">
         {/* The traffic lights' place; in a browser, which has no menu bar, the menu bar's button (Settings and the rest). */}
         {inApp() && !ownTitleBar() ? (
-          <span className={s.trafficSpace} data-tauri-drag-region />
+          <span className={s.trafficSpace} />
         ) : (
           <span className={s.appMenu}>
             <WindowControls />

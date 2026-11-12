@@ -92,7 +92,7 @@ function Shell({ title, subtitle, center, right, headerRef }: { title: ReactNode
   // Only what every view needs: search, what's new, the panel. The terminal (⌘J) is a panel tab,
   // and everything you can do is ⌘K and the menu bar.
   return (
-    <header ref={headerRef} className={cx(s.toolbar, !prefs.sidebar && s.noSidebar)} data-tauri-drag-region>
+    <header ref={headerRef} className={cx(s.toolbar, !prefs.sidebar && s.noSidebar)} data-tauri-drag-region="deep">
       {prefs.sidebar ? null : (
         <span className={s.lead}>
           {/* The sidebar's menu-bar button (a browser's), beside it while the sidebar is hidden. */}
@@ -103,14 +103,14 @@ function Shell({ title, subtitle, center, right, headerRef }: { title: ReactNode
         </span>
       )}
       <NavButtons />
-      <div className={s.titles} data-tauri-drag-region>
+      <div className={s.titles}>
         <div className={s.title}>
           <MachineTag />
           {title}
         </div>
         {subtitle ? <div className={s.subtitle}>{subtitle}</div> : null}
       </div>
-      <div className={s.center} data-tauri-drag-region>
+      <div className={s.center}>
         {center}
       </div>
       <div className={s.right}>
