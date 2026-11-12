@@ -441,7 +441,10 @@ conversation, and it's the same chat.
   link to send it on) doesn't start, and the Call button says so before you press it. The caller
   hears it ring at the others' (a bright ring-ring, then a moment of quiet, as a phone does) until
   someone joins; the window wakes
-  its sound on that click, since WebKit keeps sound started without one silent.
+  its sound on that click, since WebKit keeps sound started without one silent. The ringback and
+  the bells as people come and go play as a stream in a hidden `<audio>`, like the voices, from the
+  speaker picked for calls: with the microphone open, macOS's voice processing turns down anything
+  else the window plays, and the caller heard no ringback.
 - **Missed calls.** A ring that stops before you answered or said Not Now (nobody picked up in
   45 s, or the caller hung up) leaves "Ann tried calling you at 14:05" where it rang in the
   conversation, with Call Back, and in the inbox (core/calls/missed.ts, kept in

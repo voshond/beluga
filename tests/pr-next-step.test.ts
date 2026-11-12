@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { branchState, failedRunIds, prBlocker } from '../src/core/branch-state.js';
+import { branchState, failedRunIds, prBlocker, runningRunIds } from '../src/core/branch-state.js';
 import { Store, initialState } from '../src/core/store.js';
 import type { PrCheck, PullRequest } from '../src/core/work-store.js';
 import type { WorkspaceController } from '../src/core/workspace-controller.js';
@@ -24,7 +24,7 @@ vi.mock('node:child_process', async (orig) => ({
     queueMicrotask(() => cb(null, '', ''));
   },
 }));
-const { parsePr, rerunFailed } = await import('../src/workspaces/pr.js');
+const { cancelRun, parsePr, rerunFailed } = await import('../src/workspaces/pr.js');
 
 const ws = (over: Partial<Workspace> = {}): Workspace => ({ id: 'w1', projectRoot: '/r', projectId: 'p1', name: 'w', path: '/r/w', kind: 'worktree', createdAt: 0, branch: 'feat/x', base: 'main', external: false, status: { changed: 0, ahead: 2, behind: 0 }, ...over });
 const project = (w: Workspace): Project => ({ id: 'p1', name: 'app', root: '/r', base: 'main', workspaces: [w] });
@@ -121,6 +121,21 @@ describe('failedRunIds / rerunFailed', () => {
     exec.calls.length = 0;
     await rerunFailed('/code/auth', 11);
     expect(exec.calls).toEqual([{ cmd: 'gh', args: ['run', 'rerun', '11', '--failed'], cwd: '/code/auth' }]);
+  });
+});
+
+describe('runningRunIds / cancelRun', () => {
+  it('the Actions runs behind the queued and running checks, each once; not finished ones or commit statuses', () => {
+    const status: PrCheck = { name: 'vercel', state: 'in_progress', url: 'https://vercel.com/o/r/deploy' };
+    const checks = [run('a', 'in_progress', undefined, 21), run('b', 'queued', undefined, 21), run('c', 'queued', undefined, 22), run('d', 'completed', 'success', 23), run('e', 'completed', 'failure', 24), status];
+    expect(runningRunIds({ checkRuns: checks })).toEqual([21, 22]);
+    expect(runningRunIds({})).toEqual([]);
+  });
+
+  it('runs gh run cancel in the worktree', async () => {
+    exec.calls.length = 0;
+    await cancelRun('/code/auth', 21);
+    expect(exec.calls).toEqual([{ cmd: 'gh', args: ['run', 'cancel', '21'], cwd: '/code/auth' }]);
   });
 });
 

@@ -16,9 +16,9 @@ import { parseToolReport, toolTrailLine } from '../workspaces/toolbox.js';
 import { formatBytes, measureAll } from '../workspaces/disk.js';
 import { contentIn, resetTo } from '../workspaces/git.js';
 import { fetchRemote } from '../workspaces/sync.js';
-import { type MergeOptions, type MergeProblem, type PrStepKind, buildPrPrompt, catchUpPrompt, commitSubjects, createPr, disableAutoMerge, prFromCommits, titleOfBranch, resolvePrConflictsPrompt, customPrPrompt, deleteRemoteBranch, ensurePrPromptFile, explainMergeError, findPr, fixChecksPrompt, forgetGh, ghState, gitSetup, hasGh, headCarries, listPrs, useHttpsRemote, mergePr, mergeToBase, prStep, pushForPr, remoteRef, rerunFailed, resetPrPrompt, setPrTarget, unpushedCommits } from '../workspaces/pr.js';
+import { type MergeOptions, type MergeProblem, type PrStepKind, buildPrPrompt, catchUpPrompt, commitSubjects, createPr, disableAutoMerge, prFromCommits, titleOfBranch, resolvePrConflictsPrompt, customPrPrompt, deleteRemoteBranch, ensurePrPromptFile, explainMergeError, findPr, fixChecksPrompt, forgetGh, ghState, gitSetup, hasGh, headCarries, listPrs, useHttpsRemote, mergePr, mergeToBase, prStep, pushForPr, remoteRef, rerunFailed, cancelRun, resetPrPrompt, setPrTarget, unpushedCommits } from '../workspaces/pr.js';
 import { prTargetOf, pullOfBranch } from '../workspaces/github.js';
-import { failedRunIds, prOnOriginal } from './branch-state.js';
+import { failedRunIds, prOnOriginal, runningRunIds } from './branch-state.js';
 import { PROJECT_FILES, type ProjectScripts, checkSetup, projectFileName, scriptEnv } from '../workspaces/scripts.js';
 import { clonedSetup } from '../workspaces/setup-clone.js';
 import type { ScriptFix, SetupFix, WorkedOutScripts } from '../agent/setup-fixer.js';
@@ -102,6 +102,8 @@ export interface WorkbenchDeps {
   readonly pushForPr?: typeof pushForPr;
   /** Re-run a workflow run's failed jobs (tests stand in for gh). */
   readonly rerunFailed?: typeof rerunFailed;
+  /** Cancel a workflow run still going (tests stand in for gh). */
+  readonly cancelRun?: typeof cancelRun;
   readonly disableAutoMerge?: (dir: string, number: number) => Promise<void>;
   /** Where a branch was last pushed to (its remote-tracking ref), to notice pushes. */
   readonly remoteRef?: (dir: string, branch: string) => string | undefined;
@@ -188,7 +190,7 @@ export function fixFailedPrompt(kind: 'setup' | 'run', command: string, code: nu
   return [
     `${what} didn't work: \`${command}\` stopped with exit code ${code ?? '?'}.`,
     tail ? `The end of its output:\n\n\`\`\`\n${tail}\n\`\`\`` : '',
-    `Find out why and fix it, so \`${command}\` works here. If the command itself is wrong, say which one is right: it can be set in the project's ⋯ menu (Setup and run commands), or in its beluga.json under "scripts" for everyone.`,
+    `Find out why and fix it, so \`${command}\` works here. If the command itself is wrong, say which one is right: it can be set in the project's ⋯ menu (Project Settings…), or in its beluga.json under "scripts" for everyone.`,
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -856,12 +858,27 @@ export class Workbench {
       if (merged && opts.deleteBranch) {
         await (this.deps.deleteRemoteBranch ?? deleteRemoteBranch)(ws.path, ws.branch).catch((err: unknown) => this.deps.toast(`Merged, but the branch on GitHub wasn’t deleted: ${err instanceof Error ? err.message : String(err)}`, 'warn'));
       }
-      const message = merged ? `Merged PR #${pr.number}` : opts.auto ? `PR #${pr.number} merges when its checks pass` : `PR #${pr.number} is queued to merge`;
+      // Merged past its checks: the ones still running check nothing anymore, so they stop (no CI minutes spent on them).
+      const stopped = merged && opts.admin ? await this.cancelRunning(ws, pr) : 0;
+      const message = merged ? `Merged PR #${pr.number}${stopped ? `, and stopped its ${stopped === 1 ? 'running check' : `${stopped} running checks`}` : ''}` : opts.auto ? `PR #${pr.number} merges when its checks pass` : `PR #${pr.number} is queued to merge`;
       this.deps.toast(message, 'success');
       return { ok: true, result: merged ? 'merged' : 'queued', message };
     } finally {
       this.merging.delete(id);
     }
+  }
+
+  /**
+   * Cancel the Actions runs still going on a PR just merged past its checks, as GitHub saw it
+   * before and after the merge (a run may have started in between) → how many stopped. A run
+   * that finished meanwhile can't be cancelled: that's fine, the merge stands either way.
+   */
+  private async cancelRunning(ws: Workspace, before: PullRequest): Promise<number> {
+    const after = this.deps.store.getState().prs[ws.id];
+    const runs = [...new Set([...runningRunIds(before), ...(after ? runningRunIds(after) : [])])];
+    const cancel = this.deps.cancelRun ?? cancelRun;
+    const done = await Promise.all(runs.map((run) => cancel(ws.path, run).then(() => true, () => false)));
+    return done.filter(Boolean).length;
   }
 
   /**
@@ -1754,7 +1771,7 @@ export class Workbench {
           said.push(`run \`${found.run.command}\``);
         } else if (found.run) said.push('nothing to run');
         this.remember(project.id, learned, mine);
-        if (said.length) this.deps.toast(`${project.name}: ${said.join(', ')}. Change them in its ⋯ menu (Setup and run commands)`, 'success');
+        if (said.length) this.deps.toast(`${project.name}: ${said.join(', ')}. Change them in its ⋯ menu (Project Settings…)`, 'success');
       })
       .catch(() => undefined)
       .finally(() => this.workingOut.delete(project.id));
@@ -1786,11 +1803,11 @@ export class Workbench {
       if (looking && ws) {
         void looking.then(() => {
           if (this.manager.find(wsId) && project && this.manager.scripts(project.id).run) this.run(wsId);
-          else this.deps.toast(`${this.agent()} couldn't find a way to run this project. Set one in its ⋯ menu (Setup and run commands)`, 'warn');
+          else this.deps.toast(`${this.agent()} couldn't find a way to run this project. Set one in its ⋯ menu (Project Settings…)`, 'warn');
         });
         return undefined;
       }
-      this.deps.toast("This project has no run command. Set one in its ⋯ menu (Setup and run commands)", 'warn');
+      this.deps.toast("This project has no run command. Set one in its ⋯ menu (Project Settings…)", 'warn');
       return undefined;
     }
     const current = this.deps.terminals?.get(runId(wsId));

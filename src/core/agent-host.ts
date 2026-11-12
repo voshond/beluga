@@ -4,6 +4,8 @@ import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import type { AgentBackend, AgentPlace, AgentRunInput, BoardTools, FollowUp, LiveStatus, MacTools, RunProcess, Steer, TerminalLaunch, TerminalSink } from '../agent/types.js';
 import { ALWAYS_ASK_YOU, writesCode } from '../agent/policy.js';
+import { type ChromeAccess, chromeCard, chromeOffByFlags } from '../agent/chrome.js';
+import { outsideYourHand } from './by-hand.js';
 import { type AgentRef, type BodyInput, type BodyOf, CLAUDE_AGENT, MAX_TEXT, type MessageVia } from '../protocol.js';
 import type { People } from './people.js';
 import type { QuestionBroker } from './questions.js';
@@ -283,6 +285,13 @@ function withoutAskOnly<T extends { readonly askOnly?: unknown }>(place: T): T {
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
+/** Who a Chrome card says wants your Chrome (agent/chrome.ts). */
+function chromeAsker(own: boolean, external: string | undefined, requesterName: string, sentinelRun: boolean | undefined): string {
+  if (external) return `${external}, your external agent,`;
+  if (sentinelRun) return 'Your agent (in a Sentinel run)';
+  return own ? 'Your agent' : `Your agent (working for ${requesterName})`;
+}
+
 /**
  * Your Claude serving requests (yours and other people's): who may use it, the queue, the
  * approvals you're asked for, running it in the right place with the right model, and
@@ -296,6 +305,8 @@ export class AgentHost {
   currentChannel = 'room';
   private readonly approvals = new Map<string, (answer: ApprovalAnswer) => void>();
   private readonly alwaysTools = new Set<string>();
+  /** Requests you sent from a screen yourself (core/by-hand.ts): their runs use Claude in Chrome as usual. */
+  private readonly yourRequests = new Set<string>();
   /** "person:project" pairs you said Always to (this session). */
   private readonly alwaysProjects = new Set<string>();
   /**
@@ -1607,7 +1618,7 @@ export class AgentHost {
       // The plan's head Claude orchestrates: it may change things where it runs (your approvals and
       // Beluga's secrets rules still apply), not only read like other main-folder chats.
       const runPlace = plans?.tools && place?.askOnly && !place.syncMain ? withoutAskOnly(place) : place;
-      const final = await Promise.race([gone, exited, agent.run({
+      const final = await Promise.race([gone, exited, outsideYourHand(() => agent.run({
         ...(scratch ? { scratchDir: scratch } : {}),
         ...this.links.linkOf(body.channel),
         ...(board?.tools ? { board: board.tools } : {}),
@@ -1683,6 +1694,8 @@ export class AgentHost {
         ...(routed ? { model: routed.model, effort: place?.effort ?? routed.effort, routing: routed.routing } : this.modelFor(place?.model, place?.agent ?? named, place?.effort)),
         // Your MCP servers (your logins: Figma, Linear…) are for runs you asked for, never a friend's.
         ...(yours ? { ownerMcp: true } : {}),
+        // Claude in Chrome: as usual on what you sent yourself, asking you on anything else (a Sentinel run included).
+        ...this.chromeFor({ requestId: body.requestId, from, ...(external ? { external } : {}), guest: from !== this.selfId && Boolean(this.deps.isGuest?.(from)), automatic: Boolean(sentinel?.inRun), channel: body.channel, who: chromeAsker(from === this.selfId, external ? requesterName : undefined, requesterName, sentinel?.inRun) }),
         // Your own flags for `claude` and `codex` (Settings › Agents), never on a friend's run or an agent's below full.
         ...(yours ? this.launchArgs() : {}),
         ...(yours ? this.machineBrief() : {}),
@@ -1690,7 +1703,7 @@ export class AgentHost {
         // Your own runs also get adb on PATH (and ANDROID_SERIAL) when a phone is set up, so Bash can drive it (BLG-174).
         ...(yours && (this.deps.envFor || phone?.env) ? { env: { ...this.deps.envFor?.(body.channel, place?.cwd), ...(phone?.env ?? {}), ...tag } } : worktree || remote ? { env: tag } : {}),
         ...this.compactor.threshold(),
-      })]);
+      }))]);
       if (controller.signal.aborted) throw new Error('aborted');
       this.emitAgent(body.requestId, from, 'done', final || '(done)', body.channel);
     } catch (err) {
@@ -1815,6 +1828,8 @@ export class AgentHost {
       askUser: (question) => this.deps.questions.ask(this.selfId, requestId, channel, question),
       runCards: true,
       ...(opts.defaultModel ? this.modelFor(opts.place?.model, opts.place?.agent, opts.place?.effort) : {}),
+      // A dialogue's turn is your agents talking: Chrome asks you first.
+      ...this.chromeFor({ from: this.selfId, guest: false, automatic: true, channel, who: 'Your agent (in a dialogue)' }),
     });
     return { text, tokens };
   }
@@ -1822,6 +1837,30 @@ export class AgentHost {
   private machineBrief(): Pick<AgentRunInput, 'machineBrief'> {
     const { machineNote, machineNoteOn } = this.store.getState().prefs;
     return machineNoteOn && machineNote.trim() ? { machineBrief: buildMachineAppend(machineNote) } : {};
+  }
+
+  /** A request you sent from a screen yourself (see Session.requestAgent). */
+  markYours(requestId: string): void {
+    this.yourRequests.add(requestId);
+    if (this.yourRequests.size > 500) this.yourRequests.delete(this.yourRequests.values().next().value!);
+  }
+
+  /**
+   * Claude in Chrome for a run (agent/chrome.ts). Off for a guest, and for every run when your
+   * launch flags say `--no-chrome`. As usual when you sent this request yourself; anything else (a
+   * Sentinel firing, a friend, an external agent, a thread, a plan's step, a dialogue) asks you
+   * first, once per request, with no Always: even a fully trusted friend's, as your Chrome is signed in as you.
+   */
+  private chromeFor(run: { readonly requestId?: string; readonly from: string; readonly external?: string; readonly guest: boolean; readonly automatic: boolean; readonly channel: string; readonly who: string }): { chrome?: ChromeAccess } {
+    if (run.guest || chromeOffByFlags(this.store.getState().prefs.claudeArgs)) return {};
+    const typed = run.requestId !== undefined && this.yourRequests.has(run.requestId);
+    if (typed && run.from === this.selfId && !run.external && !run.automatic) return { chrome: {} };
+    const requester = run.external ?? run.from;
+    const ask = async (toolName: string, input: Record<string, unknown>): Promise<boolean> => {
+      const card = chromeCard(run.who, toolName, input);
+      return (await this.askTool(requester, card.title, card.detail, run.channel, { once: true })) !== 'no';
+    };
+    return { chrome: { ask } };
   }
 
   /** Your launch flags per runtime (Settings › Agents › Launch flags), when you set any. */
