@@ -275,7 +275,7 @@ function Pane({ pane, lead, style, badges, settled }: { pane: PaneId; lead: bool
     <section className={cx(s.pane, !open && s.paneClosed, dock && s.dock, dock && !open && s.dockClosed)} style={open ? style : undefined} aria-label={pane === 'top' ? undefined : 'Bottom of the panel'} data-pane={pane}>
       <header
         className={lead ? s.head : cx(s.paneHead, dock && s.dockHead)}
-        {...(lead ? { 'data-tauri-drag-region': true } : {})}
+        {...(lead ? { 'data-tauri-drag-region': 'deep' } : {})}
         {...(dock && !open ? { onClick: (e: React.MouseEvent) => e.target === e.currentTarget && setPrefs({ bottomOpen: true }), title: `Show the terminal dock${shortcutKeys('toggle-dock') ? ` (${shortcutKeys('toggle-dock')})` : ''}` } : {})}
       >
         {dock ? <Icon name="terminal" size={12} className={s.dockMark} /> : null}
