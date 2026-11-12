@@ -1,4 +1,5 @@
 import { useProjectIcon } from '../lib/projects.js';
+import { type RowColor, tileHue } from '../lib/row-colors.js';
 import { cx } from './ui.js';
 import s from './ProjectIcon.module.css';
 
@@ -15,14 +16,14 @@ function hue(name: string): number {
  */
 /**
  * `id`: a project's id, or `path:<folder>` for a folder that isn't one yet. `round`: a circle (in a
- * stack of repos), an icon filling it over a grey.
+ * stack of repos), an icon filling it over a grey. `color`: one you gave the project, for its letter tile.
  */
-export function ProjectIcon({ id, name, size = 16, round }: { id: string; name: string; size?: number; round?: boolean }) {
+export function ProjectIcon({ id, name, size = 16, round, color }: { id: string; name: string; size?: number; round?: boolean; color?: RowColor | undefined }) {
   const icon = useProjectIcon(id, round);
   const radius = round ? '50%' : Math.round(size * 0.24);
   if (icon) return <img className={cx(s.image, round && s.round)} src={icon} alt="" width={size} height={size} style={{ borderRadius: radius }} draggable={false} />;
   return (
-    <span className={s.tile} style={{ width: size, height: size, borderRadius: radius, ['--h' as string]: hue(name) }} aria-hidden="true">
+    <span className={s.tile} style={{ width: size, height: size, borderRadius: radius, ['--h' as string]: color ? tileHue(color) : hue(name) }} aria-hidden="true">
       {/* Before the icon is known, an empty tile (no flash of a letter, then a picture). */}
       {icon === null ? (
         // Centred on the letter's own height (half a capital under the middle), not the font's line box.

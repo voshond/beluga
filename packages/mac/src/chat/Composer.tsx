@@ -689,6 +689,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
           <textarea
             ref={ref}
             className={`${s.input} ${s.overHighlight} selectable`}
+            data-composer
             rows={1}
             value={buffer}
             disabled={readOnly}

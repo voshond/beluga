@@ -44,6 +44,7 @@ import { useChunkCare } from './lib/lazy-view.js';
 import { useState } from 'react';
 import { Onboarding, useOnboarding } from './onboarding/Onboarding.js';
 import { Lightbox } from './chat/ChatImages.js';
+import { SelectionBar } from './components/SelectionBar.js';
 import s from './layout/Shell.module.css';
 import { CallLayer } from './call/CallLayer.js';
 
@@ -257,6 +258,8 @@ export function App() {
       {joining ? <JoinSheet invite={joining} onCancel={() => setJoining(undefined)} onJoin={() => void joinRoom(joining)} /> : null}
       {/* One per window, over whatever opened it (a chat, a sub-agent's activity, a graph). */}
       <Lightbox />
+      {/* Select text you're reading: Copy, Quote, Ask, with no right-click (BLG-917). */}
+      <SelectionBar />
       <Toasts />
       {/* Calls (BLG-706): this window's call engine, who rings you, the ringtone, the floating card. */}
       <CallLayer />

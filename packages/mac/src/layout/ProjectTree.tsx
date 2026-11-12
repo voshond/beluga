@@ -18,6 +18,7 @@ import { openProjectHome } from '../lib/project-home.js';
 import { openSheet } from '../lib/sheets.js';
 import { getPrefs, setPrefs, usePrefs } from '../lib/prefs.js';
 import { pickFolders, pickImage, reloadProjectIcon } from '../lib/projects.js';
+import { projectColorItem, useProjectColor } from './row-color-view.js';
 import { showUndo } from '../lib/undo-toast.js';
 import { useArrangeDrag } from './arrange-drag.js';
 import { GroupHeader, NewGroupRow, groupItems, isGroupOption, moveItems, moveKey, planAcrossItems } from './ProjectGroups.js';
@@ -171,6 +172,9 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
   const onHome = view.kind === 'project' && view.id === p.id;
   const hide = useHide();
   const iconItems = useIconItems(p);
+  // A colour you gave it: its row and its chats' and worktrees' wear it (a folder-less project has none).
+  const color = useProjectColor(p.root ? p.id : undefined);
+  const colorItems: ActionItem[] = p.root ? [projectColorItem(p.id, color)] : [];
   const insideTip = tallyTip(inside);
   const live = p.workspaces.filter((w) => !w.archived);
   // Not the main checkout (work happens in worktrees); questions asked in its folder stay, as chats.
@@ -212,7 +216,7 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
     if (into) await api.workspaces.moveProject(p.id, into);
   };
   const moveFolderItem: ActionItem[] = p.root ? [{ label: 'Move Folder…', icon: 'folder', disabled: busy, ...(busy ? { hint: 'Once your agent is done' } : {}), onSelect: () => void handleMoveFolder() }] : [];
-  const extra: ActionItem[] = [...shareItem, ...teamItems, ...importItem, ...envItem, ...moveFolderItem, ...showArchivedItem, ...cleanUpItem, ...moveItems(entries, item, arrange), ...groupItems(p, entries, arrange), ...githubItems, ...iconItems, { label: 'Hide Project', danger: true, separate: true, onSelect: () => hide(p) }, { label: 'Delete Project…', danger: true, onSelect: () => openSheet({ kind: 'delete_project', projectId: p.id }) }];
+  const extra: ActionItem[] = [...shareItem, ...teamItems, ...importItem, ...envItem, ...moveFolderItem, ...showArchivedItem, ...cleanUpItem, ...moveItems(entries, item, arrange), ...groupItems(p, entries, arrange), ...githubItems, ...iconItems, ...colorItems, { label: 'Hide Project', danger: true, separate: true, onSelect: () => hide(p) }, { label: 'Delete Project…', danger: true, onSelect: () => openSheet({ kind: 'delete_project', projectId: p.id }) }];
   const kids = depth + 2;
   // Nothing to unfold: no arrow (its place kept, so the icons stay in line).
   const sessions = useCcSessions();
@@ -227,6 +231,7 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
           data-drag={`project:${p.id}`}
           indent={depth}
           selected={onHome}
+          color={color}
           className={cx(side.projectRow, current && side.currentProject)}
           data-current={current || undefined}
           aria-expanded={foldable ? !fold.folded : undefined}
@@ -246,7 +251,7 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
               ) : (
                 <span className={s.foldButton} aria-hidden="true" />
               )}
-              <ProjectIcon id={p.id} name={p.name} size={16} />
+              <ProjectIcon id={p.id} name={p.name} size={16} color={color} />
             </span>
           }
           label={p.name}

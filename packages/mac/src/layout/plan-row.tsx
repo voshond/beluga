@@ -18,6 +18,7 @@ import { DotMark, nameClass, signalClass } from './signal-marks.js';
 import { triageItems } from './row-triage-actions.js';
 import { Row } from './sidebar-parts.js';
 import { planPlace } from './project-rows.js';
+import { useProjectColor } from './row-color-view.js';
 import m from './signal.module.css';
 
 /**
@@ -32,6 +33,8 @@ export function PlanRow({ plan, indent }: { plan: Plan; indent: number }) {
   const view = usePlanView(plan)!;
   const { open, openList } = usePlanActions();
   const uiPrefs = usePrefs();
+  // Its project's colour, so the project's rows line up as one rail.
+  const color = useProjectColor(plan.projectId);
   // Only what the row shows (not the whole state): drawn again when that changes (KLD-48).
   const selected = useApp((st) => planOfPlace(st.plans, st.board, st.view) === plan.id);
   // What's new at the plan's level (its own conversation); its tasks' worktrees only add a quiet dot (BLG-12).
@@ -59,6 +62,7 @@ export function PlanRow({ plan, indent }: { plan: Plan; indent: number }) {
       <Row
         indent={indent}
         selected={selected}
+        color={color}
         className={signalClass(signal, selected)}
         aria-label={title}
         data-plan-row={plan.id}
