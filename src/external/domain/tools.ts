@@ -994,6 +994,7 @@ export const NOT_EXPOSED: Readonly<Record<string, 'chat_only' | 'checker_only'>>
   // They act on the run or the chat they are called from, and an external agent has neither.
   send_chat: 'chat_only',
   continue_in_worktree: 'chat_only',
+  name_worktree: 'chat_only',
   end_dialogue: 'chat_only',
   run_for_me: 'chat_only',
   show: 'chat_only',

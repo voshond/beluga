@@ -23,7 +23,7 @@ import { PROJECT_FILES, type ProjectScripts, checkSetup, projectFileName, script
 import { clonedSetup } from '../workspaces/setup-clone.js';
 import type { ScriptFix, SetupFix, WorkedOutScripts } from '../agent/setup-fixer.js';
 import type { SetupTools } from '../agent/types.js';
-import { buildSetupAppend } from '../agent/prompt.js';
+import { buildNameAppend, buildSetupAppend } from '../agent/prompt.js';
 import { claudeCodeCommand } from '../agent/claude-code.js';
 import { CONTINUE_PROMPT } from '../shared/run-failure.js';
 import type { NoticeEvent } from './notify.js';
@@ -441,7 +441,7 @@ export class Workbench {
     const project = this.manager.list.find((p) => p.id === ws.projectId);
     // Read now, not from the last refresh: instructions saved a moment ago (the PR sheet) apply to this one.
     const scripts = project ? this.manager.scripts(project.id) : {};
-    const prompt = buildPrPrompt({ branch: ws.branch, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', projectPrompt: scripts.prPrompt, yourPrompt: scripts.yourPrPrompt, extra });
+    const prompt = buildPrPrompt({ branch: ws.branch, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', projectPrompt: scripts.prPrompt, yourPrompt: scripts.yourPrPrompt, extra, ...(ws.ticket ? { ticket: ws.ticket } : {}) });
     if (!this.deps.store.getState().prs[ws.id]) this.prAsked.add(ws.id);
     this.deps.controller.open(ws.id);
     const ask = (): void => this.deps.askClaude(prompt, `ws:${ws.id}`);
@@ -1834,8 +1834,10 @@ export class Workbench {
     const project = ws ? this.manager.list.find((p) => p.id === ws.projectId) : undefined;
     if (!ws || ws.kind === 'main' || !project?.root) return undefined;
     const now = this.manager.scripts(project.id).setup;
+    const nameable = ws.kind === 'worktree' && !ws.nameSetByUser;
     return {
-      brief: buildSetupAppend(project.name, now?.command, now?.source),
+      brief: buildSetupAppend(project.name, now?.command, now?.source) + (nameable ? `\n${buildNameAppend(ws.name)}` : ''),
+      ...(nameable ? { name: (name: string) => this.nameForRun(wsId, name) } : {}),
       set: (command, why) => {
         const value = command.trim();
         if (!value) return 'Give the whole setup command.';
@@ -1846,6 +1848,19 @@ export class Workbench {
         return `Saved: new worktrees of ${project.name} run \`${value}\` (the owner approves it once the first time it runs by itself).`;
       },
     };
+  }
+
+  /** Claude's name_worktree: the worktree's name once it knows the work. One you named stays; a pushed branch keeps its name. */
+  private async nameForRun(wsId: string, name: string): Promise<string> {
+    const before = this.manager.find(wsId);
+    if (!before || before.kind !== 'worktree') return 'This worktree is gone.';
+    if (before.nameSetByUser) return `The owner named this worktree "${before.name}": it keeps that name.`;
+    await this.manager.renameWorktree(wsId, name);
+    void this.deps.controller.refresh();
+    const after = this.manager.find(wsId) ?? before;
+    if (after.name === before.name) return `It stays "${after.name}" (that name, or nothing usable in "${name}").`;
+    const branch = after.branch === before.branch ? `; its branch ${after.branch ?? ''} keeps its name (already pushed)` : `, branch ${after.branch}`;
+    return `Renamed to "${after.name}"${after.branch ? branch : ''}. The folder stays where it is.`;
   }
 
   /** Your own instructions for every pull request your agent writes in this project (empty: none). Kept in Beluga, not in the repo. */

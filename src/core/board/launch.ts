@@ -90,7 +90,7 @@ export function launchBoard(host: BoardHost): () => void {
     askClaude: (prompt, channel, shown) => session.askOwnClaude(prompt, channel, false, shown ?? true),
     prPrompt: (ws) => {
       const project = projectOf(ws.projectId);
-      return buildPrPrompt({ branch: ws.branch ?? ws.name, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', ...(project?.scripts?.prPrompt ? { projectPrompt: project.scripts.prPrompt } : {}), ...(project?.scripts?.yourPrPrompt ? { yourPrompt: project.scripts.yourPrPrompt } : {}) });
+      return buildPrPrompt({ branch: ws.branch ?? ws.name, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', ...(project?.scripts?.prPrompt ? { projectPrompt: project.scripts.prPrompt } : {}), ...(project?.scripts?.yourPrPrompt ? { yourPrompt: project.scripts.yourPrPrompt } : {}), ...(ws.ticket ? { ticket: ws.ticket } : {}) });
     },
   });
   attachIssues(session, issues);

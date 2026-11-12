@@ -4,15 +4,36 @@ const NAME_TIMEOUT_MS = 12_000;
 const PLAN_TITLE_WORDS = 6;
 const STOP_WORDS = new Set(['a', 'an', 'the', 'and', 'or', 'to', 'of', 'in', 'on', 'for', 'with', 'please', 'can', 'you', 'we', 'i', 'it', 'is', 'that', 'this', 'my', 'our', 'so', 'be', 'make', 'let', 'lets', "let's"]);
 const NAME = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
+const NAME_MAX = 40;
+const TICKET_KEY = /\b[A-Z][A-Z0-9]{1,9}-\d+\b/g;
+const NOT_TICKETS = new Set(['UTF', 'SHA', 'ISO', 'HTTP', 'TLS', 'SSL', 'AES', 'RSA', 'MD', 'ES', 'IPV', 'COVID', 'WCAG', 'IEEE', 'MPEG', 'H']);
+const URLS = /https?:\/\/\S+/g;
+const TICKET_FILLER = new Set(['work', 'working', 'ticket', 'issue', 'task', 'jira', 'story', 'pick', 'up', 'start', 'look', 'at', 'into', 'continue', 'tackle', 'handle']);
 
-/** A readable worktree name from the task text, without any model: the first few meaningful words. */
+const capAtHyphen = (slug: string): string => {
+  if (slug.length <= NAME_MAX) return slug;
+  const cut = slug.slice(0, NAME_MAX);
+  const head = slug[NAME_MAX] === '-' ? cut : cut.slice(0, Math.max(cut.lastIndexOf('-'), 0)) || cut;
+  return head.replace(/-+$/, '');
+};
+
+const withoutUrls = (text: string): string => text.replace(URLS, ' ');
+
+/** The first Jira-style key (like RUN-117) in the text, as written, including inside links. */
+export function ticketKey(text: string): string | undefined {
+  return text.match(TICKET_KEY)?.find((key) => !NOT_TICKETS.has(key.slice(0, key.indexOf('-'))));
+}
+
+/** A readable worktree name from the task text, without any model: the ticket key if there is one, then the first few meaningful words. */
 export function slugify(text: string): string {
-  const words = text
+  const key = ticketKey(text);
+  const keyParts = key ? key.toLowerCase().split('-') : [];
+  const words = withoutUrls(text)
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, ' ')
     .split(/\s+/)
-    .filter((w) => w && !STOP_WORDS.has(w));
-  const slug = words.slice(0, 4).join('-').slice(0, 40).replace(/-+$/, '');
+    .filter((w) => w && !STOP_WORDS.has(w) && (!key || (!TICKET_FILLER.has(w) && !keyParts.includes(w) && w !== key.toLowerCase())));
+  const slug = key ? capAtHyphen([key.toLowerCase(), ...words.slice(0, 3)].join('-')) : words.slice(0, 4).join('-').slice(0, NAME_MAX).replace(/-+$/, '');
   return NAME.test(slug) ? slug : `task-${Date.now().toString(36).slice(-5)}`;
 }
 
@@ -23,23 +44,33 @@ export function cleanName(raw: string): string | undefined {
   return NAME.test(slug) ? slug : undefined;
 }
 
+const withTicketKey = (name: string, key: string): string | undefined => {
+  const lowerKey = key.toLowerCase();
+  if (name === lowerKey || name.startsWith(`${lowerKey}-`)) return name;
+  const rest = name.split('-').filter((w) => w && !TICKET_FILLER.has(w) && !lowerKey.split('-').includes(w));
+  const prefixed = capAtHyphen([lowerKey, ...rest].join('-'));
+  return NAME.test(prefixed) ? prefixed : undefined;
+};
+
 /**
  * Ask a small, fast model (Haiku) to name a worktree after the task. Runs with no tools
  * and no saved session, on your own Claude login. Falls back to `slugify` on any trouble.
  */
 export async function nameTask(prompt: string, opts: { cwd: string; complete: Complete; model?: string }): Promise<string> {
+  const key = ticketKey(prompt);
   const abortController = new AbortController();
   const timer = setTimeout(() => abortController.abort(), NAME_TIMEOUT_MS);
   timer.unref();
   try {
     const said = await opts.complete({
-      prompt: `Task:\n"""\n${prompt.slice(0, 2000)}\n"""\nName a git worktree for this task.`,
+      prompt: `Task:\n"""\n${prompt.replace(URLS, (url) => ticketKey(url) ?? '').slice(0, 2000)}\n"""\nName a git worktree for this task.`,
       cwd: opts.cwd,
       model: opts.model ?? 'haiku',
       signal: abortController.signal,
-      system: 'You name git worktrees. Reply with only the name: 2 to 4 lowercase English words joined by hyphens (e.g. "fix-login-redirect"). No other text.',
+      system: 'You name git worktrees. Reply with only the name: 2 to 4 lowercase English words joined by hyphens (e.g. "fix-login-redirect"). Name it after what the work changes, never after how it was asked: no "work-on", "look-into", "ticket" or "issue". If the task has a ticket key, start the name with it in lowercase (e.g. "run-117-fix-nav-offset"). If nothing besides the key says what the work is, reply with only the key in lowercase. No other text.',
     });
-    return cleanName(said) ?? slugify(prompt);
+    const name = cleanName(said);
+    return (name && key ? withTicketKey(name, key) : name) ?? slugify(prompt);
   } catch {
     // fall through to the local name
   } finally {

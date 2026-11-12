@@ -115,10 +115,18 @@ export const LEGACY_BRANCH_PREFIX = 'klaud/';
  * A branch Beluga made for a worktree named `name`: under a folder-like prefix of its own (yours, beluga/,
  * klaud/), else exactly the prefix and the worktree's name (-2, -3…), so a branch of yours is never renamed.
  */
-export function isOwnBranch(branch: string, name: string, prefix: string): boolean {
+export function isOwnBranch(branch: string, name: string, prefix: string, ticket?: string): boolean {
+  if (ticket && branch.startsWith(`${ticket}/`)) return true;
   if ([prefix, BRANCH_PREFIX, LEGACY_BRANCH_PREFIX].some((p) => p.endsWith('/') && branch.startsWith(p))) return true;
   const rest = branch.startsWith(prefix) ? branch.slice(prefix.length) : undefined;
   return rest === name || (rest?.startsWith(`${name}-`) === true && /^\d+$/.test(rest.slice(name.length + 1)));
+}
+
+/** A ticket's branch, as Jira links it: RUN-117/fix-nav-offset for a worktree named run-117-fix-nav-offset (RUN-117/work while it says no more). */
+export function ticketBranch(ticket: string, name: string): string {
+  const key = ticket.toLowerCase();
+  const rest = name === key ? '' : name.startsWith(`${key}-`) ? name.slice(key.length + 1) : name;
+  return `${ticket}/${rest || 'work'}`;
 }
 
 export class WorkspaceError extends Error {}
@@ -912,18 +920,19 @@ export class WorkspaceManager {
 
   /** `opts.id`: the id it gets (from newWorktreeId), else a fresh one. */
   /** `opts.agent`: the agent it runs (unset: your default). */
-  async createWorktree(projectIdOrRoot: string, name: string, base?: string, opts: { readonly id?: string; readonly agent?: AgentRef; readonly thread?: ThreadRecord } = {}): Promise<Workspace> {
+  /** `opts.ticket`: the ticket it is for (RUN-117), so its branch is RUN-117/<name>. */
+  async createWorktree(projectIdOrRoot: string, name: string, base?: string, opts: { readonly id?: string; readonly agent?: AgentRef; readonly thread?: ThreadRecord; readonly ticket?: string } = {}): Promise<Workspace> {
     const project = this.projects.find((p) => p.id === projectIdOrRoot || p.root === projectIdOrRoot);
     if (!project) throw new WorkspaceError('Project not found');
     if (base !== undefined && !(await g.isCommit(project.root, base))) throw new WorkspaceError(`There's no branch called ${base}`);
     const from = base ?? project.base;
     const s = slug(name);
     const dir = this.freeDir(project, s);
-    const branch = await this.freeBranch(project.root, `${this.branchPrefix()}${s}`);
+    const branch = await this.freeBranch(project.root, this.wantedBranch(s, opts.ticket));
     await g.addWorktree(project.root, dir, branch, from);
     await g.excludeProjectDir(dir);
     await copyEnvFiles(project.root, dir);
-    const record: WorkspaceRecord = { id: opts.id && !this.records.some((r) => r.id === opts.id) ? opts.id : freshId(), projectRoot: project.root, name: s, path: dir, kind: 'worktree', branch, base: from, createdAt: Date.now(), envSnapshot: await envSnapshot(dir), ...agentFields(opts.agent), ...(opts.thread ? { thread: opts.thread } : {}) };
+    const record: WorkspaceRecord = { id: opts.id && !this.records.some((r) => r.id === opts.id) ? opts.id : freshId(), projectRoot: project.root, name: s, path: dir, kind: 'worktree', branch, ...(opts.ticket ? { ticket: opts.ticket } : {}), base: from, createdAt: Date.now(), envSnapshot: await envSnapshot(dir), ...agentFields(opts.agent), ...(opts.thread ? { thread: opts.thread } : {}) };
     this.saveRecord(record);
     const status = await g.status(dir, from).catch(() => undefined);
     return this.adopt(project, { ...record, projectId: project.id, external: false, ...(status ? { status } : {}) });
@@ -1542,6 +1551,11 @@ export class WorkspaceManager {
     return this.require(record.id);
   }
 
+  /** The branch a worktree of this name wants: RUN-117/<name> for a ticket's, else beluga/<name> (or your prefix). */
+  private wantedBranch(name: string, ticket?: string): string {
+    return ticket ? ticketBranch(ticket, name) : `${this.branchPrefix()}${name}`;
+  }
+
   /** A free local branch name like beluga/<name>, beluga/<name>-2… */
   freeBranchName(projectRoot: string, name: string): Promise<string> {
     return this.freeBranch(projectRoot, `${this.branchPrefix()}${slug(name)}`);
@@ -1569,8 +1583,8 @@ export class WorkspaceManager {
     // You named it meanwhile: yours stays.
     if (ws.kind !== 'worktree' || ws.nameSetByUser || !s || s === ws.name) return;
     const prefix = this.branchPrefix();
-    const branch = ws.branch && isOwnBranch(ws.branch, ws.name, prefix) && !(await this.onRemote(ws.path, ws.branch)) ? await this.freeBranch(ws.path, `${prefix}${s}`) : undefined;
-    if (branch) await g.git(ws.path, ['branch', '-m', ws.branch!, branch]);
+    const branch = ws.branch && isOwnBranch(ws.branch, ws.name, prefix, ws.ticket) && !(await this.onRemote(ws.path, ws.branch)) ? await this.freeBranch(ws.path, this.wantedBranch(s, ws.ticket), ws.branch) : undefined;
+    if (branch && branch !== ws.branch) await g.git(ws.path, ['branch', '-m', ws.branch!, branch]);
     this.patchRecord(id, { name: s, ...(branch ? { branch } : {}) });
     await this.refresh();
   }
@@ -1597,7 +1611,7 @@ export class WorkspaceManager {
     let branch = old;
     if (old && !kept) {
       const prefix = this.branchPrefix();
-      const wanted = exact ?? (isOwnBranch(old, ws.name, prefix) ? `${prefix}${s}` : `${old.slice(0, old.lastIndexOf('/') + 1)}${s}`);
+      const wanted = exact ?? (isOwnBranch(old, ws.name, prefix, ws.ticket) ? this.wantedBranch(s, ws.ticket) : `${old.slice(0, old.lastIndexOf('/') + 1)}${s}`);
       branch = exact ? await this.takenOrFree(ws.path, exact, old) : await this.freeBranch(ws.path, wanted, old);
       if (branch !== old) await g.git(ws.path, ['branch', '-m', old, branch]);
     }

@@ -73,6 +73,8 @@ export interface PrContext {
   readonly yourPrompt?: string;
   /** What you typed for this one PR ("/pr mention the migration"). */
   readonly extra?: string;
+  /** The ticket the worktree was started for (RUN-117): the title starts with it, as Jira links it. */
+  readonly ticket?: string;
 }
 
 /** The full prompt Claude gets for one PR. */
@@ -82,7 +84,8 @@ export function buildPrPrompt(ctx: PrContext, template = customPrPrompt() ?? DEF
   const project = ctx.projectPrompt?.trim() ? `\n\nProject guidelines for pull requests (from the project's beluga.json):\n${ctx.projectPrompt.trim()}` : '';
   const yours = ctx.yourPrompt?.trim() ? `\n\nThe owner's own instructions for this project's pull requests:\n${ctx.yourPrompt.trim()}` : '';
   const extra = ctx.extra?.trim() ? `\n\nFor this pull request, also: ${ctx.extra.trim()}` : '';
-  return `${filled}${project}${yours}${extra}`;
+  const ticket = ctx.ticket ? `\n\nThis work is for ticket ${ctx.ticket}: start the pull request's title with "${ctx.ticket}: " so the tracker links it.` : '';
+  return `${filled}${project}${yours}${extra}${ticket}`;
 }
 
 /** Ask Claude to fix the failing checks on a PR. */

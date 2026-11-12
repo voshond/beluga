@@ -78,6 +78,8 @@ export interface WorkspaceRecord {
   readonly path: string;
   readonly kind: WorkspaceKind;
   readonly branch?: string;
+  /** The ticket it was started for (RUN-117, from its first message): its branch is RUN-117/<name>. */
+  readonly ticket?: string;
   readonly base?: string;
   readonly createdAt: number;
   readonly archived?: boolean;

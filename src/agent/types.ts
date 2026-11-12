@@ -376,11 +376,13 @@ export interface TaskTools {
 
 /**
  * A worktree's project setup (core/workbench): what new worktrees run once, told to Claude in
- * `brief`, and `set` (Claude's set_project_setup tool) when it finds that setup incomplete.
+ * `brief`, and `set` (Claude's set_project_setup tool) when it finds that setup incomplete. A
+ * worktree also has `name` (Claude's name_worktree tool): its name once Claude knows what the work is.
  */
 export interface SetupTools {
   readonly brief: string;
   set(command: string, why: string): string;
+  name?(name: string): Promise<string>;
 }
 
 /**

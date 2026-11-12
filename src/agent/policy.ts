@@ -33,6 +33,8 @@ const ALWAYS_OK = new Set([
   ...['send_chat', 'list_peers', 'list_peer_files', 'read_peer_file', 'write_report', 'continue_in_worktree'].map((n) => `mcp__beluga__${n}`),
   // set_project_setup: only your own worktree runs have it, and what it sets asks you before it first runs by itself.
   'mcp__beluga__set_project_setup',
+  // name_worktree: only your own worktree runs have it; it renames the label and an unpushed branch of Beluga's, never one you named.
+  'mcp__beluga__name_worktree',
   // run_for_me: only your own runs have it; it only puts a card up, and nothing runs until you click Run.
   'mcp__beluga__run_for_me',
   // end_dialogue: only a chaired dialogue's turn has it (core/dialogues); it only ends that dialogue.

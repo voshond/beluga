@@ -233,6 +233,15 @@ export function buildSetupAppend(project: string, command: string | undefined, s
   ].join('\n');
 }
 
+/** A worktree Beluga named from the first message: Claude renames it once it knows what the work really is. */
+export function buildNameAppend(name: string): string {
+  return [
+    `This worktree is named "${name}", from the first message before anyone read the work. When that says little`,
+    '(only a ticket key, or the words of the request like work-on-ticket), call mcp__beluga__name_worktree once you',
+    'know what the work is (after reading the ticket, say), starting with the ticket key when there is one. Once is enough.',
+  ].join('\n');
+}
+
 /** How a sub-agent's own scratch folder is introduced (also how Beluga tells it already has one). */
 export const AGENT_SCRATCH_MARK = 'Your scratch folder:';
 

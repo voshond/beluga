@@ -6,7 +6,7 @@ import { pullOfBranch } from '../workspaces/github.js';
 import os from 'node:os';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { cleanPlanTitle, slugify } from '../agent/namer.js';
+import { cleanPlanTitle, slugify, ticketKey } from '../agent/namer.js';
 import { SESSION_RUNTIME_DEFAULT, carrySession, resumeFor } from '../agent/session-carry.js';
 import { sessionBefore } from '../agent/runtime/claude/session-rewind.js';
 import { promptRef, restoreSnapshot, snapshot, snapshotAt } from '../workspaces/snapshots.js';
@@ -858,7 +858,7 @@ export class WorkspaceController {
    */
   /** `agent`: the agent it runs (unset: your default). */
   /** `id`: the id it gets (from newWorktreeId), else a fresh one. */
-  async newWorktree(projectId: string, name: string, opts: { base?: string; quiet?: boolean; agent?: AgentRef; id?: string; thread?: ThreadRecord } = {}): Promise<Workspace | undefined> {
+  async newWorktree(projectId: string, name: string, opts: { base?: string; quiet?: boolean; agent?: AgentRef; id?: string; thread?: ThreadRecord; ticket?: string } = {}): Promise<Workspace | undefined> {
     const project = this.deps.manager.list.find((p) => p.root !== '' && (p.id === projectId || p.root === projectId));
     const id = opts.id ?? this.deps.manager.newWorktreeId();
     if (project) {
@@ -866,7 +866,7 @@ export class WorkspaceController {
       this.publish();
       if (!opts.quiet) this.deps.intend({ type: 'navigate', view: { kind: 'workspace', id, tab: 'chat' } });
     }
-    const ws = await this.act("Couldn't create the worktree", () => this.deps.manager.createWorktree(projectId, name, opts.base, { id, ...(opts.agent ? { agent: opts.agent } : {}), ...(opts.thread ? { thread: opts.thread } : {}) }), undefined, { later: true });
+    const ws = await this.act("Couldn't create the worktree", () => this.deps.manager.createWorktree(projectId, name, opts.base, { id, ...(opts.agent ? { agent: opts.agent } : {}), ...(opts.thread ? { thread: opts.thread } : {}), ...(opts.ticket ? { ticket: opts.ticket } : {}) }), undefined, { later: true });
     const shown = this.ahead.making.delete(id);
     this.publish();
     if (ws) {
@@ -1006,7 +1006,8 @@ export class WorkspaceController {
     const channel = `${WS_PREFIX}${id}`;
     // Your message shows at once on its page while git makes the folder (BLG-531); Claude gets it when that's done.
     const shown = text && this.deps.showAsk ? this.deps.showAsk(firstMessage, channel) : undefined;
-    const ws = await this.newWorktree(projectId, named || (text ? slugify(text) : 'worktree'), { id, ...(opts.base ? { base: opts.base } : {}), ...(opts.quiet ? { quiet: true } : {}), ...(opts.agent ? { agent: opts.agent } : {}) });
+    const ticket = ticketKey(text);
+    const ws = await this.newWorktree(projectId, named || (text ? slugify(text) : 'worktree'), { id, ...(opts.base ? { base: opts.base } : {}), ...(opts.quiet ? { quiet: true } : {}), ...(opts.agent ? { agent: opts.agent } : {}), ...(ticket ? { ticket } : {}) });
     if (!ws && shown) this.deps.store.dispatch({ type: 'clear', channel });
     const tasks = Boolean(ws && opts.tasks && this.planHereOrSay(channel));
     // A plan's own conversation has no plan mode; one whose plan couldn't be made plans first.
