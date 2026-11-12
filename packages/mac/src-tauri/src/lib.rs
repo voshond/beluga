@@ -332,6 +332,7 @@ pub fn run() {
             remote::client_use_local,
             remote::client_change_server,
             remote::client_set_device_name,
+            remote::allow_frame_origin,
             device::device_run,
             device::device_file,
             device::device_screenshot,

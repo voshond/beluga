@@ -5,7 +5,8 @@ import { useApi, useApp, useBeluga } from '../../lib/beluga.js';
 import { forwardedUrl } from '../../machines/forwarded-url.js';
 import { useClock } from '../../lib/window-active.js';
 import { keptKey, readKept, withKept, writeKept } from './kept-props.js';
-import { type FiredEvent, RETRYING, RETRY_MS, addEvent, mergeProps, variantField } from './preview-model.js';
+import { webPreviewOrigin } from '../../lib/boot.js';
+import { type FiredEvent, RETRYING, RETRY_MS, addEvent, atPreviewOrigin, mergeProps, variantField } from './preview-model.js';
 
 /**
  * A live preview's state and its talk with the daemon (preview.open, preview.snapshot) and its
@@ -123,7 +124,8 @@ export function usePreview({ wsId, ref, pick, seen, framed }: { wsId: string; re
     try {
       const opened = (await api.preview.open(wsId, spec)) as PreviewResult | undefined;
       if (!opened) return;
-      const out = machine && opened.ok ? { ...opened, url: await forwardedUrl(home, machine, opened.url) } : opened;
+      const publicAt = webPreviewOrigin();
+      const out = publicAt ? atPreviewOrigin(opened, publicAt) : machine && opened.ok ? { ...opened, url: await forwardedUrl(home, machine, opened.url) } : opened;
       setResult(out);
       if (!out.ok) return;
       const fresh = out.props ?? {};

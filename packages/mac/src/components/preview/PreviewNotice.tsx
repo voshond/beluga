@@ -1,6 +1,6 @@
 import { experimentOn } from '@beluga/shared/experiments.js';
 import { parsePreviewRef, previewTitle } from '@beluga/shared/preview/ref.js';
-import { webServed } from '../../lib/boot.js';
+import { webPreviewOrigin, webServed } from '../../lib/boot.js';
 import { useApp, useBeluga } from '../../lib/beluga.js';
 import { Icon } from '../Icon.js';
 import { Button, cx } from '../ui.js';
@@ -30,11 +30,12 @@ export function Notice({ title, icon = 'eye', detail, action }: { title: string;
   );
 }
 
-/** Whether a block can draw here: on, your own agent's, in a worktree's conversation, in the app. */
+/** Whether a block can draw here: on, your own agent's, in a worktree's conversation, in the app (or a page whose server serves previews publicly). */
 export function usePreviewHere(local: boolean): { readonly draws: boolean; readonly wsId: string | undefined; readonly on: boolean } {
   const on = useApp((st) => experimentOn(st.prefs.experiments, 'previews'));
   const wsId = useApp((st) => (st.view.kind === 'workspace' ? st.view.id : undefined));
-  return { draws: on && local && Boolean(wsId) && !webServed(), wsId, on };
+  const reachable = !webServed() || Boolean(webPreviewOrigin());
+  return { draws: on && local && Boolean(wsId) && reachable, wsId, on };
 }
 
 /** The card for a block that can't draw here, saying why (and Turn On… when it's only off). */
@@ -45,7 +46,7 @@ export function PreviewNotice({ code, local }: { code: string; local: boolean })
   if (!ref) return <Notice icon="info" title="This preview can’t be read" detail="Its first line should be a component file, an .html file, or a page on this computer." />;
   const title = previewTitle(ref);
   if (!local) return <Notice icon="lock" title={`A preview of ${title}`} detail="Previews run only for your own agent’s answers, on your own computer." />;
-  if (webServed()) return <Notice title={`A preview of ${title}`} detail="Live previews show in the Beluga app on the computer that runs them." />;
+  if (webServed() && !webPreviewOrigin()) return <Notice title={`A preview of ${title}`} detail="Live previews show in the Beluga app on the computer that runs them." />;
   if (!wsId) return <Notice title={`A preview of ${title}`} detail="It shows in its worktree’s conversation." />;
   if (!on) return <Notice title={`A preview of ${title}`} detail="Live previews are an experimental feature, off until you turn them on." action={{ label: 'Turn On…', run: () => ui.patch({ settings: 'experimental' }) }} />;
   return null;

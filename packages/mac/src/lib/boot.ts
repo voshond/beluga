@@ -29,6 +29,18 @@ let served = false;
  * folders, uploads for what you drop or pick, downloads for what you save or show.
  */
 export const webServed = (): boolean => served;
+let previewAt: string | undefined;
+/** Where this page's live previews load from, when the server set one up (src/preview/public.ts). */
+export const webPreviewOrigin = (): string | undefined => previewAt;
+
+/** In the app as a client, previews draw only once its window lets their frames load (an older app would open each in the browser). */
+const previewOriginHere = async (origin: string | undefined): Promise<string | undefined> => {
+  if (!origin || !remoteApp()) return origin;
+  return appInvoke('allow_frame_origin', { origin }).then(
+    () => origin,
+    () => undefined,
+  );
+};
 /** The app's folder picker, or the browser's stand-in for it. */
 export const canPickFolders = (): boolean => inApp() || served;
 
@@ -54,7 +66,7 @@ export async function endpoint(): Promise<Endpoint> {
   });
   const body = (await res.json().catch(() => {
     throw new Unreachable(unreachableDetail(res.status, res.statusText));
-  })) as Partial<Endpoint> & { error?: string; web?: boolean; signedOut?: boolean };
+  })) as Partial<Endpoint> & { error?: string; web?: boolean; signedOut?: boolean; previewOrigin?: string };
   // This browser was revoked (or never let in): the page itself becomes the Ask for a link page.
   if (res.status === 401 && body.signedOut) {
     location.reload();
@@ -63,6 +75,7 @@ export async function endpoint(): Promise<Endpoint> {
   if (!res.ok || body.error) throw new Error(body.error ?? 'Beluga is not running');
   if (body.web) {
     served = true;
+    previewAt = await previewOriginHere(body.previewOrigin);
     document.documentElement.dataset.web = 'true';
     return { url: webSocketUrl(location), token: WEB_HELLO_TOKEN };
   }
