@@ -4,7 +4,8 @@ import { isExternalRequester } from './trust.js';
 import { type AssistantChats, NO_ASSISTANT_CHATS, activeAssistantChannel, assistantChannel } from '../shared/assistant.js';
 import type { ConnectionStatus } from '../net/peer-client.js';
 import type { Effort, NotifySettings, Settings, ThemeName, TrustLevel } from './settings.js';
-import { BRANCH_PREFIX_DEFAULT, NotifySettings as NotifySchema, SETTLE_IDLE_DAYS_DEFAULT } from '../shared/settings-schema.js';
+import { ARCHIVE_SETTLED_DAYS_DEFAULT, BRANCH_PREFIX_DEFAULT, NotifySettings as NotifySchema, SETTLE_IDLE_DAYS_DEFAULT } from '../shared/settings-schema.js';
+import { FETCH_EVERY_DEFAULT } from '../shared/background-fetch.js';
 import type { Review } from '../workspaces/git.js';
 import type { Project, ProjectGroup } from '../workspaces/types.js';
 import type { EnvChange } from '../workspaces/env.js';
@@ -381,8 +382,12 @@ export interface Prefs {
   readonly settleOnMerge: boolean;
   /** Days without activity before a chat settles; 0: never. */
   readonly settleIdleDays: number;
+  /** Days a chat stays settled before it is archived by itself; 0: never. */
+  readonly archiveSettledDays: number;
   /** An agent in a worktree whose pull request is open pushes its commits there when its turn ends (BLG-840). */
   readonly pushToPr: boolean;
+  /** Minutes between Beluga's own fetches of each project (core/main-sync.ts); 0: never on its own. */
+  readonly fetchEvery: number;
   /** A worktree's task moving to In Review has its agent open a draft pull request there (BLG-927). */
   readonly prOnReview: boolean;
   /** Claude keeps screenshots and scratch output in the workspace's git-ignored `.beluga/scratch/` folder (watched live in the Mac app). */
@@ -391,11 +396,6 @@ export interface Prefs {
   readonly machineNoteOn: boolean;
   /** Experimental features that are on (shared/experiments.ts), off until you turn each on. */
   readonly experiments: readonly string[];
-  /**
-   * Chat refs, chips and links (shared/chat-ref.ts). Owner: the plan "Communication between chats".
-   * Remove this flag, and turn the feature on for everyone, once that plan has shipped.
-   */
-  readonly chatLinks: boolean;
   readonly subagents: Settings['subagents'];
   readonly hiddenButtons: readonly string[];
   readonly friendWorktrees: Settings['friendWorktrees'];
@@ -830,13 +830,14 @@ export const DEFAULT_PREFS: Prefs = {
   chatCategories: false,
   settleOnMerge: true,
   settleIdleDays: SETTLE_IDLE_DAYS_DEFAULT,
+  archiveSettledDays: ARCHIVE_SETTLED_DAYS_DEFAULT,
   pushToPr: true,
+  fetchEvery: FETCH_EVERY_DEFAULT,
   prOnReview: false,
   scratchFolder: true,
   machineNote: '',
   machineNoteOn: false,
   experiments: [],
-  chatLinks: false,
   subagents: 'full',
   hiddenButtons: [],
   friendWorktrees: 'ask',

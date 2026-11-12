@@ -12,7 +12,6 @@ type ChatsHandlers = { readonly [M in ChatsMethod]: (s: Session, ...args: Args<M
 export const CHATS_HANDLERS = {
   'chats.resolve': async (s, text) => (await resolveChatWhenKnown(s.store, text)) ?? null,
   'chats.snapshot': (s, text) => {
-    if (!s.store.getState().prefs.chatLinks) return null;
     // Its saved history first: the copy has what the chat has, not only what is on screen.
     const channel = parseChatRef(refOf(text))?.channel;
     if (channel?.startsWith('ws:')) s.workspaces?.ensureLoaded(channel.slice(3));

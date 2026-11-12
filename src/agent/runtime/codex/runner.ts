@@ -600,6 +600,7 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
     mcpServers: (projects) => mcp.list(mcpCwd(projects)),
     mcpSignIn: (projects, name) => mcp.signIn(mcpCwd(projects), name),
     mcpSignedIn: (name) => mcp.signedIn(name),
+    mcpSigningIn: (name) => mcp.signingIn(name),
     mcpSetEnabled: (projects, name, enabled) => mcp.setEnabled(mcpCwd(projects), name, enabled),
 
     async listModels() {

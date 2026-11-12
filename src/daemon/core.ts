@@ -241,7 +241,7 @@ async function publish(config: Config, room: Room, session: Session, isClosing: 
 }
 
 /** What only a screen (or the process showing it) can do for the core. */
-export type CoreHooks = Pick<SessionOptions, 'copy' | 'desktopNotify' | 'zoom' | 'raise' | 'open' | 'shutdown'>;
+export type CoreHooks = Pick<SessionOptions, 'copy' | 'desktopNotify' | 'zoom' | 'raise' | 'open' | 'openPage' | 'shutdown'>;
 
 export interface Core {
   readonly config: Config;

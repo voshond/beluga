@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AgentRef, ClaudeAnswer, GuestCan, WsRole } from '../protocol.js';
 import { EmojiSchema } from '../shared/reactions.js';
 import { SSH_HOST } from '../shared/terminal-keys.js';
-import { BRANCH_PREFIX_RE, EFFORTS, KEEP_AWAKE, LOW_POWER, NotifySettings, RUN_ON, SETTLE_IDLE_DAYS_MAX, THEMES, ThreadLimitsSchema, TRUST_LEVELS } from '../shared/settings-schema.js';
+import { ARCHIVE_SETTLED_DAYS_MAX, BRANCH_PREFIX_RE, EFFORTS, KEEP_AWAKE, LOW_POWER, NotifySettings, RUN_ON, SETTLE_IDLE_DAYS_MAX, THEMES, ThreadLimitsSchema, TRUST_LEVELS } from '../shared/settings-schema.js';
 import { AUTO_COMPACT_MAX, AUTO_COMPACT_MIN } from '../shared/context-usage.js';
 import { PARALLEL_RUNS_MAX, PARALLEL_RUNS_MIN } from '../shared/run-slots.js';
 import { CHAT_LIMIT_MAX } from '../shared/chat-limit.js';
@@ -45,6 +45,7 @@ import { TERMINAL_IMPORT_API } from './terminal-import-api.js';
 import { AGENT_TERM_API } from './agent-term-api.js';
 import { TOOLBOX_API } from './toolbox-api.js';
 import { HANDOFF_MODES } from '../shared/agent-handoff.js';
+import { FETCH_EVERY_MAX, FETCH_EVERY_MIN } from '../shared/background-fetch.js';
 
 /**
  * Everything a client can ask Beluga to do, in one list. The daemon validates every call
@@ -117,12 +118,14 @@ export const PrefsPatch = z
     chatCategories: bool,
     settleOnMerge: bool,
     settleIdleDays: z.number().int().min(0).max(SETTLE_IDLE_DAYS_MAX),
+    archiveSettledDays: z.number().int().min(0).max(ARCHIVE_SETTLED_DAYS_MAX),
     pushToPr: bool,
+    // Minutes between background fetches; 0: never on its own (#479).
+    fetchEvery: z.union([z.literal(0), z.number().int().min(FETCH_EVERY_MIN).max(FETCH_EVERY_MAX)]),
     prOnReview: bool,
     scratchFolder: bool,
     machineNote: z.string().max(MACHINE_NOTE_MAX),
     machineNoteOn: bool,
-    chatLinks: bool,
     subagents: z.enum(['full', 'compact', 'hidden']),
     hiddenButtons: z.array(z.string().max(40)).max(40),
     friendWorktrees: z.enum(['ask', 'off']),

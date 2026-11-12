@@ -929,6 +929,7 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
       return { url: `https://example.com/oauth/${encodeURIComponent(name)}` };
     },
     mcpSignedIn: (name) => signing.get(name) ?? Promise.resolve(undefined),
+    mcpSigningIn: (name) => signing.has(name),
     nameTask: async (prompt) => {
       await new Promise((r) => setTimeout(r, 600 * pace));
       return slugify(prompt);

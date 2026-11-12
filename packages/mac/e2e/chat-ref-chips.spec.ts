@@ -4,7 +4,6 @@ import { expect, test } from './fixtures.js';
 /**
  * A chat named by its bare ref in a message ("<owner>/<channel>") is drawn as that chat's chip, with
  * its title of now: in your bubble, in an agent's answer and in a card from another chat's agent.
- * With chat links off the words stay as they are.
  */
 
 async function daemon<T>(page: Page, fn: string): Promise<T> {
@@ -26,10 +25,11 @@ interface Worktree {
   readonly name: string;
 }
 
-/** Two worktrees with rows, and this Mac's peer id, with chat links as asked. */
-async function setUp(page: Page, chatLinks: boolean): Promise<{ self: string; source: Worktree; target: Worktree }> {
+/** Two worktrees with rows, and this Mac's peer id. */
+async function setUp(page: Page): Promise<{ self: string; source: Worktree; target: Worktree }> {
   await page.goto('/');
-  await daemon(page, `(c) => c.api.session.setPrefs({ chatLinks: ${chatLinks} })`);
+  // The projects drawn first: a fold button read before then is never found.
+  await expect(sidebar(page).getByRole('button', { name: /^(Show what's in|Fold) bob-api$/ }).first()).toBeVisible();
   for (const project of ['bob-api', 'landing']) {
     const unfold = sidebar(page).getByRole('button', { name: `Show what's in ${project}` }).first();
     if (await unfold.isVisible()) await unfold.click();
@@ -49,7 +49,7 @@ async function openChat(page: Page, name: string): Promise<void> {
 }
 
 test('a bare chat ref is the chat’s chip: in your bubble and in the card from another chat’s agent', async ({ page }) => {
-  const { self, source, target } = await setUp(page, true);
+  const { self, source, target } = await setUp(page);
   const sourceRef = `${self}/ws:${source.id}`;
   const targetRef = `${self}/ws:${target.id}`;
   // The source's agent sends "send to <source>: stop here" to the target, whose agent sends "stop here" back.
@@ -68,15 +68,4 @@ test('a bare chat ref is the chat’s chip: in your bubble and in the card from 
   await expect(card).not.toContainText(`${self}/`);
   await expect(card).toContainText('stop here');
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/bare-ref-card.png` });
-});
-
-test('with chat links off a bare ref stays words', async ({ page }) => {
-  const { self, source, target } = await setUp(page, false);
-  const targetRef = `${self}/ws:${target.id}`;
-  await openChat(page, source.name);
-  await box(page).fill(`look at ${targetRef} later`);
-  await box(page).press('Enter');
-  const mine = page.locator('main [data-mine="true"]').filter({ hasText: 'look at' }).last();
-  await expect(mine).toContainText(targetRef);
-  await expect(mine.getByRole('button', { name: `Worktree ${target.name}` })).toHaveCount(0);
 });

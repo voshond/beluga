@@ -33,7 +33,6 @@ function stateWith(log: readonly LogItem[] = [], extra: Partial<Record<keyof Dom
     ...initialState('room'),
     selfId: ME,
     projectsLoaded: true,
-    prefs: { ...initialState('room').prefs, chatLinks: true },
     projects: [{ id: 'p1', name: 'Beluga', root: '/p', workspaces: [ws('main1', 'main', { kind: 'main' }), ws('wt-1', 'add-auth'), ws('wt-2', 'old-work', { archived: true }), ws('chat-1', 'A chat', { kind: 'chat' })] }],
     shared: [{ owner: FRIEND, id: 'work-1', name: 'Their work', project: 'x', role: 'view', share: 's' }],
     log,
@@ -318,7 +317,7 @@ describe('who gets the suite', () => {
     expect(suites({ ...input, taskTools: {} as never })).not.toContain('beluga_chats');
   });
 
-  function setup(chatLinks: boolean, recipients: () => readonly string[] = () => []) {
+  function setup(recipients: () => readonly string[] = () => []) {
     const runs: AgentRunInput[] = [];
     const agent: AgentBackend = {
       async run(i: AgentRunInput) {
@@ -327,7 +326,7 @@ describe('who gets the suite', () => {
       },
     } as unknown as AgentBackend;
     const base = initialState('room', 'auto');
-    const store = new Store({ ...base, prefs: { ...base.prefs, chatLinks } });
+    const store = new Store(base);
     const dir = mkdtempSync(path.join(os.tmpdir(), 'beluga-chat-tools-'));
     const place = () => ({ cwd: dir, additionalDirectories: [], autoEdit: true, onSession: () => undefined });
     const host = new AgentHost({
@@ -356,38 +355,32 @@ describe('who gets the suite', () => {
   }
 
   it('your own run has the tools and the note, with the flag on', async () => {
-    const got = await setup(true)('me');
+    const got = await setup()('me');
     expect(got.chatTools).toBeDefined();
     expect(got.prompt).toContain('read_chat');
   });
 
   it.each(['friend', 'guest'])('a run from a %s has neither, at full trust too', async (from) => {
-    const got = await setup(true)(from);
+    const got = await setup()(from);
     expect(got.chatTools).toBeUndefined();
     expect(got.prompt).not.toContain('read_chat');
   });
 
   it('an external agent’s run on your computer has neither, at full grant too: the tools reach chats outside its grant', async () => {
-    const got = await setup(true)('me', { id: 'g1', name: 'GrokBot', creationSource: 'mcp' });
+    const got = await setup()('me', { id: 'g1', name: 'GrokBot', creationSource: 'mcp' });
     expect(got.chatTools).toBeUndefined();
     expect(got.prompt).not.toContain('read_chat');
   });
 
   it('a run whose chat you share after it started has its chat tools refused', async () => {
     const shared: string[] = [];
-    const got = await setup(true, () => shared)('me');
+    const got = await setup(() => shared)('me');
     expect(() => got.chatTools!.list({})).not.toThrow();
     shared.push('friend');
     expect(() => got.chatTools!.read(`${ME}/ws:wt-1`, {})).toThrow(/^chat_shared: this chat is shared with other people now/);
     expect(() => got.chatTools!.list({})).toThrow(/^chat_shared:/);
     await expect(got.chatTools!.send(`${ME}/ws:wt-1`, 'hi', {})).rejects.toThrow(/^chat_shared:/);
     await expect(got.chatTools!.wait('m1')).rejects.toThrow(/^chat_shared:/);
-  });
-
-  it('with the flag off, your own run has neither', async () => {
-    const got = await setup(false)('me');
-    expect(got.chatTools).toBeUndefined();
-    expect(got.prompt).not.toContain('read_chat');
   });
 });
 

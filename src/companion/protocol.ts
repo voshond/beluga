@@ -150,7 +150,8 @@ export const COMPANION_PROTO = { major: 1, minor: 57 } as const;
  * projects runs on (`WorkView.projects[].agent`). An older Mac leaves them out: the phone shows neither.
  * 1.55 (BLG-140, upstream's 1.51): a chat's address (`chats.resolve`): its chip's current title and whether it opens.
  * An older Mac has no such call: the phone shows the token as code. `ConvView.chatLinks`: the Mac has
- * chat links on; with them off the phone shows a chat mention as its title, with no chip.
+ * chat links (always on a Mac newer than 3.3.0; before, a setting off by default); without it the
+ * phone shows a chat mention as its title, with no chip.
  * 1.56 (BLG-149, upstream's 1.52): `TurnView.origin`: an agent's turn that reads a message from another chat.
  * 1.57 (BLG-277, upstream's 1.53): `ConvView.queue[].origin`: a queued message that an agent in another chat sent.
  */
@@ -685,7 +686,7 @@ export const ConvView = z.object({
   turns: z.array(TurnView).max(200),
   /** Older turns exist (companion.older). */
   more: z.boolean(),
-  /** 1.51: the Mac has chat links on: each "@Title (chat: …)" of yours is a chip. Without it, the phone shows "@Title". */
+  /** 1.51: the Mac has chat links (always on a Mac newer than 3.3.0): each "@Title (chat: …)" of yours is a chip. Without it, the phone shows "@Title". */
   chatLinks: z.literal(true).optional(),
   needsYou: z.array(NeedsYou).max(20),
   /** You may write here (it's yours, or shared with you to work in). */

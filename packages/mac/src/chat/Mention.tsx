@@ -52,7 +52,6 @@ export function useMentionWorld(channel: string | undefined, { tasks: withTasks 
   const projects = useApp((st) => st.projects);
   const selfId = useApp((st) => st.selfId);
   const dirCache = useApp((st) => st.dirCache);
-  const chatLinks = useApp((st) => st.prefs.chatLinks);
   const ws = worktreeOf(channel);
   return useMemo(() => {
     const share = ws ? shareNameOf(ws) : undefined;
@@ -63,9 +62,8 @@ export function useMentionWorld(channel: string | undefined, { tasks: withTasks 
       workspaces: workspaceMentions(projects),
       ...(share ? { entries: (dir: string) => dirCache[`${selfId}:${share}/${dir}`] } : {}),
       ...(tasks ? { tasks } : {}),
-      chatLinks,
     };
-  }, [friends, peers, projects, selfId, dirCache, ws, tasks, chatLinks]);
+  }, [friends, peers, projects, selfId, dirCache, ws, tasks]);
 }
 
 /**
@@ -73,7 +71,7 @@ export function useMentionWorld(channel: string | undefined, { tasks: withTasks 
  * the log. Text, not the list: a pick built fresh each time never settles (#185).
  */
 export function useChatMentions(channel: string, on: boolean): ReadonlyArray<{ readonly title: string; readonly ref: string; readonly hint: string }> {
-  const picked = useApp((st) => (on && st.prefs.chatLinks ? JSON.stringify(chatsToMention(st, channel).map((c) => ({ title: c.title, ref: c.ref, hint: c.ownership === 'shared' ? 'Shared with you' : CHAT_KIND[c.kind] }))) : ''));
+  const picked = useApp((st) => (on ? JSON.stringify(chatsToMention(st, channel).map((c) => ({ title: c.title, ref: c.ref, hint: c.ownership === 'shared' ? 'Shared with you' : CHAT_KIND[c.kind] }))) : ''));
   return useMemo(() => (picked ? (JSON.parse(picked) as Array<{ title: string; ref: string; hint: string }>) : []), [picked]);
 }
 

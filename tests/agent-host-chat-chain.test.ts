@@ -56,7 +56,7 @@ const CHAT = 'ws:chat1';
 
 function host(agent: AgentBackend) {
   const state = initialState('room', 'auto');
-  const store = new Store({ ...state, prefs: { ...state.prefs, chatLinks: true } });
+  const store = new Store(state);
   const h = new AgentHost({
     store,
     selfId: () => ME,

@@ -755,7 +755,7 @@ export function convView(state: DomainState, ctx: ViewContext, topic: Topic): Co
     ...(conv?.project ? { project: clip(conv.project, 200) } : {}),
     turns,
     more,
-    ...(state.prefs.chatLinks ? { chatLinks: true as const } : {}),
+    chatLinks: true,
     needsYou: items.slice(0, 20),
     canSend: conv?.mine ?? false,
     working,

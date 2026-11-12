@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { query, type Options } from '@anthropic-ai/claude-agent-sdk';
+import { query, type Options, type Query } from '@anthropic-ai/claude-agent-sdk';
 import { MAX_ATTACHMENT_BYTES, linkedImages, mediaTypeOf, withImagePaths } from '../../../core/attachments.js';
 import { buildPrompt, summarizeTool } from '../../prompt.js';
 import { runInstructions } from '../../run-instructions.js';
@@ -76,6 +76,8 @@ export interface ClaudeBackendOptions {
   readonly claudePath?: string;
   /** Who the agent is told it is, when not the place's agent (a local model: its own name). */
   readonly agentOf?: (input: AgentRunInput) => AgentRef | undefined;
+  /** Your MCP servers' sign-in (a fake one in tests); by default Claude Code's own. */
+  readonly mcp?: McpConnect;
   /** Your saved variables for Settings' MCP check in a folder (RuntimeOptions.ownEnv). */
   readonly ownEnv?: (cwd: string) => Readonly<Record<string, string>>;
 }
@@ -159,6 +161,20 @@ function showThinking(q: unknown): void {
 }
 
 /**
+ * A sign-in just connected `name`: ask this running Claude Code to load it now, so its tools are there
+ * in this turn. If it can't (an older Claude Code, a query already ending), the next turn loads it.
+ */
+function reconnect(q: Query, name: string): void {
+  const again = (q as { reconnectMcpServer?: (name: string) => Promise<void> }).reconnectMcpServer;
+  if (typeof again !== 'function') return;
+  try {
+    void again.call(q, name).catch(() => undefined);
+  } catch {
+    // Not supported here: the next turn loads the server.
+  }
+}
+
+/**
  * Runs turns through the Claude Agent SDK, which drives the local Claude Code
  * install and therefore uses the owner's own login/subscription. One session
  * is kept per room so the agent remembers the conversation.
@@ -166,7 +182,12 @@ function showThinking(q: unknown): void {
 export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
   let sessionId: string | undefined;
   // Settings' MCP list reads your saved variables as your runs do (#442).
-  const mcp = new McpConnect(claudeMcpSession(opts.claudePath), opts.ownEnv ? { ownEnv: opts.ownEnv } : {});
+  const mcp = opts.mcp ?? new McpConnect(claudeMcpSession(opts.claudePath), opts.ownEnv ? { ownEnv: opts.ownEnv } : {});
+  // Every Claude Code query running now with your servers: a sign-in that connects reaches each of them.
+  const live = new Set<Query>();
+  mcp.onSignedIn((name) => {
+    for (const q of live) reconnect(q, name);
+  });
 
   return {
     async run(input: AgentRunInput): Promise<string> {
@@ -481,6 +502,8 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
 
       const ends = () => ({ stderr, ...(rejectedUntil !== undefined ? { rejectedUntil } : {}), ...(apiError ? { apiError } : {}) });
       const q = query({ prompt: prompts, options });
+      // Only runs that have your MCP servers (never a friend's or a guest's) reload one you signed in to.
+      if (input.ownerMcp && !input.guest) live.add(q);
       showThinking(q);
       let failed = true;
       try {
@@ -594,6 +617,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
         // Claude Code itself failed ("process exited with code 1"): say how, in words.
         else throw new RunFailedError(classifyRun({ error: err instanceof Error ? err.message : String(err), ...(failedResult ? { result: failedResult } : {}), ...ends() }));
       } finally {
+        live.delete(q);
         recorder.finish(failed || abortController.signal.aborted);
         finish();
       }
@@ -610,6 +634,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
     mcpServers: (projects) => mcp.list([opts.cwd, ...projects]),
     mcpSignIn: (projects, name) => mcp.signIn([opts.cwd, ...projects], name),
     mcpSignedIn: (name) => mcp.signedIn(name),
+    mcpSigningIn: (name) => mcp.signingIn(name),
 
     /** Ask Claude Code which models it offers (no prompt is sent). */
     async listModels() {

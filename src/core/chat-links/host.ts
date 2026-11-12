@@ -93,15 +93,13 @@ export class HostChatLinks {
 
   /**
    * A request as it arrives. A chain comes from this computer's own sends, or from a peer's chat
-   * into one shared with them (admitPeer checks it). With chat links off, a peer's origin is
-   * dropped: the request is a plain one, as before chat links. A chain without an origin is only
-   * yours: your agent sent it on (see chainOf).
+   * into one shared with them (admitPeer checks it). A chain without an origin is only yours: your
+   * agent sent it on (see chainOf).
    */
   received(from: string, request: BodyOf<'agent_request'>): BodyOf<'agent_request'> {
     const { origin, chain, ...rest } = request;
-    const on = this.on();
-    const keep = origin && on && (from === this.self || request.channel !== 'room');
-    const keepChain = chain && on && from === this.self;
+    const keep = origin && (from === this.self || request.channel !== 'room');
+    const keepChain = chain && from === this.self;
     return { ...rest, ...(keep ? { origin } : {}), ...(keepChain ? { chain } : {}) };
   }
 
@@ -114,9 +112,9 @@ export class HostChatLinks {
     return body.chain ? { chainId: body.chain.chainId, hop: body.chain.hop } : { chainId: randomUUID(), hop: 0 };
   }
 
-  /** A run's own address, with prefs.chatLinks on (the prompt teaches the chat chip with it). */
+  /** A run's own address (the prompt teaches the chat chip with it). */
   linkOf(channel: string): { chatLink?: ChatRef } {
-    return this.on() ? { chatLink: { owner: this.self, channel } } : {};
+    return { chatLink: { owner: this.self, channel } };
   }
 
   /** Other chats for this run to find, read and message; undefined when it may not. `external`: an external agent asked for it (see agentOf). */
@@ -228,10 +226,6 @@ export class HostChatLinks {
     return this.deps.selfId();
   }
 
-  private on(): boolean {
-    return this.deps.store.getState().prefs.chatLinks;
-  }
-
   private agentIn(channel: string): AgentRef {
     return this.deps.agentRef?.(channel) ?? CLAUDE_AGENT;
   }
@@ -240,7 +234,7 @@ export class HostChatLinks {
   private readsChats(from: string, external: boolean, channel: string): boolean {
     // Not in a place other people see (the room, friends' chats, a worktree you share): their words could ask it to quote your chats there.
     // Not an external agent's run: the tools reach every chat of yours, outside its grant.
-    return from === this.self && !external && isAddressableChannel(channel) && this.on() && this.deps.sharing.recipients(channel).length === 0;
+    return from === this.self && !external && isAddressableChannel(channel) && this.deps.sharing.recipients(channel).length === 0;
   }
 
   /** How far a chat's run can act on its own, your launch flags included (permission.ts). */

@@ -85,11 +85,11 @@ const isBare = (p: MentionPiece): boolean => "ref" in p && (p.raw.startsWith("wo
  * Copied or cut from the box, a worktree's short link goes on the clipboard whole ("worktree:wt-…"),
  * and a chat's short mention with its ref ("@Title (chat: …)").
  */
-function useWholeLinksOnCopy(input: RefObject<HTMLTextAreaElement | null>, known: string, chats: boolean): void {
+function useWholeLinksOnCopy(input: RefObject<HTMLTextAreaElement | null>, known: string): void {
   const { client } = useBeluga();
   useEffect(() => {
     const el = input.current;
-    if (!el || (known === "[]" && !chats)) return;
+    if (!el) return;
     const names = new Map(JSON.parse(known) as [string, string][]);
     const onCopy = (e: ClipboardEvent): void => {
       const picked = el.value.slice(el.selectionStart, el.selectionEnd);
@@ -105,7 +105,7 @@ function useWholeLinksOnCopy(input: RefObject<HTMLTextAreaElement | null>, known
       el.removeEventListener("copy", onCopy);
       el.removeEventListener("cut", onCopy);
     };
-  }, [input, known, chats, client]);
+  }, [input, known, client]);
 }
 
 /** Drawn as a chip over the room its words take (the box's own words go see-through). */
@@ -161,7 +161,7 @@ export function MentionHighlighter({
   const { client } = useBeluga();
   const known = useApp((st) => (text.includes("worktree:") || text.includes("\u2007") ? worktreeNames(st.projects) : "[]"));
   // Chats' titles too: a short mention whose chat was renamed or removed is found again (or not).
-  const chatTitles = useApp((st) => (world.chatLinks && text.includes("[@\u2007") ? st.projects : undefined));
+  const chatTitles = useApp((st) => (text.includes("[@\u2007") ? st.projects : undefined));
   const pieces = useMemo(() => {
     const names = new Map(JSON.parse(known) as [string, string][]);
     const refOf = chatTitles ? chatRefOf(client.store.getState()) : undefined;
@@ -173,7 +173,7 @@ export function MentionHighlighter({
   const chips = pieces.some(isChip);
   const spans = useMemo(() => chipSpans(pieces), [pieces]);
   useChipCaret(input, text, spans.all, spans.whole);
-  useWholeLinksOnCopy(input, known, Boolean(world.chatLinks));
+  useWholeLinksOnCopy(input, known);
   useEffect(() => {
     const el = input.current;
     if (!el) return;

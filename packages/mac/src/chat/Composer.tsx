@@ -210,7 +210,6 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   const ready = !!buffer.trim() || commentsWaiting;
   // A chat's link pasted here becomes a chip. In a friend's worktree, one of yours can take a copy along (see send).
   const chipLinks = (text: string): string | undefined => {
-    if (!client.store.getState().prefs.chatLinks) return undefined;
     const words = chatLinksToMentions(text, (r) => chatChipOf(resolveChat(client.store.getState(), r)).label);
     return words && boxChats(words);
   };
@@ -489,7 +488,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   };
   /** Chats of yours that the words name, when this chat is another person's and goes to their agent. */
   const ownChatsNamed = (typed: string): Array<{ readonly ref: string; readonly title: string }> => {
-    if (state.view.kind !== 'shared' || runOn === 'here' || typed.startsWith('/') || !client.store.getState().prefs.chatLinks) return [];
+    if (state.view.kind !== 'shared' || runOn === 'here' || typed.startsWith('/')) return [];
     const now = client.store.getState();
     const mine = chatMentionsIn(typed).flatMap((m) => {
       const ref = parseChatRef(m.ref);

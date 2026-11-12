@@ -33,7 +33,6 @@ function setup(opts: { lateEvents?: boolean; recipients?: (channel: string) => s
     ...base,
     selfId: ME,
     projectsLoaded: true,
-    prefs: { ...base.prefs, chatLinks: true },
     projects: [{ id: 'p1', name: 'Beluga', root: '/p', workspaces: [ws('main1', { kind: 'main' }), ws('src'), ws('tgt'), ws('other'), ...['s1', 's2', 's3', 's4', 's5', 's6'].map((id) => ws(id)), ws('gone', { archived: true })] }],
     shared: [{ owner: FRIEND, id: 'theirs', name: 'Their work', project: 'x', role: 'contribute', share: 's' }],
   } as unknown as DomainState);
@@ -404,12 +403,6 @@ describe('a message your agent sends on outside the chat tools (a plan’s messa
     const from = await t.working(SOURCE, 'r1', { chain: { chainId: 'c1', hop: 1 } });
     await expect(from.send(refOf(TARGET), 'hi', {})).rejects.toThrow(/^chain_limit:/);
     await t.end(SOURCE);
-  });
-
-  it('with chat links off it checks nothing: one hop on, as before chat links', () => {
-    const t = setup();
-    t.store.dispatch({ type: 'prefs', prefs: { chatLinks: false } });
-    expect(t.h.chatSends.sendOn({ chainId: 'c1', hop: MAX_HOPS + 3 })).toEqual({ chain: { chainId: 'c1', hop: MAX_HOPS + 4 } });
   });
 });
 

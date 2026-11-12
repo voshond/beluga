@@ -295,6 +295,7 @@ export class WorkspaceController {
       armSync: (wsId, target) => void this.syncRuns.set(wsId, target),
       askClaude: (prompt, channel) => deps.askClaude(prompt, channel),
       saving: () => deps.store.getState().powerSaving,
+      fetchEvery: () => deps.store.getState().prefs.fetchEvery,
       open: (wsId) => this.open(wsId),
     });
   }

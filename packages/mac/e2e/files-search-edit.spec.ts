@@ -46,6 +46,29 @@ test('Contents search finds lines by file and opens the file at the line', async
   await page.screenshot({ path: info.outputPath('02-opened-at-line.png') });
 });
 
+test('opening a line near a file’s end scrolls only the file, never the window', async ({ page }, info) => {
+  await openHero(page);
+  await tab(page, 'Files').click();
+  await panel(page).getByRole('radiogroup', { name: 'Search' }).getByRole('radio', { name: 'Contents' }).click();
+  // Hero.tsx's last lines: its page can't scroll far enough to put them in its middle.
+  await panel(page).getByRole('textbox', { name: 'Search in the files’ contents' }).fill('</section>');
+  // Something reaching past the window's bottom edge (a popover on its way out): the window could scroll.
+  await page.evaluate(() => {
+    const below = document.createElement('div');
+    below.id = 'past-the-edge';
+    below.style.cssText = `position:absolute;left:0;top:${innerHeight}px;width:10px;height:400px`;
+    document.body.append(below);
+  });
+  await panel(page).getByRole('tree', { name: 'Lines found' }).locator('[title^="src/components/Hero.tsx:"]').first().click();
+  const file = panel(page).getByRole('region', { name: 'Hero.tsx' });
+  const line = file.locator('pre code').getByText('</section>').first();
+  await expect(line).toBeInViewport();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  // The panel's tabs still sit where they belong, under the title bar.
+  await expect(tab(page, 'Files')).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: info.outputPath('03-line-near-the-end.png') });
+});
+
 test('a file opens read-only; Edit, type, ⌘S saves it; Done with unsaved changes asks', async ({ page }, info) => {
   await openHero(page);
   await tab(page, 'Files').click();

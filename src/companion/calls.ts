@@ -18,7 +18,7 @@ const done = z.unknown();
 export const AskResult = z.object({ topic: z.string() });
 export const AskPersonResult = z.object({ topic: z.string(), task: z.string() });
 export const OlderResult = z.union([z.object({ turns: z.array(TurnView), more: z.boolean() }), z.object({ messages: z.array(ChatMessageView), more: z.boolean() })]);
-/** What a chat's address is now (src/core/chat-links/resolve.ts); null for a malformed ref or with chat links off. Where it opens stays the Mac's: the phone opens /conv/<channel>. */
+/** What a chat's address is now (src/core/chat-links/resolve.ts); null for a malformed ref, or from a Mac of 3.3.0 or older with chat links off. Where it opens stays the Mac's: the phone opens /conv/<channel>. */
 export const ChatResolveResult = z.object({ title: z.string().optional(), kind: z.string(), state: z.enum(['idle', 'working', 'archived', 'removed', 'loading']), ownership: z.enum(['own', 'shared', 'unknown']) }).passthrough().nullable();
 export type ChatResolveResult = z.infer<typeof ChatResolveResult>;
 /** Open on your Mac: it came to the front, or why not. */

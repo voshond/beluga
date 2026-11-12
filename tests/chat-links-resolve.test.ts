@@ -175,15 +175,10 @@ describe('resolveChat, other people’s chats', () => {
 });
 
 describe('resolveChatText, what the API answers', () => {
-  const on = (extra: Partial<Record<keyof DomainState, unknown>> = {}) => stateWith({ prefs: { ...initialState('room').prefs, chatLinks: true }, ...extra });
+  const on = (extra: Partial<Record<keyof DomainState, unknown>> = {}) => stateWith(extra);
   const text = formatChatRef(own('ws:wt-1'))!;
 
-  it('answers nothing while chat links are off', () => {
-    expect(initialState('room').prefs.chatLinks).toBe(false);
-    expect(resolveChatText(stateWith(), text)).toBeUndefined();
-  });
-
-  it('answers once they are on', () => {
+  it('answers for a chat of yours', () => {
     expect(resolveChatText(on(), text)?.title).toBe('add-auth');
   });
 
@@ -194,7 +189,7 @@ describe('resolveChatText, what the API answers', () => {
 });
 
 describe('before the first scan of the projects', () => {
-  const on = { prefs: { ...initialState('room').prefs, chatLinks: true } };
+  const on = {};
   const scanning = (extra: Partial<Record<keyof DomainState, unknown>> = {}) => stateWith({ ...on, projects: [], projectsLoaded: false, ...extra });
   const text = formatChatRef(own('ws:wt-1'))!;
 
@@ -246,7 +241,7 @@ describe('before the first scan of the projects', () => {
 });
 
 describe('what the phone gets', () => {
-  const on = { prefs: { ...initialState('room').prefs, chatLinks: true } };
+  const on = {};
 
   it('may call it, with a ref as text', () => {
     expect(phoneMay('chats.resolve')).toBe(true);

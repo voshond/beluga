@@ -75,6 +75,8 @@ const ALWAYS_OK = new Set([
   // Your phone (BLG-150): looking at it never asks (like the Mac's screenshot). Acting on it falls
   // to 'ask', then the owner-approval gate honours the phone's own setting (Off · Ask · Use · Full).
   ...['phone_status', 'phone_screenshot', 'phone_screen', 'phone_apps', 'phone_info', 'phone_pull', 'phone_notifications', 'phone_macro_list'].map((n) => `mcp__beluga_phone__${n}`),
+  // Your MCP servers: only your own runs have these. A sign-in only opens its page in your browser: you finish it there.
+  ...['mcp_servers', 'mcp_sign_in'].map((n) => `mcp__beluga_mcp__${n}`),
 ]);
 
 /** The board tools that only look. */

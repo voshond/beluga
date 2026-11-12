@@ -34,8 +34,6 @@ export interface MentionWorld {
   readonly entries?: (dir: string) => readonly FsEntry[] | undefined;
   /** Tasks on your board ("@BLG-24"); left out where a key might be someone else's. */
   readonly tasks?: readonly TaskMention[];
-  /** prefs.chatLinks: "@Title (chat: <ref>)" names a chat. Off, it's words. */
-  readonly chatLinks?: boolean;
 }
 
 /** "@" then a name or a path; it ends at a space (trailing punctuation isn't part of it). */
@@ -84,7 +82,7 @@ export type MentionPiece = { readonly text: string } | { readonly raw: string; r
 
 /** A line of text cut into plain text and the mentions it makes (only those that name something). */
 export function splitMentions(text: string, world: MentionWorld): MentionPiece[] {
-  if (!world.chatLinks || !text.includes('(chat: ')) return splitWords(text, world);
+  if (!text.includes('(chat: ')) return splitWords(text, world);
   const out: MentionPiece[] = [];
   let last = 0;
   for (const c of chatMentionsIn(text)) {
@@ -115,7 +113,6 @@ function splitWords(text: string, world: MentionWorld): MentionPiece[] {
 
 /** The chats the words name, as refs, each once, in order. */
 export function chatsIn(text: string, world: MentionWorld): string[] {
-  if (!world.chatLinks) return [];
   return [...new Set(chatMentionsIn(text).map((c) => c.ref))];
 }
 
