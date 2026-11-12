@@ -692,7 +692,7 @@ export class DemoTransport implements Transport {
         return ok(true);
       }
 
-      // ---- a chat's address: the demo keeps chat links off, as a Mac does by default
+      // ---- a chat's address: the demo has none to find
       case 'chats.resolve':
         return ok(null);
 

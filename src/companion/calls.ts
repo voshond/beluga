@@ -18,7 +18,7 @@ const done = z.unknown();
 export const AskResult = z.object({ topic: z.string() });
 export const AskPersonResult = z.object({ topic: z.string(), task: z.string() });
 export const OlderResult = z.union([z.object({ turns: z.array(TurnView), more: z.boolean() }), z.object({ messages: z.array(ChatMessageView), more: z.boolean() })]);
-/** What a chat's address is now (src/core/chat-links/resolve.ts); null for a malformed ref or with chat links off. Where it opens stays the Mac's: the phone opens /conv/<channel>. */
+/** What a chat's address is now (src/core/chat-links/resolve.ts); null for a malformed ref, or from a Mac of 3.3.0 or older with chat links off. Where it opens stays the Mac's: the phone opens /conv/<channel>. */
 export const ChatResolveResult = z.object({ title: z.string().optional(), kind: z.string(), state: z.enum(['idle', 'working', 'archived', 'removed', 'loading']), ownership: z.enum(['own', 'shared', 'unknown']) }).passthrough().nullable();
 export type ChatResolveResult = z.infer<typeof ChatResolveResult>;
 /** Open on your Mac: it came to the front, or why not. */
@@ -157,6 +157,8 @@ export const PhoneCalls = {
   'companion.signOut': entry('companion.signOut', z.object({ signedOut: z.literal(true) })),
   // 1.13: whether the Mac stays awake for the phone (BLG-127).
   'companion.keepAwake': entry('companion.keepAwake', done),
+  // 1.54: usage statistics' level, from the phone's Settings (BLG-922).
+  'telemetry.choose': entry('telemetry.choose', done),
   // 1.32: one of your providers becomes the default agent (BLG-459).
   'companion.defaultAgent': entry('companion.defaultAgent', done),
   // 1.14: Your Mac's chats: a new one (its id comes back), or one deleted for good.

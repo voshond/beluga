@@ -328,6 +328,11 @@ export const MACHINE: Record<Method, MachineSide> = {
   'network.read': 'drive',
   // ---- support
   'support.answer': 'drive',
+  // ---- usage statistics
+  'telemetry.choose': 'drive',
+  'telemetry.answer': 'drive',
+  'telemetry.exclude': 'drive',
+  'telemetry.mark': 'drive',
   // ---- stats
   'stats.get': 'drive',
   'stats.leaderboard': 'drive',

@@ -640,7 +640,7 @@ export function homeView(state: DomainState, ctx: ViewContext): HomeView {
   const assistant = summaryOf(state, openAssistant(state), waiting, ctx);
   const macChats = macChatSummaries(state, waiting, ctx);
   return {
-    mac: { name: clip(ctx.mac.name, 100), version: clip(ctx.mac.version, 40), keepAwake: state.prefs.keepAwake ?? 'off' },
+    mac: { name: clip(ctx.mac.name, 100), version: clip(ctx.mac.version, 40), keepAwake: state.prefs.keepAwake ?? 'off', ...(state.telemetry.available ? { telemetry: state.telemetry.level ? { level: state.telemetry.level } : {} } : {}) },
     // 1.5: Your Mac, for Home's "Ask your Mac" (its last line, whether it works).
     ...(assistant ? { assistant } : {}),
     // 1.14: all of Your Mac's chats, for the phone's chat list.
@@ -755,7 +755,7 @@ export function convView(state: DomainState, ctx: ViewContext, topic: Topic): Co
     ...(conv?.project ? { project: clip(conv.project, 200) } : {}),
     turns,
     more,
-    ...(state.prefs.chatLinks ? { chatLinks: true as const } : {}),
+    chatLinks: true,
     needsYou: items.slice(0, 20),
     canSend: conv?.mine ?? false,
     working,

@@ -19,8 +19,6 @@ export interface MentionTarget {
 export interface ParseOptions {
   /** Whether your Mac runs an agent of this runtime now ("@codex": your Codex, even when your card doesn't list it). */
   readonly runs?: (runtime: string) => boolean;
-  /** prefs.chatLinks: "@Title (chat: …)" names a chat, nobody to ask. Off: read as before chat links (BLG-309). */
-  readonly chatLinks?: boolean;
 }
 
 export type ParsedInput =
@@ -113,7 +111,7 @@ export function parseInput(raw: string, selfId: string, peers: readonly PeerInfo
     const match = MENTION.exec(tokens[i] ?? '');
     if (!match) break;
     // "@Fix the login (chat: …)" names a chat, nobody to ask (a person called Fix included).
-    if (opts.chatLinks && chatMentionsIn(tokens.slice(i).join(' '))[0]?.start === 0) break;
+    if (chatMentionsIn(tokens.slice(i).join(' '))[0]?.start === 0) break;
     const root = match[1]!;
     const second = match[2];
     const lower = root.toLowerCase();
@@ -145,7 +143,7 @@ export function parseInput(raw: string, selfId: string, peers: readonly PeerInfo
       } else ask(peer.peerId, agentOf(peer, second), Boolean(second));
     }
   }
-  if (i === 0 && opts.chatLinks && chatMentionsIn(text)[0]?.start === 0) return { kind: 'chat', text };
+  if (i === 0 && chatMentionsIn(text)[0]?.start === 0) return { kind: 'chat', text };
   if (i === 0) {
     // "@zed hi" where nobody is zed: still chat, but say so instead of dropping it silently.
     const first = MENTION.exec(tokens[0] ?? '');

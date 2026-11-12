@@ -19,7 +19,6 @@ function stateWith(log: readonly LogItem[]): DomainState {
     ...initialState('room'),
     selfId: ME,
     projectsLoaded: true,
-    prefs: { ...initialState('room').prefs, chatLinks: true },
     projects: [{ id: 'p1', name: 'App', root: '/p', workspaces: [ws('wt-1', 'add-auth')] }],
     shared: [{ owner: FRIEND, id: 'theirs', name: 'Their work', project: 'x', role: 'contribute', share: 's' }],
     log,
@@ -82,11 +81,5 @@ describe('the copy and its gates', () => {
     const token = `ghp_${'A'.repeat(36)}`;
     const copy = chatSnapshot(stateWith([said(1, `${'x'.repeat(3990)} ${token} tail`)]), `${ME}/${CHAT}`)!;
     expect(copy.text).not.toContain('ghp_AAAA');
-  });
-
-  it('chats.snapshot gives nothing with chat links off', () => {
-    const state = { ...stateWith([said(1, 'hello')]), prefs: { ...initialState('room').prefs, chatLinks: false } } as DomainState;
-    const s = { store: { getState: () => state }, workspaces: undefined } as never;
-    expect(CHATS_HANDLERS['chats.snapshot'](s, `${ME}/${CHAT}`)).toBeNull();
   });
 });

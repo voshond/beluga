@@ -125,6 +125,10 @@ export async function startDaemon(config: Config, opts: DaemonOptions): Promise<
     // The Mac app's window to the front (Open on your Mac, from the phone): the window that can.
     raise: () => server.callCap('raise', []),
     open: (target) => openWithSystem(target),
+    // An MCP sign-in's page: in the browser of the screen you use (the Mac app, or one driving this computer).
+    openPage: async (url) => {
+      await server.callCap('openExternal', [url], currentClient()).catch(() => openWithSystem(url));
+    },
     shutdown: () => void stop('Quit from a screen'),
   }, { network: true });
   server = new DaemonServer({ session: core.session, token, version: opts.version, terminals: core.terminals, log, uploadsRoot: uploadsDir(), ...(opts.port ? { port: opts.port } : {}), ...(opts.allowedOrigins ? { allowedOrigins: opts.allowedOrigins } : {}) });

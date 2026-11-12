@@ -32,6 +32,11 @@ export interface AgentRunInput {
   readonly promptId?: string;
   readonly requesterName: string;
   readonly viaAgent: boolean;
+  /**
+   * Only for a run you asked for yourself on this computer: the words you typed, without what
+   * Beluga adds to the prompt. Usage statistics send it at level On, masked; nothing else reads it.
+   */
+  readonly ownWords?: string;
   readonly context: readonly string[];
   /** 'folder': only the shared folders. 'full': the whole computer (secrets still blocked). */
   readonly scope: AccessScope;
@@ -68,7 +73,7 @@ export interface AgentRunInput {
   readonly autoCompactAt?: number;
   /** A folder (relative to the run's folder, git-ignored) for screenshots and scratch output; the owner watches it live. */
   readonly scratchDir?: string;
-  /** This chat's address, with prefs.chatLinks on: the run learns the chat chip (view-prompt.ts). */
+  /** This chat's address: the run learns the chat chip (view-prompt.ts). */
   readonly chatLink?: ChatRef;
   /** Where to run: a workspace folder with its own Claude conversation. Defaults to the room's folder. */
   readonly place?: AgentPlace;
@@ -166,7 +171,9 @@ export interface AgentRunInput {
   readonly dashboardTools?: DashboardTools;
   /** Your own runs: the notes of calls you were in (core/calls, BLG-715), to look up, never pasted in. */
   readonly callNotesTools?: CallNotesTools;
-  /** Your own runs, with prefs.chatLinks on: find and read other chats (core/chat-links); never a friend's or a guest's. */
+  /** Your own runs: your MCP servers, and signing in to one from the chat (core/mcp-sign-in.ts). */
+  readonly mcpTools?: McpTools;
+  /** Your own runs: find and read other chats (core/chat-links); never a friend's or a guest's. */
   readonly chatTools?: ChatTools;
   /** Your own runs, when you turned agent threads on: tools to start and follow child threads (core/threads), bound to this run's chat. */
   readonly threadTools?: ThreadTools;
@@ -636,6 +643,8 @@ export interface AgentBackend {
   mcpSignIn?(projects: readonly string[], name: string, runtime?: string): Promise<import('../shared/mcp.js').McpSignIn>;
   /** Waits for that sign-in: true once connected, false when it gave up, undefined when none is waiting. */
   mcpSignedIn?(name: string, runtime?: string): Promise<boolean | undefined>;
+  /** A sign-in to it is waiting for the browser now (started from Settings, the MCP chip or a run's mcp_sign_in). */
+  mcpSigningIn?(name: string, runtime?: string): boolean;
   /** Turn one on or off where its agent keeps it (Codex: config.toml). Only rows with canTurnOff. */
   mcpSetEnabled?(projects: readonly string[], name: string, enabled: boolean, runtime?: string): Promise<import('../shared/mcp.js').McpTurned>;
 }
@@ -680,6 +689,14 @@ export interface RoomBridge {
   readonly devices?: import('./device-tools.js').DeviceBridge;
   /** The same tools bound to one conversation (a run's: chat, asks and their answers go there). */
   inChannel?(channel: string): RoomBridge;
+}
+
+/** Your MCP servers as tools (core/mcp-sign-in.ts): each answers in words an agent reads. */
+export interface McpTools {
+  /** Each server, how it is, and how to sign in to it. */
+  servers(): Promise<string>;
+  /** Sign in to one (by name or label): its page opens in your browser, and this waits a while for it. */
+  signIn(name: string): Promise<{ readonly ok: boolean; readonly text: string }>;
 }
 
 /** Call notes as tools (core/calls/notes-tools.ts): each answers in words an agent reads. */

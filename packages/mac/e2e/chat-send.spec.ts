@@ -34,7 +34,6 @@ async function say(page: Page, text: string): Promise<void> {
 
 test('a message from another chat is a card with its source, and the sender sees it delivered', async ({ page }) => {
   await page.goto('/');
-  await daemon(page, `(c) => c.api.session.setPrefs({ chatLinks: true })`);
   for (const project of ['bob-api', 'landing']) await sidebar(page).getByRole('button', { name: `Show what's in ${project}` }).first().click();
   const { worktrees, self } = await daemon<{ worktrees: Array<{ id: string; name: string }>; self: string }>(
     page,
@@ -64,7 +63,6 @@ test('a message from another chat is a card with its source, and the sender sees
 
 test('a chain at the hop limit asks you, one time, and Stop answers it', async ({ page }) => {
   await page.goto('/');
-  await daemon(page, `(c) => c.api.session.setPrefs({ chatLinks: true })`);
   for (const project of ['bob-api', 'landing']) await sidebar(page).getByRole('button', { name: `Show what's in ${project}` }).first().click();
   const { worktrees, self } = await daemon<{ worktrees: Array<{ id: string; name: string }>; self: string }>(
     page,
@@ -93,7 +91,6 @@ test('a chain at the hop limit asks you, one time, and Stop answers it', async (
 
 test('a message that waits at a busy chat: its row shows the source, has no Edit, and Steer keeps it a card', async ({ page }) => {
   await page.goto('/');
-  await daemon(page, `(c) => c.api.session.setPrefs({ chatLinks: true })`);
   for (const project of ['bob-api', 'landing']) await sidebar(page).getByRole('button', { name: `Show what's in ${project}` }).first().click();
   const { worktrees, self } = await daemon<{ worktrees: Array<{ id: string; name: string }>; self: string }>(
     page,

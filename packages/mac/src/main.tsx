@@ -13,6 +13,7 @@ import { BelugaProvider } from './lib/beluga.js';
 import { apply, zoom } from './lib/prefs.js';
 import { watchWindow } from './lib/window-active.js';
 import { watchPreloadErrors } from './lib/lazy-view.js';
+import { pinWindow } from './lib/scroll-within.js';
 import { Button } from './components/ui.js';
 import { UpdateLayer } from './dialogs/UpdateSheet.js';
 import { FolderBrowserHost } from './dialogs/FolderBrowser.js';
@@ -25,6 +26,7 @@ apply();
 if (native('look')) document.documentElement.dataset.app = 'tauri';
 watchWindow();
 watchPreloadErrors();
+pinWindow();
 
 // Beluga in a browser (docs/web.md): a redeploy builds the window again under an open page, and a
 // part it loads later (a view) may be gone. Load the page again, at most once a minute (no loop).

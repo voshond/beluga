@@ -4,7 +4,8 @@ import { isExternalRequester } from './trust.js';
 import { type AssistantChats, NO_ASSISTANT_CHATS, activeAssistantChannel, assistantChannel } from '../shared/assistant.js';
 import type { ConnectionStatus } from '../net/peer-client.js';
 import type { Effort, NotifySettings, Settings, ThemeName, TrustLevel } from './settings.js';
-import { BRANCH_PREFIX_DEFAULT, NotifySettings as NotifySchema, SETTLE_IDLE_DAYS_DEFAULT } from '../shared/settings-schema.js';
+import { ARCHIVE_SETTLED_DAYS_DEFAULT, BRANCH_PREFIX_DEFAULT, NotifySettings as NotifySchema, SETTLE_IDLE_DAYS_DEFAULT } from '../shared/settings-schema.js';
+import { FETCH_EVERY_DEFAULT } from '../shared/background-fetch.js';
 import type { Review } from '../workspaces/git.js';
 import type { Project, ProjectGroup } from '../workspaces/types.js';
 import type { EnvChange } from '../workspaces/env.js';
@@ -15,6 +16,7 @@ import { type CollabAction, type CollabState, initialCollab, reduceCollab } from
 import { type SearchState, type WorkAction, type WorkState, initialWork, reduceWork } from './work-store.js';
 import { type NetworkAction, type NetworkSlice, initialNetwork, reduceNetwork } from './network-store.js';
 import { type SupportAction, type SupportSlice, initialSupport } from './support-store.js';
+import { type TelemetryAction, type TelemetrySlice, initialTelemetry } from './telemetry-store.js';
 import { type ClaudeCodeAction, type ClaudeCodeSlice, initialClaudeCode, reduceClaudeCode } from './claude-code/model.js';
 import { type GatewayAction, type GatewaySlice, initialGateway, reduceGateway } from './gateway/model.js';
 import { type FriendShareAction, type FriendShareSlice, initialFriendShare, reduceFriendShare } from './friend-share-store.js';
@@ -381,8 +383,12 @@ export interface Prefs {
   readonly settleOnMerge: boolean;
   /** Days without activity before a chat settles; 0: never. */
   readonly settleIdleDays: number;
+  /** Days a chat stays settled before it is archived by itself; 0: never. */
+  readonly archiveSettledDays: number;
   /** An agent in a worktree whose pull request is open pushes its commits there when its turn ends (BLG-840). */
   readonly pushToPr: boolean;
+  /** Minutes between Beluga's own fetches of each project (core/main-sync.ts); 0: never on its own. */
+  readonly fetchEvery: number;
   /** A worktree's task moving to In Review has its agent open a draft pull request there (BLG-927). */
   readonly prOnReview: boolean;
   /** Claude keeps screenshots and scratch output in the workspace's git-ignored `.beluga/scratch/` folder (watched live in the Mac app). */
@@ -391,11 +397,6 @@ export interface Prefs {
   readonly machineNoteOn: boolean;
   /** Experimental features that are on (shared/experiments.ts), off until you turn each on. */
   readonly experiments: readonly string[];
-  /**
-   * Chat refs, chips and links (shared/chat-ref.ts). Owner: the plan "Communication between chats".
-   * Remove this flag, and turn the feature on for everyone, once that plan has shipped.
-   */
-  readonly chatLinks: boolean;
   readonly subagents: Settings['subagents'];
   readonly hiddenButtons: readonly string[];
   readonly friendWorktrees: Settings['friendWorktrees'];
@@ -583,7 +584,7 @@ export interface MyShare {
  * Everything Beluga knows that isn't about a screen: the room, people, projects, conversations,
  * approvals… The core (the daemon) owns it and every client sees the same.
  */
-export interface DomainState extends CollabState, WorkState, NetworkSlice, SupportSlice, ClaudeCodeSlice, GatewaySlice, BoardSlice, SentinelSlice, PlansSlice, DialoguesSlice, CompanionSlice, FriendShareSlice, TeamSlice {
+export interface DomainState extends CollabState, WorkState, NetworkSlice, SupportSlice, TelemetrySlice, ClaudeCodeSlice, GatewaySlice, BoardSlice, SentinelSlice, PlansSlice, DialoguesSlice, CompanionSlice, FriendShareSlice, TeamSlice {
   readonly room: string;
   readonly projects: readonly Project[];
   /** The first scan of the projects is done: a workspace that isn't in `projects` now is really gone. */
@@ -788,7 +789,8 @@ export type Action =
   | PlansAction
   | DialoguesAction
   | TeamAction
-  | SupportAction;
+  | SupportAction
+  | TelemetryAction;
 
 const LOG_LIMIT = 1000;
 const TRANSFER_LIMIT = 20;
@@ -830,13 +832,14 @@ export const DEFAULT_PREFS: Prefs = {
   chatCategories: false,
   settleOnMerge: true,
   settleIdleDays: SETTLE_IDLE_DAYS_DEFAULT,
+  archiveSettledDays: ARCHIVE_SETTLED_DAYS_DEFAULT,
   pushToPr: true,
+  fetchEvery: FETCH_EVERY_DEFAULT,
   prOnReview: false,
   scratchFolder: true,
   machineNote: '',
   machineNoteOn: false,
   experiments: [],
-  chatLinks: false,
   subagents: 'full',
   hiddenButtons: [],
   friendWorktrees: 'ask',
@@ -900,6 +903,7 @@ export function initialState(room: string, policy: Policy = 'ask', prefs: Partia
     ...initialWork,
     ...initialNetwork,
     ...initialSupport,
+    ...initialTelemetry,
     ...initialClaudeCode,
     ...initialGateway,
     ...initialFriendShare,
@@ -1438,6 +1442,8 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
       return { ...state, ...reduceNetwork(state, action) };
     case 'support':
       return { ...state, support: action.support };
+    case 'telemetry':
+      return { ...state, telemetry: action.telemetry };
     case 'assistant_chats':
       return { ...state, assistant: action.assistant };
     case 'needs_dismissed':

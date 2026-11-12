@@ -75,14 +75,13 @@ export function QueueTray({ queue, selfName, onEdit, channel: given }: { queue: 
   const [steering, setSteering] = useState<ReadonlySet<string>>(new Set());
   // ⌥↩ is shown on Steer only when it steers what you type (with Steer as the default, or in Plan First, it queues).
   const prefs = usePrefs();
-  const chatLinks = useApp((st) => st.prefs.chatLinks);
   const steerBlock = useSteerBlock(channel);
   const steerKey = otherKeySteers(prefs.sendDuringTurn, !steerBlock) ? shortcutKeys('composer-steer') : undefined;
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   if (!queue.length) return null;
   // One line of words: a chat it names by its title, never its ref.
-  const shown = (prompt: string): string => imageLinksAsWords(chatLinks ? chatMentionsAsTitles(prompt) : prompt);
+  const shown = (prompt: string): string => imageLinksAsWords(chatMentionsAsTitles(prompt));
   const yours = queue.filter((q) => q.yours);
   const call = (p: Promise<unknown>): void => void p.catch((err: unknown) => toast(client, errorText(err), 'error'));
   const settle = (id: string): void =>

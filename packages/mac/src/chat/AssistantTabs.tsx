@@ -54,7 +54,6 @@ function ChatTab({ chat, open, only, onOpen, onDelete }: { chat: AssistantChat; 
   // The only chat, still empty: nothing to delete.
   const deletable = !only || said;
   const { client } = useBeluga();
-  const linkable = useApp((st) => st.prefs.chatLinks);
   const tab = (
     <div className={cx(s.tab, open && s.tabOn)}>
       <Tip label={signal.tip || title}>
@@ -67,7 +66,7 @@ function ChatTab({ chat, open, only, onOpen, onDelete }: { chat: AssistantChat; 
       {deletable ? <IconButton icon="x" label={only ? 'Delete this chat and start over' : 'Delete this chat'} className={s.close} onClick={() => onDelete(title, only)} /> : null}
     </div>
   );
-  return linkable ? <ActionsContext items={() => chatLinkItems(client.store.getState(), client, chat.channel)}>{tab}</ActionsContext> : tab;
+  return <ActionsContext items={() => chatLinkItems(client.store.getState(), client, chat.channel)}>{tab}</ActionsContext>;
 }
 
 function confirmDelete(title: string, last: boolean, run: () => void): void {

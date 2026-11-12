@@ -48,7 +48,6 @@ async function say(page: Page, text: string): Promise<void> {
 test('copy a link from a row, open it, and read the chip', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/');
-  await daemon(page, `(c) => c.api.session.setPrefs({ chatLinks: true })`);
   // Copy Chat Link on the row. Projects start folded.
   for (const project of ['bob-api', 'landing']) await sidebar(page).getByRole('button', { name: `Show what's in ${project}` }).first().click();
   const { id, name, self } = await worktreeWithRow(page);
@@ -83,25 +82,12 @@ test('copy a link from a row, open it, and read the chip', async ({ page, contex
   await expect(page.getByRole('textbox', { name: 'Tell Claude what to do in better-name' })).toBeVisible();
 });
 
-test('with chat links off, the chip stays code and the link does nothing', async ({ page }) => {
-  await page.goto('/');
-  // A spec file's tests share one daemon, and its prefs.
-  await daemon(page, `(c) => c.api.session.setPrefs({ chatLinks: false })`);
-  const { id, self } = await daemon<{ id: string; self: string }>(page, `(c) => { const s = c.store.getState(); const w = s.projects.flatMap((p) => p.workspaces).find((x) => x.kind === 'worktree' && !x.archived); return { id: w.id, self: s.selfId }; }`);
-  await openYourMac(page);
-  await say(page, `\`chat:${self}/ws:${id}\` and [the link](beluga://chat/${self}/${encodeURIComponent(`ws:${id}`)})`);
-  await expect(page.locator('code', { hasText: `chat:${self}/ws:${id}` }).first()).toBeVisible();
-  await page.getByRole('link', { name: 'the link' }).click();
-  await expect(page.getByRole('tablist', { name: 'Your Mac’s chats' })).toBeVisible();
-});
-
-test('a plan row stays with chat links on, and copies the link of its home chat', async ({ page, context }) => {
+test('a plan row stays, and copies the link of its home chat', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const logged: string[] = [];
   page.on('console', (m) => logged.push(m.text()));
   page.on('pageerror', (e) => logged.push(e.message));
   await page.goto('/');
-  await daemon(page, `(c) => c.api.session.setPrefs({ chatLinks: true })`);
   const { project, plan, home, self } = await daemon<{ project: string; plan: string; home: string; self: string }>(
     page,
     `(c) => { const s = c.store.getState(); const p = s.plans.plans.find((x) => x.status === 'active' && x.home.startsWith('ws:')); return { project: s.projects.find((x) => x.id === p.projectId).name, plan: p.id, home: p.home, self: s.selfId }; }`,

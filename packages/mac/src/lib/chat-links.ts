@@ -18,7 +18,7 @@ export function openChatView(actions: Actions, view: View): void {
 
 /**
  * Opens a chat's link (a deep link, or one in a message): asks the daemon, as the window may have
- * just launched. Chat links off: nothing happens. An unknown or removed chat stays where you are, with a toast.
+ * just launched. An unknown or removed chat stays where you are, with a toast.
  */
 export async function openChatLink(client: SocketClient, actions: Actions, ref: ChatRef): Promise<void> {
   const text = formatChatRef(ref);
@@ -29,9 +29,9 @@ export async function openChatLink(client: SocketClient, actions: Actions, ref: 
   if (answer.opens && chat?.view) openChatView(actions, chat.view);
 }
 
-/** "Copy Chat Link" for a row's menu (beside a worktree's own Copy Link, BLG-878, which copies its worktree: ref): none with chat links off, or for a chat with no address. */
+/** "Copy Chat Link" for a row's menu (beside a worktree's own Copy Link, BLG-878, which copies its worktree: ref): none for a chat with no address. */
 export function chatLinkItems(state: AppState, client: SocketClient, channel: string): ActionItem[] {
-  const link = state.prefs.chatLinks ? chatLink({ owner: state.selfId, channel }) : undefined;
+  const link = chatLink({ owner: state.selfId, channel });
   if (!link) return [];
   return [{ label: 'Copy Chat Link', icon: 'link', onSelect: () => void copyText(link).then(() => toast(client, 'Link copied', 'success')) }];
 }

@@ -129,21 +129,15 @@ function storeWithQueue() {
   return store;
 }
 
-describe('chat chips on the phone follow the Mac’s chat links setting', () => {
+describe('chat chips on the phone', () => {
   const ctx = { macName: 'Mac', refs: { output: () => undefined } } as never;
-  const conv = (chatLinks: boolean): ConvView => {
+  const conv = (): ConvView => {
     const base = initialState('room', 'auto');
-    const store = new Store({ ...base, selfId: ME, prefs: { ...base.prefs, chatLinks } });
+    const store = new Store({ ...base, selfId: ME });
     return viewSchema('conv:ws:tgt' as never).parse(convView(store.getState(), ctx, 'conv:ws:tgt' as never)) as ConvView;
   };
 
-  it('the conversation says when the Mac has chat links on, and only then', () => {
-    expect(conv(true).chatLinks).toBe(true);
-    expect(conv(false).chatLinks).toBeUndefined();
-  });
-
-  it('with chat links off, a chat mention is its title in plain words', () => {
-    expect(chatMentionsAsTitles(`Look at @Fix the login (chat: ${ME}/ws:src) first`)).toBe('Look at @Fix the login first');
-    expect(chatMentionsAsTitles('A ref that is no chat @x (chat: nope) stays')).toBe('A ref that is no chat @x (chat: nope) stays');
+  it('the conversation says the Mac has chat links', () => {
+    expect(conv().chatLinks).toBe(true);
   });
 });

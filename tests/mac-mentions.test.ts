@@ -55,26 +55,24 @@ describe('what a mention names', () => {
 
 describe('a chat in the words', () => {
   const ref = 'peer-owner-0001/ws:wt-login';
-  const chatWorld: MentionWorld = { ...world, chatLinks: true };
 
   it('is one piece, title and all, that keeps the text as written', () => {
-    expect(splitMentions(`read @Fix the login (chat: ${ref}), and @mia`, chatWorld)).toEqual([
+    expect(splitMentions(`read @Fix the login (chat: ${ref}), and @mia`, world)).toEqual([
       { text: 'read ' },
       { raw: `@Fix the login (chat: ${ref})`, ref: { kind: 'chat', label: 'Fix the login', id: ref } },
       { text: ', and ' },
       { raw: '@mia', ref: { kind: 'friend', label: 'mia', id: 'mia-peer-0001' } },
     ]);
     // A mention before it doesn't swallow the words up to it.
-    expect(splitMentions(`@mia see @Fix (chat: ${ref})`, chatWorld).map((p) => ('ref' in p ? p.ref.kind : 'text'))).toEqual(['friend', 'text', 'chat']);
+    expect(splitMentions(`@mia see @Fix (chat: ${ref})`, world).map((p) => ('ref' in p ? p.ref.kind : 'text'))).toEqual(['friend', 'text', 'chat']);
   });
 
-  it('stays words with chat links off, for a malformed ref, and for the room', () => {
-    expect(splitMentions(`@Fix (chat: ${ref})`, world)).toEqual([{ text: `@Fix (chat: ${ref})` }]);
-    for (const bad of ['nope', 'peer-owner-0001/room', 'peer-owner-0001/dm:bob']) expect(splitMentions(`@Fix (chat: ${bad})`, chatWorld)).toEqual([{ text: `@Fix (chat: ${bad})` }]);
+  it('stays words for a malformed ref, and for the room', () => {
+    for (const bad of ['nope', 'peer-owner-0001/room', 'peer-owner-0001/dm:bob']) expect(splitMentions(`@Fix (chat: ${bad})`, world)).toEqual([{ text: `@Fix (chat: ${bad})` }]);
   });
 
   it('becomes a mention link that names the chat', () => {
-    const href = /\((beluga-mention:[^)]+)\)/.exec(linkMentions(`@Fix (it) (chat: ${ref}) ok @Fix login (chat: ${ref})`, chatWorld))![1]!;
+    const href = /\((beluga-mention:[^)]+)\)/.exec(linkMentions(`@Fix (it) (chat: ${ref}) ok @Fix login (chat: ${ref})`, world))![1]!;
     expect(parseMentionHref(href)).toEqual({ kind: 'chat', label: 'Fix login', id: ref });
   });
 
@@ -102,17 +100,10 @@ describe('a chat in the words', () => {
 
   it('at the start of a message is no person to ask', () => {
     const peers = [{ peerId: 'me', name: 'me', agent: true, shares: [] }, { peerId: 'b', name: 'Fix', agent: true, shares: [] }] as unknown as PeerInfo[];
-    const on = { chatLinks: true };
-    expect(parseInput(`@Fix the login (chat: ${ref}) what happened?`, 'me', peers, on)).toMatchObject({ kind: 'chat', text: `@Fix the login (chat: ${ref}) what happened?` });
-    expect(parseInput(`@Fix (chat: ${ref}) what happened?`, 'me', peers, on)).toMatchObject({ kind: 'chat' });
-    expect(parseInput(`@claude @Fix the login (chat: ${ref}) what happened?`, 'me', peers, on)).toMatchObject({ kind: 'agent', prompt: `@Fix the login (chat: ${ref}) what happened?`, unknown: [] });
-    expect(parseInput('@Fix what happened?', 'me', peers, on)).toMatchObject({ kind: 'agent', prompt: 'what happened?' });
-  });
-
-  it('with chat links off is read as before chat links: "@Fix" asks Fix (BLG-309)', () => {
-    const peers = [{ peerId: 'me', name: 'me', agent: true, shares: [] }, { peerId: 'b', name: 'Fix', agent: true, shares: [] }] as unknown as PeerInfo[];
-    expect(parseInput(`@Fix (chat: ${ref}) what happened?`, 'me', peers)).toMatchObject({ kind: 'agent', targets: ['b'], prompt: `(chat: ${ref}) what happened?` });
-    expect(parseInput(`@Fix (chat: ${ref}) what happened?`, 'me', peers, { chatLinks: false })).toMatchObject({ kind: 'agent', targets: ['b'] });
+    expect(parseInput(`@Fix the login (chat: ${ref}) what happened?`, 'me', peers)).toMatchObject({ kind: 'chat', text: `@Fix the login (chat: ${ref}) what happened?` });
+    expect(parseInput(`@Fix (chat: ${ref}) what happened?`, 'me', peers)).toMatchObject({ kind: 'chat' });
+    expect(parseInput(`@claude @Fix the login (chat: ${ref}) what happened?`, 'me', peers)).toMatchObject({ kind: 'agent', prompt: `@Fix the login (chat: ${ref}) what happened?`, unknown: [] });
+    expect(parseInput('@Fix what happened?', 'me', peers)).toMatchObject({ kind: 'agent', prompt: 'what happened?' });
   });
 });
 

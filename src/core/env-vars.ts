@@ -606,6 +606,23 @@ export class EnvVars {
     this.save();
   }
 
+  /**
+   * Every secret value this computer's Beluga knows: your variables, each project's saved ones and
+   * its main folder's .env files, and the endpoints' keys. Only for masking them out of text on this
+   * computer before it's sent (src/telemetry/mask.ts); never shown, never sent.
+   */
+  secretValues(): string[] {
+    const data = this.data;
+    const dotenvs = this.projects.flatMap((p) => {
+      try {
+        return Object.values(readDotenv(p.root));
+      } catch {
+        return [];
+      }
+    });
+    return [...Object.values(data.global), ...Object.values(data.projects).flatMap((p) => Object.values(p.vars)), ...dotenvs, ...data.endpoints.flatMap((e) => (e.key ? [e.key] : []))];
+  }
+
   /** Your endpoints, keys and all: for runs on this Mac only (never a screen: see local-endpoints.ts). */
   endpoints(): readonly Endpoint[] {
     return this.data.endpoints;

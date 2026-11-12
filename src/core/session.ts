@@ -14,6 +14,7 @@ import type { AgentBackend, ChatChain, RoomBridge } from '../agent/types.js';
 import type { AgentRuntime, RuntimeCapabilities, RuntimeId, RuntimeOptions } from '../agent/runtime/types.js';
 import { guardedBackend } from '../agent/runtime/guard.js';
 import { type SideRoute, routeSideCall, routedBackend } from '../agent/runtime/router.js';
+import { observeRuntime } from '../telemetry/hook.js';
 import { sideCalls } from '../agent/side-calls.js';
 import type { ChatAnswerRequest } from './chat/claude-prompt.js';
 import { localRuntime } from '../agent/runtime/local.js';
@@ -122,6 +123,8 @@ export interface SessionOptions {
   readonly desktopNotify?: (n: import('./notify.js').DesktopNote) => void;
   /** Open a URL or file with the system (injected in tests). */
   readonly open?: (target: string) => void;
+  /** Open a web page on the screen in use (its `openExternal` capability), else with the system: an MCP sign-in's page. */
+  readonly openPage?: (url: string) => Promise<void>;
   /** Keep Claude Code current in the background (the Mac app's daemon; never in tests or the demo). */
   readonly updateAgent?: () => Promise<boolean>;
   /** Injected in tests: pull request lookups and the GitHub CLI check. */
@@ -290,7 +293,7 @@ export class Session {
     const options = { cwd: this.opts.agentCwd, autoEdit: true, additionalDirectories: [], bridge: this.bridge, ownEnv: this.ownEnv };
     return routedBackend(agent, 'claude', (id) => {
       const rt = also.find((r) => r.id === id);
-      return rt ? guardedBackend(rt.create(options), rt.capabilities) : undefined;
+      return rt ? observeRuntime(guardedBackend(rt.create(options), rt.capabilities), rt.id) : undefined;
     });
   }
 
@@ -302,7 +305,8 @@ export class Session {
 
   /** Your default agent's backend, sending each turn whose place picked another runtime to that one's (agent/runtime/router.ts). */
   private routed(main: AgentRuntime, rt: NonNullable<SessionOptions['runtime']>): AgentBackend {
-    const make = (r: AgentRuntime): AgentBackend => guardedBackend(r.create({ ...rt.options, bridge: this.bridge, ownEnv: this.ownEnv }), r.capabilities);
+    // Each runtime's turns also reach usage statistics, when you chose to send them (src/telemetry/hook.ts).
+    const make = (r: AgentRuntime): AgentBackend => observeRuntime(guardedBackend(r.create({ ...rt.options, bridge: this.bridge, ownEnv: this.ownEnv }), r.capabilities), r.id);
     // Every other runtime that has plan usage reports it too (Codex's windows on the usage tab).
     const withUsage = KNOWN_RUNTIMES.map((r) => r.id).filter((id) => id !== main.id && rt.runtimes(id)?.capabilities.hasUsage);
     return routedBackend(
@@ -332,7 +336,7 @@ export class Session {
     // A local endpoint is Claude Code pointed elsewhere (BLG-449), as in routed(): it runs wherever Claude does.
     const rt = runtime === LOCAL_RUNTIME ? (this.opts.runtime?.runtimes('claude') ? localRuntime((v) => this.local.resolve(v)) : undefined) : this.opts.runtime?.runtimes(runtime);
     if (!rt || !this.opts.runtime) return undefined;
-    const backend = guardedBackend(rt.create({ ...this.opts.runtime.options, bridge: this.bridge, ownEnv: this.ownEnv }), rt.capabilities);
+    const backend = observeRuntime(guardedBackend(rt.create({ ...this.opts.runtime.options, bridge: this.bridge, ownEnv: this.ownEnv }), rt.capabilities), rt.id);
     this.otherBackends.set(runtime, backend);
     return backend;
   }
@@ -398,7 +402,7 @@ export class Session {
       this.projectsTimer.unref();
       this.workspaceTimer = setInterval(paced(WORKSPACE_REFRESH_MS, saving, () => void this.workspaces?.refresh()), WORKSPACE_REFRESH_MS);
       this.workspaceTimer.unref();
-      // A quiet fetch of each project's remote every ~15 minutes (the project home's "fetched … ago").
+      // A quiet fetch of each project's remote as often as Settings › Workspaces says (the project home's "fetched … ago").
       this.workspaces.mainSync.start();
     }
   }
@@ -474,7 +478,7 @@ export class Session {
     // A dialogue between your agents: started here (proposed, you confirm its caps), or what you say into one (core/dialogues).
     if (dialoguesOf(this)?.fromComposer(raw, channel)) return true;
     // "@codex": your own Codex when it runs here, listed on your card or not (BLG-520).
-    const parsed = parseInput(raw, this.selfId, state.peers, { runs: (runtime) => this.runsAgent({ runtime, label: runtime }), chatLinks: state.prefs.chatLinks });
+    const parsed = parseInput(raw, this.selfId, state.peers, { runs: (runtime) => this.runsAgent({ runtime, label: runtime }) });
     // In a friend's worktree: their agent, or yours with "@claude" (core/shared-guest).
     const shared = channel !== 'room' && (parsed.kind === 'chat' || parsed.kind === 'agent') ? this.sharing.sharedFor(channel) : undefined;
     if (shared) return this.submitShared(raw, shared, channel, urgent, id);
@@ -1587,7 +1591,7 @@ export class Session {
     this.sayWhoAnswers(from, body);
     // Your Claude asked from a workspace: follow the friend's Claude there (only from the one you asked).
     const channel = waiter?.mirror && waiter.peer === from && body.requester === this.selfId ? waiter.mirror : body.channel;
-    if (!this.workspaces?.deletedChannel(channel)) this.store.dispatch({ type: 'agent_event', owner: from, requestId: body.requestId, requester: body.requester, event: body.event, text: body.text, ts, channel, ...(body.slotWait ? { slotWait: body.slotWait } : {}), ...(body.agent ? { agent: body.agent } : {}), ...(body.via ? { via: body.via } : {}), ...(body.fromChat && this.store.getState().prefs.chatLinks ? { fromChat: body.fromChat } : {}) });
+    if (!this.workspaces?.deletedChannel(channel)) this.store.dispatch({ type: 'agent_event', owner: from, requestId: body.requestId, requester: body.requester, event: body.event, text: body.text, ts, channel, ...(body.slotWait ? { slotWait: body.slotWait } : {}), ...(body.agent ? { agent: body.agent } : {}), ...(body.via ? { via: body.via } : {}), ...(body.fromChat ? { fromChat: body.fromChat } : {}) });
     if (!waiter || waiter.peer !== from || !['done', 'error', 'denied'].includes(body.event)) return;
     clearTimeout(waiter.timer);
     this.agentWaiters.delete(body.requestId);

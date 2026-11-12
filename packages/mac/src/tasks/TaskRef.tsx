@@ -152,12 +152,12 @@ export const CHAT_KIND: Readonly<Record<ResolvedChat['kind'], string>> = { workt
 
 /**
  * A chat by its address (`chat:<owner>/<channel>`): a pill with its current title, read from the
- * records as chats.resolve reads them; a click opens it. With prefs.chatLinks off it's what it was:
- * `fallback`, the caller's own (an inline code span, a step's words), else the code.
+ * records as chats.resolve reads them; a click opens it. Until it
+ * reads, `fallback`: the caller's own (an inline code span, a step's words), else the code.
  */
 export function ChatChip({ target, raw, fallback }: { target: ChatRef; raw: string; fallback?: ReactNode }) {
   // Text, not the object: a pick built fresh each time never settles (#185, as WorktreeChip above).
-  const picked = useApp((s) => (s.prefs.chatLinks ? JSON.stringify(resolveChat(s, target)) : undefined));
+  const picked = useApp((s) => JSON.stringify(resolveChat(s, target)));
   const chat = useMemo(() => (picked ? (JSON.parse(picked) as ResolvedChat) : undefined), [picked]);
   const actions = useActions();
   if (!chat) return <>{fallback ?? <code>{raw}</code>}</>;

@@ -84,7 +84,7 @@ export function buildViewAppend(terminal = false): string {
   ].join('\n');
 }
 
-/** Chat chips, only with prefs.chatLinks on (core/agent-host.ts): this chat's own ref, as the token. Nothing for a chat with no address. */
+/** Chat chips (core/agent-host.ts): this chat's own ref, as the token. Nothing for a chat with no address. */
 export function buildChatLinkAppend(here: ChatRef): string {
   const ref = formatChatRef(here);
   if (!ref) return '';

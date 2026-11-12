@@ -54,7 +54,7 @@ interface Lit {
   readonly box: Box;
 }
 
-/** Sidebar rows can be picked up, with prefs.chatLinks on. Mounted once, with the sidebar; draws what's carried. */
+/** Sidebar rows can be picked up. Mounted once, with the sidebar; draws what's carried. */
 export function useChatDrag(): ReactNode {
   const { client } = useBeluga();
   const x = useMotionValue(0);
@@ -67,7 +67,6 @@ export function useChatDrag(): ReactNode {
     const press = (e: PointerEvent): void => {
       if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || stop || !(e.target instanceof Element)) return;
       const state = client.store.getState();
-      if (!state.prefs.chatLinks) return;
       const row = e.target.closest<HTMLElement>('[data-chat-row]');
       if (!row || e.target.closest('button, input, a, [data-no-drag]')) return;
       const from = row.dataset.chatRow!;
@@ -108,11 +107,14 @@ export function useChatDrag(): ReactNode {
       const begin = (): void => {
         started = true;
         const r = row.getBoundingClientRect();
-        grab = { x: start.x - r.left, y: start.y - r.top };
+        // Its nesting is the sidebar's, not the row's: the copy starts at its icon.
+        const trim = Math.max(0, parseFloat(getComputedStyle(row).paddingLeft) - FACE_PADDING);
+        const width = r.width - trim;
+        grab = { x: Math.min(Math.max(start.x - r.left - trim, 0), width), y: start.y - r.top };
         x.set(point.x - grab.x);
         y.set(point.y - grab.y);
         lean.jump(0);
-        setCarried({ face: faceOf(row), width: r.width });
+        setCarried({ face: faceOf(row), width });
         document.documentElement.dataset.arranging = '';
         window.getSelection()?.removeAllRanges();
       };
@@ -123,6 +125,7 @@ export function useChatDrag(): ReactNode {
           begin();
         }
         ev.preventDefault();
+        window.getSelection()?.removeAllRanges();
         x.set(point.x - grab.x);
         y.set(point.y - grab.y);
         update();
@@ -149,7 +152,10 @@ export function useChatDrag(): ReactNode {
         ev.stopPropagation();
         end(false);
       };
+      // Pressing a row and moving selects nothing: not the row's words, nor a chat's, a terminal's or a file's on the way.
+      const noSelect = (ev: Event): void => ev.preventDefault();
       const cleanup = (): void => {
+        document.removeEventListener('selectstart', noSelect, { capture: true });
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
         window.removeEventListener('pointercancel', cancel);
@@ -162,6 +168,7 @@ export function useChatDrag(): ReactNode {
         delete document.documentElement.dataset.arranging;
         stop = undefined;
       };
+      document.addEventListener('selectstart', noSelect, { capture: true });
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
       window.addEventListener('pointercancel', cancel);
@@ -206,12 +213,16 @@ const boxOf = (el: Element): Box => {
 /** The conversation a message box is in, and the box. */
 const litOf = (box: HTMLElement): Lit => ({ pane: boxOf(box.closest('main, [role="complementary"]') ?? box), box: boxOf(box) });
 
-/** A copy of the row to carry: it looks the same, and is nothing anyone can find or press. */
+/** The carried copy's own left padding (a top-level row's, Row in sidebar-parts.tsx), whatever the row's nesting. */
+const FACE_PADDING = 8;
+
+/** A copy of the row to carry: it looks the same, without its nesting, and is nothing anyone can find or press. */
 function faceOf(row: HTMLElement): HTMLElement {
   const face = row.cloneNode(true) as HTMLElement;
   for (const el of [face, ...face.querySelectorAll<HTMLElement>('*')]) {
     for (const name of ['id', 'role', 'tabindex', 'title', 'aria-label', 'aria-expanded', 'aria-current', 'data-chat-row', 'data-drag']) el.removeAttribute(name);
   }
+  face.style.paddingLeft = `${FACE_PADDING}px`;
   face.inert = true;
   return face;
 }

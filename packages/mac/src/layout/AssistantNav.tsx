@@ -28,7 +28,6 @@ export function AssistantNav() {
     return channels.map((c) => signalOf(s, c)).reduce((a, b) => (RANK[b.level] > RANK[a.level] ? b : a));
   }, sameDeep);
   const { client } = useBeluga();
-  const linkable = useApp((s) => s.prefs.chatLinks);
   const open = useApp((s) => activeAssistantChannel(s.assistant));
   const row = (
     <Row
@@ -41,7 +40,6 @@ export function AssistantNav() {
       trailing={<SignalMark signal={signal} />}
     />
   );
-  if (!linkable) return row;
   // The row is Your Mac; its link is the chat open now. Each tab has its own too (AssistantTabs).
   return (
     <ActionsContext

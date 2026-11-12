@@ -28,7 +28,6 @@ const sentThere = (page: Page): Promise<string[]> => daemon<string[]>(page, `(c)
 /** bob's refunds chat open, and the words for one worktree of yours in its box. */
 async function setUp(page: Page): Promise<{ words: string; name: string }> {
   await page.goto('/');
-  await daemon(page, `(c) => c.api.session.setPrefs({ chatLinks: true })`);
   await expect.poll(() => daemon<boolean>(page, `(c) => c.store.getState().shared.some((w) => w.id === 'bob-refunds' && w.role === 'contribute')`), { timeout: 15_000 }).toBe(true);
   const mine = await daemon<{ self: string; id: string; name: string }>(page, `(c) => { const s = c.store.getState(); const w = s.projects.flatMap((p) => p.workspaces).find((w) => w.kind === 'worktree' && !w.archived); return { self: s.selfId, id: w.id, name: w.name }; }`);
   const refunds = sidebar(page).getByRole('button', { name: 'refunds' });

@@ -40,6 +40,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
  */
 export class McpConnect {
   private readonly signIns = new Map<string, { readonly session: McpSession; readonly done: Promise<boolean> }>();
+  private readonly listeners = new Set<(name: string) => void>();
 
   constructor(
     private readonly open: OpenMcpSession,
@@ -79,9 +80,14 @@ export class McpConnect {
       const res = await session.mcpAuthenticate(name);
       if (!res?.authUrl) {
         session.close();
-        return res?.requiresUserAction === false ? { connected: true } : { error: 'Claude Code didn’t give a page to sign in on.' };
+        if (res?.requiresUserAction !== false) return { error: 'Claude Code didn’t give a page to sign in on.' };
+        this.announce(name);
+        return { connected: true };
       }
-      const done = this.waitConnected(session, name).finally(() => {
+      const done = this.waitConnected(session, name).then((connected) => {
+        if (connected) this.announce(name);
+        return connected;
+      }).finally(() => {
         session.close();
         if (this.signIns.get(name)?.session === session) this.signIns.delete(name);
       });
@@ -98,10 +104,31 @@ export class McpConnect {
     return this.signIns.get(name)?.done ?? Promise.resolve(undefined);
   }
 
+  /** A sign-in started with signIn is waiting for the browser now. */
+  signingIn(name: string): boolean {
+    return this.signIns.has(name);
+  }
+
+  /** Told the name of each server a sign-in connected (the name only: never a token or a page). Returns how to stop listening. */
+  onSignedIn(listener: (name: string) => void): () => void {
+    this.listeners.add(listener);
+    return () => void this.listeners.delete(listener);
+  }
+
   /** Stop every sign-in still waiting (the daemon is going away). */
   close(): void {
     for (const { session } of this.signIns.values()) session.close();
     this.signIns.clear();
+  }
+
+  private announce(name: string): void {
+    for (const listener of this.listeners) {
+      try {
+        listener(name);
+      } catch {
+        // A listener failing never undoes a sign-in.
+      }
+    }
   }
 
   private entries(cwds: readonly string[]): OwnerMcpEntry[] {

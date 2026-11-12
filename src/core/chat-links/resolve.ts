@@ -39,11 +39,10 @@ export function resolveChat(state: DomainState, ref: ChatRef): ResolvedChat {
 }
 
 /**
- * chats.resolve: the same for a ref as text. Answers nothing for a malformed ref or while
- * prefs.chatLinks is off, so a chip stays plain text and a link does nothing.
+ * chats.resolve: the same for a ref as text. Answers nothing for a malformed ref, so its chip
+ * stays plain text and its link does nothing.
  */
 export function resolveChatText(state: DomainState, text: string): ResolvedChat | undefined {
-  if (!state.prefs.chatLinks) return undefined;
   const ref = parseChatRef(text);
   return ref && resolveChat(state, ref);
 }
