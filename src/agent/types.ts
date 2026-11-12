@@ -32,11 +32,6 @@ export interface AgentRunInput {
   readonly promptId?: string;
   readonly requesterName: string;
   readonly viaAgent: boolean;
-  /**
-   * Only for a run you asked for yourself on this computer: the words you typed, without what
-   * Beluga adds to the prompt. Usage statistics send it at level On, masked; nothing else reads it.
-   */
-  readonly ownWords?: string;
   readonly context: readonly string[];
   /** 'folder': only the shared folders. 'full': the whole computer (secrets still blocked). */
   readonly scope: AccessScope;

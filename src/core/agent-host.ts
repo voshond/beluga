@@ -1644,7 +1644,6 @@ export class AgentHost {
         ...(toolboxTools ? { toolboxTools } : {}),
         prompt: this.promptOf(body, from, lane.sent),
         ...this.promptIdOf(body),
-        ...this.ownWordsOf(from, body),
         requesterName: this.askerOf(body, from),
         viaAgent: body.viaAgent,
         context: this.recentChat(body.channel),
@@ -1934,16 +1933,6 @@ export class AgentHost {
   private viaOf(requester: string): MessageVia | undefined {
     if (!isExternalRequester(requester)) return undefined;
     return { id: requester.slice(requester.indexOf(':') + 1), name: this.nameOf(requester), creationSource: 'mcp' };
-  }
-
-  /**
-   * The words you typed yourself, for a run you asked for on this computer: not a friend's, not an
-   * agent's, and without what Beluga adds to the prompt (worktree paths, task text, a carried
-   * conversation). Only usage statistics read it, at level On (src/telemetry/observe.ts).
-   */
-  private ownWordsOf(from: string, body: BodyOf<'agent_request'>): { ownWords?: string } {
-    // A message an agent sent from another chat (BLG-149) isn't yours either.
-    return from === this.selfId && !body.via && !body.viaAgent && !body.origin ? { ownWords: body.prompt } : {};
   }
 
   /** Who a run is for, as its agent reads it. `from` alone decides what it may do. */

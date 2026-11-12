@@ -59,10 +59,6 @@ export const SETTINGS: readonly Entry[] = [
     ['Update automatically', 'Install new versions as they come.', 'auto update upgrade'],
     ['Check for updates', 'At launch and every few hours.', 'update version check now'],
   ]),
-  group('general', 'Usage statistics', 'Off, Limited or On.', 'telemetry analytics privacy statistics share data improve'),
-  ...rows('general', 'Usage statistics', [
-    ['Share usage statistics', 'Off sends nothing; Limited only the essentials; On how you use Beluga.', 'telemetry analytics privacy share data level'],
-  ]),
   ...rows('general', 'Writing', [
     ['Send with', 'Return or Command-Return sends a message.', 'enter return send message newline new line keyboard'],
     ['Send during a turn', 'Queue waits for the turn to finish. Steer sends to the current turn.', 'queue steer enter return send message running busy interrupt default'],

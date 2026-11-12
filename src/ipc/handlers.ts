@@ -25,7 +25,6 @@ import type { Args, Method } from './api.js';
 import { NETWORK_HANDLERS } from './network-handlers.js';
 import { SUPPORT_HANDLERS } from './support-handlers.js';
 import { AGENT_SETUP_HANDLERS } from './agent-setup-handlers.js';
-import { TELEMETRY_HANDLERS } from './telemetry-handlers.js';
 import { STATS_HANDLERS } from './stats-handlers.js';
 import { maybeStatsOf } from '../core/stats/counter.js';
 import { WEB_HANDLERS } from './web-handlers.js';
@@ -482,7 +481,6 @@ export const HANDLERS = {
   ...NETWORK_HANDLERS,
   ...SUPPORT_HANDLERS,
   ...AGENT_SETUP_HANDLERS,
-  ...TELEMETRY_HANDLERS,
   ...STATS_HANDLERS,
   ...WEB_HANDLERS,
   ...DIAGNOSTICS_HANDLERS,

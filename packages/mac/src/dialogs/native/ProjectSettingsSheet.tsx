@@ -45,10 +45,6 @@ export function ProjectSettings({ projectId, tab: first, close }: { projectId: s
   const [tab, setTab] = useState<ProjectTab>(first);
   const project = useApp((st) => st.projects.find((p) => p.id === projectId));
   const autoSetup = useApp((st) => st.prefs.autoSetup);
-  // Usage statistics (BLG-922): a project can be left out, whatever the level.
-  const telemetry = useApp((st) => st.telemetry);
-  const sharesNow = !project || !(telemetry.excluded ?? []).includes(project.root);
-  const [shares, setShares] = useState(sharesNow);
   const scripts = project?.scripts ?? {};
   const [values, setValues] = useState<Record<Kind, string>>({ setup: scripts.setup?.command ?? '', run: scripts.run?.command ?? '' });
   const [team, setTeam] = useState(false);
@@ -77,9 +73,7 @@ export function ProjectSettings({ projectId, tab: first, close }: { projectId: s
   };
   // Guessed values say so (once), so you check them.
   const hint = (kind: Kind, what: string) => (!edited(kind) && scripts[kind]?.source === 'detected' ? `${what} Guessed from the project: check it.` : !edited(kind) && scripts[kind]?.source === 'claude' ? `${what} Your agent worked it out from the project: check it.` : what);
-  const changed = edited('setup') || edited('run') || team || auto !== autoSetup || shares !== sharesNow;
-  // Only where there's something to leave out: a build that sends, at a level that sends.
-  const offersShare = telemetry.available && Boolean(telemetry.level) && telemetry.level !== 'off';
+  const changed = edited('setup') || edited('run') || team || auto !== autoSetup;
 
   const save = (): void => {
     for (const kind of ['setup', 'run'] as const) {
@@ -89,7 +83,6 @@ export function ProjectSettings({ projectId, tab: first, close }: { projectId: s
       else if (!team && edited(kind)) void api.workbench.setScript(project.id, kind, value);
     }
     if (auto !== autoSetup) void api.session.setPrefs({ autoSetup: auto });
-    if (shares !== sharesNow) void api.telemetry.exclude(project.root, !shares);
     close();
   };
 
@@ -137,11 +130,6 @@ export function ProjectSettings({ projectId, tab: first, close }: { projectId: s
       <Field label="">
         <Checkbox checked={auto} onChange={setAuto} label="Run setup in new worktrees" detail="For every project; in its Terminal tab" />
       </Field>
-      {offersShare ? (
-        <Field label="">
-          <Checkbox checked={shares} onChange={setShares} label="Send usage statistics from this project" detail="Off: its agents’ runs send nothing, whatever Settings › General says" />
-        </Field>
-      ) : null}
     </FormSheet>
   );
 }

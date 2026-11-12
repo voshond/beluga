@@ -16,7 +16,6 @@ import { type CollabAction, type CollabState, initialCollab, reduceCollab } from
 import { type SearchState, type WorkAction, type WorkState, initialWork, reduceWork } from './work-store.js';
 import { type NetworkAction, type NetworkSlice, initialNetwork, reduceNetwork } from './network-store.js';
 import { type SupportAction, type SupportSlice, initialSupport } from './support-store.js';
-import { type TelemetryAction, type TelemetrySlice, initialTelemetry } from './telemetry-store.js';
 import { type ClaudeCodeAction, type ClaudeCodeSlice, initialClaudeCode, reduceClaudeCode } from './claude-code/model.js';
 import { type GatewayAction, type GatewaySlice, initialGateway, reduceGateway } from './gateway/model.js';
 import { type FriendShareAction, type FriendShareSlice, initialFriendShare, reduceFriendShare } from './friend-share-store.js';
@@ -584,7 +583,7 @@ export interface MyShare {
  * Everything Beluga knows that isn't about a screen: the room, people, projects, conversations,
  * approvals… The core (the daemon) owns it and every client sees the same.
  */
-export interface DomainState extends CollabState, WorkState, NetworkSlice, SupportSlice, TelemetrySlice, ClaudeCodeSlice, GatewaySlice, BoardSlice, SentinelSlice, PlansSlice, DialoguesSlice, CompanionSlice, FriendShareSlice, TeamSlice {
+export interface DomainState extends CollabState, WorkState, NetworkSlice, SupportSlice, ClaudeCodeSlice, GatewaySlice, BoardSlice, SentinelSlice, PlansSlice, DialoguesSlice, CompanionSlice, FriendShareSlice, TeamSlice {
   readonly room: string;
   readonly projects: readonly Project[];
   /** The first scan of the projects is done: a workspace that isn't in `projects` now is really gone. */
@@ -789,8 +788,7 @@ export type Action =
   | PlansAction
   | DialoguesAction
   | TeamAction
-  | SupportAction
-  | TelemetryAction;
+  | SupportAction;
 
 const LOG_LIMIT = 1000;
 const TRANSFER_LIMIT = 20;
@@ -903,7 +901,6 @@ export function initialState(room: string, policy: Policy = 'ask', prefs: Partia
     ...initialWork,
     ...initialNetwork,
     ...initialSupport,
-    ...initialTelemetry,
     ...initialClaudeCode,
     ...initialGateway,
     ...initialFriendShare,
@@ -1442,8 +1439,6 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
       return { ...state, ...reduceNetwork(state, action) };
     case 'support':
       return { ...state, support: action.support };
-    case 'telemetry':
-      return { ...state, telemetry: action.telemetry };
     case 'assistant_chats':
       return { ...state, assistant: action.assistant };
     case 'needs_dismissed':

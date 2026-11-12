@@ -140,7 +140,7 @@ function fn(src: string, name: string): string {
 
 const s = (...names: string[]) => names.map((n) => fn(SETTINGS_TSX, n)).join('\n');
 const PANE_SOURCES: Record<string, string> = {
-  general: [s('General', 'PictureRow'), fn(read('dialogs/UpdateSettings.tsx'), 'UpdateSettingsGroup'), read('dialogs/TelemetrySettings.tsx')].join('\n'),
+  general: [s('General', 'PictureRow'), fn(read('dialogs/UpdateSettings.tsx'), 'UpdateSettingsGroup')].join('\n'),
   appearance: [s('Appearance'), read('dialogs/ThemePicker.tsx'), read('dialogs/ArchiveSettledRow.tsx')].join('\n'),
   claude: [s('AgentPane', 'AgentsGroup'), ...['LaunchFlagsSettings', 'McpSettings', 'LocalModelsSettings', 'ContextSettings', 'UsageLimitSettings', 'ParallelSettings', 'ChatLimitSettings'].map((f) => read(`dialogs/${f}.tsx`)), fn(read('dialogs/AgentThreadsSettings.tsx'), 'ThreadLimitsSettings'), ...THREAD_LIMIT_ROWS.map(({ label }) => `'${label}'`)].join('\n'),
   skills: ['MachineNoteSettings', 'SharedSkillsSettings', 'AgentsDocSettings', 'BuiltInInstructions'].map((f) => read(`dialogs/agent-setup/${f}.tsx`)).join('\n'),

@@ -38,7 +38,6 @@ import { MessageBanner } from './network/MessageBanner.js';
 import { RequestSheet } from './gateway/RequestSheet.js';
 import { useRequestNative } from './gateway/request-native.js';
 import { SupportSheets } from './dialogs/SupportSheets.js';
-import { TelemetrySheets } from './dialogs/TelemetrySheets.js';
 import { useIdleAway, useTrayPresence } from './network/net-native.js';
 import { useUpdateActivity } from './lib/updates.js';
 import { useChunkCare } from './lib/lazy-view.js';
@@ -256,7 +255,6 @@ export function App() {
       <NetworkSheets />
       <RequestSheet />
       {welcome.open ? null : <SupportSheets />}
-      {welcome.open ? null : <TelemetrySheets />}
       {joining ? <JoinSheet invite={joining} onCancel={() => setJoining(undefined)} onJoin={() => void joinRoom(joining)} /> : null}
       {/* One per window, over whatever opened it (a chat, a sub-agent's activity, a graph). */}
       <Lightbox />

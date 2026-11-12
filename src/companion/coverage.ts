@@ -334,12 +334,6 @@ export const PHONE: Record<Method, Side> = {
 
   // ---- supporting Beluga: the star ask is the Mac's (it opens GitHub there)
   'support.answer': 'mac',
-  // ---- usage statistics: the level is the phone's too (Settings); the ask and the onboarding are the Mac's
-  'telemetry.choose': 'phone',
-  'telemetry.answer': 'mac',
-  // A project's Settings sheet is the Mac's.
-  'telemetry.exclude': 'mac',
-  'telemetry.mark': 'mac',
   // ---- your stats: the Usage tab's charts and what the composer saw (the phone keeps its plan meters)
   'stats.get': 'mac',
   'stats.leaderboard': 'mac',

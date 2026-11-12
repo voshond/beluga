@@ -57,7 +57,6 @@ import { PhoneSettings } from '../phone/Phone.js';
 import { MachinesSettings } from './MachinesSettings.js';
 import { AccessSettings } from '../gateway/AccessSettings.js';
 import { UpdateAboutRow, UpdateSettingsGroup } from './UpdateSettings.js';
-import { TelemetrySettingsGroup } from './TelemetrySettings.js';
 import { GITHUB_URL } from '../lib/support.js';
 import { openExternal } from '../lib/system.js';
 import { shortcutKeys } from '../lib/shortcuts.js';
@@ -179,7 +178,6 @@ function General() {
       <ServerSettingsGroup />
       {/* A browser runs the build its server serves: the server's Beluga updates, not the page. The app as a client updates itself. */}
       {serverPage() ? null : <UpdateSettingsGroup />}
-      <TelemetrySettingsGroup />
       <Group title="Writing">
         <Row label="Send with" detail={prefs.sendWith === 'enter' ? 'Shift+Return makes a new line.' : 'Return makes a new line.'}>
           <Select

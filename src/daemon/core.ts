@@ -32,7 +32,6 @@ import { launchCalls } from '../core/calls/launch.js';
 import { launchGateway } from '../core/gateway/launch.js';
 import { launchFriendShares } from '../core/friend-share/launch.js';
 import { launchSupport } from '../core/merge-counter.js';
-import { launchTelemetry } from '../telemetry/launch.js';
 import { launchStats } from '../core/stats/counter.js';
 import { launchLeaderboard } from '../core/leaderboard/launch.js';
 import { claudeHome, launchClaudeCode } from '../core/claude-code/launch.js';
@@ -381,7 +380,6 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
 
   let stopNetwork = async (): Promise<void> => undefined;
   let stopSupport = (): void => undefined;
-  let stopTelemetry = async (): Promise<void> => undefined;
   let stopStats = (): void => undefined;
   let stopLeaderboard = (): void => undefined;
   let stopClaudeCode = (): void => undefined;
@@ -405,8 +403,6 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     if (opts.network) stopNetwork = networkSwitch({ session, store, identity: you.identity, name: config.name, dir: belugaHome(), demo: Boolean(demo), warn: (text) => session.system(text, 'warn') }, saved).stop;
     // Merged work made in Beluga, counted once per branch: the first and fifth merge ask for a star and a coffee.
     if (opts.network) stopSupport = launchSupport({ session, store, demo: Boolean(demo), asks: belugaEnv('DEMO_ASKS') });
-    // Usage statistics, when you chose to share them: only Beluga's own releases can send (src/telemetry).
-    if (opts.network) stopTelemetry = launchTelemetry({ session, store, demo: Boolean(demo), asks: belugaEnv('DEMO_ASKS') });
     // Your stats for the Usage tab: prompts, agent time, worktrees, pull requests, by project and agent.
     // BELUGA_DEMO_STATS=sparse: someone with only Claude, a plan without a 5-hour limit, no GitHub CLI, never dictating.
     if (opts.network) stopStats = launchStats({ session, store, demo: Boolean(demo), sparse: belugaEnv('DEMO_STATS') === 'sparse' });
@@ -505,7 +501,6 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     await stopCompanion();
     await stopNetwork();
     stopSupport();
-    await stopTelemetry();
     stopLeaderboard();
     stopStats();
     stopClaudeCode();
