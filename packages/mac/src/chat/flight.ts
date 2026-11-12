@@ -133,7 +133,10 @@ function land(flight: Flight, row: HTMLElement): void {
     clone.classList.remove(WAITING);
     clone.classList.add(FLYING);
     clone.dataset.sendFlight = flight.target;
-    Object.assign(clone.style, { left: `${to.left}px`, top: `${to.top}px`, width: `${to.width}px`, height: `${to.height}px` });
+    // Out of the page's flow whatever classes the row carries: one that places the row
+    // (`position: relative` from reactions) once won over `.flight`, and the copy then took its
+    // room in the chat's flex row, squeezing the list to nothing until it landed (a blank flash).
+    Object.assign(clone.style, { position: 'fixed', margin: '0', left: `${to.left}px`, top: `${to.top}px`, width: `${to.width}px`, height: `${to.height}px` });
     (row.closest<HTMLElement>('[data-flight-layer]') ?? document.body).appendChild(clone);
     // Start where the words were in the box: its left edge, its bottom line.
     const dx = flight.from.left - to.left;

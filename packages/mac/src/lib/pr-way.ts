@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { BranchStep } from '@beluga/core/branch-state.js';
+import type { BranchStep } from '../../../../src/core/branch-state.js';
 
 /** A way to create a pull request, from Create PR's chevron. */
 export type PrWay = 'pr' | 'pr_claude' | 'pr_custom' | 'pr_draft' | 'pr_original';

@@ -4,7 +4,7 @@ import { type CallView, type ShareMode, type StageMessage, CLIP_PART, HEARTBEAT_
 import { inApp } from '../lib/boot.js';
 import { Levels } from './levels.js';
 import { type CameraSize, type LineState, Peer } from './peer.js';
-import { demoCamera, demoPointer, demoScreen, demoVoice } from './demo-media.js';
+import { demoCamera, demoClicked, demoPointer, demoScreen, demoVoice } from './demo-media.js';
 import { NoiseFilter } from './noise-filter.js';
 import { repeat } from './repeat.js';
 import { wakeSound } from './ringtone.js';
@@ -470,6 +470,11 @@ export class CallEngine {
   /** Face to face over the whole window, or back to the chat. */
   setFaces(on: boolean): void {
     this.patch({ faces: on });
+  }
+
+  /** Who's in the call you're making (you too); none outside one. */
+  people(): CallView['people'] {
+    return this.view?.people ?? [];
   }
 
   /** The screen you share now, if you share one (the overlay covers it, call/overlay.ts). */
@@ -988,9 +993,13 @@ export class CallEngine {
     // Someone who isn't sharing points at it, the way pointers come over a real network.
     const pointer = stage ? call.people.find((p) => !p.me && !p.sharing) : undefined;
     if (pointer && !this.stopDemoPointer) {
+      let last = performance.now();
       this.stopDemoPointer = repeat(() => {
-        const [x, y] = demoPointer(performance.now());
+        const now = performance.now();
+        const [x, y] = demoPointer(now);
         for (const fn of this.stageSubs) fn({ k: 'laser', by: pointer.peerId, x, y });
+        if (demoClicked(last, now)) for (const fn of this.stageSubs) fn({ k: 'ping', by: pointer.peerId, x, y });
+        last = now;
       }, 60);
     } else if (!pointer && this.stopDemoPointer) {
       this.stopDemoPointer();

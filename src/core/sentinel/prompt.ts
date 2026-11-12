@@ -328,7 +328,8 @@ export function describeSentinels(items: readonly Sentinel[], extra: (s: Sentine
 function howSentinelsWork(others: readonly Sentinel[], recipes: readonly Recipe[]): string[] {
   const kinds = (Object.keys(STEP_INFO) as StepKind[]).filter(stepAvailable);
   return [
-    'When it runs: schedule (every: hours | day | other-day | week | month, at "HH:MM", days for week, day for month), manual (only when',
+    'When it runs: schedule (every: minutes with minutes 1 | 5 | 10 | 15 | 30 on the clock, hours | day | other-day | week | month, at "HH:MM",',
+    'days for week, day for month; a frequent one with an agent step uses the plan fast: prefer 15 or 30 minutes, or set limits.perDay), manual (only when',
     `the user presses Run), after (another sentinel’s run ends: on success, failure or always${others.length ? `; the others: ${others.map((o) => `${fence(o.name)} (${o.id})`).join(', ')}` : ''}),`,
     'or an event: beluga (what: task-done | pr-opened | pr-merged | milestone-passed | claude-finished | friend-asks), github (the project’s',
     'repository, polled; what: issue-opened | issue-labelled with label | pr-opened | workflow-failed | deployment-failed), uptime',

@@ -70,6 +70,7 @@ import {
   RUN_STATES,
   lastRunOf,
   scheduleSentence,
+  frequentAgentNote,
   sentinelLabel,
   toSummary,
 } from './model.js';
@@ -2134,7 +2135,7 @@ export class Sentinels {
       create: (d: ToolDraft) => {
         const { name: _n, ...refs } = this.fromToolPatch({ trigger: d.trigger, steps: d.steps });
         const draft: SentinelDraft = { ...fromToolDraft(d), ...refs };
-        const made = (s: Sentinel): string => `Made “${s.name}” (${scheduleSentence(s.trigger)}), paused: \`sentinel:${s.id}\`. Its steps: ${s.steps.map((st) => `${st.name} (step ${st.id})`).join(', ') || 'none'}. It runs once the user turns it on from its page (you can’t).`;
+        const made = (s: Sentinel): string => `Made “${s.name}” (${scheduleSentence(s.trigger)}), paused: \`sentinel:${s.id}\`. Its steps: ${s.steps.map((st) => `${st.name} (step ${st.id})`).join(', ') || 'none'}. It runs once the user turns it on from its page (you can’t).${heedPlan(s)}`;
         if (!(draft.steps ?? []).some(isSourceStep)) {
           const s = this.create(draft);
           onMade?.(s.id);
@@ -2188,7 +2189,7 @@ export class Sentinels {
         if (active?.sentinel.id === this.get(ref)?.id) throw new Error('This run is that sentinel’s: it can’t change itself while it runs');
         const said = (s: Sentinel, paused: boolean): string => {
           const changed = Object.keys(patch).filter((k) => patch[k as keyof ToolPatch] !== undefined);
-          return `Changed “${s.name}” (${changed.join(', ') || 'nothing'}): ${scheduleSentence(s.trigger, (id) => this.get(id)?.name)}; ${s.steps.length} ${s.steps.length === 1 ? 'step' : 'steps'}.${paused ? ' It changed what it can do, so it is paused now: the user turns it on again from its page (say so).' : s.paused ? ' It is paused: the user turns it on from its page.' : ''} \`sentinel:${s.id}\``;
+          return `Changed “${s.name}” (${changed.join(', ') || 'nothing'}): ${scheduleSentence(s.trigger, (id) => this.get(id)?.name)}; ${s.steps.length} ${s.steps.length === 1 ? 'step' : 'steps'}.${paused ? ' It changed what it can do, so it is paused now: the user turns it on again from its page (say so).' : s.paused ? ' It is paused: the user turns it on from its page.' : ''}${heedPlan(s)} \`sentinel:${s.id}\``;
         };
         const was = this.need(ref);
         const next = this.fromToolPatch(patch);
@@ -2345,6 +2346,12 @@ export function fromToolDraft(d: ToolDraft): SentinelDraft {
     ...(d.notify ? { notify: d.notify } : {}),
     ...(d.keepChats ? { keepChats: d.keepChats } : {}),
   };
+}
+
+/** sentinel_create/update's word about a frequent schedule with an agent step (frequentAgentNote): for Claude to tell the user. */
+function heedPlan(s: Sentinel): string {
+  const note = frequentAgentNote(s);
+  return note ? ` Tell the user: ${note}` : '';
 }
 
 /** Claude's answer, its first lines (the page's box shows it). */

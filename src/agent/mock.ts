@@ -27,6 +27,8 @@ interface Script {
   readonly brief?: ReadonlyArray<readonly ['context' | 'acceptance', string]>;
   /** One step that runs long: after it starts, the next step comes `ms` later (a steer waits; Send now stops it). */
   readonly slowStep?: { readonly step: string; readonly ms: number };
+  /** What Claude says on the way, before the step at that index ("Found it, now the tests"). */
+  readonly says?: Readonly<Record<number, string>>;
 }
 
 /** Canned, fast replies so the demo (and README recordings) never wait on real Claude calls. */
@@ -36,6 +38,11 @@ const SCRIPTS: readonly Script[] = [
     match: /^Investigate GitHub issue #48\b/,
     stepMs: 900,
     steps: ['Bash gh issue view 48 --repo acme/bob-api --comments', 'Grep "decodeURIComponent" src', 'Read src/users.ts', 'Read src/routes/login.ts', 'Write tests/login-plus-email.test.ts', 'Bash npm test -- login-plus-email'],
+    says: {
+      1: 'A `+` in the email answers 500. Looking for where the email gets decoded.',
+      3: '`findUser()` decodes it a second time, so `+` turns into a space. Checking what `login()` does with no user.',
+      4: 'That’s the 500. Writing a test that reproduces it.',
+    },
     brief: [
       [
         'context',
@@ -1034,10 +1041,17 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
     if (script.steerable) input.onSteer?.(Object.assign((followUp: FollowUp) => (said.push(followUp), true), { force, cancel }));
     let last: string | undefined;
     try {
-      for (const step of script.steps) {
+      for (const [i, step] of script.steps.entries()) {
         await pause((last && last === script.slowStep?.step ? script.slowStep.ms : (script.stepMs ?? 450)) * pace);
         if (forced) break;
         for (const followUp of said.splice(0)) followUp.onFolded?.();
+        // What it says on the way reads as it's said, then becomes a remark when the step comes.
+        const says = script.says?.[i];
+        if (says) {
+          input.onEvent('text', says);
+          await pause(900 * pace);
+          if (forced) break;
+        }
         input.onEvent('tool', step);
         last = step;
       }
