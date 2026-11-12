@@ -6021,7 +6021,6 @@
  "Runs on {0} now": "现在运行于 {0}",
  "Runs on {0}{1}": "运行于 {0}{1}",
  "Runs per day": "每天运行次数",
- "Runs this project's new conversations and answers when friends write @you about it.": "运行这个项目的新对话，并在好友 @你 谈论它时回答。",
  "Runs to the end, stops only if something fails": "一直运行到结束，只在出错时停下",
  "Runs with": "运行方式",
  "Runs {0}.": "运行 {0}。",
@@ -11964,5 +11963,9 @@
  "● {0} new": "● {0} 条新的",
  "✳ Asked Claude to read the conversation": "✳ 已请 Claude 阅读这段对话",
  "✻ Thinking…": "✻ 思考中…",
- "📎 image {0} ({1}, {2})": "📎 图片 {0}（{1}，{2}）"
+ "📎 image {0} ({1}, {2})": "📎 图片 {0}（{1}，{2}）",
+ "Agent…": "智能体…",
+ "Same as yours": "与你的相同",
+ "Agent for {0}": "{0} 的智能体",
+ "Runs this project's new worktrees and conversations, and answers when friends write @you about it. A worktree can still pick another.": "运行这个项目的新工作树和对话，并在好友 @你 谈论它时回答。工作树仍可选择其他智能体。"
 }

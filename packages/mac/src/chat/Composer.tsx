@@ -289,9 +289,14 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   // New work (a new chat or worktree): Runs on picks where it goes.
   const newWork = state.view.kind === 'draft_worktree' || state.view.kind === 'draft' ? { project: state.view.projectId === 'chats' ? undefined : state.view.projectId, folder: state.view.kind === 'draft' ? state.view.dir || undefined : undefined } : undefined;
   const startDeps = useStartDeps();
+  const newWorkAgent = useApp((st) => {
+    const name = newWork?.project ? st.projects.find((x) => x.id === newWork.project)?.name : undefined;
+    return name ? st.prefs.projectAgents?.[name] : undefined;
+  });
   const choiceKey = draftProject ? scopedKey(machine, draftProject) : undefined;
   const [worktree, setWorktreeState] = useState<WorktreeChoice>(() => (choiceKey && worktreeChoices.get(choiceKey)) || { name: '' });
   useEffect(() => setWorktreeState((choiceKey && worktreeChoices.get(choiceKey)) || { name: '' }), [choiceKey]);
+  const worktreeAgent = worktree.agent ?? newWorkAgent;
   const setWorktree = (choice: WorktreeChoice): void => {
     if (choiceKey) worktreeChoices.set(choiceKey, choice);
     setWorktreeState(choice);
@@ -419,13 +424,13 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   const createWorktree = (projectId: string, text: string): void => {
     const name = worktree.name.trim();
     // Seen as its terminal (Settings › Terminal): the terminal opens on this message (BLG-553).
-    const terminal = Boolean(text.trim()) && sendsToTerminal(client.store.getState(), getPrefs(), 'draft', worktree.agent?.runtime);
+    const terminal = Boolean(text.trim()) && sendsToTerminal(client.store.getState(), getPrefs(), 'draft', worktreeAgent?.runtime);
     // Started in the mode the picker shows (Act, Plan First or Plan with Tasks).
     const mode = worktreeMode({ terminal, plan: client.store.getState().planMode.draft === true, tasks: armed });
     const opts = { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...mode };
     // Runs on one of your computers (BLG-788): made there, in the same project, and opened at once.
     // Held (the computer Runs on names can't take it now): nothing starts, the words stay in the box.
-    const sent = sendToComputer(startDeps, projectId, worktree.agent?.runtime ?? myRuntime(client.store.getState().prefs), { kind: 'worktree', text, opts });
+    const sent = sendToComputer(startDeps, projectId, worktreeAgent?.runtime ?? myRuntime(client.store.getState().prefs), { kind: 'worktree', text, opts });
     if (sent === 'held') return keepWords(text);
     // Its words left the box when it was sent; its branch and name go with them.
     worktreeChoices.delete(scopedKey(machine, projectId));
@@ -452,7 +457,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     // BLG-841): started there; held, never here instead, when the computer named can't take it.
     const v = client.store.getState().view;
     if (v.kind === 'draft' && !text.startsWith('/')) {
-      const runtime = newChatAgent?.runtime ?? myRuntime(client.store.getState().prefs);
+      const runtime = (newChatAgent ?? newWorkAgent)?.runtime ?? myRuntime(client.store.getState().prefs);
       const sent = sendToComputer(startDeps, v.projectId, runtime, { kind: 'chat', text, ...(newChatAgent ? { agent: newChatAgent } : {}) }, v.dir || undefined);
       if (sent === 'held') return keepWords(text);
       if (sent === 'sent') return;
@@ -787,9 +792,9 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
             </ActionsDropdown>
           ) : null}
           {canRunHere && sharedWs ? <RunOnChip wsId={sharedWs.id} ownerName={state.sharedProjects.find((p) => p.owner === sharedWs.owner)?.ownerName ?? 'Their'} value={runOn} onChange={setRunOn} /> : null}
-          {!shared ? <ModelPicker channel={channel} {...(draftProject ? { draft: worktree.agent, forWorktree: true, onDraft: (agent: AgentRef | undefined) => setWorktree({ ...worktree, agent }) } : state.view.kind === 'draft' ? { draft: newChatAgent, onDraft: setNewChatAgent } : {})} /> : null}
+          {!shared ? <ModelPicker channel={channel} {...(draftProject ? { draft: worktree.agent, forWorktree: true, onDraft: (agent: AgentRef | undefined) => setWorktree({ ...worktree, agent }) } : state.view.kind === 'draft' ? { draft: newChatAgent, onDraft: setNewChatAgent } : {})} {...(newWorkAgent ? { projectAgent: newWorkAgent } : {})} /> : null}
           {/* Where new work runs (BLG-786); a chat that runs somewhere already says where. Only with a computer paired. */}
-          {shared ? null : newWork ? <RunsOnPicker {...(newWork.project ? { project: newWork.project } : {})} {...(worktree.agent?.runtime && draftProject ? { runtime: worktree.agent.runtime } : {})} {...(newWork.folder ? { folder: newWork.folder } : {})} /> : <RunsOnLabel />}
+          {shared ? null : newWork ? <RunsOnPicker {...(newWork.project ? { project: newWork.project } : {})} {...(worktreeAgent?.runtime && draftProject ? { runtime: worktreeAgent.runtime } : {})} {...(newWork.folder ? { folder: newWork.folder } : {})} /> : <RunsOnLabel />}
           {burning && state.prefs.effort === 'max' ? (
             <Tip label={`Max effort: ${agentHere} thinks as hard as it can`}>
               <span className={m.tag}>
@@ -812,7 +817,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
           ) : null}
           {!readOnly ? <MicButton box={ref} /> : null}
           {draftProject ? (
-            <Tip label={worktree.name.trim() && !buffer.trim() ? `Create ${worktree.name.trim()} without a task` : `Make the branch and folder, then ${worktree.agent ? agentName(worktree.agent) : agent} starts on the task`} keys={sendKeys}>
+            <Tip label={worktree.name.trim() && !buffer.trim() ? `Create ${worktree.name.trim()} without a task` : `Make the branch and folder, then ${worktreeAgent ? agentName(worktreeAgent) : agent} starts on the task`} keys={sendKeys}>
               <button type="button" className={cx(d.create, canCreate && d.createReady)} onClick={() => send(false)} aria-disabled={!canCreate}>
                 <Icon name="branch" size={12} />
                 Create Worktree
