@@ -289,6 +289,27 @@ describe('setup and run scripts', () => {
     expect(kay.runs[0]?.setup?.brief).toContain('`true && (cd app && npm install)` (worked out by an agent)');
   }, 60_000);
 
+  it('your Claude in a worktree can name it after the work once it knows it; a name you gave stays', async () => {
+    hub = await startHub({ keys });
+    const dir = repo();
+    const kay = await solo(dir);
+    const id = projectOf(kay.workspaces).id;
+    const ws = await kay.session.workspaces!.newWorktree(id, 'run-117', { ticket: 'RUN-117' });
+    expect(ws!.branch).toBe('RUN-117/work');
+    const tools = kay.bench.setupForRun(ws!.id)!;
+    expect(tools.brief).toContain('This worktree is named "run-117"');
+    expect(await tools.name!('run-117-fix-nav-offset')).toContain('Renamed to "run-117-fix-nav-offset", branch RUN-117/fix-nav-offset');
+    const named = kay.workspaces.find(ws!.id)!;
+    expect(named.name).toBe('run-117-fix-nav-offset');
+    expect(named.branch).toBe('RUN-117/fix-nav-offset');
+    expect(await tools.name!('run-117-fix-nav-offset')).toContain('It stays');
+    expect((await kay.workspaces.renameByUser(ws!.id, 'mine')).branch).toBe('RUN-117/mine');
+    expect(await tools.name!('something-else')).toContain('keeps that name');
+    const later = kay.bench.setupForRun(ws!.id)!;
+    expect(later.name).toBeUndefined();
+    expect(later.brief).not.toContain('name_worktree');
+  }, 60_000);
+
   it("when the run fails it asks whether to fix it; yes has Claude find the right command, which starts", async () => {
     hub = await startHub({ keys });
     const dir = repo();

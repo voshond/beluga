@@ -155,7 +155,18 @@ export function setProjectSetupToolDef(setup: SetupTools) {
   );
 }
 
-/** The Beluga tools for one run: the room's, plus continue_in_worktree in a main folder, plus set_project_setup in a worktree, plus end_dialogue in a dialogue's turn, plus run_for_me in your own runs. */
+/** For your own runs in a worktree: give it a name that says what the work is, once Claude knows (a ticket it read, say). */
+export function nameWorktreeToolDef(name: (name: string) => Promise<string>) {
+  return tool(
+    'name_worktree',
+    "Rename this worktree (its label and its own branch, unless pushed) after what the work is, once you know and its name doesn't say it: only a ticket key, or the words of the request (work-on-ticket…). 2 to 5 lowercase words joined by hyphens; start with the ticket key when there is one (run-117-fix-nav-offset). The folder stays, and a name the owner gave stays.",
+    { name: z.string().min(2).max(40).describe('The new name, e.g. `run-117-fix-nav-offset`') },
+    (a) => guarded(() => name(a.name)),
+  );
+}
+
+/** The Beluga tools for one run: the room's, plus continue_in_worktree in a main folder, plus set_project_setup (and name_worktree) in a worktree, plus end_dialogue in a dialogue's turn, plus run_for_me in your own runs. */
 export function createRoomTools(bridge: RoomBridge, move?: (task: string) => Promise<string>, setup?: SetupTools, dialogue?: DialogueTurnTools, askToRun?: (question: ClaudeQuestion) => Promise<ClaudeAnswer>) {
-  return toolSuite({ name: 'beluga', version: '0.1.0', tools: [...createRoomToolDefs(bridge), ...createGatewayToolDefs(bridge), ...createDeviceToolDefs(bridge), ...(move ? [continueInWorktreeToolDef(move)] : []), ...(setup ? [setProjectSetupToolDef(setup)] : []), ...(dialogue ? [endDialogueToolDef(dialogue)] : []), ...(askToRun ? [runCardToolDef(askToRun)] : [])] });
+  const rename = setup?.name?.bind(setup);
+  return toolSuite({ name: 'beluga', version: '0.1.0', tools: [...createRoomToolDefs(bridge), ...createGatewayToolDefs(bridge), ...createDeviceToolDefs(bridge), ...(move ? [continueInWorktreeToolDef(move)] : []), ...(setup ? [setProjectSetupToolDef(setup)] : []), ...(rename ? [nameWorktreeToolDef(rename)] : []), ...(dialogue ? [endDialogueToolDef(dialogue)] : []), ...(askToRun ? [runCardToolDef(askToRun)] : [])] });
 }
