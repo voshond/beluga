@@ -1565,7 +1565,9 @@ export class AgentHost {
       const noBoard = place?.syncMain || (place?.askOnly && plans?.checker && !sentinel?.inRun);
       // A friend's run gets its repo's board too, as their trust allows (BLG-701; see boardAccess).
       const friendBoard = from === this.selfId ? undefined : this.boardAccess(from);
-      const board = noBoard || (from !== this.selfId && !friendBoard) ? undefined : this.deps.board?.(body.channel, from, { plan: planFirst && from === this.selfId, ...(friendBoard ? { friend: { id: from, name: requesterName } } : {}) });
+      const runBoard = noBoard || (from !== this.selfId && !friendBoard) ? undefined : this.deps.board?.(body.channel, from, { plan: planFirst && from === this.selfId, ...(friendBoard ? { friend: { id: from, name: requesterName } } : {}) });
+      // A sentinel run makes tasks but never starts one: it acts on what it watched, with nobody there.
+      const board = runBoard?.tools && sentinel?.inRun ? { ...runBoard, tools: { ...runBoard.tools, start: () => Promise.reject(new Error('A sentinel run doesn’t start tasks: it leaves them in Ready for the user to Start')) } } : runBoard;
       const routed = yours && !external && !body.plan ? this.routedFor(board?.route, other && named ? named : (this.deps.agentRef?.(body.channel) ?? CLAUDE_AGENT), place, named) : undefined;
       lane.routedModel = routed?.model;
       // Child threads: your own runs in your own chats, with the flag on. A dialogue's turn comes through runDialogueTurn and never gets them.

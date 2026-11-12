@@ -45,7 +45,8 @@ const ALWAYS_OK = new Set([
   ...['who_can', 'wait_for', 'check', 'cancel', 'answer_question'].map((n) => `mcp__beluga__${n}`),
   // The task board: your own runs, and a friend's you trust (BLG-701: only its repo's board, and a
   // Trusted friend's changes ask you, see boardAsks); each change is in the task's activity.
-  ...['task_define', 'task_get', 'task_list', 'task_create', 'board_create', 'task_update', 'task_brief_edit', 'task_note', 'task_relate', 'task_attach_proof'].map((n) => `mcp__beluga_board__${n}`),
+  // task_start refuses a friend's run (core/board/work.ts): it starts a worktree on this Mac.
+  ...['task_define', 'task_get', 'task_list', 'task_create', 'task_start', 'board_create', 'task_update', 'task_brief_edit', 'task_note', 'task_relate', 'task_attach_proof'].map((n) => `mcp__beluga_board__${n}`),
   // Sentinels (core/sentinel): only your own runs have them; a new one starts paused until you turn it on,
   // and a change to what one can do pauses it. sentinel_remove and sentinel_delete_runs aren't here: deleting asks you.
   // sentinel_test and sentinel_try_source only read: a database read-only, a file, an address without your
