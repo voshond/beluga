@@ -373,6 +373,19 @@ describe('pull requests', () => {
     expect(kay.opened).toEqual(['https://github.com/x/app/pull/7']);
   });
 
+  it('one Beluga asks for by itself (a task reached In Review, BLG-927) runs the same instructions and leaves the screen where you are', async () => {
+    hub = await startHub({ keys });
+    const kay = await solo(repo());
+    const ws = await kay.session.workspaces!.newWorktree(projectOf(kay.workspaces).id, 'auth');
+    kay.screen.dispatch({ type: 'view', view: { kind: 'overview' } });
+    kay.bench.createPr(ws!.id, 'open it as a draft (gh pr create --draft)', { auto: true });
+    await waitFor(() => kay.runs.length === 1, 4000);
+    expect(kay.runs[0]?.prompt).toContain('gh pr create --base main --head beluga/auth');
+    expect(kay.runs[0]?.prompt).toContain('For this pull request, also: open it as a draft (gh pr create --draft)');
+    expect(kay.screen.getState().view).toEqual({ kind: 'overview' });
+    expect(kay.screen.getState().toast?.text).toContain('is opening a draft pull request');
+  });
+
   it("stays quiet about PRs you didn't ask for, and ignores worktrees other tools made", async () => {
     hub = await startHub({ keys });
     const dir = repo();

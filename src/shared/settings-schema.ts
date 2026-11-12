@@ -166,6 +166,8 @@ export const Settings = z.object({
   settleIdleDays: z.number().int().min(0).max(SETTLE_IDLE_DAYS_MAX).catch(SETTLE_IDLE_DAYS_DEFAULT),
   /** An agent in a worktree whose pull request is open pushes its commits there when its turn ends (BLG-840). */
   pushToPr: z.boolean().catch(true),
+  /** A worktree's task moving to In Review has its agent open a draft pull request there (BLG-927). */
+  prOnReview: z.boolean().catch(false),
   /** Claude keeps screenshots and scratch output in the workspace's git-ignored `.beluga/scratch/` folder. */
   scratchFolder: z.boolean().default(true),
   machineNote: z.string().max(MACHINE_NOTE_MAX).catch('').default(''),

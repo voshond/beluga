@@ -438,8 +438,11 @@ export class Workbench {
     return ws;
   }
 
-  /** Claude commits what belongs to the work, pushes and opens a PR with a short description. */
-  createPr(id: string, extra = ''): void {
+  /**
+   * Claude commits what belongs to the work, pushes and opens a PR with a short description.
+   * `auto`: Beluga asked by itself (a task reached In Review, BLG-927), so the screen stays where you are.
+   */
+  createPr(id: string, extra = '', opts: { readonly auto?: boolean } = {}): void {
     const ws = this.worktree(id);
     if (!ws?.branch) return;
     if (this.deps.store.getState().gh === false) {
@@ -451,12 +454,12 @@ export class Workbench {
     const scripts = project ? this.manager.scripts(project.id) : {};
     const prompt = buildPrPrompt({ branch: ws.branch, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', projectPrompt: scripts.prPrompt, yourPrompt: scripts.yourPrPrompt, extra });
     if (!this.deps.store.getState().prs[ws.id]) this.prAsked.add(ws.id);
-    this.deps.controller.open(ws.id);
+    if (!opts.auto) this.deps.controller.open(ws.id);
     const ask = (): void => this.deps.askClaude(prompt, `ws:${ws.id}`);
     // Its last PR went to a fork's original: this one goes to the fork, as the menu says (before the run reads where gh points).
     if (prTargetOf(ws.path, ws.branch)) void setPrTarget(ws.path, ws.branch, undefined).catch(() => undefined).finally(ask);
     else ask();
-    this.deps.toast(`${this.agent()} is preparing the pull request…`);
+    this.deps.toast(opts.auto ? `${ws.name} is ready for review: ${this.agent()} is opening a draft pull request…` : `${this.agent()} is preparing the pull request…`);
   }
 
   /**

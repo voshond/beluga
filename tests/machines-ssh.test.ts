@@ -103,7 +103,8 @@ async function install(name: string, ssh?: string) {
     removePhone: (id) => void host.removeDevice(id),
     onChange: () => host.machinesChanged(),
     pollMs: 60_000,
-    sshFingerprintMs: 10_000,
+    // Only a computer that never prints its pictures waits this out; a slow CI runner can take seconds to.
+    sshFingerprintMs: 30_000,
     ...(ssh ? { ssh } : {}),
   });
   host = new CompanionHost({ identity, store, devices, call: async () => ({ ok: true, value: undefined }), macName: () => name, version: '0.9.0', thumbsDir: path.join(dir, 'thumbs'), uploadsDir: path.join(dir, 'uploads'), dht: { bootstrap: testnet.bootstrap, host: '127.0.0.1' }, coalesceMs: 50, machines });

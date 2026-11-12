@@ -118,6 +118,7 @@ export const PrefsPatch = z
     settleOnMerge: bool,
     settleIdleDays: z.number().int().min(0).max(SETTLE_IDLE_DAYS_MAX),
     pushToPr: bool,
+    prOnReview: bool,
     scratchFolder: bool,
     machineNote: z.string().max(MACHINE_NOTE_MAX),
     machineNoteOn: bool,

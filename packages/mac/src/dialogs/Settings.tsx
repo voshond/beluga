@@ -534,6 +534,9 @@ function Workspaces() {
         <Row label="Keep open pull requests current" detail="When your agent commits in a worktree whose pull request is open, it pushes there as its turn ends. Off: it commits here, and you push from the toolbar.">
           <Switch label="Keep open pull requests current" on={p.pushToPr} onChange={(v) => void api.session.setPrefs({ pushToPr: v })} />
         </Row>
+        <Row label="Open a pull request when work is ready" detail="When a worktree's task moves to In Review, your agent opens a draft pull request for it, so you look before anyone is asked to review. Off: you click Create PR.">
+          <Switch label="Open a pull request when work is ready" on={p.prOnReview} onChange={(v) => void api.session.setPrefs({ prOnReview: v })} />
+        </Row>
         <Row label="Friends may start work here" detail="They ask to start a worktree or hand work to you; you approve each one.">
           <Switch label="Friend worktrees" on={p.friendWorktrees === 'ask'} onChange={(v) => void api.session.setFriendWorktrees(v ? 'ask' : 'off')} />
         </Row>

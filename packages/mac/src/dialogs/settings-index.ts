@@ -175,6 +175,7 @@ export const SETTINGS: readonly Entry[] = [
     ['Branch prefix', 'What new worktrees’ branches start with.', 'git branch name prefix'],
     ['New projects go in', 'The folder new projects and clones start in.', 'default projects folder path clone location home directory github'],
     ['Keep open pull requests current', 'Your agent pushes its commits to an open pull request when its turn ends.', 'push pr pull request git agent commits'],
+    ['Open a pull request when work is ready', 'When a worktree’s task moves to In Review, your agent opens a draft pull request.', 'auto pr pull request draft create review task automatic'],
     ['Friends may start work here', 'They ask to start a worktree or hand work to you.', 'friend worktrees'],
   ]),
   group('workspaces', 'Hidden projects', 'Projects you hid from the sidebar.', 'hide show unhide project sidebar'),

@@ -22,6 +22,7 @@ import { demoLinear } from './sync/demo.js';
 import { belugaEnv } from '../beluga-env.js';
 import { attachBoard, detachBoard } from './registry.js';
 import { BoardWork, busyChannels } from './work.js';
+import { ReviewPr } from './review-pr.js';
 import { Plans } from '../plans/plans.js';
 import { PlansWork } from '../plans/work.js';
 import { attachPlans, detachPlans } from '../plans/registry.js';
@@ -78,6 +79,8 @@ export function launchBoard(host: BoardHost): () => void {
         }),
   });
   attachBoard(session, work);
+  // A worktree's task reaching In Review opens its draft pull request, with the setting on (BLG-927).
+  const reviewPr = new ReviewPr({ store, issues: () => board.list(), openPr: (id, extra) => session.workbench?.createPr(id, extra, { auto: true }) });
   // A project's GitHub issues, handed to Claude through tasks. The demo has a pretend GitHub (acme/<project>).
   const projectOf = (id: string) => store.getState().projects.find((p) => p.id === id);
   const issues = new GitHubIssues({
@@ -195,6 +198,7 @@ export function launchBoard(host: BoardHost): () => void {
     detachSync(session);
     sync.stop();
     detachBoard(session);
+    reviewPr.stop();
     work.stop();
     store.dispatch({ type: 'plans_off' });
     store.dispatch({ type: 'board_off' });
