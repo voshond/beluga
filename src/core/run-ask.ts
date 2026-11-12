@@ -1,4 +1,5 @@
 import { stripAnsi } from '../shared/ansi.js';
+import type { ClaudeAnswer, ClaudeQuestion } from '../protocol.js';
 import type { PendingQuestion } from './collab-store.js';
 
 export type RunAsk = {
@@ -27,6 +28,7 @@ export type RunAskState = {
 export const RUN_ASK_MAX_OUTPUT = 16_000;
 export const RUN_ASK_ANSWER_OUTPUT = 3000;
 export const RUN_ASK_TIMEOUT_MS = 10 * 60_000;
+const RUN_ANSWER_HEAD = 'I ran it through Beluga on ';
 
 const RUNNABLE_FENCE = /^(`{3,}|~{3,})[ \t]*(sh|bash|zsh|shell)[ \t]*\n([\s\S]*?)^\1[ \t]*$/gm;
 const RUN_ON = /(?:^|\n)[^\n]*\bRun on \*\*([^*\n]{1,80})\*\*/;
@@ -49,6 +51,54 @@ export const runnableQuestion = (q: PendingQuestion, selfId: string, question: s
   if (q.owner !== selfId || q.question.kind !== 'question') return undefined;
   if (!q.question.questions.some((x) => x.question === question)) return undefined;
   return runAskIn(question);
+};
+
+/** Commands someone runs for an agent: the machine (left out, this one), the folder, the commands and how they tell it worked. */
+export type RunCommands = {
+  readonly on?: string;
+  readonly cwd?: string;
+  readonly commands: readonly string[];
+  readonly expect?: string;
+};
+
+const shellWord = (text: string): string => (/^[\w@%+=:,./~-]+$/.test(text) ? text : `'${text.replace(/'/g, `'\\''`)}'`);
+
+/** What you run, as the card shows it: the machine, the commands in a block to copy (its folder is the cd that starts it), and how you tell it worked. */
+export function runMarkdown(run: RunCommands): string {
+  const commands = [...(run.cwd ? [`cd ${shellWord(run.cwd)}`] : []), ...run.commands];
+  return [`Run${run.on ? ` on **${run.on}**` : ''}:`, '```sh', ...commands, '```', run.expect ? `It worked when: ${run.expect}` : ''].filter(Boolean).join('\n');
+}
+
+/** A card's question holds this many characters (the protocol's cap). */
+export const RUN_CARD_MAX = 1000;
+export const RUN_CARD_TITLE = 'Run this for me';
+
+/**
+ * A run card (run_for_me): a question with no options and one block of commands. Claude's own
+ * questions always come with options, so this shape is only ever a run card.
+ */
+export const isRunCard = (question: ClaudeQuestion): boolean => question.kind === 'question' && question.questions.length === 1 && question.questions[0]!.options.length === 0 && runAskIn(question.questions[0]!.question) !== undefined;
+
+/** The card run_for_me puts up: why, then the commands. Too long for a card: why it doesn't fit. */
+export const runCard = (why: string, run: RunCommands, title?: string): ClaudeQuestion | string => {
+  const commands = run.commands.map((c) => c.trimEnd()).filter((c) => c.trim());
+  if (!why.trim()) return 'Say why they need to run it.';
+  if (!commands.length) return 'Give at least one command.';
+  if (commands.some((c) => /^(`{3,}|~{3,})/.test(c.trim()))) return 'Give the commands themselves, without a code fence.';
+  const question = `${why.trim()}\n\n${runMarkdown({ ...run, commands })}`;
+  if (question.length > RUN_CARD_MAX) return `That is ${question.length} characters and a card holds ${RUN_CARD_MAX}: shorten why, or put the long part in a script and run that.`;
+  const parsed = runAskIn(question);
+  if (!parsed || parsed.on !== (run.on?.trim() || undefined)) return 'Keep code blocks and "Run on" lines out of why: it is words only, the commands go in commands.';
+  return { kind: 'question', questions: [{ question, header: (title?.trim() || RUN_CARD_TITLE).slice(0, 40), options: [], multiSelect: false }] };
+};
+
+/** What run_for_me tells the agent: the run's own answer, the user's words, or that they skipped it. */
+export const runCardResult = (answer: ClaudeAnswer): string => {
+  if (answer.kind !== 'answers') return 'The user skipped it: nothing was run. Carry on without it, or say what is still waiting on them.';
+  const text = Object.values(answer.answers)[0]?.trim() ?? '';
+  if (!text) return 'The user answered without running it or saying anything. Ask them in your answer what happened.';
+  if (text.startsWith(RUN_ANSWER_HEAD)) return text;
+  return `The user didn't run it through Beluga and answered instead: ${text}`;
 };
 
 export const plainOutput = (raw: string): string =>
@@ -94,7 +144,7 @@ export const runAnswer = (state: RunAskState, expect?: string): string => {
   const output = tail(state.output.trim(), RUN_ASK_ANSWER_OUTPUT);
   const how = state.error ? `it failed: ${state.error}` : `exit code ${state.exit ?? 'unknown'}`;
   const check = expect ? `Check the output against what success looks like (${expect}) and decide whether it worked.` : 'Check the output and decide whether it worked.';
-  const head = `I ran it through Beluga on ${state.where}: ${how}. ${check}`;
+  const head = `${RUN_ANSWER_HEAD}${state.where}: ${how}. ${check}`;
   if (!output) return `${head} It printed nothing.`;
   return `${head} Output${output.length < state.output.trim().length ? ' (last lines)' : ''}:\n\`\`\`text\n${output}\n\`\`\``;
 };

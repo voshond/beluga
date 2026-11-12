@@ -1,3 +1,5 @@
+import { native } from './boot-mode.js';
+
 export const OSC_CLIPBOARD = 52;
 
 const decodeBase64 = (payload: string): string | undefined => {
@@ -28,4 +30,12 @@ export const clipboardChord = (e: ChordKey, mac: boolean): ClipboardChord | unde
   if (key === 'c') return 'copy';
   if (key === 'v') return 'paste';
   return undefined;
+};
+
+export const canReadClipboard = (): boolean => native('terminalPaste') || typeof navigator.clipboard?.readText === 'function';
+
+export const readClipboard = async (): Promise<string> => {
+  if (!native('terminalPaste')) return navigator.clipboard.readText();
+  const { readText } = await import('@tauri-apps/plugin-clipboard-manager');
+  return readText();
 };

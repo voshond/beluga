@@ -102,6 +102,8 @@ export interface AgentRunInput {
   readonly canUseSecret?: (toolName: string, input: Record<string, unknown>) => Promise<boolean>;
   /** Ask the person who made the request: Claude's questions, or a plan to approve. */
   readonly askUser?: (question: ClaudeQuestion) => Promise<ClaudeAnswer>;
+  /** Your own run: it may put commands only you can run on a card with a Run button (run_for_me, through askUser). */
+  readonly runCards?: boolean;
   /** Plan first (read-only investigation, then a plan to approve) instead of acting right away. */
   readonly plan?: boolean;
   /**

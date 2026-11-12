@@ -1,6 +1,7 @@
 import type { ClaudeAnswer, ClaudeQuestion } from '../../protocol.js';
 import type { Actor, BoardState, Issue } from '../board/model.js';
 import type { Store } from '../store.js';
+import { runMarkdown } from '../run-ask.js';
 import { type Plan, type PlanAsk, type PlanRun, planTitle } from './model.js';
 import { FINISHED, type PlanView, type TaskState, type TaskView, planView } from './progress.js';
 
@@ -55,14 +56,6 @@ const clip = (text: string, max: number): string => (text.length > max ? `${text
 /** A card's question holds 1000 characters (the protocol's cap); the commands keep up to this many of them. */
 const MAX_QUESTION = 1000;
 const MAX_RUN_TEXT = 760;
-
-const shellWord = (text: string): string => (/^[\w@%+=:,./~-]+$/.test(text) ? text : `'${text.replace(/'/g, `'\\''`)}'`);
-
-/** What you run, as the card shows it: the machine, the commands in a block to copy (its folder is the cd that starts it), and how you tell it worked. */
-export function runMarkdown(run: PlanRun): string {
-  const commands = [...(run.cwd ? [`cd ${shellWord(run.cwd)}`] : []), ...run.commands];
-  return [`Run${run.on ? ` on **${run.on}**` : ''}:`, '```sh', ...commands, '```', run.expect ? `It worked when: ${run.expect}` : ''].filter(Boolean).join('\n');
-}
 
 /** The question with its commands under it: the words are cut to fit, the commands first of all. */
 function withRun(what: string, run: PlanRun | undefined): string {

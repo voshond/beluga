@@ -995,6 +995,7 @@ export const NOT_EXPOSED: Readonly<Record<string, 'chat_only' | 'checker_only'>>
   send_chat: 'chat_only',
   continue_in_worktree: 'chat_only',
   end_dialogue: 'chat_only',
+  run_for_me: 'chat_only',
   show: 'chat_only',
   show_block: 'chat_only',
   task_define: 'chat_only',

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runMarkdown } from '../src/core/plans/decisions.js';
 import { QuestionBroker } from '../src/core/questions.js';
-import { plainOutput, promptIn, runAnswer, runAskIn, runTarget, runnableQuestion, scrubbed } from '../src/core/run-ask.js';
+import { isRunCard, plainOutput, promptIn, runAnswer, runAskIn, runCard, runCardResult, runMarkdown, runTarget, runnableQuestion, scrubbed } from '../src/core/run-ask.js';
 import { RunAsks } from '../src/core/run-asks.js';
 import { Store, initialState } from '../src/core/store.js';
 import type { ClaudeAnswer } from '../src/protocol.js';
@@ -169,5 +168,55 @@ describe('RunAsks', () => {
     const far = setup('Run on **m1arch**:\n```sh\nls\n```');
     await expect(far.runs.start('q1', 'Run on **m1arch**:\n```sh\nls\n```')).rejects.toThrow(/can’t reach “m1arch”/);
     expect(far.spawned).toHaveLength(0);
+  });
+});
+
+describe('run cards (run_for_me)', () => {
+  const DEPLOY = { on: 'nas', cwd: '/volume1/docker/registry', commands: ['sudo docker compose up -d'], expect: 'both containers say Started' };
+
+  it('puts why above the commands, with no options', () => {
+    const q = runCard('The registry runs an old image.', DEPLOY);
+    expect(q).toEqual({
+      kind: 'question',
+      questions: [{ question: 'The registry runs an old image.\n\nRun on **nas**:\n```sh\ncd /volume1/docker/registry\nsudo docker compose up -d\n```\nIt worked when: both containers say Started', header: 'Run this for me', options: [], multiSelect: false }],
+    });
+    expect(typeof q !== 'string' && isRunCard(q)).toBe(true);
+    expect(typeof q !== 'string' && q.kind === 'question' && runAskIn(q.questions[0]!.question)).toEqual({ on: 'nas', commands: ['cd /volume1/docker/registry', 'sudo docker compose up -d'], expect: 'both containers say Started' });
+  });
+
+  it('says why it can’t make one', () => {
+    expect(runCard('  ', { commands: ['ls'] })).toMatch(/Say why/);
+    expect(runCard('why', { commands: ['  ', ''] })).toMatch(/at least one command/);
+    expect(runCard('why', { commands: ['```sh', 'ls', '```'] })).toMatch(/without a code fence/);
+    expect(runCard('x'.repeat(990), { commands: ['ls'] })).toMatch(/a card holds 1000/);
+    expect(runCard('First this:\n```sh\nls\n```', { commands: ['pwd'] })).toMatch(/out of why/);
+    expect(runCard('Run on **arch** first.', { on: 'nas', commands: ['pwd'] })).toMatch(/out of why/);
+  });
+
+  it('is never a question Claude asked with options', () => {
+    expect(isRunCard(card('```sh\nls\n```').question)).toBe(false);
+    expect(isRunCard({ kind: 'question', questions: [{ question: 'Which one?', header: '', options: [], multiSelect: false }] })).toBe(false);
+    expect(isRunCard({ kind: 'plan', plan: '```sh\nls\n```' })).toBe(false);
+  });
+
+  it('tells the agent what came of it', () => {
+    expect(runCardResult({ kind: 'skip' })).toMatch(/skipped it: nothing was run/);
+    expect(runCardResult({ kind: 'answers', answers: { q: 'I ran it through Beluga on nas: exit code 0.' } })).toBe('I ran it through Beluga on nas: exit code 0.');
+    expect(runCardResult({ kind: 'answers', answers: { q: 'did it in my own terminal' } })).toBe("The user didn't run it through Beluga and answered instead: did it in my own terminal");
+  });
+
+  it('a Run answers the agent waiting on the card', async () => {
+    const store = new Store(initialState('room'));
+    const broker = new QuestionBroker({ store, selfId: () => SELF, send: () => true, timeoutMs: () => 60_000, toast: () => undefined });
+    const fake = fakePty();
+    const runs = new RunAsks({ store, selfId: () => SELF, sshHosts: async () => ['nas'], hostname: () => 'i9arch', answer: (qid, q, text) => broker.answerPart(qid, q, text), spawn: () => fake.pty });
+    const q = runCard('Restart it.', { on: 'nas', commands: ['sudo systemctl restart x'] });
+    if (typeof q === 'string' || q.kind !== 'question') throw new Error('no card');
+    const waiting = broker.ask(SELF, 'r1', 'ws:one', q);
+    await runs.start(store.getState().questions[0]!.qid, q.questions[0]!.question);
+    fake.emit('restarted\r\n');
+    fake.exit(0);
+    expect(runCardResult(await waiting)).toContain('on nas: exit code 0');
+    expect(store.getState().questions).toHaveLength(0);
   });
 });
