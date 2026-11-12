@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { projectFileName } from '../../workspaces/scripts.js';
-import { type Tool, type ToolDraft, type ToolPatch, type ToolboxSig, normalizeCommandSig, substituteParams } from '../../workspaces/toolbox.js';
+import { type Tool, type ToolDraft, type ToolPatch, type ToolboxSig, isToolWorthy, normalizeCommandSig, substituteParams, toolCommandFrom, toolNameFor } from '../../workspaces/toolbox.js';
 import type { WorkspaceStore } from '../../workspaces/store.js';
 import type { Workbench } from '../workbench.js';
 import { toolboxTermId } from '../../shared/terminal-keys.js';
@@ -155,9 +156,42 @@ export class ToolboxService {
 
   // ---- detection
 
-  recordBashCommand(projectRoot: string, command: string): ToolboxSig | undefined {
-    const sig = normalizeCommandSig(command);
+  /** The project a folder belongs to: a worktree's project, else the folder itself. */
+  projectRootOf(dir: string): string {
+    const record = this.deps.store.loadRecords().find((r) => r.path === dir && r.projectRoot !== dir);
+    return record?.projectRoot ?? dir;
+  }
+
+  /**
+   * Personal tools saved under a worktree's folder (detection used to key them so) move to that
+   * worktree's project, where the Toolbox lists them. Returns how many moved.
+   */
+  adoptStrays(): number {
+    const cfg = this.config;
+    const toolbox = { ...(cfg.toolbox ?? {}) };
+    let moved = 0;
+    let changed = false;
+    for (const [key, tools] of Object.entries(toolbox)) {
+      const root = this.projectRootOf(key);
+      if (root === key) continue;
+      const kept = toolbox[root] ?? [];
+      const fresh = tools.filter((t, i) => !kept.some((k) => k.command === t.command) && tools.findIndex((o) => o.command === t.command) === i);
+      toolbox[root] = [...kept, ...fresh];
+      delete toolbox[key];
+      moved += fresh.length;
+      changed = true;
+    }
+    if (changed) this.save({ ...cfg, toolbox });
+    return moved;
+  }
+
+  recordBashCommand(cwd: string, command: string): ToolboxSig | undefined {
+    const projectRoot = this.projectRootOf(cwd);
+    const run = toolCommandFrom(command, cwd, projectRoot, os.homedir());
+    if (!isToolWorthy(run)) return undefined;
+    const sig = normalizeCommandSig(run);
     if (sig.length < 5) return undefined;
+    if (this.list(projectRoot).some((t) => normalizeCommandSig(t.command) === sig)) return undefined;
     const id = sigId(projectRoot, sig);
 
     const cfg = this.config;
@@ -179,7 +213,7 @@ export class ToolboxService {
 
     const updated = all[key]!;
     if (updated.count >= SIG_THRESHOLD) {
-      return { id, projectRoot, command: sig, count: updated.count, firstSeenMs: updated.firstSeenMs, lastSeenMs: updated.lastSeenMs };
+      return { id, projectRoot, command: sig, run, name: toolNameFor(run), count: updated.count, firstSeenMs: updated.firstSeenMs, lastSeenMs: updated.lastSeenMs };
     }
     return undefined;
   }

@@ -426,7 +426,10 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     // Sentinel: watchers that run on a schedule or by hand, do a few steps and leave a report (docs/sentinel.md).
     if (opts.network) stopSentinel = launchSentinel({ session, store, demo: Boolean(demo) });
     // Toolbox: named commands saved per-project, run without an agent (BLG-75).
-    attachToolbox(session, new ToolboxService({ store: workspaces.store, workbench: session.workbench }));
+    const toolbox = new ToolboxService({ store: workspaces.store, workbench: session.workbench });
+    // Tools an older detection saved under a worktree's folder show in their project's Toolbox again.
+    toolbox.adoptStrays();
+    attachToolbox(session, toolbox);
     // A run that stopped on your usage limit is told to continue once the limit resets (shared/auto-continue.ts).
     if (opts.network) {
       // A child thread (core/threads) a stop reached is not sent on; one it sends on owes that turn to its parent.

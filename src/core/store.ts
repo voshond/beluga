@@ -256,6 +256,8 @@ export interface ToolboxSuggestion {
   readonly count?: number;
   /** A proposal that revises an existing tool (its id): Keep updates it in place. */
   readonly replaces?: string;
+  /** That tool's command before the update, so the card shows both. */
+  readonly previous?: string;
   readonly askedAt: number;
 }
 

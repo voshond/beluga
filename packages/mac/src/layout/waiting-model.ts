@@ -91,6 +91,9 @@ export function placeOf(state: DomainState, view: View | undefined): string | un
   }
 }
 
+/** What a request lets you read before you answer it: a Toolbox tool's command. */
+export const reviewOf = (item: Pick<NeedsYou, 'id' | 'detail'>): string | undefined => (item.id.startsWith('toolbox-') && item.detail ? item.detail : undefined);
+
 /** Requests with no page of their own still say where they're answered. */
 const PLACE_BY_ID: ReadonlyArray<readonly [RegExp, string]> = [[/^friend:/, 'Friends']];
 

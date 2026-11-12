@@ -606,16 +606,24 @@ function dialogueItems(state: DomainState): NeedsYou[] {
   });
 }
 
+/** The project a Toolbox suggestion is for, by name ("beluga"), else its folder's. */
+export const toolboxProjectName = (state: Pick<DomainState, 'projects'>, root: string): string => state.projects.find((p) => p.root === root)?.name ?? root.split('/').filter(Boolean).pop() ?? root;
+
+/** A Toolbox card's words: which tool, and the command it would run (the update's old one first). */
+const toolboxDetail = (s: ToolboxSuggestion): string => (s.previous && s.previous !== s.command ? `Now: ${s.previous}\nNew: ${s.command}` : s.command);
+
 function toolboxSuggestionItems(state: DomainState): NeedsYou[] {
   return (state.toolboxSuggestions ?? []).map((s: ToolboxSuggestion): NeedsYou => {
     const root = s.projectRoot;
+    const project = clip(toolboxProjectName(state, root), 60);
+    const detail = clip(toolboxDetail(s), 4000);
     if (s.kind === 'propose' && s.replaces) {
       return {
         id: `toolbox-propose:${s.id}`,
         kind: 'decision',
         from: 'Claude',
-        title: `Update tool "${clip(s.name, 60)}" in your Toolbox?`,
-        detail: clip(s.command, 200),
+        title: `Update tool "${clip(s.name, 60)}" in ${project}'s Toolbox?`,
+        detail,
         askedAt: s.askedAt,
         actions: [
           { label: 'Update', tone: 'main' as const, method: 'toolbox.acceptProposal', args: [root, { name: s.name, command: s.command, ...(s.params ? { params: s.params } : {}) }, s.replaces] },
@@ -628,8 +636,8 @@ function toolboxSuggestionItems(state: DomainState): NeedsYou[] {
         id: `toolbox-propose:${s.id}`,
         kind: 'decision',
         from: 'Claude',
-        title: `Save tool "${clip(s.name, 60)}" to your Toolbox?`,
-        detail: clip(s.command, 200),
+        title: `Save tool "${clip(s.name, 60)}" to ${project}'s Toolbox?`,
+        detail,
         askedAt: s.askedAt,
         actions: [
           { label: 'Keep', tone: 'main' as const, method: 'toolbox.acceptProposal', args: [root, { name: s.name, command: s.command, ...(s.params ? { params: s.params } : {}), source: 'personal', createdBy: 'claude' }] },
@@ -641,8 +649,8 @@ function toolboxSuggestionItems(state: DomainState): NeedsYou[] {
       id: `toolbox-detect:${s.id}`,
       kind: 'decision',
       from: 'Beluga',
-      title: `Turn repeated command into a Toolbox tool?`,
-      detail: clip(s.command, 200),
+      title: `Make "${clip(s.name, 60)}" a tool in ${project}'s Toolbox? (run ${s.count ?? 3}×)`,
+      detail,
       askedAt: s.askedAt,
       actions: [
         { label: 'Make tool', tone: 'main' as const, method: 'toolbox.acceptProposal', args: [root, { name: s.name, command: s.command, source: 'personal' }] },

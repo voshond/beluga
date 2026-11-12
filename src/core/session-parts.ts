@@ -285,19 +285,19 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
             const replaced = draft.replaces ? service.list(r).find((t) => t.id === draft.replaces || t.name === draft.replaces) : undefined;
             if (draft.replaces && !replaced) return Promise.reject(new Error(`No tool "${draft.replaces}" to replace in this project. Use tool_list to see available tools.`));
             const id = `propose-${Date.now().toString(36)}`;
-            opts.store.dispatch({ type: 'toolbox_suggestion_add', suggestion: { id, kind: 'propose', projectRoot: r, name: draft.name, command: draft.command, ...(draft.params ? { params: draft.params } : {}), ...(replaced ? { replaces: replaced.id } : {}), askedAt: Date.now() } });
+            opts.store.dispatch({ type: 'toolbox_suggestion_add', suggestion: { id, kind: 'propose', projectRoot: r, name: draft.name, command: draft.command, ...(draft.params ? { params: draft.params } : {}), ...(replaced ? { replaces: replaced.id, previous: replaced.command } : {}), askedAt: Date.now() } });
             return replaced
               ? `Proposed an update to "${replaced.name}". It will appear as an "Update / Discard" card.`
               : `Proposed tool "${draft.name}". It will appear as a "Keep / Discard" card.`;
           },
         } satisfies ToolboxTools;
       },
-      onBashCommand: (projectRoot, command) => {
+      onBashCommand: (cwd, command) => {
         const service = toolboxOf(session);
         if (!service) return;
-        const sig = service.recordBashCommand(projectRoot, command);
+        const sig = service.recordBashCommand(cwd, command);
         if (!sig) return;
-        opts.store.dispatch({ type: 'toolbox_suggestion_add', suggestion: { id: sig.id, kind: 'detection', projectRoot, name: sig.command.split(' ')[0] ?? sig.command, command: sig.command, count: sig.count, askedAt: sig.lastSeenMs } });
+        opts.store.dispatch({ type: 'toolbox_suggestion_add', suggestion: { id: sig.id, kind: 'detection', projectRoot: sig.projectRoot, name: sig.name, command: sig.run, count: sig.count, askedAt: sig.lastSeenMs } });
       },
     });
     const terminals = opts.terminals;

@@ -43,8 +43,14 @@ export type ToolPatch = Partial<Pick<Tool, 'name' | 'command' | 'params' | 'sour
  */
 export interface ToolboxSig {
   readonly id: string;
+  /** The project the tool would belong to (a worktree's command counts for its project). */
   readonly projectRoot: string;
+  /** The normalized signature it is counted by. */
   readonly command: string;
+  /** What the tool would run: the command in full, without the `cd` into the worktree. */
+  readonly run: string;
+  /** A name for it, from its first words ("npx vitest run"). */
+  readonly name: string;
   readonly count: number;
   readonly firstSeenMs: number;
   readonly lastSeenMs: number;
@@ -77,6 +83,31 @@ export function extractParamNames(command: string): string[] {
     seen.add(m[1]!.trim());
   }
   return [...seen];
+}
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * A worktree command as a tool would run it: its leading `cd` into the worktree dropped (tools run
+ * in the project), and the worktree's path read as the project's.
+ */
+export function toolCommandFrom(command: string, cwd: string, projectRoot: string, home: string): string {
+  const dirs = [cwd, ...(home && cwd.startsWith(`${home}/`) ? [`~${cwd.slice(home.length)}`] : [])];
+  const leadingCd = dirs.map((dir) => new RegExp(`^cd\\s+(["']?)${escapeRegExp(dir)}/?\\1\\s*(?:&&|;)\\s*`));
+  const stripped = leadingCd.reduce((out, re) => out.replace(re, ''), command.trim());
+  return cwd === projectRoot ? stripped : stripped.split(cwd).join(projectRoot);
+}
+
+/** Worth offering as a tool: one line, no here-document (a one-off script), not a wall of text. */
+export const isToolWorthy = (command: string): boolean => command.length >= 5 && command.length <= 500 && !command.includes('\n') && !command.includes('<<');
+
+/** A name for a detected tool: its first words up to the first flag or chained command ("npx vitest run"). */
+export function toolNameFor(command: string): string {
+  const head = command.split(/\s*(?:&&|\|\||;|\|)\s*/)[0] ?? command;
+  const words = head.split(/\s+/).filter((w) => w && !/^\w+=/.test(w));
+  const flag = words.findIndex((w) => w.startsWith('-'));
+  const name = words.slice(0, Math.min(3, flag === -1 ? 3 : Math.max(flag, 1))).join(' ');
+  return (name || command).slice(0, 40);
 }
 
 /** A stable signature of a Bash command for detection: strip absolute paths and known hosts. */
