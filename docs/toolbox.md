@@ -65,8 +65,12 @@ In the Toolbox sheet, **Create with Agent** asks what the tool should do; each t
 
 Beluga watches your agents' Bash commands. When the same command signature appears three or more times in a 14-day window, a Needs You suggestion appears:
 
-- **Make tool** — creates a Toolbox tool immediately.
+- **Make tool** — creates a Toolbox tool immediately, and that command isn't offered again.
 - **Not this** — dismisses this suggestion and remembers the decision.
+
+The card names the tool and the project: `Make "npx vitest run" a tool in beluga's Toolbox? (run 3×)`. **Review** in the bell shows the full command before you answer, and a click on the row opens the project. Answered asks stay in the bell's notification history. The same goes for an agent's `tool_propose` cards, where an update shows the old command and the new one.
+
+Detection files the tool under the project, not the worktree the agent ran in: a leading `cd <worktree> &&` is dropped and the worktree's path in the rest of the command reads as the project's. It skips one-off scripts (here-documents, commands over one line or 500 characters) and commands that are already a tool. Tools an older version saved under a worktree's folder are moved to their project when Beluga starts.
 
 The count resets when the window expires. Only your own agents' commands trigger detection.
 

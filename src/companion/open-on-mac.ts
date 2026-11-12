@@ -98,5 +98,12 @@ export function needView(state: DomainState, need: string): View | undefined {
   if (run) return state.sentinel.runs.some((r) => r.id === run[1]) ? { kind: 'sentinel_run', runId: run[1]! } : { kind: 'sentinel' };
   const plan = /^plan:([^:]+):/.exec(need);
   if (plan) return state.plans.plans.some((p) => p.id === plan[1]) ? { kind: 'plan', id: plan[1]! } : undefined;
+  // A Toolbox card opens its project, whose Home lists the Toolbox.
+  const toolbox = /^toolbox-(?:propose|detect):(.+)$/.exec(need);
+  if (toolbox) {
+    const root = state.toolboxSuggestions?.find((s) => s.id === toolbox[1])?.projectRoot;
+    const project = root ? state.projects.find((p) => p.root === root) : undefined;
+    return project ? { kind: 'project', id: project.id } : undefined;
+  }
   return undefined;
 }

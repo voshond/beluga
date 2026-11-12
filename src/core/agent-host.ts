@@ -96,7 +96,7 @@ export interface AgentHostDeps {
   /** Project Toolbox (your own runs): the agent's list/run/propose tools for the project in `channel` (BLG-75). */
   readonly toolbox?: (channel: string) => import('../agent/types.js').ToolboxTools | undefined;
   /** Called when Claude runs a Bash command in a worktree: records it for Toolbox detection (BLG-75). */
-  readonly onBashCommand?: (projectRoot: string, command: string) => void;
+  readonly onBashCommand?: (worktree: string, command: string) => void;
   /** A plan's home conversation (your own runs): its plan tools and what Claude is told about the plan (core/plans); `said` is what this run was asked. */
   readonly plans?: (channel: string, from: string, said?: string) => { readonly tools?: import('../agent/types.js').PlanTools; readonly brief?: string; readonly checker?: boolean } | undefined;
   /** Child threads (core/threads): their tools, bound to this chat. Your own runs only, with the flag on (see runAgent). */

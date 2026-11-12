@@ -36,7 +36,10 @@ export const TOOLBOX_HANDLERS: ToolboxHandlers = {
       ? tb.update(root, replaces, { name: draft.name, command: draft.command, params: draft.params ?? [] })
       : tb.create(root, draft);
     const suggestion = s.store.getState().toolboxSuggestions.find((sg) => sg.projectRoot === root && sg.command === draft.command && sg.name === draft.name);
-    if (suggestion) s.store.dispatch({ type: 'toolbox_suggestion_remove', id: suggestion.id });
+    if (!suggestion) return result;
+    // A repeated command made into a tool isn't offered again.
+    if (suggestion.kind === 'detection') tb.dismissSig(root, suggestion.id);
+    s.store.dispatch({ type: 'toolbox_suggestion_remove', id: suggestion.id });
     return result;
   },
 };

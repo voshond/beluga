@@ -19,7 +19,7 @@ import { MachineProvider, toast, useApi, useApp, useBeluga, useUi } from '../lib
 import { macNoticeTarget, openNoticeTarget } from '../lib/notices.js';
 import { sameFields } from '../lib/stable.js';
 import { PartBoundary } from '../lib/part-boundary.js';
-import { type Waiting, type WaitingAction, bellCount, isCovered, noticeNeedView, sameWaiting, waitingList } from './waiting-model.js';
+import { type Waiting, type WaitingAction, bellCount, isCovered, noticeNeedView, reviewOf, sameWaiting, waitingList } from './waiting-model.js';
 import s from './notifications.module.css';
 
 /** A few marks the shared icon set doesn't have, drawn the same way (16 grid, 1.5 strokes). */
@@ -165,7 +165,9 @@ function WaitingRow({ w, now, close, on }: { w: Waiting; now: number; close: () 
   const api = useApi();
   const go = useGo();
   const [busy, setBusy] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const { item } = w;
+  const review = reviewOf(item);
   const answer = (a: WaitingAction): void => {
     setBusy(true);
     (client.call as (m: Method, ...args: unknown[]) => Promise<unknown>)(a.method as Method, ...a.args).then(
@@ -215,7 +217,13 @@ function WaitingRow({ w, now, close, on }: { w: Waiting; now: number; close: () 
               </Button>
             ))
           )}
+          {review ? (
+            <Button size="small" variant="plain" aria-expanded={reviewing} onClick={() => setReviewing((on) => !on)}>
+              {reviewing ? 'Hide' : 'Review'}
+            </Button>
+          ) : null}
         </span>
+        {review && reviewing ? <pre className={s.review}>{review}</pre> : null}
       </li>
     </ActionsContext>
   );

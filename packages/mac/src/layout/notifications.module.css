@@ -322,6 +322,21 @@
   gap: 6px;
   padding: 0 10px 9px 50px;
 }
+.review {
+  max-height: 220px;
+  margin: 0 10px 10px 50px;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}
 .groupTitle .count {
   margin-left: 4px;
 }
