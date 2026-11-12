@@ -14,6 +14,7 @@ import { inApp, webServed } from '../lib/boot.js';
 import { newEmptyGroup, useGroupEdit } from '../lib/group-edit.js';
 import { useApi, useApp, useBeluga, useUi } from '../lib/beluga.js';
 import { sameDeep } from '../lib/stable.js';
+import { agentName } from '../lib/agent-words.js';
 import { openProjectHome } from '../lib/project-home.js';
 import { openSheet } from '../lib/sheets.js';
 import { getPrefs, setPrefs, usePrefs } from '../lib/prefs.js';
@@ -210,13 +211,15 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
   const importItem: ActionItem[] = p.root ? [{ label: 'Import from Claude Code…', icon: 'claude', onSelect: () => openSheet({ kind: 'import_conversation', projectId: p.id }) }] : [];
   // Its variables and its main folder's .env, without going through Settings (BLG-369).
   const envItem: ActionItem[] = p.root ? [{ label: 'Environment…', icon: 'lock', onSelect: () => openSheet({ kind: 'project_env', projectId: p.id }) }] : [];
+  const ownAgent = useApp((st) => st.prefs.projectAgents?.[p.name]);
+  const agentItem: ActionItem[] = p.root ? [{ label: 'Agent…', icon: 'bot', hint: ownAgent ? agentName(ownAgent, { model: true }) : 'Same as yours', onSelect: () => openSheet({ kind: 'project_agent', projectId: p.id }) }] : [];
   // Its folder somewhere else on disk (worktrees, tasks and history go along).
   const handleMoveFolder = async (): Promise<void> => {
     const [into] = (await pickFolders(`Move ${p.name} into…`)) ?? [];
     if (into) await api.workspaces.moveProject(p.id, into);
   };
   const moveFolderItem: ActionItem[] = p.root ? [{ label: 'Move Folder…', icon: 'folder', disabled: busy, ...(busy ? { hint: 'Once your agent is done' } : {}), onSelect: () => void handleMoveFolder() }] : [];
-  const extra: ActionItem[] = [...shareItem, ...teamItems, ...importItem, ...envItem, ...moveFolderItem, ...showArchivedItem, ...cleanUpItem, ...moveItems(entries, item, arrange), ...groupItems(p, entries, arrange), ...githubItems, ...iconItems, ...colorItems, { label: 'Hide Project', danger: true, separate: true, onSelect: () => hide(p) }, { label: 'Delete Project…', danger: true, onSelect: () => openSheet({ kind: 'delete_project', projectId: p.id }) }];
+  const extra: ActionItem[] = [...shareItem, ...teamItems, ...importItem, ...agentItem, ...envItem, ...moveFolderItem, ...showArchivedItem, ...cleanUpItem, ...moveItems(entries, item, arrange), ...groupItems(p, entries, arrange), ...githubItems, ...iconItems, ...colorItems, { label: 'Hide Project', danger: true, separate: true, onSelect: () => hide(p) }, { label: 'Delete Project…', danger: true, onSelect: () => openSheet({ kind: 'delete_project', projectId: p.id }) }];
   const kids = depth + 2;
   // Nothing to unfold: no arrow (its place kept, so the icons stay in line).
   const sessions = useCcSessions();

@@ -145,11 +145,14 @@ interface Move {
  * scrolling inside a popover that never outgrows the window; effort below, Auto then Low to Max
  * on one track, what the level means above it. `draft`: a new worktree's pick (it has no conversation yet), kept by the New Worktree box.
  */
-export function ModelPicker({ channel, draft, onDraft, forWorktree }: { channel: string; draft?: AgentRef; onDraft?: (agent: AgentRef | undefined) => void; forWorktree?: boolean }) {
+const sameAgent = (a: AgentRef, b: AgentRef): boolean => a.runtime === b.runtime && (a.model ?? '') === (b.model ?? '');
+
+export function ModelPicker({ channel, draft, onDraft, forWorktree, projectAgent }: { channel: string; draft?: AgentRef; onDraft?: (agent: AgentRef | undefined) => void; forWorktree?: boolean; projectAgent?: AgentRef }) {
   const api = useApi();
+  const shownDraft = draft ?? projectAgent;
   // Only what the picker shows (not the whole state): not drawn again on every streamed event (KLD-48).
-  const picker = useApp((st) => agentPicker(pickerState(st), channel, myRuntime(st.prefs), draft, forWorktree ? draftAutoChoice(st, draft) : onDraft ? undefined : autoChoice(st, channel)), samePicker);
-  const draftAuto = useApp((st) => (forWorktree ? draftAutoChoice(st, draft)?.runtime : undefined));
+  const picker = useApp((st) => agentPicker(pickerState(st), channel, myRuntime(st.prefs), shownDraft, forWorktree ? draftAutoChoice(st, shownDraft) : onDraft ? undefined : autoChoice(st, channel)), samePicker);
+  const draftAuto = useApp((st) => (forWorktree ? draftAutoChoice(st, shownDraft)?.runtime : undefined));
   const chosenEffort = useApp((st) => st.prefs.effort);
   const routed = useApp((st) => (draft ? undefined : routedEffort(st, channel)));
   const effort = routed ?? chosenEffort;
@@ -166,6 +169,11 @@ export function ModelPicker({ channel, draft, onDraft, forWorktree }: { channel:
   const chip = `${label}${effort ? ` · ${EFFORT_INFO[effort].label}` : ''}`;
   const pick = (g: PickerGroup, value: string): void => {
     if (onDraft && !conversation) {
+      const choice: AgentRef = { runtime: g.runtime, label: g.label, ...(value ? { model: value } : {}) };
+      if (projectAgent) {
+        onDraft(sameAgent(choice, projectAgent) ? undefined : choice);
+        return;
+      }
       if (draftAuto === g.runtime) {
         onDraft(g.isDefault && !value ? undefined : { runtime: g.runtime, label: g.label, ...(value ? { model: value } : {}) });
         return;
