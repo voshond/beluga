@@ -908,6 +908,17 @@ export class BoardWork {
         const where = repos.length > 1 ? ` on ${boardName(state(), boardOf(issue), this.repoName)}, running in ${named(issue.projectId)}${covered ? '' : ` (the board covers ${named(issue.projectId)} from now on)`}` : '';
         return `Created ${issue.key}: ${issue.title} (${issue.status}${issue.private ? ', private: only the user sees it' : ''})${where}${leftOut(boardOf(issue), input.labels)}`;
       },
+      start: async (key) => {
+        // Starting work runs an agent on this Mac: your own runs only, never a friend's or an outside agent's.
+        if (home) onlyHome('starting work is the owner’s: ask them to Start it');
+        if (external) throw new Error('Starting a task is for the owner’s own agent: ask them to Start it');
+        const issue = pick(key);
+        const wsId = await this.start(issue.id, { claude: true, by: by() });
+        const started = this.workspaces().find((w) => w.id === wsId);
+        const repos = reposOf(state(), boardOf(issue));
+        const inRepo = repos.length > 1 || issue.projectId !== wsProject() ? ` in ${named(issue.projectId)}` : '';
+        return `Started ${issue.key} in the worktree "${started?.name ?? wsId}"${inRepo}: its agent is working it from its brief now. Name both in your answer: \`task:${issue.key}\` and \`worktree:${wsId}\`.`;
+      },
       createBoard: (input) => {
         if (home) onlyHome('making a new board is the owner’s');
         const repos = [...new Set(input.repos.map(projectByName))];

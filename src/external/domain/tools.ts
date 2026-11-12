@@ -1000,6 +1000,8 @@ export const NOT_EXPOSED: Readonly<Record<string, 'chat_only' | 'checker_only'>>
   show: 'chat_only',
   show_block: 'chat_only',
   task_define: 'chat_only',
+  // Starting a task from your own agent's conversation: an external agent starts one through board.start, under its grant.
+  task_start: 'chat_only',
   sentinel_stop: 'chat_only',
   sentinel_measure: 'chat_only',
   read_earlier: 'chat_only',

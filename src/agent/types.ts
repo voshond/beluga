@@ -352,6 +352,8 @@ export interface BoardTools {
     /** Only the user sees it (BLG-501). */
     readonly private?: boolean;
   }): string;
+  /** Start a task (as the app's Start): a worktree of its own, in the repo it runs in, with your agent working it. Your own runs only. */
+  start(key: string): Promise<string>;
   /** A board of its own covering a few repos (their names); its key prefix made from its name unless given. */
   createBoard(input: { readonly name: string; readonly repos: readonly string[]; readonly prefix?: string }): string;
   update(
