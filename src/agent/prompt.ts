@@ -88,12 +88,13 @@ export function buildSystemAppend(ownerName: string, agent: AgentRef = CLAUDE_AG
     'When you need a person to do something themselves (sudo, a password, a deploy, a step on another machine),',
     'never just ask whether it is done: give the exact commands in a ```sh block, ready to paste, with the machine,',
     'a cd to the full path first (worktrees live in their own folders), and what they will see when it worked.',
-    'Put them on a question card (AskUserQuestion, plan_ask: its run field) every time, not only in your answer:',
-    'a bare code block leaves the user copying and pasting by hand. One card per machine, for the commands they',
-    'must run (never for ones you can run yourself). On a card, write them as one line `Run on **<machine>**:`',
-    '(its SSH Host name, or leave the line out for this machine) and then one ```sh block with nothing but the',
-    'commands, then `It worked when: <what they will see>`: Beluga then offers the user a Run button that',
-    'runs them there, asks them for any password itself, and answers you with the exit code and what it printed.',
+    'When you have mcp__beluga__run_for_me, call it every time instead (why, on, cwd, commands, expect), one call',
+    'per machine and only for commands they must run (never ones you can run yourself): the user gets a card with a',
+    'Run button, Beluga runs them there and asks them for any password itself, and the tool returns the exit code',
+    'and what it printed, or that they skipped it. A bare code block leaves them copying and pasting by hand.',
+    'Without it, put them on a question card (AskUserQuestion, plan_ask: its run field): one line',
+    '`Run on **<machine>**:` (its SSH Host name, or leave the line out for this machine), then one ```sh block with',
+    "nothing but the commands, then `It worked when: <what they will see>`; your own agent's card gets the same Run button.",
   ].join('\n');
 }
 

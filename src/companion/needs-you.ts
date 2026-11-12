@@ -4,6 +4,7 @@ import { OFFER_DETAIL, knockWords, offerWords } from '../core/team/model.js';
 import type { PendingQuestion } from '../core/collab-store.js';
 import type { TaskView as GwTask } from '../core/gateway/model.js';
 import { parseDecisionQid } from '../core/plans/decisions.js';
+import { isRunCard, runAskIn } from '../core/run-ask.js';
 import { type Plan, isMultiRepo, planBranchFor, planPrFor, planTitle, prRef, reviewState, shipOrder, shippedIn } from '../core/plans/model.js';
 import { firstLine, sentinelById } from '../core/sentinel/model.js';
 import { type PlanView as PlanProgress, planView } from '../core/plans/progress.js';
@@ -108,6 +109,10 @@ function questionItem(state: DomainState, q: PendingQuestion): NeedsYou {
   const last = !rest.length;
   const single = last && !head.multiSelect && head.options.length > 0 && head.options.length <= 3;
   const detail = [commandsIn(head.question), ...rest.map((r) => plainLine(r.question, 1000))].filter(Boolean).join('\n');
+  // A run card (run_for_me): where it runs leads, since the commands are only in the detail.
+  const run = isRunCard(q.question) ? runAskIn(head.question) : undefined;
+  const why = run ? head.question.slice(0, Math.max(0, head.question.lastIndexOf('\n\nRun'))) : head.question;
+  const title = plainLine(why || head.question, 500);
   // Several picks (joined with ", " as the Mac does) or your own words go where `slot` says: the
   // last question sends every answer (questions.answer); an earlier one is kept with questions.pick.
   const answer: NonNullable<NeedsYou['answer']> = last
@@ -118,7 +123,7 @@ function questionItem(state: DomainState, q: PendingQuestion): NeedsYou {
     kind: decision ? 'decision' : 'question',
     ...(decision ? { from: plan ? `the plan “${clip(planTitle(plan), 80)}”` : 'a plan' } : {}),
     ...(decision && planT ? { topic: planT } : {}),
-    title: clip(plainLine(head.question, 500), 500),
+    title: clip(run ? `Run ${run.on ? `on ${run.on}` : 'this'}: ${title}` : title, 500),
     ...(detail ? { detail: clip(detail, 64_000) } : {}),
     choices: head.options.slice(0, 12).map((o) => ({ label: clip(o.label, 200), ...(o.description ? { description: clip(o.description, 1000) } : {}) })),
     multi: head.multiSelect,

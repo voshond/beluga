@@ -3,6 +3,7 @@ import type { PendingQuestion } from '@beluga/core/collab-store.js';
 import { channelOf } from '@beluga/core/store.js';
 import { currentQuestion } from '@beluga/ui/collab-actions.js';
 import { isDecisionQid } from '@beluga/core/plans/decisions.js';
+import { isRunCard } from '@beluga/core/run-ask.js';
 import { TRUST_INFO } from '@beluga/core/trust.js';
 import { defaultAgentOf } from '@beluga/protocol.js';
 import { Icon } from '../components/Icon.js';
@@ -178,10 +179,11 @@ function QuestionCard({ q, agent }: { q: PendingQuestion; agent: string }) {
   const chosen = new Set((q.picked[`${current.question}#multi`] ?? '').split('\u0000').filter(Boolean));
   const total = q.question.questions.length;
   const index = q.question.questions.indexOf(current);
+  const runCard = isRunCard(q.question);
   return (
     <div className={s.card}>
       <div className={s.head}>
-        <Icon name="claude" size={13} className={s.claude} />
+        <Icon name={runCard ? 'terminal' : 'claude'} size={13} className={s.claude} />
         <span className={s.title}>{current.header || `${agent} asks`}</span>
         {total > 1 ? <span className={s.more}>{index + 1} of {total}</span> : null}
         {/* A decision of yours in a plan waits until you answer it (core/plans/decisions.ts). */}
@@ -195,7 +197,7 @@ function QuestionCard({ q, agent }: { q: PendingQuestion; agent: string }) {
         <Markdown text={current.question} />
       </div>
       <RunAsk q={q} question={current.question} />
-      {runStarted ? null : <QuestionOptions q={q} current={current} chosen={chosen} />}
+      {runStarted ? null : runCard ? <div className={s.hint}>Or run it yourself and type what happened below.</div> : <QuestionOptions q={q} current={current} chosen={chosen} />}
     </div>
   );
 }

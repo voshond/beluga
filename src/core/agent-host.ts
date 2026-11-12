@@ -1552,6 +1552,8 @@ export class AgentHost {
         ...(from === this.selfId && this.store.getState().prefs.selfApproval === 'ask' ? { askBeforeCommands: true } : {}),
         ...(external ? this.externalRunGates(external) : {}),
         askUser: (question) => this.deps.questions.ask(askTo, body.requestId, body.channel, question),
+        // Commands only you can run go on a card with Run on your own screen (run_for_me).
+        ...(yours && askTo === this.selfId ? { runCards: true } : {}),
         plan: body.plan,
         // A plan's conversation plans; it doesn't move to a worktree.
         ...(move && !plans?.tools ? { continueInWorktree: move } : {}),
@@ -1661,6 +1663,7 @@ export class AgentHost {
         canUseTool: (toolName, input) => this.authorizeTool(this.selfId, requesterName, toolName, input, channel, place.cwd),
         canUseSecret: (toolName, input) => this.authorizeSecret(toolName, input, channel, place.cwd),
         askUser: (question) => this.deps.questions.ask(this.selfId, requestId, channel, question),
+        runCards: true,
         ...(scratch ? { scratchDir: scratch } : {}),
         ...(board?.tools ? { board: board.tools } : {}),
         ...(board?.brief ? { taskBrief: board.brief } : {}),
@@ -1702,6 +1705,7 @@ export class AgentHost {
       onFileTouched: (abs) => this.announceAgentFocus(abs),
       canUseTool: (toolName, toolInput) => this.authorizeTool(this.selfId, requesterName, toolName, toolInput, channel, opts.place?.cwd),
       askUser: (question) => this.deps.questions.ask(this.selfId, requestId, channel, question),
+      runCards: true,
       ...(opts.defaultModel ? this.modelFor(opts.place?.model, opts.place?.agent, opts.place?.effort) : {}),
     });
     return { text, tokens };
