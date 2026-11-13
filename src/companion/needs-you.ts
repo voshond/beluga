@@ -655,7 +655,7 @@ function toolboxSuggestionItems(state: DomainState): NeedsYou[] {
       askedAt: s.askedAt,
       actions: [
         { label: 'Make tool', tone: 'main' as const, method: 'toolbox.acceptProposal', args: [root, { name: s.name, command: s.command, source: 'personal' }] },
-        { label: 'Not this', tone: 'plain' as const, method: 'toolbox.dismissSuggestion', args: [root, s.id] },
+        { label: 'Don’t suggest', tone: 'danger' as const, method: 'toolbox.dismissSuggestion', args: [root, s.id] },
       ],
     };
   });

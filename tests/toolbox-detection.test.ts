@@ -10,7 +10,7 @@ import { ToolboxService } from '../src/core/toolbox/service.js';
 import { WorkspaceStore } from '../src/workspaces/store.js';
 import { isToolWorthy, toolCommandFrom, toolNameFor } from '../src/workspaces/toolbox.js';
 import type { Project, WorkspaceRecord } from '../src/workspaces/types.js';
-import { reviewOf } from '../packages/mac/src/layout/waiting-model.js';
+import { reviewOf, splitActions } from '../packages/mac/src/layout/waiting-model.js';
 
 const ROOT = '/code/app';
 const WT = '/wt/app-feature';
@@ -128,6 +128,13 @@ describe('a detected Toolbox tool on the phone and Mac', () => {
     const [item] = waitingNeeds(stateWith([detection()])).filter((n) => n.id === 'toolbox-detect:sig1');
     expect(item?.title).toBe('Make "npx vitest run" a tool in App\'s Toolbox? (run 3×)');
     expect(item?.detail).toBe('npx vitest run tests/a.test.ts');
+  });
+
+  it('shows "Don’t suggest" on the card next to Make tool, dismissing the signature for good', () => {
+    const [item] = waitingNeeds(stateWith([detection()])).filter((n) => n.id === 'toolbox-detect:sig1');
+    const { surface } = splitActions(item?.actions ?? []);
+    expect(surface.map((a) => a.label)).toEqual(['Make tool', 'Don’t suggest']);
+    expect(surface[1]).toMatchObject({ method: 'toolbox.dismissSuggestion', args: [ROOT, 'sig1'] });
   });
 
   it('opens the project', () => {

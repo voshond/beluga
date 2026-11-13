@@ -66,7 +66,7 @@ In the Toolbox sheet, **Create with Agent** asks what the tool should do; each t
 Beluga watches your agents' Bash commands. When the same command signature appears three or more times in a 14-day window, a Needs You suggestion appears:
 
 - **Make tool** — creates a Toolbox tool immediately, and that command isn't offered again.
-- **Not this** — dismisses this suggestion and remembers the decision.
+- **Don’t suggest** — declines it, right on the card: this command isn't suggested again in this project.
 
 The card names the tool and the project: `Make "npx vitest run" a tool in beluga's Toolbox? (run 3×)`. **Review** in the bell shows the full command before you answer, and a click on the row opens the project. Answered asks stay in the bell's notification history. The same goes for an agent's `tool_propose` cards, where an update shows the old command and the new one.
 
