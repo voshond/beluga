@@ -31,7 +31,7 @@ test("a project's Environment… shows its .env, and typing over a value sets it
   await sidebar.getByRole('button', { name: 'bob-api', exact: true }).first().click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Environment…' }).click();
   const sheet = page.getByRole('dialog', { name: 'bob-api Settings' });
-  await expect(sheet.getByText('Include the main folder’s .env')).toBeVisible();
+  await expect(sheet.getByText('Use the main folder’s .env')).toBeVisible();
   await expect(sheet.getByRole('switch', { name: "Use the main folder's .env" })).toHaveAttribute('aria-checked', 'true');
   const fromFile = sheet.getByLabel(/^Value of API_URL \(from \.env/);
   await expect(fromFile).toHaveValue('https://api.example.com');
@@ -48,7 +48,8 @@ test("a project's Environment… shows its .env, and typing over a value sets it
   await sheet.getByRole('button', { name: 'Show values', exact: true }).click();
   await sheet.getByLabel('Name', { exact: true }).first().click();
   await expect(sheet.getByRole('status').getByText('Saved')).toBeVisible();
-  await expect(sheet.getByText('Changed here. The .env file is left as it is.')).toBeVisible();
+  // Marked changed, with the way back to the file's value beside it (no sentence under every row).
+  await expect(sheet.getByRole('button', { name: 'Use .env for API_URL' })).toBeVisible();
   // It stayed where it was: still the first row.
   await expect(sheet.getByLabel('Name', { exact: true }).first()).toHaveValue('API_URL');
   if (process.env.SHOTS) await sheet.screenshot({ path: `${process.env.SHOTS}/env-sheet-override.png` });
@@ -56,8 +57,9 @@ test("a project's Environment… shows its .env, and typing over a value sets it
   // Keep a copy in Beluga: the rest comes in too.
   await sheet.getByRole('button', { name: 'Keep a Copy in Beluga' }).click();
   await expect(sheet.getByLabel('Value of STRIPE_KEY', { exact: true })).toHaveValue('sk_test_123');
-  // Use .env takes the override back.
-  await sheet.getByRole('button', { name: 'Use .env' }).first().click();
+  // The arrow takes the override back; a copy kept with the same value has no arrow, only its tag.
+  await expect(sheet.getByRole('button', { name: 'Use .env for STRIPE_KEY' })).toHaveCount(0);
+  await sheet.getByRole('button', { name: 'Use .env for API_URL' }).click();
   await expect(sheet.getByLabel(/^Value of API_URL \(from \.env/)).toBeVisible();
   await sheet.getByRole('button', { name: 'Done' }).click();
 });
@@ -109,25 +111,26 @@ test('a worktree sets its own variables, .env.example gets placeholders, and arc
   const { root, projectId } = await daemon<{ root: string; projectId: string }>(page, `(c) => { const p = c.store.getState().projects.find((p) => p.name === 'bob-api'); return { root: p.root, projectId: p.id }; }`, null);
   writeFileSync(path.join(root, '.env'), 'PORT=3000\nPAYMENTS_KEY=sk_live_abcdefgh12345678\n');
   writeFileSync(path.join(root, '.env.example'), 'PORT=\nRESEND_KEY=\n');
-  const ws = await daemon<{ id: string; name: string }>(page, `async (c, projectId) => {
+  const ws = await daemon<{ id: string; name: string; path: string }>(page, `async (c, projectId) => {
     const id = await c.api.workspaces.newWorktree(projectId, 'env-own');
     for (let i = 0; i < 100; i++) {
       const ws = c.store.getState().projects.flatMap((p) => p.workspaces).find((w) => w.id === id && w.path);
-      if (ws) return { id: ws.id, name: ws.name };
+      if (ws) return { id: ws.id, name: ws.name, path: ws.path };
       await new Promise((r) => setTimeout(r, 100));
     }
     throw new Error('no worktree');
   }`, projectId);
 
-  // The project page says what .env.example asks for and what it doesn't list; Create/Add writes placeholders.
+  // The project page says what .env.example asks for; what it doesn't list is the worktrees' to mend, not yours.
   await sidebar.getByRole('button', { name: 'bob-api', exact: true }).first().click();
   const section = page.getByRole('region', { name: 'Environment' });
   await expect(section.getByText('1 variable .env.example asks for isn’t set')).toBeVisible();
   await expect(section.getByText('RESEND_KEY')).toBeVisible();
-  await section.getByRole('button', { name: 'Add Them' }).click();
-  await expect.poll(() => readFileSync(path.join(root, '.env.example'), 'utf8')).toContain('\nPAYMENTS_KEY=sk_live_…\n');
-  // Never the value: the file is committed.
-  expect(readFileSync(path.join(root, '.env.example'), 'utf8')).not.toContain('abcdefgh12345678');
+  await expect(section.getByText(/doesn’t list/)).toHaveCount(0);
+  // The new worktree came with its own .env.example listing the .env's names (placeholders, never the value); the main folder's is left alone.
+  await expect.poll(() => readFileSync(path.join(ws.path, '.env.example'), 'utf8')).toContain('PAYMENTS_KEY=sk_live_…\n');
+  expect(readFileSync(path.join(ws.path, '.env.example'), 'utf8')).not.toContain('abcdefgh12345678');
+  expect(readFileSync(path.join(root, '.env.example'), 'utf8')).toBe('PORT=\nRESEND_KEY=\n');
   if (process.env.SHOTS) await section.screenshot({ path: `${process.env.SHOTS}/env-section.png` });
 
   // The worktree's own: set from its ••• › Environment…, over the project's.

@@ -620,9 +620,12 @@ function Lists({ model }: { model: HomeModel }) {
   // A plan's own conversation is listed under Plans, not as a question.
   const planHomes = new Set(usePlans().plans.map((p) => p.home));
   const asks = model.asks.filter((w) => !planHomes.has(`ws:${w.id}`));
+  // What moves the work first (tasks, plans, worktrees, then GitHub's pull requests and issues); the
+  // project's environment and history after, as what you look up rather than act on.
   return (
     <div className={s.lists}>
       <HomeToolbox projectId={project.id} projectRoot={project.root} />
+      <HomeTasks projectId={project.id} />
       <HomePlans projectId={project.id} />
       <Section
         title="Worktrees"
@@ -652,6 +655,8 @@ function Lists({ model }: { model: HomeModel }) {
           </p>
         )}
       </Section>
+      <HomePulls projectId={project.id} />
+      <HomeIssues projectId={project.id} />
       {asks.length ? (
         <Section
           title="Questions"
@@ -663,11 +668,8 @@ function Lists({ model }: { model: HomeModel }) {
           ))}
         </Section>
       ) : null}
-      <HomeTasks projectId={project.id} />
-      {project.root ? <EnvSection projectId={project.id} root={project.root} /> : null}
-      <HomePulls projectId={project.id} />
-      <HomeIssues projectId={project.id} />
       <HomeActions projectId={project.id} />
+      {project.root ? <EnvSection projectId={project.id} root={project.root} /> : null}
       <HomeHistory projectId={project.id} />
       {archived.length ? (
         <Section

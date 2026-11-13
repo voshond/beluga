@@ -104,6 +104,17 @@ const keyOf = (owner: string, id: string): string => `${owner}/${id}`;
 const bareUrl = (url: string | undefined): string => (url ?? 'Its repository').replace(/^https:\/\//, '');
 const liveWorktrees = (p: Project) => p.workspaces.filter((w) => !w.archived && !w.pending && !w.external && w.kind !== 'main');
 
+/**
+ * Which worktrees a friend has after a share (undefined: the whole project, new worktrees too).
+ * A worktree adds itself to what they have, and the whole project stays the whole project. Without
+ * a worktree (a role change from the project's sheet) what they have stays as it is: a share of one
+ * worktree only grows to the whole project when that's asked for (`whole`), or it's their first.
+ */
+export function grantScope(grant: ProjectGrant | undefined, share: Pick<FriendShareInput, 'workspaceId' | 'whole'>): readonly string[] | undefined {
+  if (share.workspaceId) return grant && !grant.only ? undefined : [...new Set([...(grant?.only ?? []), share.workspaceId])];
+  return share.whole ? undefined : grant?.only;
+}
+
 export interface FriendSharesOptions {
   readonly session: Session;
   readonly store: Store;
@@ -198,8 +209,7 @@ export class FriendShares implements FriendSharing {
     const name = this.friendName(peerId);
     const project = this.projectFor(share);
     const grant = this.grants[project.id]?.[peerId];
-    // A worktree (`workspaceId`, with or without its project's id) adds it to what they have; the whole project stays the whole project.
-    const only = share.workspaceId ? (grant && !grant.only ? undefined : [...new Set([...(grant?.only ?? []), share.workspaceId])]) : undefined;
+    const only = grantScope(grant, share);
     this.grants = { ...this.grants, [project.id]: { ...this.grants[project.id], [peerId]: { role, ...(only ? { only } : {}) } } };
     this.saveOwn();
     this.publishGrants();

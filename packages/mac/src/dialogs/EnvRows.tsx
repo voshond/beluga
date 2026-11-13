@@ -28,7 +28,7 @@ export function ImportBox({ onImport, onClose }: { onImport: (vars: EnvVar[]) =>
 }
 
 /** What a tag says about where a lent row comes from. */
-function tagOf(from: string): string {
+export function tagOf(from: string): string {
   if (from.startsWith('.env')) return '.env';
   if (from === 'Everywhere') return 'yours';
   if (from === 'this worktree') return 'here';

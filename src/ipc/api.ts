@@ -70,7 +70,7 @@ function args(...items: z.ZodType[]): { args: z.ZodTuple } {
 export const Location = z.object({ owner: id, share: z.string().min(1).max(200), path });
 
 /** A project (all its worktrees, now and later) or one worktree, shared with a friend over the network. */
-const FriendShare = z.object({ peerId: id, projectId: opt(id), workspaceId: opt(id), role: WsRole }).refine((x) => x.projectId || x.workspaceId, 'Say which project or worktree');
+const FriendShare = z.object({ peerId: id, projectId: opt(id), workspaceId: opt(id), role: WsRole, whole: opt(bool) }).refine((x) => x.projectId || x.workspaceId, 'Say which project or worktree');
 const FriendUnshare = z.object({ peerId: id, projectId: opt(id), workspaceId: opt(id) }).refine((x) => x.projectId || x.workspaceId, 'Say which project or worktree');
 
 /** Your flags for one agent's command line, refused when Beluga sets one of them itself (shared/agent-args.ts). */

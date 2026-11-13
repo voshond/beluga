@@ -18,6 +18,7 @@ import { type Plan, type PlanPr, draftRepoPlan, isMultiRepo, milestoneRepos, pla
 import { verifyProgress } from '../core/plans/verify-progress.js';
 import { planOwnerOf } from '../core/plans/owner.js';
 import { branchState, notOnPr } from '../core/branch-state.js';
+import { worktreeSharedWith } from '../ui/worktree-share.js';
 import { type RunSummary, type Sentinel, type SentinelState, activeSentinelChat, firstLine, isLive, isSentinelChat, lastRunOf, pausedWords, runsOf, scheduleSentence, sentinelById, sentinelChatTitle } from '../core/sentinel/model.js';
 import { type Dashboard, type Tile, metricOf, outputLook, tileColumns, tileCompare, tileMetrics, tileOutput, tileStateIn, tileTitle } from '../core/sentinel/dashboard-model.js';
 import { documentMime, isDocumentKind, storageName, storageSources } from '../core/sentinel/columns.js';
@@ -600,7 +601,16 @@ function summaryOf(state: DomainState, conv: Conversation, waiting: ReadonlySet<
     ...(conv.projectId && conv.projectId !== 'asked' ? { projectId: clip(conv.projectId, 200), ...iconOf(ctx, conv.projectId) } : {}),
     ...(fresh ? { fresh } : {}),
     ...notOnPrOf(state, conv.channel),
+    ...sharedOf(state, conv.channel),
   };
+}
+
+/** How many people a worktree of yours is shared with (BLG-940), the Mac row's green dot. */
+function sharedOf(state: DomainState, channel: string): Pick<ConvSummary, 'shared'> {
+  const id = channel.startsWith('ws:') ? channel.slice(3) : undefined;
+  const ws = id ? state.projects.flatMap((p) => p.workspaces).find((w) => w.id === id) : undefined;
+  const count = ws && ws.kind !== 'main' && !ws.archived ? worktreeSharedWith(state, ws.id).length : 0;
+  return count ? { shared: Math.min(count, 1000) } : {};
 }
 
 /** A worktree's commits its open PR doesn't have (BLG-840), as the Mac's row chip counts them. */

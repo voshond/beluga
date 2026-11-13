@@ -147,6 +147,34 @@ describe('worktree variables (BLG-924)', () => {
     expect(env.get('p1').exampleSync).toBe(false);
   });
 
+  it('a new worktree’s first look catches its .env.example up with its .env, only adding', () => {
+    writeFileSync(path.join(wt, '.env'), 'PORT=3000\nSTRIPE_KEY=sk_live_abcdefgh12345678\n');
+    writeFileSync(path.join(wt, '.env.example'), '# Ports\nPORT=\nLISTED_ELSEWHERE=\n');
+    expect(env.syncWorktreeExample('w1')).toEqual({ file: '.env.example', added: ['STRIPE_KEY'], removed: [], caughtUp: true });
+    expect(readFileSync(path.join(wt, '.env.example'), 'utf8')).toBe('# Ports\nPORT=\nLISTED_ELSEWHERE=\nSTRIPE_KEY=sk_live_…\n');
+    // The main folder is never written.
+    expect(() => readFileSync(path.join(root, '.env.example'), 'utf8')).toThrow();
+    // Caught up: the next look has nothing to do.
+    expect(env.syncWorktreeExample('w1')).toBeUndefined();
+  });
+
+  it('makes a worktree’s .env.example when there’s none, and leaves it when switched off', () => {
+    writeFileSync(path.join(wt, '.env'), 'NODE_ENV=development\nAPI_TOKEN=abc123abc123abc123\n');
+    env.setExampleSync('p1', false);
+    expect(env.syncWorktreeExample('w1')).toBeUndefined();
+    expect(() => readFileSync(path.join(wt, '.env.example'), 'utf8')).toThrow();
+    env.setExampleSync('p1', true);
+    writeFileSync(path.join(wt, '.env'), 'NODE_ENV=development\nAPI_TOKEN=abc123abc123abc123\nNEW_URL=https://x.example.com/a\n');
+    // Noted while off: only what was added since reaches the new file.
+    expect(env.syncWorktreeExample('w1')).toEqual({ file: '.env.example', added: ['NEW_URL'], removed: [] });
+    expect(readFileSync(path.join(wt, '.env.example'), 'utf8')).toBe('NEW_URL=https://x.example.com/…\n');
+  });
+
+  it('a first look with no .env.example and no .env writes nothing', () => {
+    expect(env.syncWorktreeExample('w1')).toBeUndefined();
+    expect(() => readFileSync(path.join(wt, '.env.example'), 'utf8')).toThrow();
+  });
+
   it('says what .env.example asks for that isn’t set, and adds what it doesn’t list with placeholders', () => {
     writeFileSync(path.join(root, '.env'), 'PORT=3000\nSTRIPE_KEY=sk_live_abcdefgh12345678\n');
     writeFileSync(path.join(root, '.env.example'), '# needed\nPORT=\nRESEND_KEY=\n');

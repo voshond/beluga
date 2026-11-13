@@ -225,6 +225,8 @@ export interface EnvOverview {
   readonly dotenvFiles: readonly string[];
   readonly everywhere: number;
   readonly example?: ExampleInfo;
+  /** Worktrees keep .env.example in step on their own (on unless switched off): what it doesn't list needs nothing from you. */
+  readonly exampleSync?: boolean;
   /** Its worktrees with variables of their own. */
   readonly worktrees: readonly { readonly id: string; readonly name: string; readonly keys: readonly string[] }[];
 }
@@ -453,6 +455,7 @@ export class EnvVars {
       dotenvFiles: scope.dotenvFiles ?? [],
       everywhere: Object.keys(this.data.global).length,
       ...(scope.example ? { example: scope.example } : {}),
+      exampleSync: scope.exampleSync !== false,
       worktrees,
     };
   }
@@ -480,12 +483,16 @@ export class EnvVars {
   }
 
   /**
-   * Keys a worktree added to or removed from its .env files since last looked at, into its own
-   * .env.example when it has one (BLG-925): the change ships with the worktree's work, and the
-   * main folder isn't touched. The first look only notes the names; `noteOnly` just notes them
-   * (keys the main folder's .env brought in aren't this worktree's to list). → what changed there.
+   * A worktree's .env.example kept in step with its .env files (BLG-925), in the worktree, so the
+   * change ships with its work and the main folder is never touched (nor pushed by itself):
+   * - the first look catches it up: every name the .env files have that it doesn't list is added
+   *   (made when there's none), so a template that drifted is mended by the next worktree's work;
+   * - after that, keys the worktree adds or removes itself are added or taken out;
+   * - `noteOnly` just notes the names (keys the main folder's .env brought in later aren't this
+   *   worktree's to list: the worktree that added them lists them).
+   * → what changed there, and whether it was the first look's catch-up.
    */
-  syncWorktreeExample(id: string, noteOnly = false): { file: string; added: readonly string[]; removed: readonly string[] } | undefined {
+  syncWorktreeExample(id: string, noteOnly = false): { file: string; added: readonly string[]; removed: readonly string[]; caughtUp?: boolean } | undefined {
     const found = this.workspace(id);
     if (!found || found.ws.kind !== 'worktree') return undefined;
     const { project, ws } = found;
@@ -498,19 +505,22 @@ export class EnvVars {
       this.data = { ...this.data, worktrees: withWorktree(this.data.worktrees, id, { vars: {}, ...before, base: now }) };
       this.save();
     };
-    const template = this.data.projects[project.root]?.exampleSync === false ? undefined : readExample(ws.path);
-    if (!base || !template || noteOnly) {
+    if (noteOnly || this.data.projects[project.root]?.exampleSync === false) {
       note();
       return undefined;
     }
-    const had = new Set(base);
+    const template = readExample(ws.path);
     const has = new Set(now);
-    const added = now.filter((k) => !had.has(k)).map((key) => ({ key, value: values[key] ?? '' }));
-    const removed = base.filter((k) => !has.has(k));
-    const result = syncExample(template.text, added, removed);
-    if (result.added.length || result.removed.length) writeFileSync(path.join(ws.path, template.file), result.text);
+    const had = new Set(base ?? []);
+    const added = now.filter((k) => !base || !had.has(k)).map((key) => ({ key, value: values[key] ?? '' }));
+    // The catch-up only adds: a name the code reads may be set elsewhere (the project's, yours).
+    const removed = base ? base.filter((k) => !has.has(k)) : [];
+    const result = syncExample(template?.text ?? '', added, removed);
+    const file = template?.file ?? DEFAULT_EXAMPLE_FILE;
+    const changed = result.added.length > 0 || result.removed.length > 0;
+    if (changed) writeFileSync(path.join(ws.path, file), result.text);
     note();
-    return result.added.length || result.removed.length ? { file: template.file, added: result.added, removed: result.removed } : undefined;
+    return changed ? { file, added: result.added, removed: result.removed, ...(base ? {} : { caughtUp: true }) } : undefined;
   }
 
   /** Let your own Claude read .env files without asking (or ask again): in a project, or with none, everywhere. */

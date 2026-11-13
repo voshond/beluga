@@ -7,7 +7,7 @@ import e from './env-settings.module.css';
 
 /**
  * A project's worktrees and its env: new keys back to the main folder, .env.example kept in step
- * from what each adds or removes (BLG-925), and the worktrees with variables of their own (BLG-924).
+ * by each worktree (caught up when it's made, then what it adds or removes; BLG-925), and the worktrees with variables of their own (BLG-924).
  */
 export function EnvWorktreeGroups({ projectId }: { projectId: string }) {
   const api = useApi();
@@ -24,7 +24,7 @@ export function EnvWorktreeGroups({ projectId }: { projectId: string }) {
         <Row label="New keys go to the main folder" detail={backError ?? 'A key a worktree adds to its .env (one the main folder doesn’t have) is added there too, so the next worktree works. A changed value is asked about: copy it there, or save it in Beluga.'}>
           <Switch label="New keys from worktrees go to the main folder's .env" on={newKeysBack} onChange={setNewKeysBack} />
         </Row>
-        <Row label="Keep .env.example in step" detail={exampleError ?? 'A key a worktree adds to or removes from its .env goes into its .env.example too, with a placeholder instead of the value, so the change ships with that work.'}>
+        <Row label="Keep .env.example in step" detail={exampleError ?? 'Each worktree lists its .env names in its own .env.example, with placeholders instead of values, so it goes out with that work. The main folder’s is never changed.'}>
           <Switch label="Keep .env.example in step with worktrees' .env" on={exampleSync} onChange={setExampleSync} />
         </Row>
       </Group>
