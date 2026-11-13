@@ -50,8 +50,9 @@ interface EnvLine {
 
 /**
  * Project Home's Environment (BLG-926): what needs you first (names .env.example asks for that
- * nothing sets, names it doesn't list, worktrees that changed a .env or set their own), then a
- * line of counts. Names only, never a value. Nothing to show: no section.
+ * nothing sets, worktrees that changed a .env or set their own; names it doesn't list only when
+ * worktrees don't keep it in step), then a line of counts. Names only, never a value. Nothing to
+ * show: no section.
  */
 export function EnvSection({ projectId, root }: { projectId: string; root: string }) {
   const api = useApi();
@@ -68,7 +69,8 @@ export function EnvSection({ projectId, root }: { projectId: string; root: strin
     ...(example?.missing.length
       ? [{ id: 'missing', icon: 'alert' as const, title: `${plural(example.missing.length, 'variable')} ${example.file ?? '.env.example'} asks for ${example.missing.length === 1 ? 'isn’t' : 'aren’t'} set`, detail: names(example.missing), open: openEnv }]
       : []),
-    ...(example?.unlisted.length
+    // Kept in step by the worktrees (the default), what it doesn't list is mended with the next one's work: nothing to do here.
+    ...(example?.unlisted.length && !overview.exampleSync
       ? [
           {
             id: 'unlisted',
@@ -77,7 +79,7 @@ export function EnvSection({ projectId, root }: { projectId: string; root: strin
             detail: example.file ? names(example.unlisted) : `So a new teammate knows what to set: ${names(example.unlisted)}`,
             open: openEnv,
             action: {
-              label: example.file ? 'Add Them' : 'Create It',
+              label: example.file ? `Add to ${example.file}` : 'Create .env.example',
               run: () =>
                 api.env.addToExample(projectId).then(
                   (added) => toast(client, added.length ? `Added ${names(added, 4)} to ${example.file ?? '.env.example'} with placeholders. Commit it from the main folder.` : 'It lists them all already', 'success'),
@@ -138,7 +140,7 @@ export function EnvSection({ projectId, root }: { projectId: string; root: strin
           {plural(lines.length - HOME_ENV, 'more thing')} in Environment
         </button>
       ) : null}
-      {!lines.length && !hasAsks ? <p className={s.none}>All set: nothing missing from .env.example, and no worktree sets its own.</p> : null}
+      {!lines.length && !hasAsks ? <p className={s.none}>All set.</p> : null}
     </Section>
   );
 }

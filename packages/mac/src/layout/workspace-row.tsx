@@ -1,6 +1,7 @@
 import type { AppState } from '@beluga/core/store.js';
 import type { Workspace } from '@beluga/workspaces/types.js';
 import { findWorkspace, stateOf } from '@beluga/ui/workspace-models.js';
+import { type SharedWithPerson, sharedWithWords, worktreeSharedWith } from '@beluga/ui/worktree-share.js';
 import { notOnPr, notOnPrLabel } from '@beluga/core/branch-state.js';
 import { Icon, type IconName } from '../components/Icon.js';
 import { ActionsContext, type ActionItem } from '../components/SpecMenu.js';
@@ -126,9 +127,11 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold, inFam
   // A child thread in its parent's fold: the row a native sub-agent has too (threads/FamilyRow.tsx).
   const family = useApp((state) => (inFamily && ws.thread ? threadFamilyRow(state, ws) : undefined), sameDeep);
   const now = useNow(family?.state === 'running');
+  // Shared with someone (a friend, or someone from your room): a small green dot on its icon says so.
+  const shared = useApp((state) => (ws.kind === 'main' ? [] : worktreeSharedWith(state, ws.id)), sameDeep);
   const icon: IconName = ws.kind === 'chat' ? 'chat' : ws.kind === 'main' ? 'folder' : 'branch';
   const mark = <HarnessMark ws={ws} />;
-  const kindIcon = family ? <FamilyMark row={family} /> : <Icon name={icon} size={14} />;
+  const kindIcon = family ? <FamilyMark row={family} /> : <SharedIcon icon={icon} people={shared} />;
   // Being made: its page opens here (the core has nothing to open yet), with nothing to do on it until it's there.
   if (ws.pending) {
     return (
@@ -245,6 +248,18 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold, inFam
     </ActionsContext>
   );
 });
+
+/** A row's kind icon, with a small green dot at its corner when it's shared with someone (who, on hover). */
+function SharedIcon({ icon, people }: { readonly icon: IconName; readonly people: readonly SharedWithPerson[] }) {
+  if (!people.length) return <Icon name={icon} size={14} />;
+  const words = sharedWithWords(people);
+  return (
+    <span className={s.sharedIcon} title={words} data-shared={people.length}>
+      <Icon name={icon} size={14} />
+      <span className={s.sharedDot} role="img" aria-label={words} />
+    </span>
+  );
+}
 
 /** What a workspace's row does wherever the sidebar draws it (a project's list, the categories): the same menu, Rename…, Regenerate title and shift-click picking. */
 export interface WorkspaceRowActions {

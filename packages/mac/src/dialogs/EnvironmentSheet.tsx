@@ -33,6 +33,7 @@ export function WorktreeEnvSheet({ workspaceId, close }: { workspaceId: string; 
       hideSubmit
       cancelLabel="Done"
       width={640}
+      scrolls
       onSubmit={close}
       onCancel={close}
       footer={
@@ -48,7 +49,7 @@ export function WorktreeEnvSheet({ workspaceId, close }: { workspaceId: string; 
         </button>
       }
     >
-      <div className={e.sheetBody}>
+      <div className={e.sheetBody} data-sheet-scroll>
         <EnvEditor projectId={project.id} worktreeId={ws.id} />
       </div>
     </FormSheet>

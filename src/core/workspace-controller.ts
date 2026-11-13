@@ -87,8 +87,8 @@ export interface ControllerDeps {
     readonly newKeysBack: (projectId: string) => boolean;
     readonly merge: (projectId: string, vars: Readonly<Record<string, string>>) => number;
     readonly moveProject?: (from: string, to: string) => void;
-    /** A worktree's added or removed .env keys into its .env.example (BLG-925); `noteOnly`: just note its keys now. */
-    readonly syncExample?: (id: string, noteOnly?: boolean) => { readonly file: string; readonly added: readonly string[]; readonly removed: readonly string[] } | undefined;
+    /** A worktree's .env.example caught up with its .env, then its added or removed keys (BLG-925); `noteOnly`: just note its keys now. */
+    readonly syncExample?: (id: string, noteOnly?: boolean) => { readonly file: string; readonly added: readonly string[]; readonly removed: readonly string[]; readonly caughtUp?: boolean } | undefined;
     /** A deleted worktree's own variables go with it (BLG-924). */
     readonly forgetWorktree?: (id: string) => void;
   };
@@ -267,9 +267,13 @@ export class WorkspaceController {
     }
   }
 
-  /** A worktree opened: the workbench (setup) and the listeners hear of it. */
+  /**
+   * A worktree opened: its .env.example caught up with the .env it was given (before setup or its
+   * agent starts, so it's there from the first commit), then the workbench (setup) and the listeners hear of it.
+   */
   private created(ws: Workspace, extra: { from?: string; about?: string } = {}): void {
     this.deleted.delete(`${WS_PREFIX}${ws.id}`);
+    if (!ws.external) this.syncExample(ws, false);
     this.deps.onWorktreeCreated?.(ws);
     this.emit({ kind: 'created', ws, ...extra });
   }
@@ -441,11 +445,14 @@ export class WorkspaceController {
     if (followed.length) this.deps.toast(`The main folder’s env changed: updated ${followed.length === 1 ? followed[0] : `${followed.length} worktrees`} too`, 'info');
   }
 
-  /** A worktree's own .env.example follows the keys it added or removed (a toast says which). */
+  /**
+   * A worktree's own .env.example follows the keys it added or removed (a toast says which). A new
+   * worktree's catch-up is quiet: it's in its changes, and goes out with its work.
+   */
   private syncExample(w: Workspace, noteOnly: boolean): void {
     try {
       const done = this.deps.env?.syncExample?.(w.id, noteOnly);
-      if (!done) return;
+      if (!done || done.caughtUp) return;
       const what = [...done.added.map((k) => `+${k}`), ...done.removed.map((k) => `−${k}`)].join(' ');
       this.deps.toast(`${w.name}: ${done.file} updated (${what}), so it goes with this work`, 'info');
     } catch {

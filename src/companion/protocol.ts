@@ -9,7 +9,7 @@ import { z } from 'zod';
  * ignores what it doesn't know. A breaking change bumps the major, and the Mac keeps answering the
  * previous major for a release.
  */
-export const COMPANION_PROTO = { major: 1, minor: 57 } as const;
+export const COMPANION_PROTO = { major: 1, minor: 58 } as const;
 
 /**
  * What came in which minor, for a phone talking to an older Mac: it subscribes to a topic (and
@@ -154,8 +154,10 @@ export const COMPANION_PROTO = { major: 1, minor: 57 } as const;
  * phone shows a chat mention as its title, with no chip.
  * 1.56 (BLG-149, upstream's 1.52): `TurnView.origin`: an agent's turn that reads a message from another chat.
  * 1.57 (BLG-277, upstream's 1.53): `ConvView.queue[].origin`: a queued message that an agent in another chat sent.
+ * 1.58 (BLG-940, upstream's 1.55): a worktree of yours shared with someone says how many (`ConvSummary.shared`), for the
+ * Mac sidebar's green dot. An older Mac sends none; an older phone shows none.
  */
-export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36, reactions: 41, cancelSteer: 47, triage: 48, draftReview: 49, threads: 50, threadAgents: 50, seen: 51, computers: 52, externalAgents: 53, chatLinks: 55, chatOrigin: 56, queuedOrigin: 57 } as const;
+export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36, reactions: 41, cancelSteer: 47, triage: 48, draftReview: 49, threads: 50, threadAgents: 50, seen: 51, computers: 52, externalAgents: 53, chatLinks: 55, chatOrigin: 56, queuedOrigin: 57, sharedMark: 58 } as const;
 
 /** One frame's biggest payload, and a file piece. */
 export const MAX_COMPANION_FRAME = 1024 * 1024;
@@ -531,6 +533,8 @@ export const ConvSummary = z.object({
   harness: AgentRefView.optional(),
   /** 1.47: the chat it sits under in Work. Only a live parent in the same project; a kept child has none. */
   parent: Topic.optional(),
+  /** 1.55 (BLG-940): a worktree of yours shared with this many people (friends, or your room), the Mac row's green dot. */
+  shared: z.number().int().min(1).max(1000).optional(),
 });
 export type ConvSummary = z.infer<typeof ConvSummary>;
 

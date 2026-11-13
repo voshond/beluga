@@ -7,6 +7,7 @@ import e from '../env-settings.module.css';
 import type { ResolvedScripts } from '@beluga/workspaces/scripts.js';
 import { Checkbox, Field, FormSheet, SourceTag, TextInput } from '../../components/FormSheet.js';
 import { useApi, useApp } from '../../lib/beluga.js';
+import { thisComputer } from '../../lib/os-words.js';
 import type { NativeMenuProps } from './index.js';
 
 type Kind = 'setup' | 'run';
@@ -94,9 +95,9 @@ export function ProjectSettings({ projectId, tab: first, close }: { projectId: s
   );
   if (!general) {
     return (
-      <FormSheet title={`${project.name} Settings`} icon={tab === 'environment' ? 'lock' : 'branch'} intro={tab === 'environment' ? 'Given to shells, setup and run commands in its workspaces, and your agent, over yours for everywhere. They stay on this computer.' : undefined} submitLabel={changed ? 'Save' : 'Done'} onSubmit={save} onCancel={close} cancelLabel={changed ? 'Cancel' : 'Close'} width={640}>
+      <FormSheet title={`${project.name} Settings`} icon={tab === 'environment' ? 'lock' : 'branch'} intro={tab === 'environment' ? `For its terminals, commands and your agent. They stay on ${thisComputer()}.` : undefined} submitLabel={changed ? 'Save' : 'Done'} onSubmit={save} onCancel={close} cancelLabel={changed ? 'Cancel' : 'Close'} width={640} scrolls>
         {tabs}
-        <div className={e.sheetBody}>
+        <div className={e.sheetBody} data-sheet-scroll>
           {tab === 'environment' ? (
             <>
               <EnvEditor projectId={project.id} />

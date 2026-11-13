@@ -455,7 +455,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `env.setWorktree` | ✓ a worktree's ••• › Environment… |
 | `env.carryWorktree` | ✓ Archive/Delete a worktree with variables of its own: “Carry its variables to the project” (on) |
 | `env.overview` | ✓ the project page's Environment section: names and counts, never a value (BLG-926) |
-| `env.addToExample` | ✓ a project's Environment tab and Environment section: Add to .env.example / Create .env.example (placeholders, never values; BLG-925) |
+| `env.addToExample` | ✓ a project's Environment tab and Environment section, when worktrees don't keep it in step: Add to .env.example / Create .env.example (placeholders, never values; BLG-925) |
 | `env.exampleSync` | ✓ a project's Settings › Worktrees tab › Keep .env.example in step |
 | `env.endpoints` | ✓ Settings › Claude › Local models |
 | `env.saveEndpoint` | ✓ Settings › Claude › Local models › Add Endpoint / Save |

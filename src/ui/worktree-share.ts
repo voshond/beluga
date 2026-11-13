@@ -51,6 +51,32 @@ export function worktreeShareRows(state: ShareState, wsId: string): WorktreeShar
   return rows;
 }
 
+/** Someone a worktree of yours is shared with, for its mark in the sidebar. */
+export interface SharedWithPerson {
+  readonly peerId: string;
+  readonly name: string;
+  readonly role: WsRole;
+}
+
+/**
+ * Who has this worktree now: friends it's shared with over the network (on its own or with its whole
+ * project), people from your room you let in, and anyone else still in its members. Empty: only you.
+ */
+export function worktreeSharedWith(state: ShareState, wsId: string): readonly SharedWithPerson[] {
+  const people: SharedWithPerson[] = worktreeShareRows(state, wsId).flatMap((r) => (r.access === 'none' ? [] : [{ peerId: r.peerId, name: r.name, role: r.access }]));
+  for (const [peerId, role] of Object.entries(state.members[wsId] ?? {})) {
+    if (peerId !== state.self?.peerId && !people.some((p) => p.peerId === peerId)) people.push({ peerId, name: 'someone', role });
+  }
+  return people;
+}
+
+/** What a shared worktree's mark says: "Shared with Bran", "Shared with Bran and Mia", "Shared with Bran and 2 others". */
+export function sharedWithWords(people: readonly Pick<SharedWithPerson, 'name'>[]): string {
+  const names = people.map((p) => p.name);
+  if (names.length <= 2) return `Shared with ${names.join(' and ')}`;
+  return `Shared with ${names[0]} and ${names.length - 1} others`;
+}
+
 /** What one row's line under the name says. */
 export function shareRowDetail(row: WorktreeShareRow, inRoom: boolean): string {
   if (row.access === 'contribute') return row.wholeProject ? 'Works with your agent across the whole project' : 'Chats and asks your agent here';

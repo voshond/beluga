@@ -6,7 +6,7 @@ import { Button, Tip, cx } from '../components/ui.js';
 import { useApi, useApp } from '../lib/beluga.js';
 import { copyText } from '../lib/copy.js';
 import { Group, Switch } from './settings-controls.js';
-import { ExampleNote, ImportBox, Lent } from './EnvRows.js';
+import { ExampleNote, ImportBox, Lent, tagOf } from './EnvRows.js';
 import e from './env-settings.module.css';
 
 interface EnvRow extends EnvVar {
@@ -158,8 +158,8 @@ export function EnvEditor({ projectId, worktreeId }: EnvPlaceProps) {
         <div className={e.sourceBar}>
           <Icon name="file" size={12} className={e.sourceIcon} />
           <span className={e.sourceText}>
-            Include the main folder’s {filesLabel}
-            <span className={e.muted}>{dotenv ? (scope.dotenvKeys.length ? ` · ${scope.dotenvKeys.length} variable${scope.dotenvKeys.length === 1 ? '' : 's'}, read fresh each time something starts` : ' · none there yet') : ' · off: only the variables set here'}</span>
+            Use the main folder’s {filesLabel}
+            {dotenv ? <span className={e.muted}> · {scope.dotenvKeys.length || 'none yet'}</span> : null}
           </span>
           <Switch label="Use the main folder's .env" on={dotenv} onChange={setDotenvOn} />
         </div>
@@ -189,8 +189,10 @@ export function EnvEditor({ projectId, worktreeId }: EnvPlaceProps) {
         }
         const { row: r, index: i, below } = item;
         const masked = !isShown(r.key, r.id);
+        // Set here over what comes from below: marked changed (with a way back) only when the value differs.
+        const changed = Boolean(below && below.value !== r.value);
         return (
-          <div key={r.id} className={cx(e.row, problems.has(i) && e.bad)}>
+          <div key={r.id} className={cx(e.row, problems.has(i) && e.bad, changed && e.changed)}>
             <input
               className={cx(e.key, below && e.fixedKey)}
               aria-label="Name"
@@ -241,11 +243,15 @@ export function EnvEditor({ projectId, worktreeId }: EnvPlaceProps) {
             <button type="button" className={cx(e.eye, !masked && e.eyeOn)} aria-label={masked ? `Show ${r.key || 'value'}` : `Hide ${r.key || 'value'}`} aria-pressed={!masked} disabled={showAll} onClick={() => toggle(`r:${r.id}`)}>
               <Icon name="eye" size={13} />
             </button>
-            {below ? (
-              <Tip label={`Changed here, over ${fromWords(below.from)}. Click to use that again.`}>
-                <button type="button" className={cx(e.sourceTag, e.sourceEdited)} aria-label={`Use ${below.from} for ${r.key}`} onClick={() => remove(r.id, false)}>
-                  <Icon name="refresh" size={10} />
+            {below && changed ? (
+              <Tip label={below.from.startsWith('.env') ? 'Changed here. Click for the .env value (the file stays as it is)' : `Changed here. Click for ${fromWords(below.from)} value`}>
+                <button type="button" className={e.reset} aria-label={`Use ${below.from} for ${r.key}`} onClick={() => remove(r.id, false)}>
+                  <Icon name="refresh" size={11} />
                 </button>
+              </Tip>
+            ) : below ? (
+              <Tip label={`Same as ${fromWords(below.from)} value, kept in Beluga too`}>
+                <span className={e.sourceTag}>{tagOf(below.from)}</span>
               </Tip>
             ) : (
               <button type="button" className={e.remove} aria-label={`Remove ${r.key || 'this row'}`} onClick={() => remove(r.id)}>
@@ -253,14 +259,6 @@ export function EnvEditor({ projectId, worktreeId }: EnvPlaceProps) {
               </button>
             )}
             {problems.has(i) ? <div className={e.problem}>{problems.get(i)}</div> : null}
-            {!problems.has(i) && below ? (
-              <div className={e.override}>
-                {below.value === r.value ? `Set here, same as ${fromWords(below.from)}.` : below.from.startsWith('.env') ? `Changed here. The ${below.from} file is left as it is.` : `Changed here, over ${fromWords(below.from)}.`}{' '}
-                <button type="button" className={e.inlineLink} onClick={() => remove(r.id, false)}>
-                  Use {below.from}
-                </button>
-              </div>
-            ) : null}
             {!problems.has(i) && scope.overridden?.[r.key]?.length ? (
               <div className={e.override}>
                 Not used in {scope.overridden[r.key]!.join(', ')}: {scope.overridden[r.key]!.length > 1 ? 'they set' : 'it sets'} {r.key} too, and that wins. Change it there.
@@ -270,7 +268,7 @@ export function EnvEditor({ projectId, worktreeId }: EnvPlaceProps) {
         );
       })}
       {importing ? <ImportBox onImport={addAll} onClose={() => setImporting(false)} /> : null}
-      {projectId && !worktreeId && scope.example ? <ExampleNote projectId={projectId} example={scope.example} onDone={(n) => (setStatus(n ? { kind: 'saved' } : { kind: 'error', text: 'Nothing to add' }), setReload((x) => x + 1))} onError={(text) => setStatus({ kind: 'error', text })} /> : null}
+      {projectId && !worktreeId && scope.example && scope.exampleSync === false ? <ExampleNote projectId={projectId} example={scope.example} onDone={(n) => (setStatus(n ? { kind: 'saved' } : { kind: 'error', text: 'Nothing to add' }), setReload((x) => x + 1))} onError={(text) => setStatus({ kind: 'error', text })} /> : null}
       <div className={e.foot}>
         <Button size="small" variant="quiet" icon="plus" onClick={add}>
           Add variable
@@ -303,11 +301,11 @@ export function EnvEditor({ projectId, worktreeId }: EnvPlaceProps) {
   );
 }
 
-/** "the .env", "your variables for everywhere", "app's variables". */
+/** Whose value: "the .env’s", "your", "app’s". */
 function fromWords(from: string): string {
-  if (from === '.env' || from.startsWith('.env')) return `the ${from}`;
-  if (from === 'Everywhere') return 'yours for everywhere';
-  return `${from}’s variables`;
+  if (from.startsWith('.env')) return `the ${from}’s`;
+  if (from === 'Everywhere') return 'your';
+  return `${from}’s`;
 }
 
 function emptyText(projectId: string, worktreeId: string | undefined): string {
