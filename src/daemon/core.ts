@@ -9,6 +9,7 @@ import { createCodexRuntime } from '../agent/runtime/codex/index.js';
 import { ScriptedCodex } from '../agent/runtime/codex/scripted.js';
 import { createOpenCodeRuntime } from '../agent/runtime/opencode/index.js';
 import { ScriptedOpenCode } from '../agent/runtime/opencode/scripted.js';
+import { DEMO_PROVIDER_MODELS, demoDescription } from '../agent/runtime/opencode/demo-models.js';
 import { createCopilotRuntime } from '../agent/runtime/copilot/index.js';
 import { ScriptedCopilot } from '../agent/runtime/copilot/scripted.js';
 import { AUTO_MODEL } from '../agent/runtime/copilot/status.js';
@@ -81,10 +82,12 @@ interface Room {
 
 const roomInvite = (room: Room): string | undefined => (room.reach ? encodeInvite({ ...room.reach, secret: room.secret }) : undefined);
 
-/** The demo's OpenCode: ready, with the scripted one's models. */
+/** The demo's OpenCode: ready, with the scripted one's models, and DeepSeek's, Kimi's and OpenRouter's (BLG-945). */
 function demoOpenCode(): AgentRuntime {
   const scripted = new ScriptedOpenCode({ stepMs: 600 });
-  const models = scripted.models.map((m) => ({ value: m.value, label: m.name.split('/').at(-1) ?? m.name, description: m.value.split('/')[0] ?? '', ...(m.efforts.length ? { efforts: m.efforts } : {}) }));
+  scripted.models = [...scripted.models, ...DEMO_PROVIDER_MODELS.map((m) => ({ value: m.value, name: m.name, efforts: [...m.efforts] }))];
+  const context = new Map(DEMO_PROVIDER_MODELS.map((m) => [m.value, m.context]));
+  const models = scripted.models.map((m) => ({ value: m.value, label: m.name.split('/').at(-1) ?? m.name, description: demoDescription({ value: m.value, ...(context.has(m.value) ? { context: context.get(m.value) } : {}) }), ...(m.efforts.length ? { efforts: m.efforts } : {}) }));
   return createOpenCodeRuntime({ connect: scripted.connect, resolve: async () => undefined, status: async () => ({ state: 'ready', models }) });
 }
 

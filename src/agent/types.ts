@@ -638,6 +638,14 @@ export interface AgentBackend {
   mcpSignIn?(projects: readonly string[], name: string, runtime?: string): Promise<import('../shared/mcp.js').McpSignIn>;
   /** Waits for that sign-in: true once connected, false when it gave up, undefined when none is waiting. */
   mcpSignedIn?(name: string, runtime?: string): Promise<boolean | undefined>;
+  /** MCP Apps: one `ui://` resource of one of your servers (its HTML and the content item's `_meta`), read with no model turn. */
+  mcpReadUiResource?(projects: readonly string[], server: string, uri: string): Promise<{ readonly html: string; readonly meta?: Record<string, unknown> }>;
+  /** MCP Apps: one server's tools now (annotations and `_meta`), for the app tool gate. */
+  mcpAppTools?(projects: readonly string[], server: string): Promise<readonly import('../mcp-apps/ports/tool-catalog.js').CatalogTool[]>;
+  /** MCP Apps: an app's tools/call (already gated), its result for the app, never a model. */
+  mcpAppCall?(projects: readonly string[], server: string, tool: string, args: Readonly<Record<string, unknown>>): Promise<import('../shared/mcp-apps.js').AppToolResult>;
+  /** MCP Apps: an app's resources/read of a `ui://` resource. */
+  mcpAppRead?(projects: readonly string[], server: string, uri: string): Promise<import('../shared/mcp-apps.js').AppReadResult>;
   /** A sign-in to it is waiting for the browser now (started from Settings, the MCP chip or a run's mcp_sign_in). */
   mcpSigningIn?(name: string, runtime?: string): boolean;
   /** Turn one on or off where its agent keeps it (Codex: config.toml). Only rows with canTurnOff. */

@@ -375,7 +375,7 @@ describe('Workbench.mergePr', () => {
       writeFileSync(path.join(dir, '.git', 'config'), '[branch "klaud/auth"]\n\tmerge = refs/pull/7/head\n');
       const b = bench(pr({ head: 'aaa1111' }), () => pr({ state: 'MERGED' }), 1, undefined, dir);
       const out = await b.wb.mergePr('auth', { method: 'squash' });
-      expect(out).toMatchObject({ ok: false, reason: 'unpushed', message: expect.stringMatching(/^PR #42 is from someone’s fork, so Beluga can’t push 1 commit here to it, and merging it would leave it out/) });
+      expect(out).toMatchObject({ ok: false, reason: 'unpushed', message: 'PR #42 is from someone’s fork, and merging it now would leave 1 commit here out. Open Your Own PR puts it on a new one, with #42’s' });
       expect(b.pushes).toEqual([]);
       expect(b.merges).toEqual([]);
     });

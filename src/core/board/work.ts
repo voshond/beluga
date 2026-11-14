@@ -124,7 +124,8 @@ export class BoardWork {
       const via = issue.carriedBy ?? issue.worktrees.at(-1);
       const root = roots.get(issue.projectId);
       if (!issue.branch || !root || issue.archivedAt !== undefined || (via && live.has(via))) continue;
-      if (issue.status !== 'in_progress' && issue.status !== 'in_review') continue;
+      // Held after its merge (BLG-952): already merged, waiting on its criteria, not on gh.
+      if ((issue.status !== 'in_progress' && issue.status !== 'in_review') || issue.mergedHeld) continue;
       const key = `${root}\0${issue.branch}`;
       const group = waiting.get(key) ?? { root, branch: issue.branch, ids: [] };
       group.ids.push(issue.id);

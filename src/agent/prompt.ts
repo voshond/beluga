@@ -117,6 +117,9 @@ export function buildScratchAppend(dir: string): string {
     'JSON you fetched or produced, notes. Give files short descriptive names (e.g. 01-login-page.png,',
     'api-response.json) and prefer .png/.json/.md/.txt. The owner watches this folder live to follow what',
     'you are doing, so write there as you go instead of only to /tmp. Never put secrets in it.',
+    `When you name a file or folder in your answer, write its whole path from your working folder (${dir}/pr-12/,`,
+    `not scratch/pr-12/ or pr-12/): the app makes it a link that opens it. A file in a checkout you made in the`,
+    `scratch folder (to land or review a pull request) too: ${dir}/land-12/src/app.ts, not src/app.ts.`,
   ].join('\n');
 }
 
@@ -147,17 +150,40 @@ export function buildKeepAppend(agent: AgentRef = CLAUDE_AGENT): string {
 }
 
 /**
- * Every agent runs its commands in your login shell (Claude Code's Bash tool, Codex's `zsh -lc`), and
- * writes them for bash. Claude's also get zsh-compat.sh (runtime/claude/zsh-compat.ts); the rest only this.
+ * The shell an agent's commands run in, as its prompt words it: zsh, or zsh with zsh-compat.sh
+ * (`zsh-compat`: Claude Code only, runtime/claude/zsh-compat.ts), or `other`: bash or anything else.
  */
-export function buildShellAppend(shell: string | undefined = process.env.SHELL, platform: NodeJS.Platform = process.platform): string {
-  if (platform === 'win32' || !shell || shellName(shell) !== 'zsh') return '';
-  return [
-    '',
-    'Your shell commands run in zsh, not bash. Write them for zsh: quote globs and URLs (`--include=\'*.ts\'`,',
-    '`curl "https://…?a=1"`), since an unquoted one that matches nothing stops the whole command; compare with',
-    '`[[ $a == b ]]` or `[ "$a" = b ]` (`==` inside `[ ]` fails); and never name a variable `path` (it is $PATH) or `status` (read-only).',
-  ].join('\n');
+export type ShellSetup = 'zsh' | 'zsh-compat' | 'other';
+
+/** An agent that runs its commands in your login shell (Codex's `zsh -lc`): plain zsh when that's zsh. */
+export function loginShellSetup(shell: string | undefined, platform: NodeJS.Platform = process.platform): ShellSetup {
+  return platform !== 'win32' && shell && shellName(shell) === 'zsh' ? 'zsh' : 'other';
+}
+
+/** The bash habits zsh still reads its own way, with or without zsh-compat.sh. */
+const ZSH_STILL = [
+  'compare with `[[ $a == b ]]` or `[ "$a" = b ]`; an unquoted `$list` stays one word and arrays count from 1',
+  '(loop over an array: `for f in "${files[@]}"`); print text with backslashes (JSON, Windows paths) with',
+  '`printf \'%s\\n\' "$x"`, not echo; and never name a variable `path` (it is $PATH) or `status` (read-only).',
+];
+
+/**
+ * Agents write their commands for bash; on zsh, how to write them so they run. Claude Code's zsh also
+ * takes zsh-compat.sh (a glob that matches nothing stays as typed), so it's told what that leaves.
+ */
+export function buildShellAppend(setup: ShellSetup): string {
+  if (setup === 'other') return '';
+  const lead =
+    setup === 'zsh-compat'
+      ? [
+          'Your shell commands run in zsh, set up to take common bash: a glob or URL that matches nothing is left as',
+          'typed, as in bash. Still quote globs and URLs (`--include=\'*.ts\'`, `curl "https://…?a=1"`) so they never expand;',
+        ]
+      : [
+          'Your shell commands run in zsh, not bash. Write them for zsh: quote globs and URLs (`--include=\'*.ts\'`,',
+          '`curl "https://…?a=1"`), since an unquoted one that matches nothing stops the whole command;',
+        ];
+  return ['', ...lead, ...ZSH_STILL].join('\n');
 }
 
 /**

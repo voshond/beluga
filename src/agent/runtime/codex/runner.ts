@@ -3,6 +3,7 @@ import { linkedImages } from '../../../core/attachments.js';
 import { type RunEnd, RunFailedError, classifyRun } from '../../../shared/run-failure.js';
 import { fallbackFor } from '../../../shared/runtime-fallbacks.js';
 import { buildPrompt } from '../../prompt.js';
+import { isYourRun } from '../../policy.js';
 import { runInstructions } from '../../run-instructions.js';
 import { runToolSuites } from '../../run-tools.js';
 import { ToolHost, type StdioServerConfig } from '../../tool-host.js';
@@ -18,7 +19,7 @@ import { codexComplete } from './complete.js';
 import { CodexEvents, type TurnSink, contextEvent, usageEvent } from './events.js';
 import { type AskForApproval, type Model, REASONING_EFFORTS, type ReasoningEffort, type ThreadStartResponse, type ThreadTokenUsage, type Turn, type UserInput } from './protocol.js';
 import { approvalFor, codexConfinement, originOf, trustRow } from './sandbox.js';
-import { ELICITATION, GatePasses, argsOnServer, mcpToolCallOf } from './tool-questions.js';
+import { ELICITATION, mcpToolCallOf } from './tool-questions.js';
 import { CODEX_USAGE_AGENT, type CodexRateLimits, fromRateLimits } from './rate-limits.js';
 import { findCodex } from './app-server.js';
 import { CodexMcp } from './mcp.js';
@@ -115,11 +116,11 @@ export function clampEffort(effort: AgentRunInput['effort'], supported: readonly
 export const TOOL_TIMEOUT_SEC = 3600;
 
 /**
- * Beluga's tool servers as Codex config overrides (`mcp_servers.<name>`), for one thread. Their
- * calls are approved on Codex's side (`default_tools_approval_mode: approve`): each one already goes
- * through gateTool in the tool host, the same gate as every other tool, which asks you when it
- * should. Codex's own ask (an `mcpServer/elicitation/request`, codex-cli 0.166) has no answer in
- * Beluga, and it came back as "user rejected MCP tool call" (a screenshot, every time).
+ * Beluga's tool servers as Codex config overrides (`mcp_servers.<name>`), for one thread. Codex
+ * approves every call to them itself (`default_tools_approval_mode`), whatever the thread's approval
+ * policy, so each call reaches ToolHost's gate (gateTool), the one Claude's canUseTool asks: a plan
+ * being made, a friend's task and your own run get the same answer from Beluga's tools on both.
+ * Only Beluga's servers: your own Codex MCP servers keep Codex's own approvals.
  */
 export function mcpConfig(servers: Readonly<Record<string, StdioServerConfig>>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(servers).map(([name, s]) => [`mcp_servers.${name}`, { command: s.command, args: s.args, env: s.env, tool_timeout_sec: TOOL_TIMEOUT_SEC, default_tools_approval_mode: 'approve' }]));
@@ -188,7 +189,7 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
       const autoEdit = !askOnly && !input.dialogue?.readOnly && (place?.autoEdit ?? opts.autoEdit);
       const fixup = place?.fixup;
       const syncMain = askOnly ? place?.syncMain : undefined;
-      const policy = { cwd, roots: [cwd, ...extraDirs, ...(fixup ? [fixup] : [])], autoEdit, scope: input.scope, guest: input.guest, boardAsks: input.boardAsks, dotenv: Boolean(input.canUseSecret) && !input.guest, askOnly: Boolean(askOnly), ...(syncMain ? { syncMain: syncProbes(cwd, syncMain) } : {}), ...(fixup ? { fixup } : {}), ...(place?.alsoEdit?.length ? { alsoEdit: place.alsoEdit } : {}) };
+      const policy = { cwd, roots: [cwd, ...extraDirs, ...(fixup ? [fixup] : [])], autoEdit, scope: input.scope, guest: input.guest, boardAsks: input.boardAsks, dotenv: Boolean(input.canUseSecret) && !input.guest, yourRun: isYourRun(input), askOnly: Boolean(askOnly), ...(syncMain ? { syncMain: syncProbes(cwd, syncMain) } : {}), ...(fixup ? { fixup } : {}), ...(place?.alsoEdit?.length ? { alsoEdit: place.alsoEdit } : {}) };
       const remember = (id: string): void => (place ? place.onSession(id) : void (sessionId = id));
       const shelf = new ViewShelf();
       // The model and effort, settled once Codex can list its models (see settle), and again when another model is picked mid-run.
@@ -212,10 +213,10 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
         if (ev && ev !== lastContext) input.onEvent('context', (lastContext = ev));
       };
 
-      // Beluga's tools, served for this run alone and gated per call (vetTool, policy, you).
-      const passes = new GatePasses();
+      // Beluga's tools, served for this run alone and gated per call (vetTool, policy, you). Codex
+      // never asks before calling them (mcpConfig), so this gate is the only one, as on Claude.
       const suites = runToolSuites(input, bridge, shelf, cwd);
-      const mounted = await host().mount(suites, (name, args) => (passes.take(name, args) ? Promise.resolve(undefined) : gateTool(name, args, input, policy)));
+      const mounted = await host().mount(suites, (name, args) => gateTool(name, args, input, policy));
       let conn: CodexConnection | undefined;
       // Codex's sub-agents (BLG-519): rows and steps on the request's card, as Claude's are.
       const subAgents = new CodexSubAgents(cwd, { onSub: (e) => input.onEvent('sub', JSON.stringify(e)), ...(input.onStep ? { onStep: input.onStep } : {}), onFileTouched: input.onFileTouched });
@@ -282,14 +283,11 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
               for (const file of files) if (await gateTool('Edit', { file_path: file }, input, policy)) return { decision: 'decline' };
               return { decision: 'accept' };
             }
-            // Codex asking before an MCP tool call (your own runs only): the same gate, and one question for the call.
+            // Codex asking before a call to one of your own Codex MCP servers (only your own runs have them;
+            // a plan's approval policy is never, so it asks nothing): the same gate, so you decide. Beluga's
+            // own servers never ask here: Codex approves their calls, and ToolHost's gate judges each one.
             const call = method === ELICITATION && trustRow(origin, input.scope).yourTools ? mcpToolCallOf(params) : undefined;
-            if (call) {
-              const served = argsOnServer(suites, call);
-              if (planning || (await gateTool(call.name, served ?? call.args, input, policy))) return { action: 'decline' };
-              if (served) passes.add(call.name, served);
-              return { action: 'accept', content: {} };
-            }
+            if (call) return (await gateTool(call.name, call.args, input, policy)) ? { action: 'decline' } : { action: 'accept', content: {} };
             // Anything else (more permissions, questions, other elicitations) isn't Beluga's to grant.
             throw new Error(`${method} isn’t supported in Beluga`);
           });
@@ -497,7 +495,8 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
             remember(threadId);
             await planned?.proc.kill();
           }
-          r = await runTurn(original, next, '');
+          // Images you pasted into your answer go with it, as a message's do (codexInput: Codex reads them itself).
+          r = await runTurn(original, next, verdict.approve ? '' : verdict.feedback);
           answer = said(answerOf(r, original));
           if (verdict.approve || next === NOT_YET_NOTE) break;
         }

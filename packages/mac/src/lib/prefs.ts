@@ -157,6 +157,18 @@ export const ACCENTS = {
 } as const;
 export type Accent = keyof typeof ACCENTS;
 
+/** macOS's own default accent, for a web view that can't draw the system's (AccentColor). */
+const ACCENT_FALLBACK = '#007aff';
+
+/**
+ * The CSS for an accent. `systemColor`: the web view draws CSS's AccentColor (WebKit does;
+ * Chromium, as in WebView2 on Windows, does not, and `var(--accent)` would then be nothing).
+ */
+export function accentCss(accent: Accent, systemColor: boolean): string {
+  const css: string = ACCENTS[accent];
+  return systemColor ? css : css.replace('AccentColor', ACCENT_FALLBACK);
+}
+
 export const DEFAULT_PREFS: UiPrefs = {
   appearance: 'system',
   lightTheme: 'light',
@@ -336,7 +348,7 @@ export function apply(p: UiPrefs = shown): void {
   root.dataset.os = keyPlatform();
   root.dataset.transparency = blur ? 'full' : 'reduce';
   vibrancy(blur);
-  root.style.setProperty('--accent', ACCENTS[p.accent]);
+  root.style.setProperty('--accent', accentCss(p.accent, CSS.supports('color', 'AccentColor')));
   root.style.setProperty('--text-size', `${p.textSize}px`);
   root.style.setProperty('--sidebar-w', `${p.sidebarWidth}px`);
   root.style.setProperty('--panel-w', `${p.panelWidth}px`);

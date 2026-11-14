@@ -499,6 +499,12 @@ export const MACHINE: Record<Method, MachineSide> = {
   // Live previews (BLG-769): built and served on the computer; the app forwards their server's port to this Mac.
   'preview.open': 'drive',
   'preview.snapshot': 'drive',
+  // MCP Apps: served on that computer's loopback app host (its port isn't forwarded the way previews' is, yet).
+  'apps.get': 'drive',
+  'apps.call': 'drive',
+  'apps.read': 'drive',
+  'apps.message': 'drive',
+  'apps.context': 'drive',
   // ---- dialogues
   'dialogues.start': 'drive',
   'dialogues.confirm': 'drive',

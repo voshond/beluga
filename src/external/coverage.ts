@@ -30,6 +30,7 @@ const WEB_SESSION = 'A browser session can answer approvals and read secret valu
 const PR_INSTRUCTIONS = 'A person\'s own standing instructions to their agent: an agent passes one-off instructions with pr_create.';
 const WINDOW_LOAD = 'The window notes a part of itself that did not load: an agent has no window.';
 const PREVIEW = 'A live preview is built for a window\'s frame and drawn there: an agent has no frame.';
+const MCP_APP = 'An MCP App is drawn in a window\'s frame: an agent has no frame.';
 const SAVE_PANEL = 'It writes a file where a person chose in the Save panel.';
 const COMPUTERS = 'It manages your other computers, or moves work between them: a person does that from the app.';
 const NO_TOOL = 'No tool reaches it yet: a tool for it comes with its own decision.';
@@ -571,6 +572,11 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'stats.saveImage': { refused: SAVE_PANEL },
   'preview.open': { refused: PREVIEW },
   'preview.snapshot': { refused: PREVIEW },
+  'apps.get': { refused: MCP_APP },
+  'apps.call': { refused: MCP_APP },
+  'apps.read': { refused: MCP_APP },
+  'apps.message': { refused: MCP_APP },
+  'apps.context': { refused: MCP_APP },
   'files.readRange': { refused: NO_TOOL },
   'machines.alwaysOn': { refused: COMPUTERS },
   'machines.alwaysOn.status': { refused: COMPUTERS },

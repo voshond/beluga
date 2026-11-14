@@ -4,6 +4,7 @@ import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import type { AgentBackend, AgentPlace, AgentRunInput, BoardTools, FollowUp, LiveStatus, MacTools, RunProcess, Steer, TerminalLaunch, TerminalSink } from '../agent/types.js';
 import { ALWAYS_ASK_YOU, writesCode } from '../agent/policy.js';
+import { withAppContext } from '../mcp-apps/domain/app-requests.js';
 import { type ChromeAccess, chromeCard, chromeOffByFlags } from '../agent/chrome.js';
 import { outsideYourHand } from './by-hand.js';
 import { type AgentRef, type BodyInput, type BodyOf, CLAUDE_AGENT, MAX_TEXT, type MessageVia } from '../protocol.js';
@@ -106,6 +107,8 @@ export interface AgentHostDeps {
   readonly plans?: (channel: string, from: string, said?: string, chain?: () => import('../agent/types.js').ChatChain) => { readonly tools?: import('../agent/types.js').PlanTools; readonly brief?: string; readonly checker?: boolean } | undefined;
   /** Child threads (core/threads): their tools, bound to this chat. Your own runs only, with the flag on (see runAgent). */
   readonly threads?: (channel: string) => import('../agent/types.js').ThreadTools | undefined;
+  /** MCP Apps (Settings › Experimental): what apps in this conversation told the model since its last turn, taken by this one. */
+  readonly appContext?: (channel: string) => ReadonlyArray<{ readonly app: string; readonly text: string }>;
   /** "Your Mac" (core/assistant), your own runs in its conversation: where it runs, its tools, what Claude is told. */
   readonly assistant?: (channel: string, from: string) => { readonly place: AgentPlace; readonly tools: MacTools; readonly brief: string } | undefined;
   /** Your own agent asked in a friend's worktree (your "@claude" there): where it runs here, and what it's told about theirs. */
@@ -1642,7 +1645,8 @@ export class AgentHost {
         ...(previewBrief ? { previewBrief } : {}),
         ...(sentinel ? { sentinelTools: sentinel.tools, sentinelBrief: sentinel.brief, ...(sentinel.dashboard ? { dashboardTools: sentinel.dashboard } : {}) } : {}),
         ...(toolboxTools ? { toolboxTools } : {}),
-        prompt: this.promptOf(body, from, lane.sent),
+        // What MCP Apps here said for the model: your own runs only, wrapped as data (apps are third-party).
+        prompt: withAppContext(this.promptOf(body, from, lane.sent), from === this.selfId ? (this.deps.appContext?.(body.channel) ?? []) : []),
         ...this.promptIdOf(body),
         requesterName: this.askerOf(body, from),
         viaAgent: body.viaAgent,

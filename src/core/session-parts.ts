@@ -1,6 +1,7 @@
 import { switchAgent } from './agent-switch.js';
 import { runtimeChoices } from '../shared/agent-runtimes.js';
 import type { SessionOptions, Session } from './session.js';
+import { appContextsOf } from '../mcp-apps/contexts.js';
 import { threadsOf } from './threads/launch.js';
 import type { ModelChoice } from './work-store.js';
 import { WorkspaceController } from './workspace-controller.js';
@@ -253,6 +254,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       confirmTool: (toolName, input) => sentinelOf(session)?.confirmWords(toolName, input),
       plans: (channel, from, said, chain) => plansOf(session)?.forRun(channel, from, said, chain),
       threads: (channel) => threadsOf(session)?.forRun(channel),
+      appContext: (channel) => appContextsOf(session).take(channel),
       // "Your Mac"'s chats, and your own asks in friends' chats (BLG-207): both work in its folder.
       assistant: (channel, from) => assistantOf(session)?.forRun(channel, from) ?? assistantOf(session)?.forChat(channel, from),
       // Your "@claude" in a worktree a friend shared with you: your agent, here, reading theirs (core/shared-guest).

@@ -21,6 +21,7 @@ import { agentName, useMyAgent } from "../lib/agent-words.js";
 import { agentMark } from "@beluga/shared/agent-marks.js";
 import { projectAgent } from "@beluga/shared/agent-picker.js";
 import chat from "../chat/chat.module.css";
+import { makeAhead } from "../lib/make-ahead.js";
 import { RunsOnPicker } from "../chat/RunsOn.js";
 import { type WorkToStart, sendToComputer, useStartDeps } from "../machines/start-there.js";
 import { myRuntime } from "../chat/ModelPicker.js";
@@ -338,7 +339,7 @@ function HomeComposer({ project }: { project: Project }) {
         message = await api.attachments.expand(
           typed,
           `home:${project.id}`,
-          [...images],
+          [...(await att.saved(images))],
           [...shown],
         );
       } catch (err) {
@@ -374,9 +375,10 @@ function HomeComposer({ project }: { project: Project }) {
       return;
     }
     if (worktree) {
-      // The worktree is made in the background (it opens when ready): you can go on right away.
+      // The worktree is made in the background, its row and "Making…" page there at once (BLG-942): you can go on right away.
       setText("");
       setName("");
+      const ahead = makeAhead(client, project.id, named || message || "worktree", { ...(base ? { base } : {}), asked: message });
       void api.workspaces
         .startWorktree(project.id, message, {
           ...(base ? { base } : {}),
@@ -384,14 +386,16 @@ function HomeComposer({ project }: { project: Project }) {
           ...(agent ? { agent } : {}),
           // Seen as its terminal (Settings › Terminal): the terminal opens on this message (BLG-553).
           ...(message.trim() && sendsToTerminal(client.store.getState(), getPrefs(), "draft", agent?.runtime) ? { terminal: true } : {}),
+          ...(ahead ? { id: ahead.id } : {}),
         })
-        .catch((err: unknown) =>
+        .catch((err: unknown) => {
+          ahead?.drop();
           toast(
             client,
             `Couldn’t create the worktree: ${errorText(err)}`,
             "error",
-          ),
-        );
+          );
+        });
       return;
     }
     setBusy(true);

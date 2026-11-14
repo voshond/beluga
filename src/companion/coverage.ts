@@ -549,6 +549,12 @@ export const PHONE: Record<Method, Side> = {
   // A live preview builds and runs code on the Mac for its own window's frame; the phone shows a plain card.
   'preview.open': 'mac',
   'preview.snapshot': 'mac',
+  // An MCP App runs a server's page in the Mac window's frame; the phone shows the step's one line.
+  'apps.get': 'mac',
+  'apps.call': 'mac',
+  'apps.read': 'mac',
+  'apps.message': 'mac',
+  'apps.context': 'mac',
   'files.searchContent': 'mac',
   'files.searchNames': 'mac',
   'files.save': 'mac',

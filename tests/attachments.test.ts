@@ -9,6 +9,7 @@ import {
   expandChips,
   formatBytes,
   importImage,
+  isOwnImageFile,
   insertChip,
   linkedImages,
   mediaTypeOf,
@@ -77,8 +78,17 @@ describe('images for Claude', () => {
   it('points linked images at their files for an answer Claude reads as text', () => {
     const answer = 'like this [📎 image 1 (png, 1K)](klaud-attachment:me/a.png), not [x](klaud-attachment:me/missing.png)';
     expect(withImagePaths(answer, dir)).toBe(`like this [📎 image 1 (png, 1K)](${path.join(dir, 'a.png')}), not [x](klaud-attachment:me/missing.png)`);
-    expect(withImagePaths('[y](klaud-attachment:me/b.jpg)', dir)).toBe(`[y](${path.join(dir, 'room', 'b.jpg')})`);
+    // Only an image right in the folder (the one your own run may Read): a room copy stays a link.
+    expect(withImagePaths('[y](klaud-attachment:me/b.jpg)', dir)).toBe('[y](klaud-attachment:me/b.jpg)');
     expect(withImagePaths('klaud-attachment:me/../secret.png', dir)).toBe('klaud-attachment:me/../secret.png');
+    expect(withImagePaths('klaud-attachment:me/a\\..\\x.png', dir)).toBe('klaud-attachment:me/a\\..\\x.png');
+  });
+
+  it('knows an image right in the folder, where it really is', () => {
+    expect(isOwnImageFile(path.join(dir, 'a.png'), dir)).toBe(true);
+    expect(isOwnImageFile(path.join(dir, 'room', 'b.jpg'), dir)).toBe(false);
+    expect(isOwnImageFile(path.join(dir, 'missing.png'), dir)).toBe(false);
+    expect(isOwnImageFile(dir, dir)).toBe(false);
   });
 
   it('sends images as content blocks next to the text', async () => {
@@ -94,5 +104,14 @@ describe('images for Claude', () => {
     const a = registerAttachment(copy, png.length);
     const name = publishForRoom(a, path.join(dir, 'out'));
     expect(readFileSync(path.join(dir, 'out', name))).toEqual(png);
+  });
+});
+
+describe('an image linked into an answer', () => {
+  it("stays in Beluga's own folder: secret, and never sent (only your own run's Read of it is let through, policy.ts)", async () => {
+    const { attachmentsDir } = await import('../src/core/attachments.js');
+    const { isSecretPath } = await import('../src/core/shares.js');
+    expect(isSecretPath(path.join(attachmentsDir(), 'shot.png'))).toBe(true);
+    expect(isSecretPath(path.join(attachmentsDir(), 'received', 'f-shot.png'))).toBe(true);
   });
 });

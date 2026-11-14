@@ -16,7 +16,7 @@ import { parseToolReport, toolTrailLine } from '../workspaces/toolbox.js';
 import { formatBytes, measureAll } from '../workspaces/disk.js';
 import { contentIn, resetTo } from '../workspaces/git.js';
 import { fetchRemote } from '../workspaces/sync.js';
-import { type MergeOptions, type MergeProblem, type PrStepKind, buildPrPrompt, catchUpPrompt, commitSubjects, createPr, disableAutoMerge, prFromCommits, titleOfBranch, resolvePrConflictsPrompt, customPrPrompt, deleteRemoteBranch, ensurePrPromptFile, explainMergeError, findPr, fixChecksPrompt, forgetGh, ghState, gitSetup, hasGh, headCarries, listPrs, useHttpsRemote, mergePr, mergeToBase, prStep, pushForPr, remoteRef, rerunFailed, cancelRun, resetPrPrompt, setPrTarget, unpushedCommits } from '../workspaces/pr.js';
+import { type MergeOptions, type MergeProblem, type PrStepKind, buildPrPrompt, catchUpPrompt, commitSubjects, createPr, disableAutoMerge, prFromCommits, titleOfBranch, resolvePrConflictsPrompt, customPrPrompt, deleteRemoteBranch, ensurePrPromptFile, explainMergeError, findPr, fixChecksPrompt, forgetGh, ghState, gitSetup, hasGh, headCarries, listPrs, useHttpsRemote, mergePr, mergeToBase, prStep, pushForPr, pushToFork, remoteRef, rerunFailed, cancelRun, resetPrPrompt, setPrTarget, unpushedCommits } from '../workspaces/pr.js';
 import { prTargetOf, pullOfBranch } from '../workspaces/github.js';
 import { failedRunIds, prOnOriginal, runningRunIds } from './branch-state.js';
 import { PROJECT_FILES, type ProjectScripts, checkSetup, projectFileName, scriptEnv } from '../workspaces/scripts.js';
@@ -100,6 +100,7 @@ export interface WorkbenchDeps {
   readonly createPr?: typeof createPr;
   readonly mergeToBase?: typeof mergeToBase;
   readonly pushForPr?: typeof pushForPr;
+  readonly pushToFork?: typeof pushToFork;
   /** Re-run a workflow run's failed jobs (tests stand in for gh). */
   readonly rerunFailed?: typeof rerunFailed;
   /** Cancel a workflow run still going (tests stand in for gh). */
@@ -468,7 +469,7 @@ export class Workbench {
    * Create PR, straight away and without Claude: commits anything left (as the branch's name),
    * pushes, and opens a pull request titled from the commits (`gh pr create`).
    */
-  async quickPr(id: string, opts: { readonly draft?: boolean; readonly https?: boolean; readonly original?: boolean } = {}): Promise<GitHubOutcome> {
+  async quickPr(id: string, opts: { readonly draft?: boolean; readonly https?: boolean; readonly original?: boolean; readonly own?: boolean } = {}): Promise<GitHubOutcome> {
     const fail = (message: string): { ok: false; message: string } => {
       this.deps.toast(message, 'error');
       return { ok: false, message };
@@ -487,8 +488,19 @@ export class Workbench {
     if (opts.original && !fork) return fail('This project’s origin isn’t a fork on GitHub, so there’s no original to open it on');
     if (this.creatingPr.has(id)) return { ok: false, message: 'The pull request is already being opened' };
     this.creatingPr.add(id);
-    const branch = ws.branch;
+    let branch = ws.branch;
     try {
+      // Open Your Own PR (BLG-948): a fork's pull request checked out here that can't be pushed to.
+      // The branch becomes yours (a name of its own, following nothing); the new PR has the fork's commits and yours.
+      const followed = opts.own ? pullOfBranch(ws.path, ws.branch) : undefined;
+      const from = followed !== undefined ? this.deps.store.getState().prs[id] : undefined;
+      if (followed !== undefined) {
+        try {
+          branch = await this.manager.leavePull(id);
+        } catch (err) {
+          return fail(`Couldn’t give it a branch of its own: ${firstLine(err)}`);
+        }
+      }
       this.deps.toast(`Opening a pull request for ${branch}${fork ? ` on ${fork.owner}/${fork.repo}` : ''}…`);
       try {
         if ((ws.status?.changed ?? 0) > 0) await this.manager.commitAll(id, titleOfBranch(branch));
@@ -497,7 +509,9 @@ export class Workbench {
       }
       const base = this.prBase(ws);
       const subjects = await commitSubjects(ws.path, `origin/${base}`).catch(() => []);
-      const text = prFromCommits(branch, subjects);
+      const commits = prFromCommits(branch, subjects);
+      const builds = followed !== undefined ? `Builds on #${followed}${from?.fork ? ` from ${from.fork.owner}’s fork` : ''}, which doesn’t take pushes from maintainers.` : '';
+      const text = builds ? { title: from?.title || commits.title, body: [builds, commits.body].filter(Boolean).join('\n\n') } : commits;
       let pr: PullRequest;
       try {
         pr = await (this.deps.createPr ?? createPr)(ws.path, { base: fork?.branch ?? base, head: branch, ...text, ...(opts.draft ? { draft: true } : {}), ...(opts.https ? { https: true } : {}), ...(fork ? { to: fork } : {}) });
@@ -811,7 +825,8 @@ export class Workbench {
         const commits = n === 0 ? 'the latest commits' : n === 1 ? '1 commit' : `${n} commits`;
         const them = n === 1 ? 'it' : 'them';
         // A fork's pull request checked out here (BLG-756): Beluga can't push to it, so merging would leave them out.
-        if (pullOfBranch(ws.path, ws.branch) !== undefined) return fail('unpushed', `PR #${pr.number} is from someone’s fork, so Beluga can’t push ${commits} here to it, and merging it would leave ${them} out. Suggest ${them} on the PR, or open a PR of your own`);
+        // BLG-948: what to do instead is the toolbar's step (Push to the fork, or Open Your Own PR).
+        if (pullOfBranch(ws.path, ws.branch) !== undefined) return fail('unpushed', `PR #${pr.number} is from someone’s fork, and merging it now would leave ${commits} here out. ${pr.fork?.canPush ? `Push ${them} to it first` : `Open Your Own PR puts ${them} on a new one, with #${pr.number}’s`}`);
         this.deps.toast(`Pushing ${commits} to ${ws.branch} before merging PR #${pr.number}…`);
         try {
           await (this.deps.pushForPr ?? pushForPr)(ws.path, ws.branch);
@@ -1003,11 +1018,7 @@ export class Workbench {
     // A fork's pull request checked out here (BLG-756): its branch lives on the fork, so pushing to
     // origin wouldn't reach the PR, and would stop the branch following refs/pull/<n>/head.
     const pull = pullOfBranch(ws.path, ws.branch);
-    if (pull !== undefined) {
-      const message = `PR #${pull} is from someone’s fork: Beluga can’t push to it, so your commits stay here. Suggest them on the PR, or open a PR of your own`;
-      this.deps.toast(message, 'info');
-      return { ok: false, message };
-    }
+    if (pull !== undefined) return this.pushToForkPr(ws, pull);
     this.creatingPr.add(id);
     try {
       await (this.deps.pushForPr ?? pushForPr)(ws.path, ws.branch);
@@ -1023,6 +1034,46 @@ export class Workbench {
     const message = pr?.state === 'OPEN' ? `Pushed ${ws.branch}: PR #${pr.number}’s checks run again` : `Pushed ${ws.branch}`;
     this.deps.toast(message, 'success');
     return { ok: true, message };
+  }
+
+  /**
+   * Push to a fork's pull request checked out here (BLG-948): straight to its branch on the fork when
+   * its author lets maintainers edit it (GitHub is asked again, it may have changed). When it doesn't,
+   * nothing is pushed, and what's said points at Open Your Own PR, the step the toolbar shows then.
+   */
+  private async pushToForkPr(ws: Workspace, pull: number): Promise<GitHubOutcome> {
+    const id = ws.id;
+    if (this.creatingPr.has(id)) return { ok: false, message: 'It’s already being pushed' };
+    this.creatingPr.add(id);
+    try {
+      let pr: PullRequest | undefined;
+      try {
+        pr = await (this.deps.findPr ?? findPr)(ws.path, ws.branch!);
+      } catch (err) {
+        return this.troubleOr(ws, err, `Couldn’t ask GitHub about PR #${pull}`);
+      }
+      if (pr) this.deps.store.dispatch({ type: 'pr', id, pr });
+      const fork = pr?.fork;
+      if (!fork?.canPush) {
+        const message = `${fork ? `${fork.owner}’s fork` : `PR #${pull}’s fork`} doesn’t let maintainers push to PR #${pull}. Open Your Own PR puts your commits on a new pull request, with #${pull}’s`;
+        this.deps.toast(message, 'info');
+        return { ok: false, message };
+      }
+      try {
+        await (this.deps.pushToFork ?? pushToFork)(ws.path, fork, pull);
+      } catch (err) {
+        return this.troubleOr(ws, err, `Couldn’t push to ${fork.owner}’s fork`);
+      }
+      this.troubles.delete(id);
+      this.pushedAt.set(id, this.now());
+      await this.deps.controller.refresh();
+      await this.refreshPrs(id);
+      const message = `Pushed to ${fork.owner}’s fork: PR #${pull}’s checks run again`;
+      this.deps.toast(message, 'success');
+      return { ok: true, message };
+    } finally {
+      this.creatingPr.delete(id);
+    }
   }
 
   /** Run a PR's failed Actions jobs again on the same commit (a flaky test): `gh run rerun <id> --failed` for each run. */

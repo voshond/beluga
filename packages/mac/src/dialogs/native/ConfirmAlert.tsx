@@ -56,19 +56,28 @@ function useArchivePlan(id: string, worktree: boolean): ArchivePreview | undefin
   return plan;
 }
 
-/** What deleting a worktree would lose that archiving keeps: `null` once asked and there's nothing, undefined while asking. */
-function useDeletePlan(id: string, worktree: boolean): DeletePlan | null | undefined {
+/** How long Delete waits on the unpushed-commits check before letting you choose anyway: a busy Beluga can answer very late. */
+export const DELETE_CHECK_MS = 10_000;
+
+/**
+ * What deleting a worktree would lose that archiving keeps: `null` once asked and there's nothing,
+ * undefined while asking, `'late'` when no answer came within DELETE_CHECK_MS (an answer after that
+ * still replaces it).
+ */
+function useDeletePlan(id: string, worktree: boolean): DeletePlan | null | undefined | 'late' {
   const api = useApi();
-  const [plan, setPlan] = useState<DeletePlan | null | undefined>(worktree ? undefined : null);
+  const [plan, setPlan] = useState<DeletePlan | null | undefined | 'late'>(worktree ? undefined : null);
   useEffect(() => {
     if (!worktree) return;
     let live = true;
+    const timer = setTimeout(() => live && setPlan((p) => (p === undefined ? 'late' : p)), DELETE_CHECK_MS);
     api.workspaces.deletePlan(id).then(
       (p) => live && setPlan(p ?? null),
       () => live && setPlan(null),
     );
     return () => {
       live = false;
+      clearTimeout(timer);
     };
   }, [id, worktree]);
   return plan;
@@ -133,10 +142,13 @@ export function ConfirmAlert({ menu, close }: NativeMenuProps<'confirm'>) {
   if (menu.action === 'delete') {
     const worktree = ws.kind === 'worktree' && !ws.external;
     const remove = (): void => go(withEnv ? `confirm-delete-env${all}` : 'confirm-delete');
-    // Delete waits until it's known whether unpushed commits would go with it.
+    // Delete waits until it's known whether unpushed commits would go with it, and says so (BLG-946).
     const asking = lose === undefined;
+    // No answer in time: Delete is yours to choose, with Archive (which keeps everything) beside it.
+    const late = lose === 'late';
+    const archiveInstead = (): void => go(withEnv ? `confirm-archive-env${all}` : 'confirm-archive');
     // Commits pushed nowhere (BLG-617): say how many, and Archive (which keeps them) is the main button.
-    if (lose) {
+    if (lose && lose !== 'late') {
       const it = lose.unpushed === 1 ? 'it' : 'them';
       return (
         <Alert
@@ -159,7 +171,7 @@ export function ConfirmAlert({ menu, close }: NativeMenuProps<'confirm'>) {
             </>
           }
           table={table}
-          confirm={ws.archived ? { label: 'Keep It', onClick: close } : { label: 'Archive Instead', onClick: () => go(withEnv ? `confirm-archive-env${all}` : 'confirm-archive') }}
+          confirm={ws.archived ? { label: 'Keep It', onClick: close } : { label: 'Archive Instead', onClick: archiveInstead }}
           alternative={{ label: 'Delete Anyway', destructive: true, onClick: remove }}
           onCancel={close}
         >
@@ -184,10 +196,13 @@ export function ConfirmAlert({ menu, close }: NativeMenuProps<'confirm'>) {
               )}
             </p>
             <p>You can’t undo this.</p>
+            {asking ? <p className={s.muted}>Checking for commits that were never pushed…</p> : null}
+            {late ? <p className={s.muted}>Beluga couldn’t finish checking for commits that were never pushed. {ws.archived ? 'Keep it archived if you’re not sure.' : 'If you’re not sure, Archive keeps the branch and the conversation.'}</p> : null}
           </>
         }
         table={table}
         confirm={{ label: 'Delete', destructive: true, disabled: asking, onClick: remove }}
+        {...(late && !ws.archived ? { alternative: { label: 'Archive Instead', onClick: archiveInstead } } : {})}
         onCancel={close}
       >
         {boxes}

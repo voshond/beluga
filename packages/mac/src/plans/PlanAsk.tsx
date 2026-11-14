@@ -4,6 +4,7 @@ import { isDecisionQid } from '@beluga/core/plans/decisions.js';
 import { answerTyped, currentQuestion } from '@beluga/ui/collab-actions.js';
 import { Markdown } from '../chat/Markdown.js';
 import { RunAsk, useRunStarted } from '../chat/RunAsk.js';
+import { MentionHighlighter } from '../chat/MentionHighlighter.js';
 import { useAttachments } from '../chat/use-attachments.js';
 import { Icon } from '../components/Icon.js';
 import { Button, cx } from '../components/ui.js';
@@ -11,6 +12,7 @@ import { useActions } from '../lib/actions.js';
 import { toast, useApi, useBeluga } from '../lib/beluga.js';
 import { chosenOf } from './plan-ask-model.js';
 import a from '../chat/attention.module.css';
+import c from '../chat/composer.module.css';
 import s from './plan-ask.module.css';
 
 /**
@@ -52,14 +54,18 @@ export function PlanAsk({ q }: { q: PendingQuestion }) {
     if (!text) return;
     setOwn('');
     if (!images.length) return answerTyped(client, q, text);
-    api.attachments.expand(text, q.channel, [...images], [...shown]).then(
-      (expanded) => answerTyped(client, q, expanded),
-      (err: unknown) => {
-        setOwn(own);
-        putBack();
-        toast(client, `Couldn't send the images: ${err instanceof Error ? err.message : String(err)}`, 'error');
-      },
-    );
+    // An image still being saved is waited for (it showed in the box at once), as the composer does.
+    att
+      .saved(images)
+      .then((real) => api.attachments.expand(text, q.channel, [...real], [...shown]))
+      .then(
+        (expanded) => answerTyped(client, q, expanded),
+        (err: unknown) => {
+          setOwn(own);
+          putBack();
+          toast(client, `Couldn't send the images: ${err instanceof Error ? err.message : String(err)}`, 'error');
+        },
+      );
   };
   const writing = Boolean(own.trim()) || att.images.length > 0;
   return (
@@ -116,22 +122,26 @@ export function PlanAsk({ q }: { q: PendingQuestion }) {
             write();
           }}
         >
-          <textarea
-            ref={box}
-            rows={1}
-            className={cx(s.ownInput, 'selectable')}
-            value={own}
-            placeholder={current.options.length ? 'Or write your own…' : 'Your answer…'}
-            aria-label="Write your own answer"
-            onChange={(e) => setOwn(e.target.value)}
-            onPaste={att.onPaste}
-            onKeyDown={(e) => {
-              if (att.onRefKey(e)) return;
-              if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
-              e.preventDefault();
-              write();
-            }}
-          />
+          {/* An image's "[1  name]" is drawn as its chip, as in the plan's own box. */}
+          <div className={cx(c.inputWrap, s.ownWrap)}>
+            <MentionHighlighter text={own} input={box} className={s.ownInput ?? ''} />
+            <textarea
+              ref={box}
+              rows={1}
+              className={cx(s.ownInput, c.overHighlight, 'selectable')}
+              value={own}
+              placeholder={current.options.length ? 'Or write your own…' : 'Your answer…'}
+              aria-label="Write your own answer"
+              onChange={(e) => setOwn(e.target.value)}
+              onPaste={att.onPaste}
+              onKeyDown={(e) => {
+                if (att.onRefKey(e)) return;
+                if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
+                e.preventDefault();
+                write();
+              }}
+            />
+          </div>
           {writing ? (
             <Button size="small" variant="primary" type="submit">
               Answer
