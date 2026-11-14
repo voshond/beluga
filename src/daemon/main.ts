@@ -12,7 +12,7 @@ import type { Recorder } from '../core/blackbox/recorder.js';
 import { blackbox } from '../core/blackbox/recorder.js';
 import { startBlackbox } from './blackbox.js';
 import { clearDaemonInfo, writeDaemonInfo } from './files.js';
-import { watchEventLoop } from './lag.js';
+import { FROZEN_EVERY_MS, type LagStats, isFrozen, lagLine, watchEventLoop } from './lag.js';
 import { keepLogSmall } from './log-size.js';
 import type { Readable } from 'node:stream';
 import { stopWhenInputEnds } from './stop-on-input.js';
@@ -58,6 +58,8 @@ export interface DaemonOptions {
   readonly logFd?: number;
   /** The black box to keep event-loop periods and state changes in (core/blackbox/recorder.ts). */
   readonly record?: Recorder;
+  /** The main thread froze for a while (lag.ts isFrozen): keep a copy of what it was doing. */
+  readonly onFrozen?: (lag: LagStats) => void;
   /** Stop once this ends: the app's pipe on Windows, which has no signals (stop-on-input.ts). */
   readonly stopWithInput?: Readable;
   /** Also serve the UI to browsers on the web port (`beluga web`, daemon/web.ts). */
@@ -190,8 +192,11 @@ export async function startDaemon(config: Config, opts: DaemonOptions): Promise<
   const record = opts.record;
   const stopActions = record ? core.session.store.onAction((a) => record.action(a.type)) : () => undefined;
   core.start();
-  const onPeriod = record ? (lag: Parameters<Recorder['period']>[0]) => record.period(lag, process.memoryUsage()) : undefined;
-  const stopWatch = watchEventLoop(log, { ...(opts.lagEveryMs ? { everyMs: opts.lagEveryMs, all: true } : {}), ...(onPeriod ? { onPeriod } : {}) });
+  const onPeriod = (lag: LagStats): void => {
+    record?.period(lag, process.memoryUsage());
+    if (isFrozen(lag)) opts.onFrozen?.(lag);
+  };
+  const stopWatch = watchEventLoop(log, { ...(opts.lagEveryMs ? { everyMs: opts.lagEveryMs, all: true } : {}), onPeriod });
   stopLag = () => {
     stopWatch();
     stopActions();
@@ -215,7 +220,14 @@ export async function runDaemon(config: Config, opts: DaemonOptions): Promise<vo
   process.stderr.on('error', () => {});
   const box = startBlackbox({ version: opts.version });
   const demoTemp = config.mode === 'demo' ? ownTempRoot('demo') : undefined;
-  const daemon = await startDaemon(config, { ...opts, log, record: blackbox });
+  // A freeze (BLG-942) leaves a copy of the black box in logs/incidents/: what was called and dispatched just before. Once an hour at most.
+  let frozenAt = 0;
+  const onFrozen = (lag: LagStats): void => {
+    if (Date.now() - frozenAt < FROZEN_EVERY_MS) return;
+    frozenAt = Date.now();
+    box.incident('frozen', lagLine(lag));
+  };
+  const daemon = await startDaemon(config, { ...opts, log, record: blackbox, onFrozen });
   keepLogSmall(opts.logFd ?? 2, log);
   if (opts.web && opts.announce && daemon.webUrl) {
     const { url, expiresAt } = daemon.web.sessions.link(daemon.webUrl);

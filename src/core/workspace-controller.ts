@@ -925,31 +925,64 @@ export class WorkspaceController {
    * line saying what it is. No agent starts: you look, run it, or ask. A second click while it's
    * made is the same one.
    */
-  openPull(projectId: string, pull: PullHead): Promise<Workspace | undefined> {
-    const key = `${projectId}#${pull.number}`;
+  openPull(projectId: string, number: number, head: PullHead | (() => Promise<PullHead>), opts: { readonly id?: string } = {}): Promise<Workspace | undefined> {
+    const key = `${projectId}#${number}`;
     const running = this.pulling.get(key);
     if (running) return running;
-    const job = this.openPullNow(projectId, pull).finally(() => this.pulling.delete(key));
+    const job = this.openPullNow(projectId, number, head, opts.id).finally(() => this.pulling.delete(key));
     this.pulling.set(key, job);
     return job;
   }
 
-  private async openPullNow(projectId: string, pull: PullHead): Promise<Workspace | undefined> {
+  /** The id a new worktree gets: the one a screen already shows it under, when it's free (BLG-942). */
+  private freeId(wanted: string | undefined): string {
+    return wanted && !this.deps.manager.find(wanted) && !this.ahead.making.has(wanted) ? wanted : this.deps.manager.newWorktreeId();
+  }
+
+  /**
+   * Its row and page show at once (BLG-942), before GitHub is asked which branch it's on: that
+   * took a second or two, with nothing on screen. The worktree already on that branch, if there
+   * is one, opens instead once that's known.
+   */
+  private async openPullNow(projectId: string, number: number, head: PullHead | (() => Promise<PullHead>), wanted?: string): Promise<Workspace | undefined> {
     const project = this.deps.manager.list.find((p) => p.id === projectId && p.root);
     if (!project) {
       this.deps.toast('That project is gone', 'warn');
       return undefined;
     }
-    const mine = (branch: string): boolean => branch === pull.branch || (Boolean(pull.fork) && branch === `pr-${pull.number}`);
-    const there = project.workspaces.find((w) => w.kind === 'worktree' && !w.archived && w.branch && mine(w.branch));
+    const mine = (pull: PullHead, branch: string): boolean => branch === pull.branch || (Boolean(pull.fork) && branch === `pr-${pull.number}`);
+    const already = (pull: PullHead): Workspace | undefined => project.workspaces.find((w) => w.kind === 'worktree' && !w.archived && w.branch && mine(pull, w.branch));
+    const known = typeof head === 'function' ? undefined : head;
+    const there = known ? already(known) : undefined;
     if (there) {
       this.open(there.id);
       return there;
     }
-    const id = this.deps.manager.newWorktreeId();
-    this.ahead.making.set(id, pendingWorktree({ id, project, name: `pr-${pull.number}`, ...(pull.base ? { base: `origin/${pull.base}` } : {}) }));
+    const id = this.freeId(wanted);
+    this.ahead.making.set(id, pendingWorktree({ id, project, name: `pr-${number}`, ...(known?.base ? { base: `origin/${known.base}` } : {}) }));
     this.publish();
     this.deps.intend({ type: 'navigate', view: { kind: 'workspace', id, tab: 'chat' } });
+    const leave = (): void => {
+      if (this.ahead.making.delete(id)) this.publish();
+      this.deps.intend({ type: 'close_tab', id });
+    };
+    let pull: PullHead;
+    try {
+      pull = known ?? (await (head as () => Promise<PullHead>)());
+    } catch (err) {
+      leave();
+      throw err;
+    }
+    const found = already(pull);
+    if (found) {
+      leave();
+      this.open(found.id);
+      return found;
+    }
+    if (pull.base) {
+      this.ahead.making.set(id, pendingWorktree({ id, project, name: `pr-${number}`, base: `origin/${pull.base}` }));
+      this.publish();
+    }
     const ws = await this.act(`Couldn't open #${pull.number} in a worktree`, () => this.deps.manager.createPullWorktree(projectId, pull, { id }), undefined, { later: true });
     const shown = this.ahead.making.delete(id);
     this.publish();
@@ -1034,11 +1067,11 @@ export class WorkspaceController {
    * by the name the model gave it; with `nameLater`, as soon as it's made (its id stays when the
    * name comes, so a caller that only wants the id needn't wait for the model).
    */
-  async startWorktree(projectId: string, firstMessage: string, nameTask: (prompt: string) => Promise<string>, opts: { base?: string; name?: string; plan?: boolean; tasks?: boolean; quiet?: boolean; nameLater?: boolean; agent?: AgentRef; terminal?: boolean } = {}): Promise<Workspace | undefined> {
+  async startWorktree(projectId: string, firstMessage: string, nameTask: (prompt: string) => Promise<string>, opts: { base?: string; name?: string; plan?: boolean; tasks?: boolean; quiet?: boolean; nameLater?: boolean; agent?: AgentRef; terminal?: boolean; id?: string } = {}): Promise<Workspace | undefined> {
     const text = firstMessage.trim();
     const named = opts.name?.trim();
     const proper = named || !text ? undefined : nameTask(firstMessage).catch(() => undefined);
-    const id = this.deps.manager.newWorktreeId();
+    const id = this.freeId(opts.id);
     const channel = `${WS_PREFIX}${id}`;
     // Your message shows at once on its page while git makes the folder (BLG-531); Claude gets it when that's done.
     const shown = text && this.deps.showAsk ? this.deps.showAsk(firstMessage, channel) : undefined;

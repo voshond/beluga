@@ -62,6 +62,7 @@ import { type PeerRun, type ShellRunner, describeShellResult } from './peer-run.
 import type { GuestControl, ProjectInvites } from './project-invites.js';
 import type { GuestShell } from './guest-shell.js';
 import { type SharedDiff, guestMayDo } from './shared-diff.js';
+import { chatFilesRefusal } from './plain-chat-files.js';
 import { coalesce } from './coalesce.js';
 import { PowerSaver, paced } from './power-saver.js';
 import type { EnvVars } from './env-vars.js';
@@ -717,6 +718,23 @@ export class Session {
   }
 
   /**
+   * A message an MCP App in this conversation posts for you (ui/message, Settings › Experimental ›
+   * MCP Apps): said in the chat as yours, marked as the app's (`app`: its tool), and asked of your
+   * Claude like a line you typed. Only in a conversation of your own Claude (not the group chat).
+   */
+  askFromApp(text: string, channel: string, app: string): boolean {
+    if (channel === 'room' || this.sharing.sharedFor(channel)) return false;
+    const requestId = randomUUID();
+    const running = this.host.runningIn(channel);
+    const mid = randomUUID();
+    const words = text.slice(0, MAX_TEXT);
+    this.store.dispatch({ type: 'chat', id: chatMessageId(this.selfId, mid, ''), from: this.selfId, text: words, ts: Date.now(), byAgent: false, channel, request: requestId, fromApp: app, ...(running ? { queued: true as const } : {}) });
+    // People you invited into this chat see it too, as sendChat sends (without the app's mark: their Beluga has no field for it).
+    for (const to of this.sharing.recipients(channel)) this.send({ kind: 'chat', text: words, byAgent: false, channel, mid }, { to });
+    return this.askOwnClaude(text, channel, false, false, requestId) !== undefined;
+  }
+
+  /**
    * A turn a plan starts by itself. In a worktree an external agent started it stays at that agent's
    * level, and ends with its grant: a plan's brief must not lift it to yours.
    */
@@ -1274,6 +1292,9 @@ export class Session {
     if (GUARDED.has(body.kind) && !this.replay.admit(id, sentAt)) return;
     // Someone invited by link to a project only reaches that project.
     if (from !== this.selfId && this.invites.isRestricted(from) && !guestMayDo(body, this.opts.shares)) return;
+    // A plain chat shared with someone, in your room or over the network, gives only its Scratch.
+    const refused = from === this.selfId ? undefined : chatFilesRefusal(this.store.getState().projects, body);
+    if (refused) return void this.send(refused, { to: from });
     switch (body.kind) {
       case 'fs_search':
         if (!this.opts.shares.canAccess(body.share, from, this.selfId) || !this.opts.shares.isPrivate(body.share)) {

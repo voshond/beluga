@@ -48,6 +48,7 @@ import { TRIAGE_HANDLERS } from './triage-handlers.js';
 import { GIT_HANDLERS } from './git-handlers.js';
 import { VIEWS_HANDLERS } from './views-handlers.js';
 import { PREVIEW_HANDLERS } from './preview-handlers.js';
+import { MCP_APPS_HANDLERS } from './mcp-apps-handlers.js';
 import { FILES_EDIT_HANDLERS } from './files-handlers.js';
 import { COMPANION_HANDLERS } from './companion-handlers.js';
 import { MACHINE_HANDLERS } from './machine-handlers.js';
@@ -227,7 +228,7 @@ export const HANDLERS = {
   'workspaces.newWorktree': async (s, projectId, name, opts) => (await ctl(s)?.newWorktree(projectId, name, { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.agent ? { agent: opts.agent } : {}) }))?.id,
   'workspaces.newChat': async (s, projectId, title, dir) => (await ctl(s)?.newChat(projectId, title, dir))?.id,
   'workspaces.startChat': (s, projectId, text, dir, opts) => (maybeStatsOf(s)?.prompt(`new-chat:${projectId}`, text), byYourHand(text, () => ctl(s)?.startChat(projectId, text, dir ?? undefined, { ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}) }))),
-  'workspaces.startWorktree': async (s, projectId, text, opts) => (maybeStatsOf(s)?.prompt(`new-worktree:${projectId}`, text, opts?.agent?.runtime), await byYourHand(text, () => ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.tasks ? { tasks: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.terminal ? { terminal: true } : {}), nameLater: true })))?.id,
+  'workspaces.startWorktree': async (s, projectId, text, opts) => (maybeStatsOf(s)?.prompt(`new-worktree:${projectId}`, text, opts?.agent?.runtime), await byYourHand(text, () => ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.tasks ? { tasks: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.id ? { id: opts.id } : {}), nameLater: true })))?.id,
   'workspaces.branches': (s, projectId) => ctl(s)?.branches(projectId),
   'workspaces.fork': async (s, id, name) => (await ctl(s)?.fork(id, name))?.id,
   'workspaces.editPrompt': (s, id, line, text, mode) => ctl(s)?.editPrompt(id, line, text, mode),
@@ -501,6 +502,7 @@ export const HANDLERS = {
   ...GIT_HANDLERS,
   ...VIEWS_HANDLERS,
   ...PREVIEW_HANDLERS,
+  ...MCP_APPS_HANDLERS,
   ...FILES_EDIT_HANDLERS,
   ...COMPANION_HANDLERS,
   ...MACHINE_HANDLERS,

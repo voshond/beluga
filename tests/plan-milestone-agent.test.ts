@@ -152,6 +152,9 @@ describe('one Claude per milestone (BLG-7)', () => {
     expect(p).toContain('status in_progress');
     expect(p).toContain('status in_review');
     expect(p).toContain('No pull requests');
+    // What only the user can do is asked with a card; nothing promises Beluga asks for a request written out.
+    expect(p).toContain('ask it with plan_ask');
+    expect(p).not.toContain('Beluga asks them');
     // The other milestone's Claude works beside it.
     expect(p).toContain('“Admin page”: src/admin');
   });

@@ -9,7 +9,7 @@ import { z } from 'zod';
  * ignores what it doesn't know. A breaking change bumps the major, and the Mac keeps answering the
  * previous major for a release.
  */
-export const COMPANION_PROTO = { major: 1, minor: 58 } as const;
+export const COMPANION_PROTO = { major: 1, minor: 59 } as const;
 
 /**
  * What came in which minor, for a phone talking to an older Mac: it subscribes to a topic (and
@@ -156,6 +156,8 @@ export const COMPANION_PROTO = { major: 1, minor: 58 } as const;
  * 1.57 (BLG-277, upstream's 1.53): `ConvView.queue[].origin`: a queued message that an agent in another chat sent.
  * 1.58 (BLG-940, upstream's 1.55): a worktree of yours shared with someone says how many (`ConvSummary.shared`), for the
  * Mac sidebar's green dot. An older Mac sends none; an older phone shows none.
+ * 1.59 (BLG-952, upstream's 1.56): a task held for its checks says so (`TaskSummary.needsChecks`): how many criteria are
+ * neither ticked nor explained, and whether its work already merged. An older Mac sends none; an older phone shows none.
  */
 export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36, reactions: 41, cancelSteer: 47, triage: 48, draftReview: 49, threads: 50, threadAgents: 50, seen: 51, computers: 52, externalAgents: 53, chatLinks: 55, chatOrigin: 56, queuedOrigin: 57, sharedMark: 58 } as const;
 
@@ -583,9 +585,10 @@ export type MergeView = z.infer<typeof MergeView>;
  * 1.8: the branch steps the phone can ask the Mac for (companion.branchStep): all of the Mac's
  * (core/branch-state.ts) but Merge into the main folder (its own sheet, companion.merge) and Open
  * PR (the phone's browser). Since BLG-753 also Push (an open PR's commits not pushed yet) and Re-run
- * Failed Checks, added at the end (an older Mac never offers them).
+ * Failed Checks, added at the end (an older Mac never offers them); since BLG-948 Open Your Own PR
+ * (a fork's pull request that can't be pushed to).
  */
-export const PHONE_BRANCH_STEPS = ['merge_pr', 'merge_auto', 'merge_admin', 'cancel_auto', 'update_branch', 'mark_ready', 'resolve_pr', 'fix_checks', 'merge_claude', 'review_claude', 'commit', 'pr', 'pr_claude', 'pr_draft', 'pr_original', 'continue_after_merge', 'archive', 'delete', 'push', 'rerun_checks'] as const;
+export const PHONE_BRANCH_STEPS = ['merge_pr', 'merge_auto', 'merge_admin', 'cancel_auto', 'update_branch', 'mark_ready', 'resolve_pr', 'fix_checks', 'merge_claude', 'review_claude', 'commit', 'pr', 'pr_claude', 'pr_draft', 'pr_original', 'continue_after_merge', 'archive', 'delete', 'push', 'rerun_checks', 'pr_own'] as const;
 export type PhoneBranchStep = (typeof PHONE_BRANCH_STEPS)[number];
 
 /** 1.8: one of a branch's steps (core/branch-state.ts BranchStep). */
@@ -654,6 +657,8 @@ export const AgentPickerView = z.object({
         isDefault: z.boolean(),
         current: z.boolean(),
         models: z.array(z.object({ value: z.string().max(80), label: z.string().max(80), description: z.string().max(200), on: z.boolean() })).max(30),
+        /** BLG-945: how many more models this runtime has on the Mac than `models` holds (the picked one is always in it). */
+        more: z.number().int().min(0).optional(),
       }),
     )
     .max(8),
@@ -865,6 +870,11 @@ export const TaskSummary = z.object({
   onBoard: z.string().max(200).optional(),
   /** Only you see it (BLG-501): it never reaches teammates or Linear. */
   private: z.literal(true).optional(),
+  /**
+   * 1.59 (BLG-952, upstream's 1.56): held for its checks, as the Mac's "Needs its checks": `open` criteria are neither
+   * ticked nor explained, so it stays out of review; `merged`: its work merged, so it stays out of Done.
+   */
+  needsChecks: z.object({ open: z.number().int().min(1), merged: z.literal(true).optional() }).optional(),
   updatedAt: ts,
 });
 export type TaskSummary = z.infer<typeof TaskSummary>;

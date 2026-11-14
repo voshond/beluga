@@ -53,6 +53,7 @@ export type BranchStepId =
   | 'pr_custom'
   | 'pr_draft'
   | 'pr_original'
+  | 'pr_own'
   | 'merge'
   | 'merge_base'
   | 'continue_after_merge'
@@ -233,6 +234,24 @@ export function branchState(state: Pick<DomainState, 'projects' | 'gh' | 'prs' |
     if (blocker === 'push') {
       const was = pr.conflicts ? `says it conflicts with ${into}` : pr.checks === 'failing' ? 'says its checks failed' : pr.checks === 'pending' ? 'is running checks' : 'shows';
       const them = unpushed === 1 ? 'it' : 'them';
+      // Someone's fork's pull request (BLG-948): pushed to the fork when its author lets maintainers
+      // edit it; otherwise a pull request of your own carries the fork's commits and these.
+      const fork = pr.fork;
+      if (fork && !fork.canPush) {
+        return at('not_pushed', `${plural(unpushed, 'commit')} not on PR`, 'info', `${plural(unpushed, 'commit')} here ${unpushed === 1 ? 'isn’t' : 'aren’t'} on ${n}, and ${fork.owner}’s fork doesn’t let maintainers push to it`, [
+          { id: 'pr_own', label: 'Open Your Own PR', hint: `A new pull request into ${into} with ${n}’s commits and your ${plural(unpushed, 'commit')}, on a branch of its own${changed ? ` (the ${plural(changed, 'uncommitted change')} get committed first)` : ''}` },
+          commit,
+          openPr,
+        ]);
+      }
+      if (fork) {
+        return at('not_pushed', `${plural(unpushed, 'commit')} not on PR`, 'info', `${plural(unpushed, 'commit')} here ${unpushed === 1 ? 'isn’t' : 'aren’t'} on ${n} yet: ${fork.owner}’s fork lets maintainers push to it`, [
+          { id: 'push', label: `Push ${plural(unpushed, 'Commit')} to ${n}`, hint: `Pushes to ${fork.branch} on ${fork.owner}’s fork, which updates ${n}: GitHub runs its checks again` },
+          { id: 'pr_own', label: 'Open Your Own PR', hint: `A new pull request into ${into} with ${n}’s commits and yours, instead` },
+          commit,
+          openPr,
+        ]);
+      }
       // The pill reads "3 commits not on PR #398" (its number is drawn beside it).
       return at('not_pushed', `${plural(unpushed, 'commit')} not on PR`, 'info', `${plural(unpushed, 'commit')} here ${unpushed === 1 ? 'isn’t' : 'aren’t'} on ${n} yet: merging it now would leave ${them} out, and what GitHub ${was} is for an older commit`, [
         { id: 'push', label: `Push ${plural(unpushed, 'Commit')} to ${n}`, hint: `Pushes ${ws.branch} to ${n}: GitHub runs its checks again and looks for conflicts with ${into}${changed ? ` (the ${plural(changed, 'uncommitted change')} stay here)` : ''}` },

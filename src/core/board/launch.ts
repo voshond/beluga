@@ -29,11 +29,12 @@ import { attachPlans, detachPlans } from '../plans/registry.js';
 import { seedDemoPlan } from '../plans/demo.js';
 import { PlanDecisions } from '../plans/decisions.js';
 import { launchTeam } from '../team/launch.js';
-import { TeamBoardSync } from '../team/board-sync.js';
+import { BRAKE_WINDOW_MS, TeamBoardSync } from '../team/board-sync.js';
 import { TeamAssign } from '../team/assign.js';
 import { TeamContext } from '../team/context-share.js';
 import { TeamKnocks } from '../team/knock.js';
 import { TeamPlans } from '../team/plan-share.js';
+import { blackbox } from '../blackbox/recorder.js';
 
 /**
  * Start the board and plans for the daemon (the Mac app's Beluga): tasks in ~/.beluga/board.json,
@@ -138,6 +139,8 @@ export function launchBoard(host: BoardHost): () => void {
     titlePlan: (goal) => session.titlePlan(goal),
     // Tasks only you can do came up: their decision cards (below) go up now.
     forYou: () => decisions?.sync(true),
+    // The plan's conversation runs on the agent picked for its work, switched as its own picker switches it.
+    followAgent: (channel, agent) => void session.workbench?.setAgent(channel, agent, 'quiet'),
   });
   attachPlans(session, planWork);
   // A plan task that's yours: a decision card in the plan's conversation, never a worktree.
@@ -167,7 +170,14 @@ export function launchBoard(host: BoardHost): () => void {
         if (busy?.log !== log) busy = { log, set: busyChannels(log) };
         return busy.set.has(`ws:${id}`);
       };
-      const teamSync = new TeamBoardSync(team, { board, live, running, dir: teamDir });
+      // A task going round between Macs is held by the sync's brake (BLG-942): noted in the black box, once a minute.
+      let braked = 0;
+      const onBrake = (id: string, sends: number): void => {
+        if (Date.now() - braked < 60_000) return;
+        braked = Date.now();
+        blackbox.record('log', `team board: ${board.get(id)?.key ?? id} was sent on ${sends} times in ${BRAKE_WINDOW_MS / 1000} s; held, then sent whole`);
+      };
+      const teamSync = new TeamBoardSync(team, { board, live, running, dir: teamDir, onBrake });
       // Plans you choose to share with the team: teammates review them, you apply what you like.
       const teamPlans = new TeamPlans(team, { edit: (id, ops) => void planWork.edit(id, ops), dir: teamDir });
       // What the project is about (for Claude writing tasks): one text for the whole team.

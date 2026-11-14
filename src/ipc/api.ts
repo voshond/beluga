@@ -33,6 +33,7 @@ import { TEAM_API } from './team-api.js';
 import { GIT_API } from './git-api.js';
 import { VIEWS_API } from './views-api.js';
 import { PREVIEW_API } from './preview-api.js';
+import { MCP_APPS_API } from './mcp-apps-api.js';
 import { FILES_EDIT_API } from './files-api.js';
 import { COMPANION_API } from './companion-api.js';
 import { MACHINE_API } from './machine-api.js';
@@ -60,6 +61,8 @@ const id = z.string().min(1).max(200);
 const channel = z.string().min(1).max(200);
 const path = z.string().max(4096);
 const bool = z.boolean();
+/** A worktree id a screen chose (wt- and 12 of a UUID's characters, as the core makes them). */
+export const WorktreeId = z.string().regex(/^wt-[0-9a-f-]{12}$/);
 const opt = <T extends z.ZodType>(t: T) => t.optional();
 function args(): { args: z.ZodTuple<[], null> };
 function args<T extends [z.ZodType, ...z.ZodType[]]>(...items: T): { args: z.ZodTuple<T, null> };
@@ -309,7 +312,8 @@ export const API = {
   'workspaces.startChat': args(id, str, opt(path.nullable()), opt(z.object({ terminal: opt(bool), plan: opt(bool), agent: opt(AgentRef) }))),
   // → the new worktree's id. `plan`: its Claude plans first. `tasks`: Plan with Tasks, its conversation is a
   // draft plan's home, written from the first message. `quiet`: started from the phone, the Mac's window stays put.
-  'workspaces.startWorktree': args(id, str, opt(z.object({ base: opt(z.string().min(1).max(250)), name: opt(z.string().max(200)), plan: opt(bool), tasks: opt(bool), quiet: opt(bool), agent: opt(AgentRef), terminal: opt(bool) }))),
+  // `id`: the id it gets, chosen by the screen that shows it as being made already (BLG-942; taken only when free).
+  'workspaces.startWorktree': args(id, str, opt(z.object({ base: opt(z.string().min(1).max(250)), name: opt(z.string().max(200)), plan: opt(bool), tasks: opt(bool), quiet: opt(bool), agent: opt(AgentRef), terminal: opt(bool), id: opt(WorktreeId) }))),
   // What a new worktree can start from: → { base: the default, branches: default first, then newest }.
   'workspaces.branches': args(id),
   'workspaces.fork': args(id, z.string().max(200)),
@@ -412,7 +416,7 @@ export const API = {
   'workbench.createPr': args(id, opt(str)),
   // Create PR without Claude: commit what's left, push, open it titled from the commits → { ok, message, trouble? }.
   // https: push this once over HTTPS with gh's login (the SSH key isn't working; origin stays as it is).
-  'workbench.quickPr': args(id, opt(z.object({ draft: opt(bool), https: opt(bool), original: opt(bool) }).strict())),
+  'workbench.quickPr': args(id, opt(z.object({ draft: opt(bool), https: opt(bool), original: opt(bool), own: opt(bool) }).strict())),
   // Merge into its base with no PR (BLG-265): commit what's left, land the branch on origin/<base> and push it there → { ok, message, trouble? }.
   'workbench.mergeToBase': args(id, opt(z.object({ https: opt(bool) }).strict())),
   // A fix from a GitHub trouble card (BLG-213), then Create PR again ('pr', 'pr_draft'), Merge into its base ('merge_base') or nothing ('none') → { ok, message, trouble? }.
@@ -575,6 +579,8 @@ export const API = {
   ...GIT_API,
   ...VIEWS_API,
   ...PREVIEW_API,
+  // ---- MCP Apps: a UI tool's app in the chat (mcp-apps-api.ts)
+  ...MCP_APPS_API,
   // ---- your workspace's files: searching their contents, editing, formatting (files-api.ts)
   ...FILES_EDIT_API,
   // ---- your phone: pairing it, removing it, what it asks for (companion-api.ts)

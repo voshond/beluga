@@ -29,6 +29,7 @@ import { brandText } from '../lib/brand.js';
 import { messageItems } from './message-menu.js';
 import { Markdown } from './Markdown.js';
 import { AgentSteps, StepsFold, StepsToggle } from './steps/AgentSteps.js';
+import { McpApps } from './mcp-app/McpApps.js';
 import { useDisclosure } from './steps/step-memory.js';
 import { useFlightLanding } from './flight.js';
 import { type TurnPart, subInHead, wordsOf, workingPhase } from './live-tail.js';
@@ -188,7 +189,7 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
   // Your own message in one of your conversations can be edited (BLG-385): rewound to, or forked from.
   const wsId = own && item.channel.startsWith('ws:') ? item.channel.slice(3) : undefined;
   const kind = useApp((st) => (wsId ? findWorkspace(st.projects, wsId)?.kind : undefined));
-  const editable = Boolean(wsId) && (kind === 'worktree' || kind === 'chat') && !steer && !item.via;
+  const editable = Boolean(wsId) && (kind === 'worktree' || kind === 'chat') && !steer && !item.via && !item.fromApp;
   const [editing, setEditing] = useState(false);
   // Emoji reactions (BLG-702): the button a hover shows, and the chips under the message.
   const reactions = useChatReactions(item, own);
@@ -202,6 +203,7 @@ export const ChatRow = memo(function ChatRow({ item, continued, ends = true, min
           {editing ? null : reactions.button}
           <div className={s.body}>
             {item.via ? <div className={s.sentBy} data-sent-by={item.via.id}>Sent by {item.via.name}</div> : null}
+            {item.fromApp ? <div className={s.sentBy} data-sent-by-app={item.fromApp}>Sent by the {item.fromApp} app</div> : null}
             {editing && wsId ? (
               <EditPrompt wsId={wsId} lineId={item.id} text={item.text} worktree={kind === 'worktree'} onClose={() => setEditing(false)} />
             ) : text ? (
@@ -580,6 +582,8 @@ function TurnCard({
           <StepsFold folded={folded}>
             <AgentSteps item={item} running={running} part={part} subs={subs} />
           </StepsFold>
+          {/* MCP Apps (Settings › Experimental): a UI tool's page, kept in sight when the steps fold. */}
+          <McpApps item={item} running={running} />
           {/* What it asked other people's Claudes, before its answer (which comes last). */}
           {tasks?.map((t) => (
             <div key={t.id} className={s.turnTask}>

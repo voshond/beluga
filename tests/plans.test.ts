@@ -17,6 +17,7 @@ import { Store, initialState } from '../src/core/store.js';
 import type { WorkspaceController, WorktreeEvent } from '../src/core/workspace-controller.js';
 import type { Project, Workspace } from '../src/workspaces/types.js';
 import { isPlanOwned, planOf } from '../src/core/plans/owner.js';
+import { needsYou } from '../src/companion/needs-you.js';
 import { PLAN_TOOL_NAMES, createPlanToolDefs, milestoneInput, toOps } from '../src/agent/plan-tools.js';
 import { decideTool } from '../src/agent/policy.js';
 import { PlanBodySchema } from '../src/core/team/protocol.js';
@@ -1289,6 +1290,49 @@ describe('the plan’s branch: tasks start from it, milestones merge into it, on
     t.work.pass(t.plan.id, 'safe');
     await t.settle();
     expect(run()?.passedAt).toBeDefined();
+  });
+
+  /** On Autopilot: the first milestone finished, checked and passed by Autopilot, and its merge failed. */
+  async function failedOnAutopilot() {
+    const t = await running('autopilot');
+    let tries = 0;
+    t.setConflict(() => {
+      tries++;
+      throw new Error('fatal: plan/payments is checked out with uncommitted changes');
+    });
+    for (const title of ['Auth on payment routes', 'Idempotent webhooks']) t.board.update(t.issue(title).id, { status: 'in_review' }, t.claude);
+    await tick(10);
+    t.board.update(t.issue('Receipts once').id, { status: 'in_review' }, t.claude);
+    await tick(10);
+    t.work.forRun('ws:main', 'p-me')!.tools!.gate('safe', 'pass', 'ok');
+    await t.settle();
+    await tick(50);
+    return { ...t, tries: () => tries, run: () => t.plans.need(t.plan.id).runs['safe'] };
+  }
+
+  it('on autopilot a failed merge is yours to pass again: the plan says so, and Needs You (the phone too) asks', async () => {
+    const t = await failedOnAutopilot();
+    expect(t.run()?.mergeFailed).toBeDefined();
+    expect(t.view().next).toMatchObject({ kind: 'pass', milestone: { milestone: { id: 'safe' } } });
+    const card = needsYou(t.store.getState()).find((n) => n.id === `plan:${t.plan.id}:pass:safe`);
+    expect(card?.title).toBe('“Safe payments” couldn’t merge: pass it again?');
+    expect(card?.detail).toBe('fatal: plan/payments is checked out with uncommitted changes');
+    expect(card?.actions.map((a) => a.method)).toEqual(['plans.pass', 'plans.recheck']);
+  });
+
+  it('on autopilot a new round (Check Again) forgets the failed merge, and a passing check passes it again', async () => {
+    const t = await failedOnAutopilot();
+    expect(t.tries()).toBe(1);
+    t.setConflict(undefined);
+    t.work.recheck(t.plan.id, 'safe');
+    expect(t.run()?.mergeFailed).toBeUndefined();
+    expect(t.run()?.passedAt).toBeUndefined();
+    await tick(20);
+    t.work.forRun('ws:main', 'p-me')!.tools!.gate('safe', 'pass', 'ok again');
+    await t.settle();
+    await tick(50);
+    expect(t.run()?.passedAt).toBeDefined();
+    expect(t.log.merged.length).toBe(2);
   });
 
   it('Merge on GitHub pushes the branch first, asks GitHub again, and says GitHub’s no in plain words', async () => {

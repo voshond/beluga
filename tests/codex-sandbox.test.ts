@@ -256,8 +256,9 @@ describe('a side call on Codex', () => {
 // Checked on Linux (bubblewrap); macOS's seatbelt reads the same profile, not run here.
 describe.skipIf(!codex || process.platform !== 'linux')("a worktree's git, in Codex's own sandbox (the real codex binary)", () => {
   it('your own run commits and moves main; hooks and config stay read only; a friend gets none of it', async () => {
-    mkdirSync(path.join(os.homedir(), '.cache'), { recursive: true });
-    const base = realpathSync(mkdtempSync(path.join(os.homedir(), '.cache', 'beluga-codex-git-')));
+    const cache = path.resolve(__dirname, '..', 'node_modules', '.cache');
+    mkdirSync(cache, { recursive: true });
+    const base = realpathSync(mkdtempSync(path.join(cache, 'beluga-codex-git-')));
     try {
       const repo = path.join(base, 'repo');
       const wt = path.join(base, 'wt');

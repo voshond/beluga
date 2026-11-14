@@ -67,7 +67,26 @@ function numberIn(channel: string, n: number, words: string): number {
   return k;
 }
 
+/**
+ * Images wait in the box at once (BLG-942), before Beluga has saved them: under a temporary number
+ * (negative, never one Beluga gives) with their thumbnail and their "[image N]", while the saving
+ * goes on behind. A busy daemon can no longer hold a paste back and then show them all at once.
+ * Each temporary number → Beluga's, once saved (undefined: it couldn't be, and it left the box).
+ */
+const savedAs = new Map<number, Promise<number | undefined>>();
+/** Temporary numbers still being saved (drawn as such). */
+const saving = new Set<number>();
+let nextTemp = -1;
+
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/** A picture as the base64 Beluga's attachments.add takes. */
+async function base64Of(file: Blob): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
 
 /** Files that aren't images (a served page uploads them, web-files.ts). */
 const othersOf = (files: FileList | undefined): File[] => [...(files ?? [])].filter((f) => !f.type.startsWith('image/'));
@@ -108,6 +127,8 @@ export interface Attachments {
   readonly restore: (sent: string) => Promise<string>;
   /** The thumbnails and file chips, for above the words. */
   readonly waiting: React.ReactNode;
+  /** `take`'s images by Beluga's numbers, once each is saved (one still saving is waited for; rejects if one couldn't be). */
+  readonly saved: (images: readonly number[]) => Promise<readonly number[]>;
 }
 
 /**
@@ -126,7 +147,7 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
     waitingImages.set(memo, next);
     setImagesState(next);
   };
-  const pendingImages = images.filter((n) => previewOf(n));
+  const pendingImages = images.filter((n) => previewOf(n) || saving.has(n));
   const [files, setFilesState] = useState<readonly WaitingFile[]>(() => waitingFiles.get(memo) ?? []);
   useEffect(() => setFilesState(waitingFiles.get(memo) ?? []), [memo]);
   const setFiles = (next: readonly WaitingFile[]): void => {
@@ -166,54 +187,106 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
     return before.length + chip.length;
   };
 
-  const attach = async (picked: readonly File[]): Promise<void> => {
-    for (const file of picked) {
-      const ext = (/image\/(png|jpe?g|gif|webp)/.exec(file.type)?.[1] ?? 'png') as 'png' | 'jpg' | 'jpeg' | 'gif' | 'webp';
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      let bin = '';
-      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-      let added: { n: number; chip: string; file?: string };
-      try {
-        added = await api.attachments.add(ext, btoa(bin));
-        // A pasted picture is just "image.png": the name Beluga saved it under tells them apart.
-        const named = file.name && !/^image\.\w+$/i.test(file.name) ? file.name : added.file;
-        if (named) imageNames.set(added.n, named);
-        if (added.file) imageFiles.set(added.n, added.file);
-        keepPreview(added.n, file);
-      } catch (err) {
-        toast(client, `Couldn't add ${file.name || 'the image'}: ${errorText(err)}`, 'error');
-        continue;
-      }
-      addWaiting(added.n);
-      placeRef(added.n);
-    }
+  /** An "[image N]" in the words, said another way where it is; the cursor stays where it was among the words. */
+  const renameRef = (from: string, to: string): void => {
+    const now = text();
+    const at = now.indexOf(from);
+    if (at < 0 || from === to) return;
+    const el = box.current;
+    const was = el ? el.selectionStart : now.length;
+    const cursor = was > at ? was + to.length - from.length : was;
+    setText(now.slice(0, at) + to + now.slice(at + from.length), cursor);
+    requestAnimationFrame(() => el?.setSelectionRange(cursor, cursor));
   };
 
-  /** An image file on this Mac, waiting to go: its number (undefined when it couldn't be added, said in a toast). */
-  const addImageFile = async (f: PathInfo): Promise<number | undefined> => {
-    try {
-      const added = await api.attachments.addFile(f.path);
-      imageNames.set(added.n, f.name);
-      imageFiles.set(added.n, added.file);
-      const shown = await api.attachments.read(selfId, added.file);
-      keepPreview(added.n, new Blob([Uint8Array.from(atob(shown.data), (c) => c.charCodeAt(0))], { type: shown.mime }));
-      addWaiting(added.n);
-      return added.n;
-    } catch (err) {
-      toast(client, `Couldn't add ${f.name}: ${errorText(err)}`, 'error');
-      return undefined;
-    }
+  // The box these images went into, now (you may have moved to another conversation while one saved).
+  const memoNow = useRef(memo);
+  memoNow.current = memo;
+  const setImagesIn = (key: string, next: readonly number[]): void => {
+    waitingImages.set(key, next);
+    if (memoNow.current === key) setImagesState(next);
   };
+
+  /**
+   * An image waits at once, under a temporary number (its thumbnail too when there's a `preview`),
+   * while `save` has Beluga keep it. Saved: it takes Beluga's number where it waits (its "[image N]"
+   * stays as it is). Not saved: it leaves the box and its "[image N]" the words, and a toast says why.
+   * → the temporary number (its "[image N]" is the caller's to place).
+   */
+  const waitAtOnce = (label: string, name: string | undefined, preview: Blob | undefined, save: () => Promise<{ readonly n: number; readonly file: string; readonly name: string }>): number => {
+    const temp = nextTemp--;
+    const key = memo;
+    saving.add(temp);
+    if (preview) keepPreview(temp, preview);
+    if (name) imageNames.set(temp, name);
+    addWaiting(temp);
+    const done = save().then(
+      async (added) => {
+        imageNames.set(added.n, imageNames.get(temp) ?? added.name);
+        imageFiles.set(added.n, added.file);
+        if (preview) keepPreview(added.n, preview);
+        else {
+          // From a path: its thumbnail comes from Beluga now that it has it (a placeholder until then).
+          const shown = await api.attachments.read(selfId, added.file).catch(() => undefined);
+          if (shown) keepPreview(added.n, new Blob([Uint8Array.from(atob(shown.data), (c) => c.charCodeAt(0))], { type: shown.mime }));
+        }
+        const numbers = numbersOf(key);
+        const shownAs = numbers.get(temp);
+        if (shownAs !== undefined) numbers.set(added.n, shownAs);
+        saving.delete(temp);
+        // A pasted "image.png" waited as "[image N]": now it has the name Beluga saved it under, its chip says so.
+        if (!imageNames.has(temp) && added.name && shownAs !== undefined && memoNow.current === key) renameRef(boxRef(shownAs), boxRef(shownAs, added.name));
+        // Still waiting (not removed, nor sent meanwhile): Beluga's number in its place.
+        const waiting = waitingImages.get(key) ?? [];
+        if (waiting.includes(temp)) setImagesIn(key, waiting.map((x) => (x === temp ? added.n : x)));
+        return added.n;
+      },
+      (err: unknown) => {
+        saving.delete(temp);
+        const shownAs = numbersOf(key).get(temp);
+        setImagesIn(key, (waitingImages.get(key) ?? []).filter((x) => x !== temp));
+        if (memoNow.current === key && shownAs !== undefined) {
+          const now = text();
+          const next = withoutRef(now, shownAs);
+          if (next !== now) setText(next, next.length);
+        }
+        toast(client, `Couldn't add ${label}: ${errorText(err)}`, 'error');
+        return undefined;
+      },
+    );
+    savedAs.set(temp, done);
+    return temp;
+  };
+
+  /** Pictures pasted or dropped on the box: each waits at once, in order, its "[image N]" where the cursor is. */
+  const attach = async (picked: readonly File[]): Promise<void> => {
+    const temps = picked.map((file) => {
+      const ext = (/image\/(png|jpe?g|gif|webp)/.exec(file.type)?.[1] ?? 'png') as 'png' | 'jpg' | 'jpeg' | 'gif' | 'webp';
+      // A pasted picture is just "image.png": the name Beluga saves it under tells them apart (on its chip once saved).
+      const named = file.name && !/^image\.\w+$/i.test(file.name) ? file.name : undefined;
+      const temp = waitAtOnce(file.name || 'the image', named, file, async () => {
+        const added = await api.attachments.add(ext, await base64Of(file));
+        return { n: added.n, file: added.file ?? '', name: named ?? added.file ?? '' };
+      });
+      placeRef(temp);
+      return temp;
+    });
+    await Promise.all(temps.map((t) => savedAs.get(t)));
+  };
+
+  /** An image file on this Mac: it waits at once (a placeholder until Beluga has it). → its number in the box for now. */
+  const addImageFile = (f: PathInfo): number =>
+    waitAtOnce(f.name, f.name, undefined, async () => {
+      const added = await api.attachments.addFile(f.path);
+      return { n: added.n, file: added.file, name: f.name };
+    });
 
   /** Files on this Mac: images wait as thumbnails (referenced at `at`, else where the cursor is), others as chips. */
   const addPaths = async (picked: readonly PathInfo[], at?: number): Promise<void> => {
     const others = picked.filter((f) => !f.image);
     if (others.length) setFiles([...(waitingFiles.get(memo) ?? []), ...others.filter((f) => !(waitingFiles.get(memo) ?? []).some((w) => w.path === f.path))]);
     let cursor = at;
-    for (const f of picked.filter((x) => x.image)) {
-      const n = await addImageFile(f);
-      if (n !== undefined) cursor = placeRef(n, cursor);
-    }
+    for (const f of picked.filter((x) => x.image)) cursor = placeRef(addImageFile(f), cursor);
   };
 
   /**
@@ -334,8 +407,7 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
       let words = '';
       let from = 0;
       for (const hit of found) {
-        const n = await addImageFile(hit.info);
-        words += pasted.slice(from, hit.start) + (n === undefined ? pasted.slice(hit.start, hit.end) : imageRef(n));
+        words += pasted.slice(from, hit.start) + imageRef(addImageFile(hit.info));
         from = hit.end;
       }
       words += pasted.slice(from);
@@ -343,6 +415,17 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
     },
     chipLinks,
   );
+
+  /** The waiting images by Beluga's numbers, once each is saved (rejects if one couldn't be: it's gone from the box). */
+  const saved = async (ids: readonly number[]): Promise<readonly number[]> =>
+    Promise.all(
+      ids.map(async (n) => {
+        if (n >= 0) return n;
+        const real = await savedAs.get(n);
+        if (real === undefined) throw new Error('An image couldn’t be added');
+        return real;
+      }),
+    );
 
   /** The waiting images full size (the lightbox: Esc or a click outside closes), from image `n`. */
   const openImages = (n: number): void => {
@@ -446,8 +529,8 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
         <div className={img.pending} role="group" aria-label="Images to send">
           {pendingImages.map((n) => (
             <div key={n} className={img.pendingItem}>
-              <button type="button" className={img.pendingOpen} aria-label={`Open image ${shownOf(n)}`} onClick={() => openImages(n)}>
-                <img src={previewOf(n)} alt={`image ${shownOf(n)}`} draggable={false} />
+              <button type="button" className={cx(img.pendingOpen, saving.has(n) && img.pendingSaving)} aria-label={`Open image ${shownOf(n)}`} aria-busy={saving.has(n)} onClick={() => openImages(n)}>
+                {previewOf(n) ? <img src={previewOf(n)} alt={`image ${shownOf(n)}`} draggable={false} /> : <Icon name="image" size={14} />}
               </button>
               <span className={img.pendingLabel}>{shownOf(n)}</span>
               <button type="button" className={img.pendingRemove} aria-label={`Remove image ${shownOf(n)}`} onClick={() => removeImage(n)}>
@@ -532,5 +615,6 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
     onRefKey,
     restore,
     waiting,
+    saved,
   };
 }

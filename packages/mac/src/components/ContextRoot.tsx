@@ -10,6 +10,9 @@ import { type ReactNode, useEffect, useState } from 'react';
  * click, and each right-click opened another on top of it (#467). Here a menu also closes on an
  * outside `mousedown`, a right-click elsewhere, or the window losing focus, as a native menu
  * does; and opening one closes the one before.
+ *
+ * The menus that stayed on Windows were closed, though: they never left the page, because
+ * Radix waited for an exit animation that never came (#505). base.css takes them out at once.
  */
 
 /** What a press can land in without closing the menu: the menu and its submenus. */

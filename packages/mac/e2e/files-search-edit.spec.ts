@@ -80,12 +80,12 @@ test('a file opens read-only; Edit, type, ⌘S saves it; Done with unsaved chang
   await file.getByRole('button', { name: 'Edit', exact: true }).click();
   const area = file.getByRole('textbox', { name: 'Edit README.md' });
   await expect(area).toBeFocused();
-  // The demo project has no Prettier: Format is there, off, and says why.
-  const format = file.getByRole('button', { name: /Prettier isn’t installed/ });
-  await expect(format).toHaveAttribute('aria-disabled', 'true');
+  // The demo project has no Prettier of its own: Format still works, with the one Beluga ships.
+  const format = file.getByRole('button', { name: /^Format with Prettier \d/ });
+  await expect(format).not.toHaveAttribute('aria-disabled', 'true');
   await format.hover();
-  await expect(page.getByRole('tooltip')).toContainText('Prettier isn’t installed in this project');
-  await page.screenshot({ path: info.outputPath('04-format-off.png'), clip: (await file.boundingBox()) ?? undefined });
+  await expect(page.getByRole('tooltip')).toContainText('Format with Prettier');
+  await page.screenshot({ path: info.outputPath('04-format-on.png'), clip: (await file.boundingBox()) ?? undefined });
   await page.mouse.move(0, 0);
   await expect(area).toBeFocused();
   await page.keyboard.press(`${MOD}+ArrowUp`);

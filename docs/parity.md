@@ -409,7 +409,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `workbench.setModel` | ✓ (the composer's agent picker: a model of the same runtime, for this conversation or new ones; the phone's picker since 1.32) |
 | `workbench.setAgent` | ✓ (the agent picker's other runtimes, grouped Claude › Codex › Local model; a runtime this Mac doesn't run is greyed with why; the phone's picker since 1.32) |
 | `workbench.createPr` | ✓ |
-| `workbench.quickPr` | ✓ the toolbar's Create PR (and Create Draft PR under its chevron; in a fork, Create PR on the original too: pushed to the fork, opened on the repository it was forked from), the Changes panel's Create PR. Both lead with the way you last picked (Mac, `lib/pr-way.ts`) |
+| `workbench.quickPr` | ✓ the toolbar's Create PR (and Create Draft PR under its chevron; in a fork, Create PR on the original too: pushed to the fork, opened on the repository it was forked from; on someone's fork's pull request that can't be pushed to, Open Your Own PR), the Changes panel's Create PR. Both lead with the way you last picked (Mac, `lib/pr-way.ts`) |
 | `workbench.mergeToBase` | ✓ the branch control's chevron › Merge into main… (no PR yet, on GitHub): asks first, then lands the branch on origin's base and pushes |
 | `workbench.gitFix` | ✓ the GitHub trouble card that a failed Create PR, Merge or Update Branch opens (Push over HTTPS, Log In to GitHub, Install GitHub CLI, the SSH steps under •••) |
 | `workbench.signInClaude` | ✓ Sign In on a failed Claude card that says Claude Code isn’t signed in or its sign-in expired: a menu of a Claude subscription, an Anthropic Console account (runs `claude auth login --claudeai` or `--console` in a shell, then Claude continues) or a 3rd-party platform (opens its setup page) |
@@ -420,7 +420,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `workbench.refreshPrs` | ✓ |
 | `workbench.mergePr` | ✓ the PR sheet › Merge on GitHub (squash, merge or rebase; Merge When Checks Pass; Merge Now, Skipping Checks), also in the PR strip above the chat. With commits here the PR doesn't have it's Push and Merge: the daemon pushes them first and merges only the head that has them (BLG-840), on the Mac and the phone alike |
 | `workbench.prStep` | ✓ the toolbar's branch state › Update Branch (the PR is behind its base), Mark Ready for Review (a draft) |
-| `workbench.pushPr` | ✓ the toolbar's branch state "N commits not on PR #n" › Push N Commits to PR #n: the worktree has commits its open PR doesn't, so merging would leave them out and GitHub's checks and conflicts are for an older commit (its menu: Push and Merge When Ready; the sidebar row's ↑N chip says the same; phone: the branch band's Push) |
+| `workbench.pushPr` | ✓ the toolbar's branch state "N commits not on PR #n" › Push N Commits to PR #n: the worktree has commits its open PR doesn't, so merging would leave them out and GitHub's checks and conflicts are for an older commit (its menu: Push and Merge When Ready; the sidebar row's ↑N chip says the same; phone: the branch band's Push). Someone's fork's pull request goes to the fork's branch when its author lets maintainers edit it; otherwise the step is Open Your Own PR |
 | `workbench.rerunChecks` | ✓ the toolbar's branch state "Checks failed" › its chevron › Re-run Failed Checks (`gh run rerun --failed`, for a flaky test; phone: the branch band's ••• too) |
 | `workbench.prConversation` | ✓ the PR page (the PR strip's comments count, or the PR sheet's Comments): comments, reviews and threads on lines with their code; a `beluga-pr-comments` block in chat shows them read-only (phone: not yet) |
 | `workbench.prPost` | ✓ the PR page: Reply in a thread, Resolve / Reopen, and a comment on the PR |
@@ -431,8 +431,8 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `workbench.editPrPrompt` | ✓ |
 | `workbench.resetPrPrompt` | ✓ |
 | `workbench.measureDisk` | ✓ |
-| `workbench.checkAgents` | ✓ Check Again on onboarding's Your agents step and in Settings › Agent › Your agents |
-| `workbench.agentSignIn` | ✓ Sign In beside an agent that isn't signed in (onboarding, Settings › Agent) |
+| `workbench.checkAgents` | ✓ Check Again on onboarding's Your agents step and in Settings › Agent › Your agents; Look Again under OpenCode's models in the agent picker, after adding a provider |
+| `workbench.agentSignIn` | ✓ Sign In beside an agent that isn't signed in (onboarding, Settings › Agent); Add a provider under OpenCode's models in the agent picker (DeepSeek, Kimi…) |
 | `workbench.search` | ✓ |
 | `workbench.openHit` | ✓ |
 | `workbench.saveTemplate` | ✓ |
@@ -740,6 +740,11 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `agent.step` | ✓ opening a step on an agent card: Bash's command and output (colours kept), the file read, an edit's diff, a search's matches, a page fetched, an MCP tool's input and output as JSON, the thinking |
 | `view.fetch` | ✓ a live table, chart, stats or code view in a conversation fetching its next page, sorted or searched, or refreshing it (docs/views.md) |
 | `preview.open` | ✓ a live preview in a conversation (Settings › Experimental › Live previews, docs/previews.md) as it scrolls into view, and a component file's Preview in Files: built on this computer, drawn in its frame with props from its types; off, it says so with Turn On… |
+| `apps.get` | ✓ a step of a tool with an MCP App draws the server's page under it in the chat, fed the tool's input and result (only on a Claude Code with the MCP Apps capabilities; without them the step has no app) · phone: the step's one line · a driven computer: its app host's port isn't forwarded yet, so the frame doesn't load there |
+| `apps.call` | ✓ an MCP App calls a tool of its own server (tools/call): a readOnly tool with 'app' visibility runs; any other asks Allow / Allow Always / Decline first (Always: that tool of that server, until Beluga quits); another server's tool or a model-only one is refused · phone: nothing (apps are drawn on the Mac) |
+| `apps.read` | ✓ an MCP App reads a `ui://` resource of its own server (resources/read); other schemes are refused · phone: nothing |
+| `apps.message` | ✓ an MCP App posts a message (ui/message): it asks Allow / Allow Always / Decline first (refused while your Claude works there), then shows in the chat as yours with "Sent by the <tool> app" and starts a turn of your Claude there · phone: the message, "Sent by the <tool> app" |
+| `apps.context` | ✓ an MCP App sets what it tells the model (ui/update-model-context): the latest per app, added to your Claude's next turn in that chat as data, never instructions · phone: nothing |
 | `preview.snapshot` | ✓ a live preview's ••• › Save as Picture (a PNG in the worktree's .beluga/scratch/previews); with a phone paired, each preview's newest picture is kept there too, for the phone to show |
 | `git.fetch` | ✓ Fetch on a project's home (“fetched 3 min ago”, or why it couldn't: sign-in needed, offline) |
 | `git.fetchIfStale` | ✓ opening a project's home fetches quietly when the last fetch is a few minutes old (the daemon also fetches every project every ~15 min, or as Settings › Workspaces › Fetch in the background says: slower, or never) |

@@ -55,9 +55,12 @@ if (last.includes('beluga version')) { process.stdout.write('Beluga 0.9.0\\n'); 
 if (last.endsWith(" up'")) { fs.writeFileSync(${at('running')}, '1'); process.stdout.write('Beluga is running.\\n'); process.exit(0); }
 if (last.includes('pair --computer --json')) {
   if (!fs.existsSync(${at('running')})) { process.stderr.write('Beluga isn’t running here.\\n'); process.exit(1); }
+  fs.writeFileSync(${at('pid')}, String(process.pid));
   process.stdout.write(fs.readFileSync(${at('pair.json')}, 'utf8') + '\\n');
   const told = new Set();
   setInterval(() => {
+    // Its test is done and its folder gone: nothing will end it, so it ends itself (never left behind).
+    if (!fs.existsSync(${JSON.stringify(dir)})) process.exit(0);
     for (const f of ['waiting.json', 'end.json']) {
       const file = require('path').join(${JSON.stringify(dir)}, f);
       if (!told.has(f) && fs.existsSync(file)) { told.add(f); process.stdout.write(fs.readFileSync(file, 'utf8') + '\\n'); if (f === 'end.json') process.exit(0); }
@@ -186,6 +189,34 @@ describe.skipIf(WINDOWS)('adding a computer over SSH', () => {
     expect(app.machines.list()).toEqual([]);
     await waitFor(() => mini.machines.pairStatus().last?.kind === 'declined', 10_000);
     expect(mini.machines.set.holdsIdentity).toBe(true);
+  }, 120_000);
+
+  it('a pairing still open when Beluga quits ends its ssh with it', async () => {
+    const work = mkdtempSync(path.join(os.tmpdir(), 'beluga-fake-ssh-'));
+    cleanup.push(() => rmSync(work, { recursive: true, force: true }));
+    const ssh = fakeSsh(work, { installed: true });
+    const app = await install('MacBook', ssh.bin);
+    const mini = await install('mini');
+    // The computer prints its link and its pictures, and never how the pairing ended.
+    const info = await mini.machines.pairStart();
+    ssh.say('pair.json', { link: info.link, code: info.code, expiresAt: info.expiresAt });
+    const offering = app.machines.sshPairStart('mini');
+    const waiting = await waitFor(() => mini.machines.pairStatus().open?.waiting, 30_000);
+    ssh.say('waiting.json', { waiting: waiting.name, fingerprint: waiting.fingerprint });
+    await offering;
+    const pid = Number(readFileSync(path.join(work, 'pid'), 'utf8'));
+    const alive = (): boolean => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    expect(alive()).toBe(true);
+
+    await app.machines.stop();
+    await waitFor(() => !alive(), 10_000);
   }, 120_000);
 
   it('a host it can’t reach, or one that isn’t a host, says so', async () => {
