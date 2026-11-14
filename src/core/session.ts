@@ -6,7 +6,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isTermBusy } from '../shared/terminal-keys.js';
 import { agentLabel } from '../shared/agent-label.js';
 import { KNOWN_RUNTIMES } from '../shared/agent-runtimes.js';
-import { ASSISTANT_TITLE, isAssistant } from '../shared/assistant.js';
+import { ASSISTANT_TITLE, isAssistant, THIS_COMPUTER } from '../shared/assistant.js';
 import { assistantOf } from './assistant/registry.js';
 import os from 'node:os';
 import path from 'node:path';
@@ -1584,7 +1584,7 @@ export class Session {
     const name = peerName(this.store.getState(), from);
     const wanted = agentName(asked.agent);
     const answered = agentName(by);
-    if (mine) this.system(`Your ${wanted} isn’t set up on this Mac, so your ${answered} answers`, 'warn');
+    if (mine) this.system(`Your ${wanted} isn’t set up on ${THIS_COMPUTER}, so your ${answered} answers`, 'warn');
     else if (body.fallback) this.system(`${name}’s ${wanted} isn’t set up on their Mac, so their ${answered} answers`, 'warn');
     else this.system(`${name}’s Mac can’t pick an agent by name yet (an older Beluga), so their ${answered} answers`, 'warn');
   }

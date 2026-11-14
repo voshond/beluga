@@ -586,32 +586,35 @@ function HomeComposer({ project }: { project: Project }) {
           {/* Where it runs (BLG-786): a worktree, a question or a plan alike. Only with a computer paired. */}
           <RunsOnPicker project={project.id} />
           <span className={s.flex} />
-          {plan ? (
-            <label className={d.field}>
-              <span className={d.fieldLabel}>Runs</span>
-              <Select<Autonomy>
-                className={d.select}
-                size="small"
-                label="How it runs"
-                value={autonomy}
-                onChange={setAutonomy}
-                options={AUTONOMIES.map((a) => ({
-                  value: a,
-                  label: AUTONOMY_INFO[a].label,
-                  description: AUTONOMY_INFO[a].summary,
-                }))}
-              />
-            </label>
-          ) : null}
-          <MicButton box={ref} />
-          {worktree ? (
-            // Create Worktree, and its ▾: the same worktree worked by another agent (BLG-506).
-            <SplitButton label="Create with another agent" caretClassName={cx(d.create, ready && d.createReady)} items={startWith(undefined, (a) => void send(a))}>
-              {createButton}
-            </SplitButton>
-          ) : (
-            createButton
-          )}
+          {/* The actions keep together, on the right, when the bar takes two rows (#527). */}
+          <div className={s.actions}>
+            {plan ? (
+              <label className={d.field}>
+                <span className={d.fieldLabel}>Runs</span>
+                <Select<Autonomy>
+                  className={d.select}
+                  size="small"
+                  label="How it runs"
+                  value={autonomy}
+                  onChange={setAutonomy}
+                  options={AUTONOMIES.map((a) => ({
+                    value: a,
+                    label: AUTONOMY_INFO[a].label,
+                    description: AUTONOMY_INFO[a].summary,
+                  }))}
+                />
+              </label>
+            ) : null}
+            <MicButton box={ref} />
+            {worktree ? (
+              // Create Worktree, and its ▾: the same worktree worked by another agent (BLG-506).
+              <SplitButton label="Create with another agent" caretClassName={cx(d.create, ready && d.createReady)} items={startWith(undefined, (a) => void send(a))}>
+                {createButton}
+              </SplitButton>
+            ) : (
+              createButton
+            )}
+          </div>
         </div>
       </div>
     </section>

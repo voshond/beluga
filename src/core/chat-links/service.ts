@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { parseChatRef } from '../../shared/chat-ref.js';
+import { type ChatRef, parseChatRef } from '../../shared/chat-ref.js';
 import { READS_AFTER_STEP, STEERED_IN } from '../../shared/claude-notices.js';
 import type { ChatChain, ChatTools } from '../../agent/types.js';
 import type { AgentRef, BodyOf, ChatOrigin } from '../../protocol.js';
 import type { LogItem, Store } from '../store.js';
 import { chatAccessOf } from './access.js';
 import { type GuardRefusal, type GuardState, NO_SENDS, checkSend, checkSentOn, renewChain, sentSoFar } from './guard.js';
-import { resolveChat } from './resolve.js';
+import { oneLine } from '../gateway/result.js';
+import { type ResolvedChat, resolveChat } from './resolve.js';
 import { REFUSAL_WORDS, refOf } from './transcript.js';
+import { wakeRefusal } from '../sentinel/wake.js';
 
 /**
  * Agents sending to your own chats: who may send (access.ts), what the target's state means, the
@@ -15,12 +17,31 @@ import { REFUSAL_WORDS, refOf } from './transcript.js';
  * message's request id is its message id, and its card says how it is.
  */
 
-export type SendRefusal = GuardRefusal | 'chat_archived' | 'not_found' | 'chat_loading' | 'terminal_driving' | 'source_not_addressable' | 'offline' | 'mode_wider' | 'not_delivered' | 'chain_stopped' | 'requester_refused' | 'not_addressable' | 'view_only';
+export type SendRefusal = GuardRefusal | 'chat_archived' | 'not_found' | 'chat_loading' | 'terminal_driving' | 'source_not_addressable' | 'offline' | 'mode_wider' | 'not_delivered' | 'chain_stopped' | 'requester_refused' | 'not_addressable' | 'view_only' | 'not_yours' | 'shared_contributor';
 
 /** How a message reached its chat. `readBy`: a steered message's answer comes from that run. */
 export interface Delivered {
   readonly delivery: 'started' | 'queued' | 'steered';
   readonly readBy?: string;
+}
+
+/** A prompt from one of your sentinels, for one of its runs (see deliverFromSentinel). */
+export interface SentinelDelivery {
+  readonly sentinel: { readonly id: string; readonly name: string };
+  /** The sentinel's run: the claude-finished trigger knows the turn came from it (the chain guard). */
+  readonly run: string;
+  /** The step in that run: the same run and step deliver once. */
+  readonly step: string;
+  /** One of your own chats: a ref (`<owner>/<channel>`) or a channel of yours. */
+  readonly channel: string;
+  readonly text: string;
+}
+
+/** What became of a sentinel's prompt: `channel` is where it went. */
+export interface SentinelReceipt {
+  readonly messageId: string;
+  readonly channel: string;
+  readonly delivery: Delivered['delivery'];
 }
 
 export type MessageState = 'queued' | 'working' | 'answered' | 'failed' | 'lost';
@@ -60,6 +81,8 @@ interface SentMessage {
   readonly owner: string;
   readonly target: string;
   readonly title: string;
+  /** A sentinel sent it: there is no chat of its own to hear what became of it. */
+  readonly fromSentinel?: boolean;
   delivered: Delivered;
   lost?: string;
 }
@@ -88,9 +111,12 @@ const WORDS: Readonly<Record<SendRefusal, string>> = {
   pair_rate: 'this chat sent that chat too many messages in a short time.',
   target_rate: 'that chat got too many messages in a short time. Stop sending and end your turn.',
   queue_full: 'too many messages wait at that chat already.',
+  not_yours: 'a sentinel sends only to your own chats, not to a chat another person shared with you.',
+  shared_contributor: 'that chat is shared with a contributor, and a sentinel wakes only a chat that is yours alone.',
 };
 
 const BELUGA_AGENT: AgentRef = { runtime: 'beluga', label: 'Beluga' };
+const SENTINEL_AGENT: AgentRef = { runtime: 'beluga', label: 'Sentinel' };
 
 export class ChatSendService {
   private guard: GuardState = NO_SENDS;
@@ -127,29 +153,14 @@ export class ChatSendService {
     const message = this.sent.get(messageId);
     if (!message) return;
     message.lost = why;
-    this.deps.system(message.source, `A message to “${message.title}” was lost: ${why}`, 'warn');
+    if (!message.fromSentinel) this.deps.system(message.source, `A message to “${message.title}” was lost: ${why}`, 'warn');
   }
 
   private async send(run: SendingRun, refText: string, text: string, opts: Parameters<ChatTools['send']>[2]): Promise<string> {
     const state = this.deps.store.getState();
     const self = this.deps.selfId();
-    const ref = refOf(refText);
-    const parsed = parseChatRef(ref);
-    const access = chatAccessOf(state, { requester: run.requester, ref, action: 'send' });
-    // An archived or removed chat of yours has a clear answer of its own.
-    const chat = parsed && resolveChat(state, parsed);
-    if (!access.allow && !(access.code === 'not_found' && chat?.ownership === 'own')) throw refused(access.code);
-    if (!parsed || !chat) throw refused('not_addressable');
-    // A chat shared with you: its owner's computer decides the rest, with their trust in you.
-    const remote = chat.ownership === 'shared';
-    if (chat.state === 'archived') throw refused('chat_archived');
-    if (chat.state === 'loading') throw refused('chat_loading');
-    // A main checkout is no conversation of its own: its chat if it moved to one, else nowhere to run.
-    const target = remote ? parsed.channel : chat.view?.kind === 'workspace' ? `ws:${chat.view.id}` : chat.view?.kind === 'project' ? undefined : parsed.channel;
-    if (chat.state === 'removed' || !target) throw refused('not_found');
+    const { parsed, chat, remote, target } = this.targetOf(state, run.requester, refText);
     if (!parseChatRef(`${self}/${run.channel}`)) throw refused('source_not_addressable');
-    if (remote && !state.peers.some((p) => p.peerId === parsed.owner)) throw refused('offline');
-    if (!remote && this.deps.terminalDriving(target)) throw refused('terminal_driving');
     if (!remote && this.deps.permissionRank(run.channel) < this.deps.permissionRank(target)) throw refused('mode_wider');
 
     const chain = run.chain();
@@ -209,6 +220,83 @@ export class ChatSendService {
     message.delivered = delivered;
     const note = opts.mode === 'steer' && delivered.delivery !== 'steered' ? 'That chat could not take a steer now, so the message went the normal way.' : undefined;
     return receipt(decision.messageId, this.stateOf(decision.messageId), delivered.delivery, note);
+  }
+
+  /**
+   * A prompt that one of your sentinels sends into one of your own chats (no sending chat, no
+   * tools). The same checks as a send to that chat, and its limits: the sentinel is the source.
+   * A chain starts at each run. A limit refuses it and asks you nothing: the next run tries again.
+   */
+  async deliverFromSentinel(delivery: SentinelDelivery): Promise<SentinelReceipt> {
+    const state = this.deps.store.getState();
+    const self = this.deps.selfId();
+    const { chat, remote, target } = this.targetOf(state, self, delivery.channel.includes('/') ? delivery.channel : `${self}/${delivery.channel}`);
+    if (remote) throw refused('not_yours');
+    // The chat it lands in must be yours alone (a main checkout's moved-to chat too): the sentinel's checks named the ref.
+    if (wakeRefusal(state, target)) throw refused('shared_contributor');
+    const source = `sentinel:${delivery.sentinel.id}`;
+    const chainId = `${source}:${delivery.run}`;
+    if (this.stopped.has(chainId)) throw refused('chain_stopped');
+    const asked = randomUUID();
+    const ask = { requestId: `${delivery.run}:${delivery.step}`, messageId: asked, source, target, chainId, hop: 0, queued: this.deps.queuedFromChats(target), now: this.now() };
+    const { state: guard, decision } = checkSend(this.guard, ask);
+    this.guard = guard;
+    if (!decision.allow) throw refused(decision.code, decision.retryAt);
+    if (decision.repeat) return { messageId: decision.messageId, channel: target, delivery: this.sent.get(decision.messageId)?.delivered.delivery ?? 'queued' };
+
+    this.deps.load(target);
+    const name = oneLine(delivery.sentinel.name, 200);
+    const request: BodyOf<'agent_request'> = {
+      kind: 'agent_request',
+      requestId: decision.messageId,
+      prompt: delivery.text,
+      viaAgent: false,
+      channel: target,
+      urgent: false,
+      plan: state.planMode[target] === true,
+      origin: { ref: `${self}/${source}`, title: name, agent: SENTINEL_AGENT, chainId, hop: decision.hop, messageId: decision.messageId, sentinel: { id: delivery.sentinel.id, name, run: delivery.run } },
+    };
+    const message: SentMessage = { source, owner: self, target, title: chat.title ?? target, fromSentinel: true, delivered: { delivery: 'queued' } };
+    this.keep(decision.messageId, message);
+    const delivered = await this.deps.deliver(request, false);
+    if (!delivered) {
+      this.sent.delete(decision.messageId);
+      throw refused('not_delivered');
+    }
+    message.delivered = delivered;
+    return { messageId: decision.messageId, channel: target, delivery: delivered.delivery };
+  }
+
+  /** A sentinel's prompt, until its turn ends, `ms` pass, or `signal` aborts: its state, and its answer once it ended. */
+  async outcome(messageId: string, ms: number, signal: AbortSignal): Promise<{ readonly state: MessageState; readonly answer?: string }> {
+    const done = (): boolean => signal.aborted || isFinal(this.stateOf(messageId));
+    if (!done()) await this.until(done, ms, signal);
+    const answer = this.answerOf(messageId);
+    return { state: this.stateOf(messageId), ...(answer !== undefined ? { answer } : {}) };
+  }
+
+  /**
+   * Where a message to `refText` goes, or why it can't: the checks on the target that every
+   * delivery shares (who may send, archived, loading, gone, offline, a terminal driving it).
+   */
+  private targetOf(state: ReturnType<ChatSendDeps['store']['getState']>, requester: string, refText: string): { readonly parsed: ChatRef; readonly chat: ResolvedChat; readonly remote: boolean; readonly target: string } {
+    const ref = refOf(refText);
+    const parsed = parseChatRef(ref);
+    const access = chatAccessOf(state, { requester, ref, action: 'send' });
+    // An archived or removed chat of yours has a clear answer of its own.
+    const chat = parsed && resolveChat(state, parsed);
+    if (!access.allow && !(access.code === 'not_found' && chat?.ownership === 'own')) throw refused(access.code);
+    if (!parsed || !chat) throw refused('not_addressable');
+    // A chat shared with you: its owner's computer decides the rest, with their trust in you.
+    const remote = chat.ownership === 'shared';
+    if (chat.state === 'archived') throw refused('chat_archived');
+    if (chat.state === 'loading') throw refused('chat_loading');
+    // A main checkout is no conversation of its own: its chat if it moved to one, else nowhere to run.
+    const target = remote ? parsed.channel : chat.view?.kind === 'workspace' ? `ws:${chat.view.id}` : chat.view?.kind === 'project' ? undefined : parsed.channel;
+    if (chat.state === 'removed' || !target) throw refused('not_found');
+    if (remote && !state.peers.some((p) => p.peerId === parsed.owner)) throw refused('offline');
+    if (!remote && this.deps.terminalDriving(target)) throw refused('terminal_driving');
+    return { parsed, chat, remote, target };
   }
 
   /**

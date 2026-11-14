@@ -39,6 +39,9 @@ export function registerAttachment(file: string, size: number): Attachment {
 
 export const attachment = (n: number): Attachment | undefined => registry.get(n);
 
+/** Every image pasted into a box this session (sent or not): the cleanup never takes one of these. */
+export const pastedThisSession = (): ReadonlySet<string> => new Set([...registry.values()].map((a) => path.resolve(a.path)));
+
 /**
  * An image you linked in a message, waiting again (a queued message pulled back into the box):
  * the number it had while this session still knows it, else a new one for the same file.

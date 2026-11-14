@@ -9,6 +9,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | Command | Core | Mac |
 |---|---|---|
 | `/invite` | the Mac's message boxes route it themselves (`src/shared/invite-route.ts`, `lib/invite-command.ts`); elsewhere `session.submit` → `runCommand` | `/invite` alone: the Add a Friend sheet (link, code, QR) · `/invite @ata` adds ata to what's on screen: a channel (`network.groups.addMember`), a DM (offers “New channel with you, X and Y”, the New Channel sheet), a project or worktree (`sharing.shareWithFriend` once it exists, through `lib/share-with-friend.ts`; until then a friend in your room gets the worktree through the room, otherwise the room's share sheet opens with a note) · `/invite @` completes your friends' names, in the chat box and in a DM's or channel's box · Sidebar footer Invite · File › Invite… · ⌘K › Add a friend… (one entry for inviting and adding a friend) |
+| `/schedule` | the Mac's message box opens the Schedule a Message sheet itself (`chat/ScheduleSheet.tsx`, BLG-400) → `sentinel.create` (one chat step to this chat) then `sentinel.pause` (off: it starts on, you made it); elsewhere `session.submit` → `runCommand` says where it works | `/schedule [prompt]` in a worktree, project or Your Mac chat (chat-schedules experiment, on by default): When (Repeats with the schedule controls, Once at a moment — a `once` trigger —, In N hours — a `once` trigger N hours on) and Prompt; the sentinel has one chat step to this chat (docs/sentinel.md §13) · the chat's Info › Schedules › + |
 | `/overview` | `session.submit` → `runCommand` | typed in the composer · Sidebar › Overview · Go › Overview (⌘1) |
 | `/room` | `session.submit` → `runCommand` | typed in the composer · Sidebar › Channels › Group chat and ⌘K › In this room › Group chat, while someone else is in the room (alone it goes Home: the room's chat is no place of its own, BLG-871) |
 | `/new` | `session.submit` → `runCommand` | typed in the composer · Sidebar project ⌥ button · File › New Worktree… (⌘⇧N) · ⌘K · empty Overview / chat › New Worktree |
@@ -18,7 +19,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `/run` | `session.submit` → `runCommand` | typed in the composer · Toolbar Run (shows the terminal, keeps the keyboard in the message box) · the panel's Terminal tab ▶ · person sheet “Run a command…” |
 | `/terminal` | `session.submit` → `runCommand` | typed in the composer · the right panel's Terminal tab (⌥⌘3) or the drawer under the chat (⌘J, Settings › Terminal picks which) · Go › Terminal (⌘6) |
 | `/setup` | `session.submit` → `runCommand` | typed in the composer · the panel terminal's Commands… |
-| `/handoff` | `session.submit` → `runCommand` | typed in the composer · Toolbar ⋯ › Hand off |
+| `/handoff` | `session.submit` → `runCommand` | typed in the composer · Toolbar ⋯ › Share… › Can take it over · ⌘K “Share So Someone Takes It Over…” (Hand off lives in Share, BLG-967) |
 | `/model` | `session.submit` → `runCommand` | typed in the composer (`/model codex:gpt-5` picks another agent: a live conversation is handed off) · Composer agent picker (runtimes as groups, BLG-446) |
 | `/search` | `session.submit` → `runCommand` | typed in the composer · Sidebar › Search · ⌘⇧F |
 | `/usage` | `session.submit` → `runCommand` | typed in the composer · Sidebar › Usage (⌘5) |
@@ -116,7 +117,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `project` | sheet and right-click menu |
 | `archived` | sheet and right-click menu |
 | `agents` | sheet |
-| `ws_share` | Share sheet: everyone in the room with an access popup (Can work here / Can follow / No access), Invite by Link… |
+| `ws_share` | Share sheet: everyone in the room with an access popup (Can work here / Can follow / No access), Invite by Link…; the add row's What they can do also offers Can take it over for a worktree (what Hand off was, BLG-967; `takeOver` opens on it), and Write a handoff note |
 | `shared` | sheet (Chat / Files / Changes, who's in it, Leave… with an alert; the people button on its toolbar) and right-click menu |
 | `clear` | sheet |
 | `invite_person` | sheet: workspaces with Invite buttons, Work here / Follow |
@@ -126,10 +127,9 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `scripts` | sheet |
 | `toolbox` | sheet |
 | `templates` | sheet |
-| `handoff` | sheet |
 | `remote_ws` | sheet |
 | `ws_more` | sheet |
-| `invite_link` | Invite People sheet (the room's own links: the room popover's Invite, the room panel, Hand Off's “invite someone”; `/invite` and File › Invite… add a friend instead): Invite to popup, They can (Watch / Prompt / Edit), link checkboxes, Copy Invite Link (Return, says Copied), how they join, people waiting, active links with Copy and Revoke |
+| `invite_link` | Invite People sheet (the room's own links: the room popover's Invite, the room panel; `/invite` and File › Invite… add a friend instead): Invite to popup, They can (Watch / Prompt / Edit), link checkboxes, Copy Invite Link (Return, says Copied), how they join, people waiting, active links with Copy and Revoke |
 | `guest_add` | the guest's card: Add ▾ beside the projects they're in |
 
 ## API methods
@@ -206,8 +206,9 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `invites.change` | ✓ |
 | `invites.remove` | ✓ |
 | `remote.requestWorktree` | ✓ |
-| `remote.handoff` | ✓ |
-| `remote.canHandOff` | ✓ the Hand Off sheet, as it opens: who can't take it and why |
+| `remote.handoff` | ✓ the Share sheet's Hand Over (Can take it over) |
+| `remote.canHandOff` | ✓ the Share sheet, when Can take it over and a friend are picked: who can't take it and why |
+| `remote.handoffNote` | ✓ the Share sheet's Write a handoff note: in the chat and as `.beluga/scratch/HANDOFF.md` |
 | `diff.load` | ✓ |
 | `diff.select` | ✓ |
 | `shell.run` | ✓ the search field over a shared workspace's Files (find + grep) |
@@ -453,7 +454,9 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `env.newKeysBack` | ✓ a project's Settings › Worktrees tab › New keys go to the main folder |
 | `env.worktree` | ✓ a worktree's ••• › Environment… (and its row in the project's Settings › Worktrees tab and Environment section): its own variables, with what it gets from below greyed (BLG-924) |
 | `env.setWorktree` | ✓ a worktree's ••• › Environment… |
-| `env.carryWorktree` | ✓ Archive/Delete a worktree with variables of its own: “Carry its variables to the project” (on) |
+| `env.carryWorktree` | ✓ Archive/Delete a worktree with variables of its own: “Carry its variables to the project” (on); Merge: “Keep for the project” |
+| `env.pastedKeys` | ✓ paste text with an API key into the chat box: the key card above it |
+| `env.keepPasted` | ✓ the key card's Keep It Safe |
 | `env.overview` | ✓ the project page's Environment section: names and counts, never a value (BLG-926) |
 | `env.addToExample` | ✓ a project's Environment tab and Environment section, when worktrees don't keep it in step: Add to .env.example / Create .env.example (placeholders, never values; BLG-925) |
 | `env.exampleSync` | ✓ a project's Settings › Worktrees tab › Keep .env.example in step |
@@ -606,6 +609,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `sentinel.moveReceive` | ✓ a sentinel's ⋯ › Move To ▸, on the computer it goes to |
 | `sentinel.moveLand` | ✓ a sentinel's ⋯ › Move To ▸: it lands paused there, its sources checked, what it lacks there said |
 | `sentinel.moveDrop` | ✓ a sentinel's ⋯ › Move To ▸: gone from where it was once the copy is in (or the copy, when the move didn't finish) |
+| `sentinel.forChat` | a chat's Info panel › Schedules (worktree, project and Your Mac chats; behind the chat-schedules experiment, on by default): each sentinel whose chat step wakes it, with its status dot, when it runs, Run Now and an on/off switch; a click opens its page (BLG-399) · the sidebar's chat rows: a clock mark on a chat a sentinel wakes (dimmed when all its schedules are off) · phone: the conversation's ••• › Schedules (the conversation view's `schedules`, 1.57) with Run and Pause / Turn On only (BLG-401) |
 | `sentinel.runs` | ✓ a sentinel's page › History (the dot strip, then the runs as rows); the phone's sentinel page draws the same runs from its `sentinel:<id>` topic |
 | `sentinel.runGet` | ✓ a run's page: the steps' outputs (Show output) and the report; the phone opens a run's report |
 | `sentinel.ask` | ✓ a sentinel's page › the box under its header, "Ask Your Agent to change this sentinel…" (⌘↩; the agent's last line while it works, its answer and Open Chat after) · New Sentinel › Describe It (an empty paused sentinel, then this) |
@@ -871,6 +875,7 @@ The same scenarios run on every runtime (`tests/runtime-conformance.ts`, `npx vi
 | A terminal's clipboard: right-click Copy, Paste, Select All, Clear and Copy on Select (also in Settings › Terminal); Ctrl+Shift+C and V off a Mac; what a program copies with OSC 52 (Claude Code's own copy) goes to the clipboard, reading it never; ⌥-drag selects past a program that takes the mouse (⇧-drag off a Mac) | Mac (`lib/term-clipboard.ts`, `views/term-menu.ts`) |
 | Environment variable editor (masked values, a copy button, paste KEY=value lines, search past ten, Undo after removing; a project's main folder .env loads by default and shows beside its own variables, with yours greyed below, each marked where it comes from, an edit to one overriding it and Use … undoing that, Keep a Copy in Beluga; names .env.example asks for that nothing sets shown empty as needed; a worktree's own variables over everything else) | Mac (Settings › Environment: yours and a list of projects; a project's Settings sheet with General, Environment and Worktrees tabs from the gear on its page, ••• › Project Settings… and Environment…, ⌘K › Project Settings… and its page's Environment pill and section; a worktree's ••• › Environment…: `dialogs/EnvEditor.tsx`, `dialogs/EnvironmentSheet.tsx`, `dialogs/native/ProjectSettingsSheet.tsx`). The phone gets none of it: settings stay the Mac's |
 | A worktree changed a .env the main folder doesn't have: an env bar (its keys as +added ~changed −removed tags) with Copy to Main Folder and Keep Here, in the project page's Environment section and in the worktree; untouched copies follow the main folder's .env on their own; keys a worktree adds or removes reach its own .env.example (BLG-925) | Mac (`views/project/EnvAsks.tsx`, `views/project/EnvSection.tsx`) |
+| A key pasted into the chat box (BLG-965): a card above the box names what it is (OpenAI, Stripe, a key like one of yours…) with the key hidden and an editable `$NAME`; Keep It Safe (↩, and Send while it asks) keeps it as the chat's own variable: the key dissolves and a key chip grows in where it was (the words say `$NAME`), the card says so, then folds away; esc / Leave as Text keeps the words; `$NAME` is a key chip in the box and in sent messages; the box's Keys pill lists the chat's keys (put one in the message, rename it, paste a new key, remove it, Keep for the project, All variables…); "@" offers them first; a new worktree's page holds them until the worktree is made; Merge asks whether the project keeps the chat's variables | Mac (`chat/KeyPasteCard.tsx`, `chat/ChatKeys.tsx`, `chat/MentionHighlighter.tsx`, `dialogs/native/MergeReview.tsx`). The phone's box doesn't look for keys yet |
 | Confirmations as alerts (archive/delete with “Commit & Archive”, an env-changes table, and boxes to carry a worktree's own variables to the project, copy its .env changes, and also remove keys it took out; clear, agent worktrees, hide project, leave a shared workspace), each with Cancel | Mac (`dialogs/native/*Alert.tsx`, `components/Alert.tsx`) |
 | Inviting, people and sharing as sheets and cards: the Invite People sheet (Invite to popup, Watch / Prompt / Edit, Copy Invite Link with “Copied”, people waiting, active links with Copy and Revoke), a person's card beside their row (trust as a segmented control, Message / Ask Your Agent / Run / Follow / Files, usage meters, Remove with an alert), your account card (rename in place, who may use your agent), a right-click Trust ▸ submenu, the Share sheet for a workspace (an access popup per person), Share a Folder (Open panel, your projects, only some people, the agent may edit, Stop Sharing), the room's card from the sidebar's status | Mac (`dialogs/native/InviteSheet.tsx`, `PersonPopover.tsx`, `PersonCards.tsx`, `PersonMenu.tsx`, `WorkspaceShare.tsx`, `ShareFolderSheet.tsx`, `SharedSheet.tsx`, `RoomPopover.tsx`) |
 | Addressing a message with a chip (“To bob”, “To bob's agent”, “To your agent”) | Mac (`MacUi.to`, the composer) |

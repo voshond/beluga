@@ -70,6 +70,14 @@ describe('a conversation’s signal: needs you > unread > working > idle', () =>
     expect(signalOf(cc, 'ws:hooks', 'hooks').level).toBe('working');
   });
 
+  it('is working while a thread under it works, and idle once its threads are done', () => {
+    const child = ws({ id: 'kid', name: 'kid', kind: 'chat', projectId: 'chats', thread: { parent: 'ws:q', parentTitle: 'How do deploys work?', root: 'ws:q', depth: 1, task: 't', startedAt: 1, owed: [] } });
+    const s = apply(base(), { type: 'projects', projects: [{ ...chats, workspaces: [...chats.workspaces, child] }, api, site] }, overview);
+    const busy = apply(s, run('started', 'ws:kid'));
+    expect(signalOf(busy, 'ws:q')).toMatchObject({ level: 'working', working: true });
+    expect(signalOf(apply(busy, run('done', 'ws:kid')), 'ws:q').working).toBe(false);
+  });
+
   it('is unread once Claude finished elsewhere, and says so', () => {
     const s = apply(base(), view('auth'), run('started'), overview, run('done'));
     expect(signalOf(s, 'ws:auth', 'auth')).toMatchObject({ level: 'unread', unread: 1, tip: 'Your agent finished · 1 new message' });

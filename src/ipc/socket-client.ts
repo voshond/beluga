@@ -2,7 +2,7 @@ import { ClientStore, type DomainSource } from '../client/client-store.js';
 import type { Intent } from '../core/intents.js';
 import { type Action, type DomainState, reduceDomain } from '../core/store.js';
 import type { PtyExit } from '../terminal/pty-host.js';
-import type { PtyLink } from '../terminal/emulator.js';
+import type { AttachOptions, PtyLink } from '../terminal/emulator.js';
 import type { Args, Method } from './api.js';
 import { type ApiProxy, type ClientKind, type BelugaClient, type HelloKind, type PhoneMirror, type PhoneMirrorStatus, type PhoneTouchData, type PhoneVideoPiece, apiProxy, toastsFailure } from './client.js';
 import type { Result } from './handlers.js';
@@ -97,6 +97,10 @@ class SocketTerm implements PtyLink {
 
   resize(cols: number, rows: number): void {
     this.sendFrame({ t: 'term_resize', term: this.key, cols, rows });
+  }
+
+  ack(chars: number): void {
+    if (chars > 0) this.sendFrame({ t: 'term_ack', term: this.key, chars });
   }
 
   onData(listener: (data: string) => void): () => void {
@@ -299,13 +303,13 @@ export class SocketClient implements BelugaClient {
     return () => void this.closeListeners.delete(listener);
   }
 
-  attachTerminal(key: string): PtyLink {
+  attachTerminal(key: string, opts: AttachOptions = {}): PtyLink {
     this.terms.get(key)?.close();
     const term = new SocketTerm(key, (f) => this.send(f), () => {
       if (this.terms.get(key) === term) this.terms.delete(key);
     });
     this.terms.set(key, term);
-    this.send({ t: 'term_attach', term: key });
+    this.send({ t: 'term_attach', term: key, ...(opts.flow ? { flow: true } : {}) });
     return term;
   }
 

@@ -278,6 +278,10 @@
   color: var(--text-3);
   font-size: 0.86rem;
 }
+.addNote {
+  margin: 10px 2px 2px;
+  font-size: 0.92rem;
+}
 .addNone {
   padding: 2px 2px 4px;
   color: var(--text-3);

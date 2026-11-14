@@ -1,3 +1,4 @@
+import { THIS_COMPUTER } from './assistant.js';
 /**
  * The runtimes an agent picker shows (BLG-446), whether this Mac runs them or not: one this Mac
  * can't run yet stays in the list, greyed, saying what's missing, instead of disappearing.
@@ -35,10 +36,10 @@ export type RuntimeState = 'ready' | 'signed_out' | 'missing' | 'no_endpoint';
 
 /** Every runtime Beluga knows of, in picker order, with what's missing when it isn't set up. */
 export const KNOWN_RUNTIMES: ReadonlyArray<{ readonly id: string; readonly label: string; readonly missing: string }> = [
-  { id: 'claude', label: 'Claude', missing: "Claude Code isn't signed in on this Mac" },
-  { id: 'codex', label: 'Codex', missing: "Codex isn't set up on this Mac yet" },
-  { id: 'opencode', label: 'OpenCode', missing: "OpenCode isn't set up on this Mac yet" },
-  { id: 'copilot', label: 'Copilot', missing: "GitHub Copilot CLI isn't set up on this Mac yet" },
+  { id: 'claude', label: 'Claude', missing: `Claude Code isn't signed in on ${THIS_COMPUTER}` },
+  { id: 'codex', label: 'Codex', missing: `Codex isn't set up on ${THIS_COMPUTER} yet` },
+  { id: 'opencode', label: 'OpenCode', missing: `OpenCode isn't set up on ${THIS_COMPUTER} yet` },
+  { id: 'copilot', label: 'Copilot', missing: `GitHub Copilot CLI isn't set up on ${THIS_COMPUTER} yet` },
   { id: 'local', label: 'Local model', missing: 'No local model endpoint is set' },
 ];
 

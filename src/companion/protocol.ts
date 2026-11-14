@@ -9,7 +9,7 @@ import { z } from 'zod';
  * ignores what it doesn't know. A breaking change bumps the major, and the Mac keeps answering the
  * previous major for a release.
  */
-export const COMPANION_PROTO = { major: 1, minor: 59 } as const;
+export const COMPANION_PROTO = { major: 1, minor: 60 } as const;
 
 /**
  * What came in which minor, for a phone talking to an older Mac: it subscribes to a topic (and
@@ -158,8 +158,10 @@ export const COMPANION_PROTO = { major: 1, minor: 59 } as const;
  * Mac sidebar's green dot. An older Mac sends none; an older phone shows none.
  * 1.59 (BLG-952, upstream's 1.56): a task held for its checks says so (`TaskSummary.needsChecks`): how many criteria are
  * neither ticked nor explained, and whether its work already merged. An older Mac sends none; an older phone shows none.
+ * 1.60 (BLG-401, upstream's 1.57): `ConvView.schedules`, `TurnView.origin.sentinel`, `queue[].origin.sentinel`: a chat's
+ * schedules (Run and Pause only), and a message one of your sentinels sent says so.
  */
-export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36, reactions: 41, cancelSteer: 47, triage: 48, draftReview: 49, threads: 50, threadAgents: 50, seen: 51, computers: 52, externalAgents: 53, chatLinks: 55, chatOrigin: 56, queuedOrigin: 57, sharedMark: 58 } as const;
+export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36, reactions: 41, cancelSteer: 47, triage: 48, draftReview: 49, threads: 50, threadAgents: 50, seen: 51, computers: 52, externalAgents: 53, chatLinks: 55, chatOrigin: 56, queuedOrigin: 57, sharedMark: 58, chatSchedules: 60 } as const;
 
 /** One frame's biggest payload, and a file piece. */
 export const MAX_COMPANION_FRAME = 1024 * 1024;
@@ -459,7 +461,8 @@ export const TurnView = z.object({
    * 1.45 (BLG-149): the agent in another chat, not you, asked for this turn: its chat's ref and
    * title, the agent, and its words. Drawn above the turn as a card, never as your message.
    */
-  origin: z.object({ ref: z.string().max(400), title: z.string().max(200), agent: z.string().max(64), prose: ProseView }).optional(),
+  /** `sentinel`: one of your sentinels sent it (its name); the card says "From Sentinel <name>". An older phone shows the title. */
+  origin: z.object({ ref: z.string().max(400), title: z.string().max(200), agent: z.string().max(64), sentinel: z.string().max(200).optional(), prose: ProseView }).optional(),
   /** 1.3: what it's doing now (a running turn), and its steps in words with their tools, newest last. */
   live: LiveView.optional(),
   trail: z.array(StepView).max(40).optional(),
@@ -716,7 +719,7 @@ export const ConvView = z.object({
         text: z.string().max(300),
         waiting: z.string().max(300).optional(),
         /** 1.46: an agent in another chat sent it, not you: its chat's ref and title, and the agent. */
-        origin: z.object({ ref: z.string().max(400), title: z.string().max(200), agent: z.string().max(64) }).optional(),
+        origin: z.object({ ref: z.string().max(400), title: z.string().max(200), agent: z.string().max(64), sentinel: z.string().max(200).optional() }).optional(),
       }),
     )
     .max(20)
@@ -742,6 +745,12 @@ export const ConvView = z.object({
   terminal: z.object({ label: z.string().max(80) }).optional(),
   /** 1.41 (BLG-702): your quick reactions, for a reactable turn's long-press (the room's or a workspace's chat). */
   quick: z.array(z.string().min(1).max(32)).max(8).optional(),
+  /**
+   * 1.60 (BLG-401, upstream's 1.57): the sentinels that send into this chat on a schedule (chat-schedules experiment):
+   * its name, when it runs in words, its next time, whether it's off or running. The phone runs
+   * (sentinel.run) and pauses or turns on (sentinel.pause) one; it never makes or changes one.
+   */
+  schedules: z.array(z.object({ id, name: z.string().max(200), sentence: z.string().max(200), nextAt: z.number().optional(), paused: z.boolean(), running: z.boolean() })).max(20).optional(),
 });
 export type ConvView = z.infer<typeof ConvView>;
 

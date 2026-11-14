@@ -1,11 +1,17 @@
 /**
- * Experimental features (Settings › Experimental): early work that's off until you turn it on.
- * One list for the daemon (what Claude is told, what the API allows) and the screens (the pane
+ * Experimental features (Settings › Experimental): early work that's off until you turn it on,
+ * except the ones in DEFAULT_ON, which are on until you turn them off. One list for the daemon (what Claude is told, what the API allows) and the screens (the pane
  * that explains each one). Browser-safe: data only.
  */
 
-export const EXPERIMENTS = ['previews', 'routing'] as const;
+export const EXPERIMENTS = ['previews', 'routing', 'chat-schedules'] as const;
 export type Experiment = (typeof EXPERIMENTS)[number];
+
+/** Experiments that are on by default: the switch stays, as an off switch. */
+export const DEFAULT_ON: readonly Experiment[] = ['chat-schedules'];
+
+/** How the list says "off" for an experiment that is on by default ("-chat-schedules"). */
+const offMark = (id: Experiment): string => `-${id}`;
 
 export interface ExperimentInfo {
   readonly id: Experiment;
@@ -48,15 +54,37 @@ export const EXPERIMENT_INFO: Readonly<Record<Experiment, ExperimentInfo>> = {
     keywords: 'model routing orchestrator auto model haiku sonnet opus subagents cost workers',
     cost: 'Nothing extra runs on this computer: the same Claude Code or Codex runs the helpers. Most of the work moves to smaller models, so a task usually uses less of your plan, though a big task’s orchestrator runs on the most capable model.',
   },
+  'chat-schedules': {
+    id: 'chat-schedules',
+    title: 'Chat schedules',
+    summary: 'Let a sentinel send a prompt into one of your own chats on a schedule, or once at a time you pick.',
+    changes: [
+      'A sentinel can have a chat step: it sends your prompt into one of your chats, waits for the answer and keeps its first line in the run.',
+      'The message in the chat says which sentinel sent it.',
+      'Only your own chats: a chat shared with a contributor is refused, and the sentinel pauses with the reason.',
+    ],
+    keywords: 'schedule chat prompt every day later once remind wake sentinel',
+    cost: 'Each run starts a turn of your agent, so it uses your subscription as if you sent the prompt yourself. While this is off no chat step runs.',
+  },
 };
 
-/** Whether an experiment is on in a list of enabled ones (unknown ids from a newer Beluga are kept, never on). */
+/**
+ * Whether an experiment is on in the saved list (unknown ids from a newer Beluga are kept, never on).
+ * One that is on by default is on unless the list has its off mark.
+ */
 export function experimentOn(enabled: readonly string[] | undefined, id: Experiment): boolean {
+  if (DEFAULT_ON.includes(id)) return !enabled?.includes(offMark(id));
   return Boolean(enabled?.includes(id));
+}
+
+/** A live check of one experiment, for the daemon to hand to the code it gates (reads the prefs at each call). */
+export function experimentGate(enabled: () => readonly string[] | undefined, id: Experiment): () => boolean {
+  return () => experimentOn(enabled(), id);
 }
 
 /** The list with `id` turned on or off (a new list; order kept). */
 export function withExperiment(enabled: readonly string[], id: Experiment, on: boolean): string[] {
-  const rest = enabled.filter((e) => e !== id);
+  const rest = enabled.filter((e) => e !== id && e !== offMark(id));
+  if (DEFAULT_ON.includes(id)) return on ? rest : [...rest, offMark(id)];
   return on ? [...rest, id] : rest;
 }

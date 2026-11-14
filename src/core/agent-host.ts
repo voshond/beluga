@@ -39,7 +39,7 @@ import { explainTaskMentions } from '../shared/task-refs.js';
 import { HostChatLinks, type RunChain } from './chat-links/host.js';
 import type { ChatSendService, Delivered } from './chat-links/service.js';
 import { explainWorktreeRefs } from '../shared/worktree-refs.js';
-import { ASSISTANT_TITLE, isAssistant } from '../shared/assistant.js';
+import { ASSISTANT_TITLE, isAssistant, YOUR_COMPUTER } from '../shared/assistant.js';
 import { type SlotWait, clampParallelRuns } from '../shared/run-slots.js';
 import { fallbackFor } from '../shared/runtime-fallbacks.js';
 import { agentForAsk } from './gateway/serve.js';
@@ -290,6 +290,12 @@ function withoutAskOnly<T extends { readonly askOnly?: unknown }>(place: T): T {
 
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/** The names of a chat's own variables (keys pasted into it, BLG-965), for its run's instructions. */
+function chatVarsOf(byWorktree: Readonly<Record<string, readonly string[]>> | undefined, channel: string): { chatVars?: readonly string[] } {
+  const names = channel.startsWith('ws:') ? byWorktree?.[channel.slice(3)] : undefined;
+  return names?.length ? { chatVars: names } : {};
+}
 
 /** Who a Chrome card says wants your Chrome (agent/chrome.ts). */
 function chromeAsker(own: boolean, external: string | undefined, requesterName: string, sentinelRun: boolean | undefined): string {
@@ -1712,6 +1718,8 @@ export class AgentHost {
         ...(yours ? this.machineBrief() : {}),
         // Your variables can hold secrets: only runs you asked for get them, never a friend's.
         // Your own runs also get adb on PATH (and ANDROID_SERIAL) when a phone is set up, so Bash can drive it (BLG-174).
+        // Keys pasted into this chat and kept out of it (BLG-965): Claude is told their names (the values are in env).
+        ...(yours ? chatVarsOf(this.store.getState().envKeys.worktrees, body.channel) : {}),
         ...(yours && (this.deps.envFor || phone?.env) ? { env: { ...this.deps.envFor?.(body.channel, place?.cwd), ...(phone?.env ?? {}), ...tag } } : worktree || remote ? { env: tag } : {}),
         ...this.compactor.threshold(),
       }))]);
@@ -1999,7 +2007,7 @@ export class AgentHost {
     // A file that runs code later (a git hook, npm scripts…; BLG-413): asked each time, once, whatever was allowed before.
     if (!asOwner && writesCode(toolName, input, cwd ?? process.cwd())) {
       const file = String(input.file_path ?? input.notebook_path);
-      const answer = await this.askTool(requester, `${wants} change ${path.basename(file)}, a file that can run commands on your Mac`, file, channel, { once: true });
+      const answer = await this.askTool(requester, `${wants} change ${path.basename(file)}, a file that can run commands on ${YOUR_COMPUTER}`, file, channel, { once: true });
       return answer !== 'no';
     }
     // Invited by link to edit this project: as if you prompted, inside its folder (secrets were already refused).

@@ -210,6 +210,9 @@
   outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
   outline-offset: 1px;
 }
+.checkOff .box {
+  opacity: 0.55;
+}
 .checkText {
   display: flex;
   flex-direction: column;

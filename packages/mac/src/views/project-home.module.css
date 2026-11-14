@@ -108,7 +108,27 @@ button.stat:disabled {
   margin: 0;
   font-size: 1.08rem;
   font-weight: 600;
-  min-width: 14rem;
+  min-width: min(14rem, 100%);
+}
+/*
+ * A narrow page (the window at its narrowest, a wide right panel beside it): the way to start gets
+ * its own full line under the question, the tabs share it out; narrower still, the tabs drop their
+ * icons and keep their words (#527).
+ */
+@container (max-width: 600px) {
+  .composerHead > [role='tablist'] {
+    flex: 1 1 100%;
+  }
+  .composerHead [role='tab'] {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: 0 8px;
+  }
+}
+@container (max-width: 380px) {
+  .composerHead [role='tab'] > svg {
+    display: none;
+  }
 }
 .box {
   position: relative;
@@ -172,6 +192,7 @@ button.stat:disabled {
 }
 .bar > label,
 .bar > span,
+.actions > label,
 .bar button {
   flex-shrink: 0;
   white-space: nowrap;
@@ -194,17 +215,36 @@ button.stat:disabled {
 .bar > :last-child {
   margin-left: auto;
 }
+/* Runs (a plan's), the mic and the box's button: one group, so they wrap together and stay on the right. */
+.actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px 12px;
+}
 /* A narrow page: the fields' words step aside (each says what it is in its tooltip and placeholder). */
 @container (max-width: 760px) {
   .bar > label > span:first-child,
+  .actions > label > span:first-child,
   .bar [data-runs-on-words] {
     display: none;
   }
 }
-/* Too narrow for one line: the button goes under the fields, still on the right. */
+/* Too narrow for one line: two rows, the fields on top and the actions (the mic, the button) under them on the right (#527). */
 @container (max-width: 520px) {
   .bar {
     flex-wrap: wrap;
+  }
+  .bar > .flex {
+    flex-basis: 100%;
+    height: 0;
+    margin-top: -6px;
+  }
+  .actions {
+    flex-shrink: 1;
+    min-width: 0;
   }
 }
 

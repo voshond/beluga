@@ -108,6 +108,24 @@ export function buildMachineAppend(note: string): string {
   return ['', '', 'About this machine, from its owner (true for this computer; use what it allows when the work needs it):', '<machine_context>', note.trim(), '</machine_context>'].join('\n');
 }
 
+/**
+ * Variables kept for this chat alone (BLG-965): keys the owner pasted, which Beluga kept out of the
+ * chat (their message says `$NAME` where the key was). They are in the environment of every command.
+ */
+export function buildChatVarsAppend(names: readonly string[]): string {
+  if (!names.length) return '';
+  const list = names.slice(0, 20).map((n) => `$${n}`).join(', ');
+  return [
+    '',
+    `Variables kept for this chat: ${list}. When a message says $NAME where a key would be, the owner pasted that key and`,
+    'Beluga kept it out of the chat: it is already in the environment of every command you run here, so use it by name',
+    '(curl -H "Authorization: Bearer $NAME", process.env.NAME, os.environ["NAME"]). Never print, echo, log or write its',
+    'value into a file, a commit or your answer; to check it is set, test it (e.g. [ -n "$NAME" ]). Code that needs it',
+    'reads it from the environment, and a project with a .env.example lists its name there (Beluga already added it).',
+    'Archiving or merging this worktree asks the owner whether the project keeps these variables.',
+  ].join('\n');
+}
+
 /** A workspace's scratch folder: where screenshots and intermediate output go (shown live to the owner). */
 export function buildScratchAppend(dir: string): string {
   return [

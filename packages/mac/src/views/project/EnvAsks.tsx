@@ -9,6 +9,7 @@ import { useApi, useApp, useBeluga } from '../../lib/beluga.js';
 import { openSheet } from '../../lib/sheets.js';
 import { sameDeep } from '../../lib/stable.js';
 import s from './env-asks.module.css';
+import { thisComputer } from '../../lib/os-words.js';
 
 const NONE: readonly EnvChange[] = [];
 const NO_SENDS: readonly EnvSendAsk[] = [];
@@ -34,7 +35,7 @@ function EnvSendRow({ ask }: { ask: EnvSendAsk }) {
           <code key={f}>{f}</code>
         ))}
         for {ask.projectName}
-        <span className={s.detail}> · send this Mac’s?</span>
+        <span className={s.detail}> · send {thisComputer()}’s?</span>
       </span>
       <Tip label="Sent over your encrypted link and kept only you can read it there; asked again next time">
         <Button size="small" disabled={busy} onClick={() => decide('once')}>

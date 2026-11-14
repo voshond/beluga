@@ -6,8 +6,9 @@ import { endpointClaudeHome, prepareEndpointHome, type EndpointHome } from './en
 import { tokensPerSecond } from '../../shared/local-endpoints.js';
 import type { AgentRuntime } from './types.js';
 import type { BtwRequest } from '../btw.js';
+import { THIS_COMPUTER } from '../../shared/assistant.js';
 
-const GONE = "That local model isn't set up on this Mac any more. Pick another in Settings › Local models.";
+const GONE = `That local model isn't set up on ${THIS_COMPUTER} any more. Pick another in Settings › Local models.`;
 
 /** The endpoint a picked model value names (core/local-endpoints.ts resolves it). */
 export interface LocalTarget {

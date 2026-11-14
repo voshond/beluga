@@ -2,6 +2,7 @@ import type { DomainState } from './store.js';
 import type { PrCheck, PullRequest } from './work-store.js';
 import type { ForkOf } from '../workspaces/github.js';
 import type { Workspace } from '../workspaces/types.js';
+import { THIS_COMPUTER } from '../shared/assistant.js';
 
 /**
  * Where a worktree's branch stands, in one word you can see at the top (Merged, Ready to merge,
@@ -324,7 +325,7 @@ export function branchState(state: Pick<DomainState, 'projects' | 'gh' | 'prs' |
   const ahead = st?.ahead ?? 0;
   const ship: BranchStep | false = !planned && (github
     ? { id: 'pr', label: 'Create PR', hint: `${changed ? 'Commits what’s left, pushes' : 'Pushes'} ${ws.branch} and opens a pull request into ${into}, titled from its commits` }
-    : { id: 'merge', label: `Merge into ${into}…`, hint: `Shows what would merge into ${into} on this Mac and checks it first` });
+    : { id: 'merge', label: `Merge into ${into}…`, hint: `Shows what would merge into ${into} on ${THIS_COMPUTER} and checks it first` });
   // Create PR's other ways, under its chevron.
   const prWays: BranchStep[] =
     !planned && github

@@ -93,7 +93,7 @@ function useOverlays() {
       case 'templates':
         return ui.openMenu({ kind: 'templates' });
       case 'handoff':
-        if (wsId) ui.openMenu({ kind: 'handoff', id: wsId });
+        if (wsId) ui.openMenu({ kind: 'ws_share', id: wsId, takeOver: true });
         return;
       case 'welcome':
         return ui.openMenu({ kind: 'welcome' });

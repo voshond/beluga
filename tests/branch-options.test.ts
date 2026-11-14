@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { THIS_COMPUTER } from '../src/shared/assistant.js';
 import { branchOptions } from '../packages/mac/src/chat/branch-options.js';
 import { filterEntries } from '../packages/mac/src/components/select-model.js';
 
@@ -27,7 +28,7 @@ describe('branchOptions', () => {
         ],
       },
       {
-        section: 'On this Mac',
+        section: `On ${THIS_COMPUTER}`,
         options: [
           { value: 'main', label: 'main' },
           { value: 'feat/x', label: 'feat/x' },

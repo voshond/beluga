@@ -101,7 +101,7 @@ describe('planning finds the repos near it (BLG-28, BLG-30)', () => {
     expect(draft.repoChanges).toEqual([{ repo: 'cal', change: 'add', why: 'DELETE /documents/:id returns 409', by: 'claude' }]);
     expect(draft.milestones[0]!.repos).toEqual(['cal']);
     expect(proposedRepos(t.plans.need(t.plan.id))).toEqual(['api', 'cal']);
-    expect(() => tools.update([{ op: 'repo', repo: 'friends-api', on: true, why: 'x' }])).toThrow(/isn’t a project on this Mac \(near this plan: whisper-api, unit-frames\)/);
+    expect(() => tools.update([{ op: 'repo', repo: 'friends-api', on: true, why: 'x' }])).toThrow(/isn’t a project on this (?:Mac|PC|computer) \(near this plan: whisper-api, unit-frames\)/);
     const view = PlanView.parse(planPageView(t.store.getState(), t.plan.id));
     expect(view.repos).toEqual(['calendar-desktop', 'calendar-api']);
     expect(view.repoChanges).toEqual([{ name: 'calendar-api', change: 'add', by: 'claude', why: 'DELETE /documents/:id returns 409' }]);

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PendingQuestion } from '@beluga/core/collab-store.js';
 import { channelOf } from '@beluga/core/store.js';
+import { placeName } from '@beluga/core/notify.js';
 import { currentQuestion } from '@beluga/ui/collab-actions.js';
 import { isDecisionQid } from '@beluga/core/plans/decisions.js';
 import { isRunCard } from '@beluga/core/run-ask.js';
@@ -12,12 +13,14 @@ import { useActions } from '../lib/actions.js';
 import { useApi, useApp, useBeluga, useUi } from '../lib/beluga.js';
 import { agentName } from '../lib/agent-words.js';
 import { brandText } from '../lib/brand.js';
+import { macNoticeTarget, openNoticeTarget } from '../lib/notices.js';
 import { sameDeep, sameFields } from '../lib/stable.js';
 import { hostToBefriend } from '../network/net-model.js';
 import { befriend } from '../network/use-net.js';
 import { Markdown } from './Markdown.js';
 import { RunAsk, useRunStarted } from './RunAsk.js';
 import { useNow } from './Items.js';
+import { approvalsHere, waitingElsewhere } from './waiting-here.js';
 import s from './attention.module.css';
 
 /**
@@ -31,6 +34,7 @@ export function Attention({ channel }: { channel?: string } = {}) {
     <div className={s.stack}>
       <Approvals {...(channel ? { channel } : {})} />
       <Question {...(channel ? { channel } : {})} />
+      {channel ? null : <Elsewhere />}
       {inRoom ? <Knock /> : null}
       {inRoom ? <BefriendHost /> : null}
       {inRoom ? <TrustPrompt /> : null}
@@ -39,13 +43,16 @@ export function Attention({ channel }: { channel?: string } = {}) {
 }
 
 /**
- * `channel`: in a friends' chat (BLG-207), only what holds up your Claude there; a friend's request
- * is answered on its card in the chat instead.
+ * Only what this conversation asked (BLG-966): another chat's approval is answered in that chat
+ * (Elsewhere below takes you there). `channel`: in a friends' chat (BLG-207), only what holds up
+ * your Claude there; a friend's request is answered on its card in the chat instead.
  */
 function Approvals({ channel }: { channel?: string }) {
   const api = useApi();
   const all = useApp((st) => st.approvals);
-  const approvals = useMemo(() => (channel ? all.filter((a) => a.channel === channel && !a.task) : all), [all, channel]);
+  const view = useApp((st) => st.view);
+  const opens = useOpens();
+  const approvals = useMemo(() => (channel ? all.filter((a) => a.channel === channel && !a.task) : approvalsHere(all, channelOf(view), opens)), [all, channel, view, opens]);
   const first = approvals[0];
   const now = useNow(Boolean(first?.askedAt));
   const [showAll, setShowAll] = useState(false);
@@ -144,8 +151,8 @@ function Question({ channel }: { channel?: string }) {
   const { ui } = useBeluga();
   // Only the question shown and who asked, so other events don't draw the card again.
   const { q, owner, agent, selfId } = useApp((st) => {
-    const first = st.questions[0];
-    const q = channel ? st.questions.find((x) => x.channel === channel) : first?.channel === channelOf(st.view) ? first : undefined;
+    const here = channel ?? channelOf(st.view);
+    const q = st.questions.find((x) => x.channel === here);
     const peer = q ? st.peers.find((p) => p.peerId === q.owner) : undefined;
     return { q, owner: peer?.name, agent: agentName(peer ? defaultAgentOf(peer) : defaultAgentOf(st.self)), selfId: st.selfId };
   }, sameFields);
@@ -244,6 +251,46 @@ function QuestionOptions({ q, current, chosen }: QuestionOptionsProps) {
         <div className={s.hint}>Pick one, or type your own answer below.</div>
       )}
     </>
+  );
+}
+
+/** Whether a conversation can be opened in this window (one that can't is answered wherever you are). */
+function useOpens(): (channel: string) => boolean {
+  const places = useApp((st) => ({ projects: st.projects, shared: st.shared, network: st.network, plans: st.plans, board: st.board, prefs: st.prefs }), sameFields);
+  return useMemo(() => (channel: string) => Boolean(macNoticeTarget(places, channel)), [places]);
+}
+
+/**
+ * Another chat waits for you (an approval, a question, a plan): one line that names it and takes
+ * you there, where you answer it. Never its Allow / Deny here, in a conversation it isn't about.
+ */
+function Elsewhere() {
+  const { client } = useBeluga();
+  const actions = useActions();
+  const opens = useOpens();
+  const { first, place, more } = useApp((st) => {
+    const chats = waitingElsewhere(st.approvals, st.questions, channelOf(st.view), opens);
+    const first = chats[0];
+    return { first, place: first ? placeName(st, first) : undefined, more: Math.max(0, chats.length - 1) };
+  }, sameFields);
+  if (!first || !place) return null;
+  const open = (): void => {
+    const st = client.store.getState();
+    const target = macNoticeTarget(st, first);
+    if (target) openNoticeTarget(actions, target, (id) => client.store.dispatch({ type: 'view', view: { kind: 'conversation', id } }));
+  };
+  // The place as it's named ("webhook-retries", "your chat with Mia"): never capitalized, so it isn't first.
+  return (
+    <div className={s.elsewhere} role="status" data-testid="waiting-elsewhere">
+      <Dot tone="warn" />
+      <span className={s.elsewhereText}>
+        Waiting for you in <strong>{place}</strong>
+        {more ? ` and ${more} other ${more === 1 ? 'chat' : 'chats'}` : ''}
+      </span>
+      <Button size="small" onClick={open}>
+        Open Chat
+      </Button>
+    </div>
   );
 }
 

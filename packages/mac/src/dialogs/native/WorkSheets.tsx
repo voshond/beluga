@@ -5,6 +5,7 @@ import { ProjectAgentSheet } from '../ProjectAgentSheet.js';
 import { NewTaskSheet } from '../../tasks/NewTaskSheet.js';
 import { BoardSheet } from '../../tasks/boards.js';
 import { NewSentinelSheet } from '../../sentinel/NewSentinelSheet.js';
+import { ScheduleSheet } from '../../chat/ScheduleSheet.js';
 import { AddTileSheet } from '../../sentinel/AddTileSheet.js';
 import { DocumentSheet } from '../../sentinel/DocumentSheet.js';
 import { DataSheet } from '../../sentinel/DataSheet.js';
@@ -214,6 +215,8 @@ export function NativeSheets() {
       return <NewPlanSheet {...(sheet.projectId ? { projectId: sheet.projectId } : {})} {...(sheet.projectIds ? { projectIds: sheet.projectIds } : {})} close={close} />;
     case 'new_sentinel':
       return <NewSentinelSheet {...(sheet.projectId ? { projectId: sheet.projectId } : {})} {...(sheet.way ? { way: sheet.way } : {})} close={close} />;
+    case 'schedule':
+      return <ScheduleSheet channel={sheet.channel} {...(sheet.prompt ? { prompt: sheet.prompt } : {})} close={close} />;
     case 'add_tile':
       return <AddTileSheet key={sheet.dashboardId} dashboardId={sheet.dashboardId} close={close} />;
     case 'sentinel_data':

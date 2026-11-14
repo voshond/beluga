@@ -1,5 +1,6 @@
 import type { IconName } from '../components/Icon.js';
-import { trayName } from '../lib/os-words.js';
+import { ASSISTANT_TITLE } from '../../../../src/shared/assistant.js';
+import { thisComputer, trayName, upFirst } from '../lib/os-words.js';
 import type { PaneInfo, SettingEntry, SettingsPane } from '../lib/settings-search.js';
 // Relative, not @beluga/ui: the root's tests and typecheck read this file too.
 import { HIDEABLE_BUTTONS } from '../../../../src/ui/settings-menus.js';
@@ -116,7 +117,7 @@ export const SETTINGS: readonly Entry[] = [
     ['Chats it’s off in', 'Chats that wait for you to press Continue.', 'usage limit chats off resume continue'],
   ]),
   ...rows('claude', 'Working at once', [['Conversations your agent works in at once', 'Past it, a message waits its turn.', 'parallel concurrency limit queue simultaneous runs']]),
-  ...rows('claude', 'Open chats', [['Chats kept at once', 'How many chats Your Mac and Sentinel keep as tabs.', 'chat limit tabs sentinel']]),
+  ...rows('claude', 'Open chats', [['Chats kept at once', `How many chats ${ASSISTANT_TITLE} and Sentinel keep as tabs.`, 'chat limit tabs sentinel']]),
   ...rows('claude', THREAD_LIMITS_GROUP, [
     ['Levels of threads', 'How deep a chat’s threads go.', 'thread depth child sub-agent limit'],
     ['Working at once in one chat’s tree', 'Threads working under one chat.', 'thread running tree limit'],
@@ -277,7 +278,7 @@ export const SETTINGS: readonly Entry[] = [
   ]),
   group('external', 'Connect an agent', 'Make a pairing code: what it may do, and where.', 'pair pairing code connect'),
   ...rows('external', 'Connect an agent', [
-    ['For an agent outside this Mac', 'A hosted agent, or one on another computer.', 'remote hosted tailscale public'],
+    ['For a remote agent', 'A hosted agent, or one on another computer.', 'remote hosted tailscale public'],
     ['What it may do', 'Its level: ask each time, trusted or full trust.', 'level trust'],
     ['Full trust for this code', 'An explicit choice for a remote agent.', 'remote full warning'],
     ['All projects and chats', 'Or choose what it reaches.', 'projects reach scope'],
@@ -294,7 +295,7 @@ export const SETTINGS: readonly Entry[] = [
   // Phone
   group('computers', 'Where new work runs', 'This computer, one of yours, or the least busy.', 'run new work machine best available'),
   ...rows('computers', 'Where new work runs', [['Run New Work On', 'Worktrees, runs, plans and sentinels you start.', 'here best available machine computer']]),
-  group('computers', 'You on the network', 'This Mac, or the computer that’s your Always On.', 'always on identity network friends move stand in standing in mac mini server'),
+  group('computers', 'You on the network', `${upFirst(thisComputer())}, or the computer that’s your Always On.`, 'always on identity network friends move stand in standing in mac mini server'),
   group('computers', 'Env files sent without asking', 'Projects whose .env files go to your computers.', 'env dotenv secrets ask again always'),
   ...rows('computers', 'Your settings', [['Your settings on every computer', 'They follow you by themselves; a conflict is said here.', 'sync settings conflicts same everywhere secrets keep in sync']]),
   group('computers', 'Your computers', 'Add one over SSH or with a code; rename, icon, Update It, Forget.', 'add ssh link code fingerprint rename icon forget update health'),

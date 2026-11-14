@@ -24,6 +24,7 @@ import { COPY_TTL_MS, cloneFrom, cloneFromBundle, cloneUrl, copiesHome, copyTarg
 import { ShareCourier, type ShareMesh } from './courier.js';
 import { type ForkHistory, fetchFork, haveOf, packFork, placeFork, unpackFork } from './fork.js';
 import { HISTORY_TEXT, HISTORY_TEXT_LONG, type ShareMsg, historyPageOf } from './protocol.js';
+import { THIS_COMPUTER } from '../../shared/assistant.js';
 
 /**
  * Sharing with friends over the network, with nobody hosting (docs/network.md, "Sharing with
@@ -279,7 +280,7 @@ export class FriendShares implements FriendSharing {
   private projectFor(share: { projectId?: string; workspaceId?: string }, whole = !share.workspaceId): Project {
     const projects = this.state.projects;
     const project = share.projectId ? projects.find((p) => p.id === share.projectId) : projects.find((p) => p.workspaces.some((w) => w.id === share.workspaceId));
-    if (!project) throw new Error(share.projectId || share.workspaceId ? 'There’s no such project on this Mac' : 'Say which project or worktree to share');
+    if (!project) throw new Error(share.projectId || share.workspaceId ? `There’s no such project on ${THIS_COMPUTER}` : 'Say which project or worktree to share');
     if (whole && !project.root) throw new Error('Share your chats one at a time');
     return project;
   }
@@ -716,7 +717,7 @@ export class FriendShares implements FriendSharing {
     const made = rec?.copy?.state === 'ready' && this.state.projects.some((p) => p.id === rec.copy?.projectId);
     if (!rec || !(rec.whole || rec.url) || rec.copy?.state === 'copying' || made) return;
     const manager = this.opts.session.workspaces?.manager;
-    if (!manager) return this.setCopy(owner, id, { state: 'failed', error: 'Projects aren’t open on this Mac' });
+    if (!manager) return this.setCopy(owner, id, { state: 'failed', error: `Projects aren’t open on ${THIS_COMPUTER}` });
     const have = rec.url ? await manager.projectForRemote(rec.url).catch(() => undefined) : undefined;
     if (have) return this.setCopy(owner, id, { state: 'ready', path: have.root, projectId: have.id });
     const dest = copyTarget(rec.ownerName, rec.name, this.opts.copies ?? copiesHome());
@@ -773,7 +774,7 @@ export class FriendShares implements FriendSharing {
     if (!rec || rec.owner !== owner || !shared) throw new Error('That worktree isn’t shared with you');
     const ctl = this.opts.session.workspaces;
     const project = rec.copy?.state === 'ready' ? this.state.projects.find((p) => p.id === rec.copy?.projectId) : undefined;
-    if (!ctl || !project?.root) throw new Error(`You don’t have a copy of ${rec.name} on this Mac yet`);
+    if (!ctl || !project?.root) throw new Error(`You don’t have a copy of ${rec.name} on ${THIS_COMPUTER} yet`);
     const want = shared.branch && safeRef(shared.branch) ? shared.branch : undefined;
     let ws = want ? project.workspaces.find((w) => w.kind === 'worktree' && !w.archived && w.branch === want) : undefined;
     if (!ws) {
@@ -815,7 +816,7 @@ export class FriendShares implements FriendSharing {
     const why = cannotTake(rec.ownerName, this.opts.mesh.belugaOf(owner), 'share.fork', this.opts.mesh.isLinked(owner));
     if (why) throw new Error(why);
     const project = await this.localProjectOf(rec);
-    if (!project && !rec.url && !rec.whole) throw new Error(`Forking needs ${rec.name} on this Mac: ask ${rec.ownerName} to share the whole project, and it’s copied here`);
+    if (!project && !rec.url && !rec.whole) throw new Error(`Forking needs ${rec.name} on ${THIS_COMPUTER}: ask ${rec.ownerName} to share the whole project, and it’s copied here`);
     if (name?.trim()) this.forkNames.set(wsId, name.trim());
     else this.forkNames.delete(wsId);
     if (project) return this.askFork(owner, wsId, project);
@@ -848,7 +849,7 @@ export class FriendShares implements FriendSharing {
     const rec = this.received[key];
     if (!rec) return this.forkFailed(wsId, 'That worktree isn’t shared with you any more');
     const project = await this.localProjectOf(rec);
-    if (!project) return this.forkFailed(wsId, `${rec.name} isn’t on this Mac`);
+    if (!project) return this.forkFailed(wsId, `${rec.name} isn’t on ${THIS_COMPUTER}`);
     await this.askFork(rec.owner, wsId, project);
   }
 
@@ -907,7 +908,7 @@ export class FriendShares implements FriendSharing {
     };
     try {
       const project = await this.localProjectOf(rec);
-      if (!project) throw new Error(`${rec.name} isn’t on this Mac any more`);
+      if (!project) throw new Error(`${rec.name} isn’t on ${THIS_COMPUTER} any more`);
       const bytes = await fetchBytes({ owner: from, share: m.share, path: 'fork.tgz' }, (to, b) => this.opts.session.files.request(to, b), MAX_DOWNLOAD_BYTES, progress);
       const got = await unpackFork(bytes, tmp);
       const name = this.forkNames.get(m.ws) || clean(got.meta.name) || 'fork';

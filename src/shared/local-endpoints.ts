@@ -6,6 +6,7 @@
  * "<endpoint id>/<model>". Browser-safe: the daemon, the Mac app and the phone import it.
  */
 import type { RuntimeModel } from './agent-runtimes.js';
+import { THIS_COMPUTER } from './assistant.js';
 
 /** The runtime id local endpoints run under (see agent-runtimes.ts KNOWN_RUNTIMES). */
 export const LOCAL_RUNTIME = 'local';
@@ -90,7 +91,7 @@ export function localModels(endpoints: readonly EndpointChoice[]): RuntimeModel[
 
 /** Why the Local group can't be used at all (nothing set up), or undefined when some endpoint is there. */
 export function localWhy(endpoints: readonly EndpointChoice[]): string | undefined {
-  if (!endpoints.length) return 'Start Ollama on this Mac, or add an endpoint in Settings › Local models';
+  if (!endpoints.length) return `Start Ollama on ${THIS_COMPUTER}, or add an endpoint in Settings › Local models`;
   return undefined;
 }
 

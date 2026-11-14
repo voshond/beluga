@@ -9,16 +9,20 @@ import { closeFocus, moveTerminal, openFocus, usePanelRuntime } from '../../lib/
 import { setPrefs, usePrefs } from '../../lib/prefs.js';
 import { useGlobalShells } from '../../lib/shells.js';
 import { chordLabel } from '../../lib/shortcuts-model.js';
+import { takeRuns } from '../../lib/term-run-queue.js';
 import { claimShell, extraShells, pruneShells, releaseShell, useShellOwners } from '../../lib/ws-shells.js';
 import { EnvStale, NoShells, ShellTabs, useEnvStale } from '../../views/TerminalView.js';
 import { TerminalTab } from '../../views/TerminalTab.js';
-import { Xterm } from '../../views/Xterm.js';
+import { Xterm, type XtermProps } from '../../views/Xterm.js';
 import { SshMenu } from '../../views/SshMenu.js';
 import t from '../../views/terminal.module.css';
 import s from './panel.module.css';
 
 /** How recently ⌘J must have asked for the keyboard for a terminal that just appeared to take it. */
 const FOCUS_WINDOW_MS = 800;
+
+/** Run in a chat's code block types into the terminal that's showing here (lib/term-run.ts). */
+const TAKES_RUNS: NonNullable<XtermProps['extend']> = (_term, tools) => takeRuns(tools.write);
 
 interface Tabbed {
   readonly key: string | undefined;
@@ -217,7 +221,7 @@ export function TerminalPane({ where, onClose }: { where: 'drawer' | 'panel'; on
           />
         ) : key ? (
           <>
-            <Xterm key={`${key}:${key in exits ? 'x' : 'live'}${stale ? ':old' : ''}`} termKey={key} start={tabbed.start} focus={false} />
+            <Xterm key={`${key}:${key in exits ? 'x' : 'live'}${stale ? ':old' : ''}`} termKey={key} start={tabbed.start} focus={false} {...(key in exits ? {} : { extend: TAKES_RUNS })} />
             <EnvStale termKey={key} />
             {key in exits && tabbed.restart ? (
               <div className={t.restart}>

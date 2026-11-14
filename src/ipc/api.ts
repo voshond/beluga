@@ -264,9 +264,12 @@ export const API = {
 
   // ---- work on a friend's computer
   'remote.requestWorktree': args(id, z.string().max(80), str, opt(bool)),
+  // Take it over (BLG-967): their agent continues it on their computer, from Share's "Take it over".
   'remote.handoff': args(id, id),
-  // Can this worktree go to them (who they are, and whether their Mac has the repository)? Asked as the Hand Off sheet opens.
+  // Can this worktree go to them (who they are, and whether their Mac has the repository)? Asked when Share's "Take it over" is picked.
   'remote.canHandOff': args(id, id),
+  // Your agent writes a handoff note for whoever you share with (or whoever joins): in the chat and as HANDOFF.md in Scratch.
+  'remote.handoffNote': args(id, opt(id)),
 
   // ---- a workspace shared with you: what changed, and its read-only shell
   'diff.load': args(id),
@@ -313,7 +316,7 @@ export const API = {
   // → the new worktree's id. `plan`: its Claude plans first. `tasks`: Plan with Tasks, its conversation is a
   // draft plan's home, written from the first message. `quiet`: started from the phone, the Mac's window stays put.
   // `id`: the id it gets, chosen by the screen that shows it as being made already (BLG-942; taken only when free).
-  'workspaces.startWorktree': args(id, str, opt(z.object({ base: opt(z.string().min(1).max(250)), name: opt(z.string().max(200)), plan: opt(bool), tasks: opt(bool), quiet: opt(bool), agent: opt(AgentRef), terminal: opt(bool), id: opt(WorktreeId) }))),
+  'workspaces.startWorktree': args(id, str, opt(z.object({ base: opt(z.string().min(1).max(250)), name: opt(z.string().max(200)), plan: opt(bool), tasks: opt(bool), quiet: opt(bool), agent: opt(AgentRef), terminal: opt(bool), id: opt(WorktreeId), vars: opt(EnvRows) }))),
   // What a new worktree can start from: → { base: the default, branches: default first, then newest }.
   'workspaces.branches': args(id),
   'workspaces.fork': args(id, z.string().max(200)),
@@ -486,6 +489,10 @@ export const API = {
   'env.setWorktree': args(id, EnvRows),
   // Before a worktree goes: its own variables into the project's (same name: the worktree's wins) → how many.
   'env.carryWorktree': args(id),
+  // API keys in text just pasted into a chat (BLG-965): where it's going (a workspace, or a new worktree's project), named the way it names its keys.
+  'env.pastedKeys': args(z.object({ workspaceId: opt(id), projectId: opt(id) }), str),
+  // Keep pasted keys as a chat's own variables (its workspace's; none: yours everywhere) → the .env.example it listed them in.
+  'env.keepPasted': args(z.object({ workspaceId: opt(id), projectId: opt(id) }), EnvRows),
   // A project's environment in names and counts (its page, the phone): never a value.
   'env.overview': args(id),
   // List in the main folder's .env.example what's set and it doesn't list (placeholders, never values) → the names added.

@@ -13,6 +13,7 @@ import { OFFER_DETAIL, offerWords, waitingOn, waitingWords, workingOn, workingWo
 import { type Issue, STATUS_INFO, actorName, activityText, assigneeName, boardName, boardOf, byStatus, isArchived, isEpic, isOwnBoard, isStartable, isVisiting, issueById, progressOf as boardProgress, reposOf, showsOn } from '../core/board/model.js';
 import type { CcAgent } from '../core/claude-code/model.js';
 import type { PendingQuestion } from '../core/collab-store.js';
+import { chatsWithThreadsWorking } from '../core/threads/model.js';
 import { type TaskView as GwTask, isFinal, requestGist, stateLabel, stateTone, targetLabel } from '../core/gateway/model.js';
 import { parseDecisionQid } from '../core/plans/decisions.js';
 import { type Plan, type PlanPr, draftRepoPlan, isMultiRepo, milestoneRepos, planForHome, planRepos, planTitle, prRef, reviewState } from '../core/plans/model.js';
@@ -20,7 +21,8 @@ import { verifyProgress } from '../core/plans/verify-progress.js';
 import { planOwnerOf } from '../core/plans/owner.js';
 import { branchState, notOnPr } from '../core/branch-state.js';
 import { worktreeSharedWith } from '../ui/worktree-share.js';
-import { type RunSummary, type Sentinel, type SentinelState, activeSentinelChat, firstLine, isLive, isSentinelChat, lastRunOf, pausedWords, runsOf, scheduleSentence, sentinelById, sentinelChatTitle } from '../core/sentinel/model.js';
+import { type RunSummary, type Sentinel, type SentinelState, activeSentinelChat, chatSchedules, firstLine, isLive, isSentinelChat, lastRunOf, pausedWords, runsOf, scheduleSentence, sentinelById, sentinelChatTitle } from '../core/sentinel/model.js';
+import { experimentOn } from '../shared/experiments.js';
 import { type Dashboard, type Tile, metricOf, outputLook, tileColumns, tileCompare, tileMetrics, tileOutput, tileStateIn, tileTitle } from '../core/sentinel/dashboard-model.js';
 import { documentMime, isDocumentKind, storageName, storageSources } from '../core/sentinel/columns.js';
 import { sentinelGraph } from '../core/sentinel/workflow.js';
@@ -512,7 +514,7 @@ function turnOf(state: DomainState, item: LogItem, outputs: readonly OutputView[
     agent: item.agent ?? CLAUDE_AGENT,
     prose: pictures(proseOf(item.text)),
     ts: item.ts,
-    ...(item.origin ? { origin: { ref: clip(item.origin.ref, 400), title: clip(item.origin.title, 200), agent: clip(item.origin.agent.label, 64), prose: proseOf(item.prompt ?? '') } } : {}),
+    ...(item.origin ? { origin: { ref: clip(item.origin.ref, 400), title: clip(item.origin.title, 200), agent: clip(item.origin.agent.label, 64), ...(item.origin.sentinel ? { sentinel: clip(item.origin.sentinel.name, 200) } : {}), prose: proseOf(item.prompt ?? '') } } : {}),
     ...(status ? { status } : {}),
     ...(step ? { step } : {}),
     steps: item.steps.length,
@@ -587,7 +589,7 @@ function summaryOf(state: DomainState, conv: Conversation, waiting: ReadonlySet<
   // A note about a steered message ("reads this after its current step") isn't the last thing said.
   const last = [...items].reverse().find((l) => (l.type === 'chat' || (l.type === 'agent' && !steerWaiting(l) && l.text !== STEERED_IN && l.text !== TAKEN_BACK)) && (l.type === 'chat' ? l.text : l.text || l.prompt));
   const lastText = last?.type === 'chat' ? last.text : last?.type === 'agent' ? last.text || last.prompt || '' : '';
-  const status: ConvSummary['status'] = waiting.has(topic) ? 'waiting' : running.length ? 'working' : lastAgent && (lastAgent.status === 'error' || lastAgent.status === 'denied') ? 'failed' : 'idle';
+  const status: ConvSummary['status'] = waiting.has(topic) ? 'waiting' : running.length || chatsWithThreadsWorking(state).has(conv.channel) ? 'working' : lastAgent && (lastAgent.status === 'error' || lastAgent.status === 'denied') ? 'failed' : 'idle';
   const lastAt = Math.max(0, ...items.map((l) => (l.type === 'agent' ? (l.lastAt ?? l.endTs ?? l.ts) : l.ts)));
   const subs = running.reduce((n, a) => n + a.subagents.filter((s) => s.status === 'running' && s.kind !== 'background').length, 0);
   const unread = state.unread[conv.channel] ?? 0;
@@ -786,7 +788,16 @@ export function convView(state: DomainState, ctx: ViewContext, topic: Topic): Co
     ...tagsOf(state, channel),
     ...terminalOf(state, channel),
     ...(reactableChannel(channel) ? { quick: quickRow(state) } : {}),
+    ...schedulesOf(state, channel),
   };
+}
+
+/** The sentinels that send into this chat on a schedule (BLG-401), behind chat-schedules: run and pause only. */
+function schedulesOf(state: DomainState, channel: string): Pick<ConvView, 'schedules'> {
+  if (!experimentOn(state.prefs.experiments, 'chat-schedules') || !state.selfId) return {};
+  const rows = chatSchedules(state.sentinel, `${state.selfId}/${channel}`).slice(0, 20);
+  const nameOf = (id: string): string | undefined => state.sentinel.items.find((i) => i.id === id)?.name;
+  return rows.length ? { schedules: rows.map((r) => ({ id: r.id, name: clip(r.name, 200), sentence: clip(scheduleSentence(r.trigger, nameOf), 200), ...(r.nextAt !== undefined ? { nextAt: r.nextAt } : {}), paused: r.paused, running: r.running })) } : {};
 }
 
 /** The Mac's terminal view drives this conversation (BLG-534): who, so the phone can say so and take it back. */
@@ -905,7 +916,7 @@ function queueOf(state: DomainState, channel: string): NonNullable<ConvView['que
   return state.log
     .filter((l): l is AgentItem => l.type === 'agent' && l.channel === channel && l.status === 'queued' && l.owner === me && (l.requester !== undefined ? l.requester === me : l.requesterName === l.ownerName))
     .slice(0, 20)
-    .map((l) => ({ id: clip(l.requestId, 200), text: plainLine(l.prompt ?? '', 300) || 'A message', ...(l.slotWait ? { waiting: clip(slotWaitDetail(l.slotWait), 300) } : {}), ...(l.origin ? { origin: { ref: clip(l.origin.ref, 400), title: clip(l.origin.title, 200), agent: clip(l.origin.agent.label, 64) } } : {}) }));
+    .map((l) => ({ id: clip(l.requestId, 200), text: plainLine(l.prompt ?? '', 300) || 'A message', ...(l.slotWait ? { waiting: clip(slotWaitDetail(l.slotWait), 300) } : {}), ...(l.origin ? { origin: { ref: clip(l.origin.ref, 400), title: clip(l.origin.title, 200), agent: clip(l.origin.agent.label, 64), ...(l.origin.sentinel ? { sentinel: clip(l.origin.sentinel.name, 200) } : {}) } } : {}) }));
 }
 
 const planState = (plan: Plan, progress: PlanProgress): string => (plan.status === 'active' && plan.paused ? 'paused' : plan.status === 'active' && progress.next.kind === 'done' ? 'done' : plan.status);

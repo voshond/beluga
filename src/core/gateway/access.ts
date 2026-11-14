@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { NEEDS, type Need, type TaskKind } from './protocol.js';
 import { hhmm } from '../../shared/clock.js';
+import { THIS_COMPUTER } from '../../shared/assistant.js';
 
 /**
  * Who may have their Claude do what on this Mac: per-capability settings by trust level, and
@@ -62,7 +63,7 @@ export function capabilitiesFrom(raw: unknown): Capabilities {
 
 /** Plain words for each capability (Settings, the request sheet, reasons sent back). */
 export const CAP_INFO: Readonly<Record<Need, { label: string; detail: string; doing: string }>> = {
-  shell: { label: 'Run commands', detail: 'Commands in a terminal on this Mac, with no input, stopped after a time limit.', doing: 'run commands' },
+  shell: { label: 'Run commands', detail: `Commands in a terminal on ${THIS_COMPUTER}, with no input, stopped after a time limit.`, doing: 'run commands' },
   files: { label: 'Read and write files', detail: 'In the folders you choose below (and the task’s own folder). Secrets never.', doing: 'read or write files' },
   project: { label: 'Work in projects', detail: 'Your agent works in one of your projects (as for your own requests).', doing: 'work in your projects' },
   screen: { label: 'See the screen', detail: 'Screenshots of the main display or one app’s window, read-only.', doing: 'see the screen' },
@@ -237,7 +238,7 @@ export function ruleFor(facts: RequestFacts, peerName: string, decision: Pick<De
 
 // ------------------------------------------------------------------ words for screens
 
-const KIND_WORDS: Readonly<Record<RuleKind, string>> = { task: 'Requests to your agent', command: 'Commands', file: 'Files sent from this Mac' };
+const KIND_WORDS: Readonly<Record<RuleKind, string>> = { task: 'Requests to your agent', command: 'Commands', file: `Files sent from ${THIS_COMPUTER}` };
 
 /** "Requests to your Claude needing: run commands, see the screen · in landing". */
 export function ruleLabel(rule: Rule): string {

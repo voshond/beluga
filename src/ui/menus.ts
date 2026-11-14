@@ -43,7 +43,8 @@ export type MenuKind =
   | { readonly kind: 'project'; readonly id: string }
   | { readonly kind: 'archived'; readonly id: string }
   | { readonly kind: 'agents'; readonly projectId: string }
-  | { readonly kind: 'ws_share'; readonly id: string }
+  /** `takeOver`: open on "Take it over" (what Hand off used to be, BLG-967). */
+  | { readonly kind: 'ws_share'; readonly id: string; readonly takeOver?: boolean }
   | { readonly kind: 'shared'; readonly owner: string; readonly id: string }
   | { readonly kind: 'clear'; readonly channel: string; readonly host: boolean }
   | { readonly kind: 'invite_person'; readonly peerId: string }

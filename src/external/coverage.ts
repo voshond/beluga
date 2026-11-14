@@ -19,7 +19,7 @@ const ENV_LIST = 'It replaces the whole list of variables, and an agent cannot r
 const PAIRING = 'A person pairs a phone, with the phone in hand.';
 const SIGN_IN = 'A sign-in is a person\'s, in a browser.';
 const PHONE_LINK = 'The phone\'s own link: an agent uses the chat, file and board tools for the same work.';
-const YOUR_MAC = 'The owner gave agents the sidebar\'s chats, not the Your Mac chats (BLG-243).';
+const YOUR_MAC = 'The owner gave agents the sidebar\'s chats, not the computer’s own assistant chats (BLG-243).';
 const OTHERS_RUNS = 'It stops runs that are not this agent\'s: beluga_chat_interrupt stops its own.';
 const INBOX = 'The inbox marks what a person has read, and an agent\'s mark would hide it from them.';
 const NO_SCOPE = 'A file name does not say which chat the image is in, so a grant cannot check it.';
@@ -216,6 +216,8 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'env.worktree': { refused: SECRET_VALUES },
   'env.setWorktree': { refused: ENV_LIST },
   'env.carryWorktree': 'gated',
+  'env.pastedKeys': { refused: SECRET_VALUES },
+  'env.keepPasted': { refused: SECRET_VALUES },
   'env.overview': 'gated',
   'env.addToExample': 'gated',
   'env.exampleSync': 'gated',
@@ -362,6 +364,7 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'sentinel.test': 'covered',
   'sentinel.stop': 'covered',
   'sentinel.pause': 'gated',
+  'sentinel.forChat': { refused: NO_TOOL },
   'sentinel.runs': 'covered',
   'sentinel.runGet': 'covered',
   'sentinel.ask': 'covered',
@@ -514,6 +517,7 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'session.react': 'covered',
   'host.cancelSteer': 'covered',
   'remote.canHandOff': 'covered',
+  'remote.handoffNote': { refused: 'The person sharing asks for a handoff note from the Share sheet; an outside agent can write its own' },
   'workspaces.rename': 'covered',
   'workspaces.regenerateTitle': 'covered',
   'workspaces.deletePlan': 'covered',

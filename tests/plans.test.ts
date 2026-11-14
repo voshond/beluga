@@ -1878,7 +1878,7 @@ describe('a plan across several repos (BLG-10)', () => {
     const t = multiSetup();
     const chats = (): number => t.store.getState().projects.flatMap((p) => p.workspaces).length;
     const before = chats();
-    await expect(t.work.create({ projectId: 'api', projectIds: ['cal', 'friend-repo'], goal: 'Nope' })).rejects.toThrow(/only cover projects on this Mac: "friend-repo" isn't one of them/);
+    await expect(t.work.create({ projectId: 'api', projectIds: ['cal', 'friend-repo'], goal: 'Nope' })).rejects.toThrow(/only cover projects on this (?:Mac|PC|computer): "friend-repo" isn't one of them/);
     expect(chats()).toBe(before);
     expect(t.plans.list()).toHaveLength(0);
   });

@@ -35,6 +35,8 @@ export type TaskDraftResult = z.infer<typeof TaskDraftResult>;
 export const SentinelRunResult = z.object({ id: z.string(), sentinelId: z.string(), state: z.string(), startedAt: z.number(), headline: z.string() }).passthrough();
 /** A client device connected to the Mac's Beluga (src/shared/devices.ts DeviceInfo). */
 export const DeviceResult = z.object({ id: z.string(), name: z.string(), os: z.enum(DEVICE_OS), caps: z.array(z.enum(DEVICE_CAPS)), lastSeen: z.number() });
+/** One of a chat's schedules (BLG-399): the phone's conversation sheet lists them (BLG-401). */
+export const ChatScheduleResult = z.object({ id: z.string(), name: z.string(), paused: z.boolean(), prompt: z.string(), running: z.boolean(), nextAt: z.number().optional() }).passthrough();
 export const PutResult =z.union([z.object({ received: z.number().int().min(0) }), z.object({ ref: z.string() })]);
 
 export const PhoneCalls = {
@@ -195,6 +197,7 @@ export const PhoneCalls = {
   // report, and Merge / Not Now on a run waiting for you.
   'sentinel.run': entry('sentinel.run', SentinelRunResult),
   'sentinel.pause': entry('sentinel.pause', done),
+  'sentinel.forChat': entry('sentinel.forChat', z.array(ChatScheduleResult)),
   'sentinel.runs': entry('sentinel.runs', z.array(SentinelRunResult)),
   'sentinel.runGet': entry('sentinel.runGet', z.object({ run: SentinelRunResult, sentinel: z.object({ id: z.string(), name: z.string() }).optional(), report: z.string().optional() }).passthrough()),
   'sentinel.decide': entry('sentinel.decide', SentinelRunResult),
