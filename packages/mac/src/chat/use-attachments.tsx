@@ -16,6 +16,7 @@ import { boxChats, plainWords } from './chat-box.js';
 import { type ImageInText, type PathInfo, insertText, usePastePaths } from './paste-paths.js';
 import s from './composer.module.css';
 import img from './images.module.css';
+import { thisComputer } from '../lib/os-words.js';
 
 /**
  * What goes with a message besides its words, the same in every message box (a conversation's
@@ -330,7 +331,7 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
       return toast(client, `Couldn't add what you dropped: ${errorText(err)}`, 'error');
     }
     const plan = planDrop(picked, checks);
-    for (const r of plan.refused) toast(client, `${r.name} stays on this Mac: ${r.reason}`, 'warn');
+    for (const r of plan.refused) toast(client, `${r.name} stays on ${thisComputer()}: ${r.reason}`, 'warn');
     const go = async (files: readonly PathInfo[], env: boolean): Promise<void> => {
       const arrived = await sendFiles(
         (machine, n, file, off) => home.call('machines.upload.send', machine, n, file, off, env ? { env: true } : undefined),

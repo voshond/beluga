@@ -149,6 +149,8 @@
   color: var(--text-2);
   font-size: 0.93rem;
   font-weight: 500;
+  /* A pill is one line high: its words never break inside it (#527). */
+  white-space: nowrap;
   transition: background var(--dur-fast), color var(--dur-fast);
 }
 .segment:hover {

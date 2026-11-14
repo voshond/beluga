@@ -2,9 +2,11 @@ import { useLocalSearchParams } from 'expo-router';
 import { agentName } from '../../../../src/shared/agent-label';
 import { resetWords } from '../../../../src/shared/run-failure';
 import { KeyboardLift } from '../../components/KeyboardLift';
-import { Activity, Bot, Camera, ChevronRight, Map as MapIcon, CircleCheck, CircleX, Clock, Cpu, FolderTree, GitMerge, History, Images, Laptop, MessagesSquare, Monitor, Network, OctagonX, Plus, Send, Square, SquareTerminal, Trash2, Undo2 } from 'lucide-react-native';
+import { Activity, Bot, CalendarClock, Camera, ChevronRight, Map as MapIcon, CircleCheck, CircleX, Clock, Cpu, FolderTree, GitMerge, History, Images, Laptop, MessagesSquare, Monitor, Network, OctagonX, Plus, Send, Square, SquareTerminal, Trash2, Undo2 } from 'lucide-react-native';
 import { AgentList, Breathe, LivePanel, StepList, StepsFold, ToolBadge, TypingDots } from '../../components/Live';
 import { ThreadsSheet, threadsSummary } from '../../components/ThreadsSheet';
+import { SchedulesSheet } from '../../components/ChatSchedules';
+import { schedulesSummary } from '../../lib/schedules';
 import { BranchBand, MergeBand, MergeSheet } from '../../components/Merge';
 import { ProjectMark } from '../../components/ProjectMark';
 import { InlineThing } from '../../components/render/Inline';
@@ -136,6 +138,9 @@ function Conversation() {
   const [outputsOpen, setOutputsOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [threadsOpen, setThreadsOpen] = useState(false);
+  const [schedulesOpen, setSchedulesOpen] = useState(false);
+  // The chat's last schedule went: the sheet closes, so it doesn't open by itself when one comes back.
+  if (schedulesOpen && !c?.schedules?.length) setSchedulesOpen(false);
   // What waits its turn is in the queue above the composer, not a turn of its own.
   const turns = c ? c.turns.filter((t) => !(c.queue && t.who === 'claude' && t.status === 'queued')) : [];
   // A worktree (or chat folder) of yours has files to read and terminals to share with the Mac (1.7).
@@ -328,6 +333,7 @@ function Conversation() {
         {c?.mergeable ? <MergeSheet topic={topic} visible={mergeOpen} onClose={() => setMergeOpen(false)} /> : null}
         <EditPromptSheet turn={editing} onClose={() => setEditing(undefined)} />
         <ThreadsSheet threadFamily={c?.threadFamily} visible={threadsOpen} onClose={() => setThreadsOpen(false)} />
+        <SchedulesSheet schedules={c?.schedules} visible={schedulesOpen} onClose={() => setSchedulesOpen(false)} />
         <Options
           visible={Boolean(reacting)}
           onClose={() => setReacting(undefined)}
@@ -389,6 +395,7 @@ function Conversation() {
             { Icon: c?.agent ? markIcon(runtimeMark(c.agent.runtime)) : Bot, label: `Agent · ${c?.agent ? agentName(c.agent, { model: true }) : ''}`, sub: 'Pick the agent and model for this conversation', tone: 'lavender', hidden: !can.agentPicker, onPress: () => setPicking(true) },
             { Icon: Plus, label: 'New chat', sub: 'A fresh chat with your Mac, a new tab there too', tone: 'sky', hidden: !macChats, onPress: () => newMacChat((h) => router.replace(h as never)) },
             { Icon: Square, label: askedTask ? 'Stop asking' : 'Stop the agent', tone: 'rose', hidden: !c?.working, onPress: () => void call(askedTask ? calls.cancelTask(askedTask) : calls.stop(topic)) },
+            { Icon: CalendarClock, label: 'Schedules', sub: schedulesSummary(c?.schedules), tone: 'sky', hidden: !c?.schedules?.length, onPress: () => setSchedulesOpen(true) },
             { Icon: Network, label: 'Threads', sub: threadsSummary(c?.threadFamily), tone: 'lavender', hidden: !c?.threadFamily, onPress: () => setThreadsOpen(true) },
             { Icon: Images, label: 'Outputs', sub: all.length ? `${all.length} from this worktree` : 'Nothing yet', tone: 'sky', hidden: !all.length, onPress: () => setOutputsOpen(true) },
             { Icon: GitMerge, label: 'Merge…', sub: 'Into your main folder, checked first', tone: 'lavender', hidden: !can.merge, onPress: () => setMergeOpen(true) },
@@ -514,8 +521,14 @@ function FromChatCard({ origin, topic, turn, chats }: { origin: NonNullable<Turn
         <T v="caption" style={{ fontWeight: '600' }}>
           From
         </T>
-        {on && ref ? <InlineThing el={{ kind: 'chat', ref }} /> : <T v="caption">{origin.title}</T>}
-        <T v="caption">· {origin.agent}, an agent</T>
+        {origin.sentinel ? (
+          <T v="caption">Sentinel {origin.sentinel}</T>
+        ) : (
+          <>
+            {on && ref ? <InlineThing el={{ kind: 'chat', ref }} /> : <T v="caption">{origin.title}</T>}
+            <T v="caption">· {origin.agent}, an agent</T>
+          </>
+        )}
       </View>
       <Prose prose={origin.prose} at={{ topic, turn }} chats={chats} />
     </View>

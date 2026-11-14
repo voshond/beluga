@@ -277,7 +277,7 @@ export function TermPane({ wsId, termKey, kind, cwd, split, focusOnMount, onSpli
 
   return (
     <div ref={root} className={cx(s.pane, split && s.paneSplit)} style={chipVars} data-pane={kind} data-term-key={termKey}>
-      <Xterm key={`${termKey}:${gen}`} termKey={termKey} start={start} focus={focusOnMount} gpu extend={extend} onKey={onKey} settleMs={140} fromBottom={kind === 'agent'} />
+      <Xterm key={`${termKey}:${gen}`} termKey={termKey} start={start} focus={focusOnMount} extend={extend} onKey={onKey} settleMs={140} fromBottom={kind === 'agent'} />
       {finding && search ? (
         <FindBar
           search={search}

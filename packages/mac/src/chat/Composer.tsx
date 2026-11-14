@@ -40,6 +40,8 @@ import { lastMineIn } from './starting-model.js';
 import { type WorktreeChoice, WorktreeDraft } from './WorktreeDraft.js';
 import { sendSteerNow, stopClaude } from '../lib/commands.js';
 import { useAttachments } from './use-attachments.js';
+import { useKeyPaste } from './KeyPasteCard.js';
+import { forgetHeld, heldFor, targetOf } from './key-paste-model.js';
 import { CommentCards } from './CommentCards.js';
 import { useWaitingComments } from '../views/DiffComment.js';
 import { takeComments, withComments } from '../views/diff-comments.js';
@@ -58,6 +60,8 @@ import { isPlanHome, planForHome } from '@beluga/core/plans/model.js';
 import { MaxFire } from './MaxFire.js';
 import { effectsOn, fireVars } from './fire-look.js';
 import { handleInvite } from '../lib/invite-command.js';
+import { experimentOn } from '@beluga/shared/experiments.js';
+import { canSchedule, scheduleCommand } from './schedule-model.js';
 import s from './composer.module.css';
 import m from './max.module.css';
 import d from './draft.module.css';
@@ -306,6 +310,9 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   // Only where its agent has one (it forks the conversation's session: Claude's, OpenCode's; not Codex's).
   const btwHere = useApp((st) => runtimeHas(runtimeHere(st.projects.flatMap((p) => p.workspaces).find((w) => `ws:${w.id}` === channel)?.agent, st.self), 'btw'));
   const canBtw = channel.startsWith('ws:') && !shared && btwHere;
+  // A schedule for this chat (BLG-400): '/schedule' opens its sheet, behind the chat-schedules experiment.
+  // Not in a Your Mac chat Beluga made for itself (a sentinel run's).
+  const canScheduleHere = useApp((st) => experimentOn(st.prefs.experiments, 'chat-schedules') && canSchedule(channel, Boolean(shared), st.assistant.chats));
   const [asideIn, setAsideIn] = useState<string | undefined>(undefined);
   const aside = canBtw && asideIn === channel;
   const btwOpen = useApp((st) => Boolean(st.btw?.[channel]));
@@ -337,6 +344,17 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
       ? { hint: 'ask your agent, in your copy' }
       : { hint: `ask your agent: it reads ${ownerName}’s worktree from here`, owner: { name: ownerName, hint: `ask ${ownerName}’s agent, in their worktree` } };
   // Suggestions as you type: commands, people and Claudes, workspaces, folders, tasks.
+  // An API key pasted here (BLG-965): a card offers to keep it in Beluga, the message saying $NAME instead.
+  const keyTarget = targetOf(channel, {
+    ...(draftProject ? { draftProject } : {}),
+    ...(state.view.kind === 'draft' ? { newChatProject: { id: state.view.projectId, name: state.projects.find((p) => p.id === (state.view as { projectId: string }).projectId)?.name ?? 'the project' } } : {}),
+    worktree: state.projects.some((p) => p.workspaces.some((w) => `ws:${w.id}` === channel && w.kind === 'worktree')),
+  });
+  // `resend`: Send pressed while a paste was still being looked at, and it held no key.
+  const resendRef = useRef<() => void>(() => undefined);
+  // The box's words set as typing would (set() comes further down).
+  const setRef = useRef<(text: string) => void>(() => undefined);
+  const keys = useKeyPaste({ target: shared ? undefined : keyTarget, box: boxKey, agent: agentHere, text: () => ui.get().buffer, setText: (t) => setRef.current(t), input: ref, resend: () => resendRef.current(), inputClass: s.input ?? '' });
   const suggestions: Suggestion[] = useMemo(
     () =>
       !buffer
@@ -356,10 +374,12 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
             chats,
             skills,
             skillsOn,
-            ...(canBtw ? {} : { without: ['btw'] }),
+            ...(canBtw && canScheduleHere ? {} : { without: [...(canBtw ? [] : ['btw']), ...(canScheduleHere ? [] : ['schedule'])] }),
             ...(claudeHere ? { claudeHere } : {}),
+            // This chat's keys first (BLG-965): "@" puts `$NAME` in the words, a chip.
+            ...(keys.chatKeys.length ? { keys: keys.chatKeys } : {}),
           }),
-    [buffer, state.peers, state.selfId, state.dirCache, state.view.kind, state.projects, state.friends, wsId, mentionWorld.tasks, chats, skills, skillsOn, canBtw, runtimes, claudeHere?.hint],
+    [keys.chatKeys, buffer, state.peers, state.selfId, state.dirCache, state.view.kind, state.projects, state.friends, wsId, mentionWorld.tasks, chats, skills, skillsOn, canBtw, canScheduleHere, runtimes, claudeHere?.hint],
   );
   const sug = useSuggestions(suggestions, buffer, (picked) => accept(picked));
 
@@ -421,6 +441,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     ui.patch({ buffer: text, cursor: text.length });
     sug.reset();
   };
+  setRef.current = set;
   /** The first message of a new worktree starts it (on the chosen branch, with the chosen name). */
   const createWorktree = (projectId: string, text: string): void => {
     const name = worktree.name.trim();
@@ -442,7 +463,9 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     // The draft's words went with it: forgotten now, as the page changes in this same moment (no render in between to do it).
     drafts.delete(boxKey);
     const ahead = makeAhead(client, projectId, name || text || 'worktree', { ...(worktree.base ? { base: worktree.base } : {}), asked: text });
-    void api.workspaces.startWorktree(projectId, text, { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...mode, ...(ahead ? { id: ahead.id } : {}) }).catch((err: unknown) => {
+    // Keys pasted into this message and kept (BLG-965) are the worktree's own before it starts (held until it's made).
+    const vars = heldFor(boxKey, text);
+    void api.workspaces.startWorktree(projectId, text, { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...mode, ...(ahead ? { id: ahead.id } : {}), ...(vars.length ? { vars } : {}) }).then(() => forgetHeld(boxKey), (err: unknown) => {
       ahead?.drop();
       keepWords(text);
       toast(client, `Couldn't create the worktree: ${errorText(err)}`, 'error');
@@ -461,6 +484,8 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     }
     // /invite adds a friend, or adds friends to what's on screen (BLG-203): done here, where the view is known.
     if (handleInvite(client, ui, text)) return;
+    const scheduled = canScheduleHere ? scheduleCommand(text) : undefined;
+    if (scheduled !== undefined) return openSheet({ kind: 'schedule', channel, ...(scheduled ? { prompt: scheduled } : {}) });
     if (draftProject && !text.startsWith('/')) return createWorktree(draftProject, text);
     // A new chat (in a project, outside one, or in a folder), Runs on one of your computers (BLG-788,
     // BLG-841): started there; held, never here instead, when the computer named can't take it.
@@ -525,6 +550,8 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   /** `copied`: you answered the copy question for these words already. */
   const send = (secondary = false, copied = false): void => {
     const urgent = sendsUrgent(prefs.sendDuringTurn, { busy: queueing, canSteer, secondary });
+    // A key card is asking: Send keeps the keys first (the message then says $NAME), never sends a key by accident.
+    if (keys.asking) return keys.keep();
     const typed = buffer.trim();
     if (aside) {
       if (!typed) return;
@@ -591,6 +618,8 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     }
     deliver(text, urgent);
   };
+  // The latest Send, for one held while a paste was looked at (see useKeyPaste).
+  resendRef.current = () => send(false);
   // Speaking instead of typing (Settings › Voice): the words come here when this is the box you're in; Send right away sends them as ↩ would.
   useDictationTarget(ref, () => send(false), draftKey);
   const dictation = useDictation();
@@ -609,9 +638,13 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     if (picked.enter === 'submit') {
       ui.patch({ buffer: '', cursor: 0 });
       // A friend picked for "/invite": handled here like a typed one (BLG-340), not by the daemon.
-      if (!handleInvite(client, ui, picked.value)) actions.submit(picked.value);
+      if (handleInvite(client, ui, picked.value)) return;
+      const scheduled = canScheduleHere ? scheduleCommand(picked.value) : undefined;
+      if (scheduled !== undefined) return openSheet({ kind: 'schedule', channel, ...(scheduled ? { prompt: scheduled } : {}) });
+      actions.submit(picked.value);
       return;
     }
+    if (picked.kind === 'key') keys.pop(picked.label.replace(/^\$/, ''));
     // A chat picked: its mention written short, a chip with its title.
     set(picked.kind === 'chat' ? boxChats(picked.value) : picked.value);
   }
@@ -619,6 +652,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
     // Enter while an input method is composing (Japanese, Chinese…) picks the characters.
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+    if (keys.onKey(e)) return;
     // Shift-Tab switches between acting and planning first, as in Claude Code (not focus).
     if (isShortcut('composer-mode', e) && !shared && !planHome) {
       e.preventDefault();
@@ -689,6 +723,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
       {sug.list}
       {canBtw ? <BtwCard channel={channel} /> : null}
       <QueueTray queue={queue} selfName={state.self?.name ?? ''} onEdit={(prompt) => void editQueued(prompt)} />
+      {keys.card}
       <div
         ref={boxRef}
         style={effects ? (fireVars(prefs.maxFire) as React.CSSProperties) : undefined}
@@ -762,7 +797,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
         <MentionedChats text={buffer} world={mentionWorld} />
         <DictationStrip box={ref} />
         <div className={s.inputWrap}>
-          <MentionHighlighter text={buffer} world={mentionWorld} input={ref} className={s.input ?? ""} />
+          <MentionHighlighter text={buffer} world={mentionWorld} input={ref} className={s.input ?? ""} keys={keys.names} entering={keys.entering} />
           <textarea
             ref={ref}
             className={`${s.input} ${s.overHighlight} selectable`}
@@ -773,9 +808,13 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
             placeholder={aside ? `Ask ${agentHere} something on the side…` : to ? `Message ${recipientLabel(to)}` : mode === 'tasks' && !homePlan?.body && !homePlan?.draft?.milestones.length ? `Describe what to build: ${agent} plans it into milestones and tasks` : state.placeholder}
             onChange={(e) => set(e.target.value)}
             onKeyDown={onKey}
-            onPaste={att.onPaste}
+            onPaste={(e) => {
+              keys.onPaste(e);
+              att.onPaste(e);
+            }}
             spellCheck
           />
+          {keys.ghost}
         </div>
         <div className={s.bar}>
           {planHome && homePlan ? (
@@ -822,6 +861,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
           <span className={s.flex} />
           {/* Your MCP servers, on the box's right beside how full the context is (BLG-252). */}
           {!shared ? <McpChip /> : null}
+          {keys.button}
           {channel !== 'draft' ? <ContextMeter channel={channel} /> : null}
           {/* While you talk, only your voice's control shows: two square buttons side by side stopped Claude by mistake. */}
           {compose.busy && !talking ? (

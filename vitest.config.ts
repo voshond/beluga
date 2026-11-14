@@ -16,7 +16,9 @@ export default defineConfig({
     // Ten worktrees testing at once leave the Mac usable: half the cores per run (KLAUD_TEST_WORKERS
     // overrides it), and a few runs at a time machine-wide (scripts/test-lock.mjs, KLAUD_TEST_SLOTS).
     maxWorkers: workerCount(),
-    globalSetup: ['scripts/test-lock.mjs', 'tests/temp-root.global.ts'],
+    // Each run keeps its temp files in its own beluga-run-* folder, removed when it ends (and by the
+    // next run if it was killed), so a test that misses its cleanup leaves nothing behind.
+    globalSetup: ['scripts/test-lock.mjs', 'scripts/test-temp-root.mjs'],
     // The whole suite passing on a Mac prints a "Tested-on: macOS <tree>" line for the commit
     // (scripts/local-pass.mjs). CI has no macOS run since ci.yml went Linux-only, so nothing reads it there.
     reporters: ['default', './scripts/local-pass.mjs'],

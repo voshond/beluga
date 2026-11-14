@@ -155,6 +155,8 @@ export interface AgentRunInput {
   readonly phoneTools?: PhoneTools;
   readonly phoneBrief?: string;
   readonly machineBrief?: string;
+  /** Names of variables kept for this chat alone (keys pasted and kept out of the chat, BLG-965). */
+  readonly chatVars?: readonly string[];
   /** Live previews are on (Settings › Experimental): what Claude is told about showing them. */
   readonly previewBrief?: string;
   /** Your own runs: sentinels (core/sentinel), and what Claude is told (a sentinel run's brief, or a short note). */

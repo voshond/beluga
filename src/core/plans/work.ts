@@ -24,6 +24,7 @@ import { liveFrom, type TaskView } from './progress.js';
 import { type PlanGit, planGitOf } from './plan-git.js';
 import { type Plans, UNTITLED } from './plans.js';
 import { type MilestoneWhere, type NearRepo, type PlanRepoInfo, checkFailedPrompt, checkerBrief, describePlan, handbackPrompt, headBrief, milestoneNote, milestoneWhere, planningBrief, reviewerBrief, sizeWords, workerNote } from './prompt.js';
+import { THIS_COMPUTER } from '../../shared/assistant.js';
 
 /**
  * Plans at work: making a plan (its own conversation, in the project's main folder where Claude
@@ -262,7 +263,7 @@ export class PlansWork {
     // Its conversation plans on the agent picked for its work (a new conversation: nothing to hand off).
     // One this Mac can't run would fail the first turn, so your default plans it and the plan keeps the pick.
     if (input.agent && runsHere(this.deps.store.getState().runtimes, input.agent)) controller.manager.setAgent(chat.id, input.agent);
-    else if (input.agent) this.deps.store.dispatch({ type: 'system', channel: home, text: `${agentName(input.agent)} isn’t set up on this Mac, so your default agent plans this.`, level: 'warn' });
+    else if (input.agent) this.deps.store.dispatch({ type: 'system', channel: home, text: `${agentName(input.agent)} isn’t set up on ${THIS_COMPUTER}, so your default agent plans this.`, level: 'warn' });
     if (!opts.quiet) this.deps.intend({ type: 'navigate', view: { kind: 'plan', id: plan.id } });
     this.deps.askClaude(goal, home, true);
     // Named in a moment by a quick model (your message is never its name); Claude's plan_write names it after that.
@@ -341,7 +342,7 @@ export class PlansWork {
     const known = this.deps.store.getState().projects.some((p) => p.id === id && p.root);
     if (!known) {
       const near = this.nearRepos(this.plans.need(planId)).map((r) => r.name);
-      throw new Error(`“${change.repo}” isn’t a project on this Mac${near.length ? ` (near this plan: ${near.join(', ')})` : ''}`);
+      throw new Error(`“${change.repo}” isn’t a project on ${THIS_COMPUTER}${near.length ? ` (near this plan: ${near.join(', ')})` : ''}`);
     }
     return { ...change, repo: id!, by };
   }
@@ -358,7 +359,7 @@ export class PlansWork {
     if (repos.length > MAX_PLAN_REPOS) throw new Error(`A plan covers at most ${MAX_PLAN_REPOS} projects`);
     const projects = this.deps.store.getState().projects;
     const missing = repos.filter((id) => !projects.some((p) => p.id === id && p.root));
-    if (missing.length) throw new Error(`A plan can only cover projects on this Mac: ${missing.map((id) => `"${id}"`).join(', ')} ${missing.length > 1 ? "aren't" : "isn't"} one of them`);
+    if (missing.length) throw new Error(`A plan can only cover projects on ${THIS_COMPUTER}: ${missing.map((id) => `"${id}"`).join(', ')} ${missing.length > 1 ? "aren't" : "isn't"} one of them`);
     return repos;
   }
 

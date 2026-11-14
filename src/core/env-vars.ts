@@ -10,6 +10,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { ENV_KEY, type EnvKeys, type EnvVar, MAX_ENV_VALUE, MAX_ENV_VARS, envProblems, envRecord, importEnv, mergeEnv, parseEnvText } from '../shared/env-vars.js';
 import { DEFAULT_EXAMPLE_FILE, EXAMPLE_FILES, exampleKeys, syncExample } from '../shared/env-example.js';
+import { type FoundKey, findKeys, mayHoldKey } from '../shared/key-detect.js';
 import { ENDPOINT_ID, endpointIdFor } from '../shared/local-endpoints.js';
 import type { Project, Workspace } from '../workspaces/types.js';
 import { belugaHome } from './home.js';
@@ -161,6 +162,11 @@ function exampleInfo(dir: string, set: ReadonlySet<string>, files: readonly stri
     missing: keys.filter((k) => !set.has(k)),
     unlisted: [...new Set(files)].filter((k) => !listed.has(k)),
   };
+}
+
+/** A key found in pasted text, and whether keeping it changes a variable set there now. */
+export interface PastedKey extends FoundKey {
+  readonly replaces?: boolean;
 }
 
 /** One place's variables, for the Settings editor. */
@@ -429,6 +435,67 @@ export class EnvVars {
     this.save();
     this.publish();
     return n;
+  }
+
+  /**
+   * The API keys in text just pasted into a chat there (BLG-965), named the way the place names
+   * its keys: one you have already says which, one shaped like yours takes its name, a provider's
+   * takes the name your .env.example uses for it. What comes back holds only the pasted text's own
+   * keys, never another value; `replaces`: a different value is set under that name there now.
+   */
+  pastedKeys(where: EnvPlace, text: string): PastedKey[] {
+    if (!mayHoldKey(text)) return [];
+    const { project, dir, wsId } = this.placeOf(where);
+    const known = mergeEnv(...this.layers(project, dir, wsId, true).map((l) => l.vars));
+    const example = [project?.root, dir].flatMap((d) => (d ? [readExample(d)] : [])).flatMap((f) => (f ? exampleKeys(f.text) : []));
+    return findKeys(text, { known, names: example }).map((k) => (k.why !== 'yours' && known[k.name] !== undefined && known[k.name] !== k.value ? { ...k, replaces: true } : k));
+  }
+
+  /**
+   * Keep keys pasted into a chat (BLG-965): as that workspace's own variables (same name: replaced),
+   * so its runs get them and archiving or merging asks whether the project keeps them; with no
+   * workspace yet (a new chat), as the project's own, or with no project either, as yours everywhere. A worktree that has a .env.example lists their names there
+   * (a placeholder, never the value), so the change ships with its work. → the template it listed them in.
+   */
+  keepPasted(where: { readonly workspaceId?: string; readonly projectId?: string }, rows: readonly EnvVar[]): { example?: string } {
+    if (!rows.length) return {};
+    const { workspaceId, projectId } = where;
+    if (!workspaceId) {
+      // A new chat that has no place yet: the project's (or with none, yours), as Settings › Environment would keep them.
+      if (projectId && !this.project(projectId)) throw new Error('That project is gone');
+      this.set(projectId, importEnv(this.get(projectId).vars, rows));
+      return {};
+    }
+    const found = this.workspace(workspaceId);
+    if (!found) throw new Error('That chat’s workspace is gone');
+    this.setWorktree(workspaceId, importEnv(toRows(this.data.worktrees[workspaceId]?.vars ?? {}), rows));
+    return this.listInExample(workspaceId, rows);
+  }
+
+  /**
+   * Keys for a worktree that's being made (a key pasted into a new worktree's first message):
+   * set before it exists, so its first run has them. Forgotten if it isn't made (forgetWorktree).
+   */
+  presetWorktree(id: string, rows: readonly EnvVar[]): boolean {
+    // An id that's already a workspace isn't one being made: its variables aren't this message's to add to.
+    if (this.workspace(id)) return false;
+    const vars = checkedVars(importEnv(toRows(this.data.worktrees[id]?.vars ?? {}), rows));
+    this.data = { ...this.data, worktrees: withWorktree(this.data.worktrees, id, { ...this.data.worktrees[id], vars }) };
+    this.save();
+    this.publish();
+    return true;
+  }
+
+  /** Names in a worktree's .env.example (only one it has, and unless the project switched syncing off). → the file. */
+  listInExample(workspaceId: string, rows: readonly EnvVar[]): { example?: string } {
+    const found = this.workspace(workspaceId);
+    if (!found || found.ws.kind !== 'worktree' || this.data.projects[found.project.root]?.exampleSync === false) return {};
+    const template = readExample(found.ws.path);
+    if (!template) return {};
+    const { text, added } = syncExample(template.text, rows);
+    if (!added.length) return {};
+    writeFileSync(path.join(found.ws.path, template.file), text);
+    return { example: template.file };
   }
 
   /** A deleted worktree's variables go with it. */

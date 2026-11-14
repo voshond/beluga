@@ -56,6 +56,8 @@ export type NativeSheet =
   | { readonly kind: 'new_plan'; readonly projectId?: string; readonly projectIds?: readonly string[] }
   /** A new sentinel (docs/sentinel.md §3): from a recipe, or built yourself; `projectId` 'mac' is Your Mac. */
   | { readonly kind: 'new_sentinel'; readonly projectId?: string; readonly way?: 'describe' | 'recipe' | 'build' }
+  /** Make a schedule that wakes this chat (BLG-400): '/schedule [prompt]' or the Schedules section's +. */
+  | { readonly kind: 'schedule'; readonly channel: string; readonly prompt?: string }
   /** Add a Tile to a dashboard (docs/sentinel.md §10). */
   | { readonly kind: 'add_tile'; readonly dashboardId: string }
   /** A kept table's document or storage object, or a run's file, in Beluga's viewer (BLG-381); `name` is the storage cell for one from Storage; for a run's file (BLG-392), `metric` is the run and `name` its file. */

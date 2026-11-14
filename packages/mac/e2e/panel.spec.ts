@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from './fixtures.js';
+import { termText } from './helpers.js';
 
 /**
  * The workspace screen: the conversation stays in the center, and the right panel has the
@@ -178,8 +179,8 @@ test('Terminal in the panel: + adds a shell for this workspace, and it runs ther
   await expect(added).toBeVisible();
   await term.locator('.xterm').click();
   await page.keyboard.type('pwd; echo panel-$((6*7))\n');
-  await expect(term.getByText('panel-42').last()).toBeVisible({ timeout: 15_000 });
-  await expect(term.getByText(/add-auth/).first()).toBeVisible();
+  await expect.poll(() => termText(term), { timeout: 15_000 }).toContain('panel-42');
+  await expect.poll(() => termText(term)).toMatch(/add-auth/);
   await added.hover();
   await added.getByRole('button', { name: /^Close Shell \d+/ }).click();
   await expect(numbered).toHaveCount(before);
@@ -197,7 +198,7 @@ test('⌘J opens a drawer under the chat when that’s your choice (Settings ›
   // ⌘J puts the keyboard in it.
   await expect(drawer.locator('.xterm-helper-textarea')).toBeFocused();
   await page.keyboard.type('echo drawer-$((6*7))\n');
-  await expect(drawer.getByText('drawer-42').last()).toBeVisible({ timeout: 15_000 });
+  await expect.poll(() => termText(drawer), { timeout: 15_000 }).toContain('drawer-42');
   // The conversation stays above it.
   await expect(composer(page)).toBeVisible();
   // Drag it taller; the height is kept.
