@@ -67,11 +67,12 @@ const SHELL_DIRS = ['/bin', '/usr/bin', '/usr/local/bin', '/opt/homebrew/bin'];
  */
 export function claudeCodeShell(env: Readonly<Record<string, string | undefined>>, platform: NodeJS.Platform = process.platform, canRun: (file: string) => boolean = runnable): 'zsh' | 'bash' | undefined {
   if (platform === 'win32') return undefined;
-  const kind = (file: string): 'zsh' | 'bash' => (path.basename(file).includes('zsh') ? 'zsh' : 'bash');
+  // Past the Windows check these are POSIX paths, whatever the host: path.posix keeps them so.
+  const kind = (file: string): 'zsh' | 'bash' => (path.posix.basename(file).includes('zsh') ? 'zsh' : 'bash');
   const named = [env.CLAUDE_CODE_SHELL, env.SHELL].find((file) => file && (file.includes('bash') || file.includes('zsh')) && canRun(file));
   if (named) return kind(named);
-  const dirs = [...(env.PATH ?? '').split(path.delimiter).filter(Boolean), ...SHELL_DIRS];
-  return (['zsh', 'bash'] as const).find((shell) => dirs.some((dir) => canRun(path.join(dir, shell))));
+  const dirs = [...(env.PATH ?? '').split(path.posix.delimiter).filter(Boolean), ...SHELL_DIRS];
+  return (['zsh', 'bash'] as const).find((shell) => dirs.some((dir) => canRun(path.posix.join(dir, shell))));
 }
 
 /**

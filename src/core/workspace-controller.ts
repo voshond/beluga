@@ -143,7 +143,7 @@ export interface OutsideConversation extends FoundConversation {
 export const workspaceIdOf = (channel: string): string | undefined => (channel.startsWith(WS_PREFIX) ? channel.slice(WS_PREFIX.length) : undefined);
 export { shareNameOf } from '../shared/share-names.js';
 import { shareNameOf } from '../shared/share-names.js';
-import { FILE_MANAGER } from '../shared/assistant.js';
+import { FILE_MANAGER, THIS_COMPUTER } from '../shared/assistant.js';
 import { fallbackFor } from '../shared/runtime-fallbacks.js';
 import { SCRATCH_DIR, type ScratchFile, type ScratchTotal, ensureScratch, listScratch, scratchTotal } from '../workspaces/scratch.js';
 import { isUnder } from '../shared/path-inside.js';
@@ -612,7 +612,7 @@ export class WorkspaceController {
    */
   async outsideConversations(projectId: string, dir?: string): Promise<{ dir: string; conversations: OutsideConversation[] }> {
     const project = this.deps.manager.list.find((p) => p.id === projectId && p.root);
-    if (!project) throw new Error('That project isn’t on this Mac');
+    if (!project) throw new Error(`That project isn’t on ${THIS_COMPUTER}`);
     const where = path.resolve(dir?.trim() || project.root);
     const all = this.deps.manager.list.flatMap((p) => p.workspaces);
     const brought = new Map(all.filter((w) => w.importedSession && !w.archived).map((w) => [w.importedSession!, w.id]));

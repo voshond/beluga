@@ -195,6 +195,7 @@ export const HANDLERS = {
   'remote.requestWorktree': (s, peerId, project, task, plan) => s.remote.requestWorktree(peerId, project, task, plan),
   'remote.handoff': (s, wsId, peerId) => s.remote.handoff(wsId, peerId),
   'remote.canHandOff': (s, wsId, peerId) => s.remote.canHandOff(wsId, peerId),
+  'remote.handoffNote': (s, wsId, peerId) => s.remote.handoffNote(wsId, peerId ?? undefined),
 
   'diff.load': (s, id) => s.diff.load(id),
   'diff.select': (s, index) => s.diff.select(index),
@@ -228,7 +229,22 @@ export const HANDLERS = {
   'workspaces.newWorktree': async (s, projectId, name, opts) => (await ctl(s)?.newWorktree(projectId, name, { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.agent ? { agent: opts.agent } : {}) }))?.id,
   'workspaces.newChat': async (s, projectId, title, dir) => (await ctl(s)?.newChat(projectId, title, dir))?.id,
   'workspaces.startChat': (s, projectId, text, dir, opts) => (maybeStatsOf(s)?.prompt(`new-chat:${projectId}`, text), byYourHand(text, () => ctl(s)?.startChat(projectId, text, dir ?? undefined, { ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}) }))),
-  'workspaces.startWorktree': async (s, projectId, text, opts) => (maybeStatsOf(s)?.prompt(`new-worktree:${projectId}`, text, opts?.agent?.runtime), await byYourHand(text, () => ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.tasks ? { tasks: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.id ? { id: opts.id } : {}), nameLater: true })))?.id,
+  // Keys pasted into its first message (BLG-965) are its own variables before it starts, so its first run has them.
+  'workspaces.startWorktree': async (s, projectId, text, opts) => {
+    const vars = opts?.vars?.filter((v) => v.key) ?? [];
+    const preset = vars.length > 0 && Boolean(opts?.id) && s.env.presetWorktree(opts!.id!, vars);
+    try {
+      const id = (maybeStatsOf(s)?.prompt(`new-worktree:${projectId}`, text, opts?.agent?.runtime), await byYourHand(text, () => ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.tasks ? { tasks: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.id ? { id: opts.id } : {}), nameLater: true })))?.id;
+      if (id && preset && opts?.id === id) s.env.listInExample(id, vars);
+      else if (id && vars.length) s.env.keepPasted({ workspaceId: id }, vars);
+      // Made under another id (or not at all): the preset goes.
+      if (preset && opts?.id !== id) s.env.forgetWorktree(opts!.id!);
+      return id;
+    } catch (err) {
+      if (preset) s.env.forgetWorktree(opts!.id!);
+      throw err;
+    }
+  },
   'workspaces.branches': (s, projectId) => ctl(s)?.branches(projectId),
   'workspaces.fork': async (s, id, name) => (await ctl(s)?.fork(id, name))?.id,
   'workspaces.editPrompt': (s, id, line, text, mode) => ctl(s)?.editPrompt(id, line, text, mode),
@@ -355,6 +371,8 @@ export const HANDLERS = {
   'env.worktree': (s, id) => s.env.worktree(id),
   'env.setWorktree': (s, id, rows) => s.env.setWorktree(id, rows),
   'env.carryWorktree': (s, id) => s.env.carryWorktree(id),
+  'env.pastedKeys': (s, where, text) => s.env.pastedKeys(where, text),
+  'env.keepPasted': (s, where, rows) => s.env.keepPasted(where, rows),
   'env.overview': (s, projectId) => s.env.overview(projectId),
   'env.addToExample': (s, projectId) => s.env.addToExample(projectId),
   'env.exampleSync': (s, projectId, on) => s.env.setExampleSync(projectId, on),

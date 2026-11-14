@@ -34,6 +34,12 @@ interface Script {
 /** Canned, fast replies so the demo (and README recordings) never wait on real Claude calls. */
 const SCRIPTS: readonly Script[] = [
   {
+    // A command to paste in your terminal (BLG-968): the block's Run does it for you.
+    match: /\bhow do i (run|start|check)\b/i,
+    steps: ['Read package.json'],
+    answer: 'It needs Node 20 or later. Paste this in your terminal to check yours:\n\n```bash\nnode --version\n```',
+  },
+  {
     // Issues › Investigate on the demo's headline bug (core/issues/prompts.ts): why, a reproduction, and the brief written.
     match: /^Investigate GitHub issue #48\b/,
     stepMs: 900,

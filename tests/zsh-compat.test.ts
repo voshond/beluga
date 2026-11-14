@@ -51,7 +51,7 @@ describe('zsh compat for Claude runs', () => {
     expect(out).toBe('3 3 a\nx\ty\n');
   });
 
-  it('does nothing in bash', () => {
+  it.skipIf(process.platform === 'win32')('does nothing in bash', () => {
     const out = execFileSync('/bin/sh', ['-c', `${ZSH_COMPAT}echo ok`], { encoding: 'utf8' });
     expect(out).toBe('ok\n');
   });

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './fixtures.js';
-import { pick } from './helpers.js';
+import { pick, popup, popupMenu } from './helpers.js';
 
 /** BLG-623: a Share sheet adds people one at a time (a friend, what they can do, Share) and lists only who has it. */
 
@@ -79,4 +79,55 @@ test('a shared worktree has a green dot in the sidebar; changing access from the
   await project.getByRole('button', { name: 'Done' }).click();
   await expect(dot('webhook-retries')).toBeVisible();
   await expect(others.first()).toBeVisible();
+});
+
+test('Hand off lives in Share: "Can take it over" hands a worktree over, and any share can come with a handoff note (BLG-967)', async ({ page }) => {
+  const row = sidebar(page).getByRole('button', { name: 'webhook-retries', exact: true });
+  if (!(await row.isVisible())) await sidebar(page).getByRole('button', { name: 'bob-api' }).first().click({ position: { x: 60, y: 10 } });
+  await row.click();
+  // No Hand Off of its own any more: ⌘K's "handoff" opens Share on "Can take it over".
+  await page.keyboard.press('Meta+k');
+  await page.keyboard.type('handoff');
+  await expect(page.getByRole('option', { name: /Hand Off to Someone/ })).toHaveCount(0);
+  await page.getByRole('option', { name: /Share So Someone Takes It Over/ }).click();
+  const sheet = page.getByRole('dialog', { name: /^Share “webhook-retries”/ });
+  await expect(sheet.getByRole('combobox', { name: 'What they can do' })).toContainText('Can take it over');
+  const note = sheet.getByRole('checkbox', { name: /Write a handoff note/ });
+  await expect(note).toBeChecked();
+  await expect(note).toBeDisabled();
+  await expect(sheet.getByRole('button', { name: 'Hand Over' })).toBeDisabled();
+  // Who can take it over: the room's people with their agent, and friends, each saying which.
+  await popup(sheet, 'Friend to share with').click();
+  const inRoom = popupMenu(page).getByRole('option', { name: 'bob', exact: true }).first();
+  await expect(inRoom).toContainText('In your room');
+  await inRoom.click();
+  // Their Beluga is asked first whether it could take it: the demo's bob doesn't take work from friends.
+  await expect(sheet).toContainText('bob has turned off work from friends');
+  await expect(sheet.getByRole('button', { name: 'Hand Over' })).toBeDisabled();
+  if (shots) await sheet.screenshot({ path: `${shots}/07-take-over-cannot.png` });
+  // bob the friend, over the network: no answer from the demo's network, so it goes ahead as before.
+  await popup(sheet, 'Friend to share with').click();
+  const friend = popupMenu(page).getByRole('option', { name: 'bob', exact: true }).nth(1);
+  await expect(friend).toContainText('Friend');
+  await friend.click();
+  await expect(sheet).toContainText('bob gets the latest branch, this chat and the note in a worktree on their computer');
+  await expect(sheet.getByRole('button', { name: 'Hand Over' })).toBeEnabled();
+  if (shots) {
+    await sheet.screenshot({ path: `${shots}/07-take-over-light.png` });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await sheet.screenshot({ path: `${shots}/08-take-over-dark.png` });
+    await page.emulateMedia({ colorScheme: 'light' });
+  }
+
+  // Back to sharing here: the note is a choice now, off until you tick it.
+  await pick(sheet, 'What they can do', 'Can work here');
+  await expect(sheet.getByRole('button', { name: 'Share', exact: true })).toBeVisible();
+  await expect(note).toBeEnabled();
+  await expect(note).not.toBeChecked();
+  await pick(sheet, 'Friend to share with', 'mia');
+  await note.check();
+  if (shots) await sheet.screenshot({ path: `${shots}/09-share-with-note.png` });
+  await sheet.getByRole('button', { name: 'Share', exact: true }).click();
+  await expect(sheet.getByRole('combobox', { name: 'Access for mia' })).toContainText('Can work here');
+  await pick(sheet, 'Access for mia', 'Remove access');
 });

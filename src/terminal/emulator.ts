@@ -33,6 +33,13 @@ export interface PtyLink {
   readonly exited?: PtyExit;
   /** Stop listening (the program keeps running). */
   close?(): void;
+  /** The screen drew this many more characters of the output (flow control, BLG-963; see flow.ts). */
+  ack?(chars: number): void;
+}
+
+export interface AttachOptions {
+  /** This screen acks what it draws (`ack`), and the program waits while it's far behind. */
+  readonly flow?: boolean;
 }
 
 export type TerminalExit = PtyExit;

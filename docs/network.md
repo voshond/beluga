@@ -898,7 +898,7 @@ and the setup when you trust them fully; otherwise the chat says so, with Termin
 the state's `forks` (asking, copying, ready with your worktree's id, failed with why); the header button follows it
 (Packing…, Waiting for ata's Mac…, Copying…, then Open My Fork). The same trust rule now holds for "Runs on" › This Mac.
 
-**Handing a worktree to a friend (BLG-341).** Hand Off lists your friends as well as the room's people with their
+**Handing a worktree to a friend (BLG-341).** Share's *Can take it over* (Hand Off until BLG-967) lists your friends as well as the room's people with their
 agent. To a friend outside your room, the room's own `ws_handoff` (note, chat, branch bundle in a private share for
 them) goes over their link instead (`FriendShares.routeHandoff`), and so does their `ws_handoff_result`; each side
 keeps the `hid` so only that answer is let through, and the bundle's share is fetched the way a fork's pack is (the
@@ -906,10 +906,18 @@ keeps the `hid` so only that answer is let through, and the bundle's share is fe
 Mac shares the new worktree back to you over the network to follow along. Packs in an outbox (copies, forks,
 handoffs) are never offered as folders. A Beluga without `share.handoff` is told before anything is sent.
 
+**The handoff note (BLG-967).** Hand Off and Share were one idea in two sheets, so Share is the only one now:
+*Can take it over* is the old handoff, and *Write a handoff note* asks your agent for a note with any share
+(`remote.handoffNote`). The prompt (`src/core/handoff-note.ts`) has the agent check git first, read-only, then
+write Goal, Where it stands, Next steps, Decisions and Watch out, with no secrets. The note shows in the chat and is
+kept as `.beluga/scratch/HANDOFF.md` (Scratch, so never committed, and open to whoever it's shared with); a Mac
+taking the work over writes the same file into its new worktree, and its agent is told to check the note against the
+code first.
+
 **Checking first, and saying why (BLG-614).** Before a note is written or anything is committed or sent, the Mac
 handing off asks `ws_handoff_check` (just the origin URL): does their Mac have that repository, and do they take work
-from friends? Nobody approves it; the answer is only yes or a reason. The Hand Off sheet asks it of everyone online
-as it opens (`remote.canHandOff`) and shows who can't take it and why. It goes the same way the handoff would (room,
+from friends? Nobody approves it; the answer is only yes or a reason. The Share sheet asks it of the friend you pick
+with *Can take it over* (`remote.canHandOff`) and shows who can't take it and why. It goes the same way the handoff would (room,
 or the friend's link via `FriendShares.routeHandoffCheck`, matched by `reqId`). No answer within 8 seconds (an older
 Beluga, or someone offline) lets the handoff go ahead as before. The receiving Mac also checks for the repository
 before asking you to approve. Its `ws_handoff_result` carries a `reason` (`declined`, `off`, `no_repo`,

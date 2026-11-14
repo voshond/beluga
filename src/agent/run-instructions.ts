@@ -2,7 +2,7 @@ import os from 'node:os';
 import type { AgentRef } from '../protocol.js';
 import type { InstructionPieceView } from '../shared/agent-setup.js';
 import { buildGraphAppend } from './graph-prompt.js';
-import { type ShellSetup, buildAskOnlyAppend, buildChatSendAppend, buildCommitAppend, buildKeepAppend, buildMachineAppend, buildScratchAppend, buildSetupAppend, buildShellAppend, buildShippedAppend, buildSystemAppend, loginShellSetup } from './prompt.js';
+import { type ShellSetup, buildAskOnlyAppend, buildChatSendAppend, buildChatVarsAppend, buildCommitAppend, buildKeepAppend, buildMachineAppend, buildScratchAppend, buildSetupAppend, buildShellAppend, buildShippedAppend, buildSystemAppend, loginShellSetup } from './prompt.js';
 import { buildSyncMainAppend } from './sync-main.js';
 import { buildTerminalAppend } from './terminal-prompt.js';
 import type { AgentRunInput } from './types.js';
@@ -53,6 +53,14 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
     sample: () => buildSetupAppend(SAMPLE_PROJECT, 'npm ci', 'detected'),
   },
   { id: 'scratch', label: 'Scratch folder', when: 'Worktree runs, with Scratch folder on', source: 'src/agent/prompt.ts', text: (c) => (c.input.scratchDir ? buildScratchAppend(c.input.scratchDir) : ''), sample: () => buildScratchAppend('.beluga/scratch') },
+  {
+    id: 'chat-vars',
+    label: 'Variables kept for this chat',
+    when: 'Chats where you pasted a key (kept out of the chat)',
+    source: 'src/agent/prompt.ts',
+    text: (c) => (c.input.chatVars?.length ? buildChatVarsAppend(c.input.chatVars) : ''),
+    sample: () => buildChatVarsAppend(['OPENAI_API_KEY']),
+  },
   { id: 'shell', label: 'Your shell is zsh', when: 'Every run, when its commands run in zsh', source: 'src/agent/prompt.ts', text: (c) => buildShellAppend(c.shell), sample: () => buildShellAppend('zsh-compat') },
   { id: 'keep', label: 'Processes that keep running', when: 'Worktree runs', source: 'src/agent/prompt.ts', text: (c) => (c.worktree ? buildKeepAppend(c.agent) : ''), sample: () => buildKeepAppend() },
   { id: 'commit', label: 'Commit before ending', when: 'Worktree runs (not a plan’s, not in a main folder)', source: 'src/agent/prompt.ts', text: (c) => (c.worktree && !c.input.planBrief && !c.askOnly ? buildCommitAppend(c.input.place?.openPr) : ''), sample: () => buildCommitAppend() },

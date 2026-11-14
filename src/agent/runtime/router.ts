@@ -1,6 +1,7 @@
 import { sideCalls } from '../side-calls.js';
 import type { AgentBackend, AgentRunInput, TerminalSink } from '../types.js';
 import type { Complete, RuntimeId } from './types.js';
+import { THIS_COMPUTER } from '../../shared/assistant.js';
 
 /** Runtimes' names, for the words a routed call says when one can't do something. */
 const RUNTIME_LABELS: Readonly<Record<string, string>> = { codex: 'Codex', opencode: 'OpenCode', copilot: 'Copilot' };
@@ -67,7 +68,7 @@ export function routedBackend(fallback: AgentBackend, fallbackRuntime: RuntimeId
     run: (input: AgentRunInput) => {
       const id = input.place?.agent?.runtime ?? fallbackRuntime;
       const backend = pick(id);
-      if (!backend) return Promise.reject(new Error(`${input.place?.agent?.label ?? id} isn't set up on this Mac. Pick another agent for this worktree.`));
+      if (!backend) return Promise.reject(new Error(`${input.place?.agent?.label ?? id} isn't set up on ${THIS_COMPUTER}. Pick another agent for this worktree.`));
       return backend.run(input);
     },
     // The agent's own terminal on a conversation (BLG-534): its runtime's, as its turns are.

@@ -19,6 +19,7 @@ const NODE_TYPE: Readonly<Record<StepKind, GraphNode['type']>> = {
   pr: 'task',
   merge: 'milestone',
   message: 'person',
+  chat: 'service',
   friend: 'person',
   trigger: 'service',
   measure: 'metric',
@@ -40,6 +41,8 @@ function handsOn(st: Step): string {
       return 'what it read (JSON)';
     case 'friend':
       return 'their answer';
+    case 'chat':
+      return 'its answer’s first line';
     case 'pr':
       return 'the pull request';
     case 'merge':

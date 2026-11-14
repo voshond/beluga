@@ -50,6 +50,7 @@ export class PtyProcess {
   private readonly resizeListeners = new Set<(size: { cols: number; rows: number }) => void>();
   private disposed = false;
   private lastOut = Date.now();
+  private holds = 0;
 
   constructor(opts: PtyOptions) {
     this.id = opts.id;
@@ -124,6 +125,33 @@ export class PtyProcess {
   /** Input bytes (keyboard). Ignored once the program has exited. */
   write(data: string): void {
     if (data) this.pty?.write(data);
+  }
+
+  /**
+   * Make the program wait (its output paused, as a real terminal does when it can't keep up) until
+   * every hold is let go: a screen far behind on drawing holds it (see flow.ts). → let go (once).
+   */
+  hold(): () => void {
+    let held = true;
+    if (this.holds++ === 0) this.flow('pause');
+    return () => {
+      if (!held) return;
+      held = false;
+      if (--this.holds === 0) this.flow('resume');
+    };
+  }
+
+  /** Whether some screen is making the program wait now. */
+  get waiting(): boolean {
+    return this.holds > 0;
+  }
+
+  private flow(how: 'pause' | 'resume'): void {
+    try {
+      this.pty?.[how]();
+    } catch {
+      // The process may have exited between the check and the call.
+    }
   }
 
   /** Type a command line and press Enter. */

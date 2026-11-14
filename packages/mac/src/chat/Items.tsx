@@ -383,10 +383,17 @@ function FromChatCard({ origin, text }: { origin: ChatOrigin; text: string }) {
       <div className={s.gutter} />
       <div className={s.body}>
         <div className={s.fromChat} data-from-chat={origin.ref}>
-          <div className={s.fromChatHead}>
-            <Icon name="chat" size={11} />
-            From <InlineCode text={`chat:${origin.ref}`} fallback={origin.title} /> · {origin.agent.label}, an agent
-          </div>
+          {origin.sentinel ? (
+            <div className={s.fromChatHead}>
+              <Icon name="sentinel" size={11} />
+              From Sentinel {origin.sentinel.name}
+            </div>
+          ) : (
+            <div className={s.fromChatHead}>
+              <Icon name="chat" size={11} />
+              From <InlineCode text={`chat:${origin.ref}`} fallback={origin.title} /> · {origin.agent.label}, an agent
+            </div>
+          )}
           <Markdown text={text} />
         </div>
       </div>

@@ -192,6 +192,8 @@ export const ChatOrigin = z.object({
   messageId: shortStr,
   /** The source chat wants an answer. Without it, the message wants none. */
   replyWanted: z.boolean().optional(),
+  /** One of your sentinels sent it, not a chat: its card says "From Sentinel <name>"; `run` is the run that sent it. An older Mac drops it. */
+  sentinel: z.object({ id: shortStr, name: z.string().max(200), run: shortStr.optional() }).optional().catch(undefined),
 });
 export type ChatOrigin = z.infer<typeof ChatOrigin>;
 
