@@ -95,7 +95,7 @@ export function ProjectSettings({ projectId, tab: first, close }: { projectId: s
   );
   if (!general) {
     return (
-      <FormSheet title={`${project.name} Settings`} icon={tab === 'environment' ? 'lock' : 'branch'} intro={tab === 'environment' ? `For its terminals, commands and your agent. They stay on ${thisComputer()}.` : undefined} submitLabel={changed ? 'Save' : 'Done'} onSubmit={save} onCancel={close} cancelLabel={changed ? 'Cancel' : 'Close'} width={640} scrolls>
+      <FormSheet title={`${project.name} Settings`} intro={tab === 'environment' ? `For its terminals, commands and your agent. They stay on ${thisComputer()}.` : undefined} submitLabel={changed ? 'Save' : 'Done'} onSubmit={save} onCancel={close} cancelLabel={changed ? 'Cancel' : 'Close'} width={640} scrolls>
         {tabs}
         <div className={e.sheetBody} data-sheet-scroll>
           {tab === 'environment' ? (
@@ -113,7 +113,6 @@ export function ProjectSettings({ projectId, tab: first, close }: { projectId: s
   return (
     <FormSheet
       title={`${project.name} Settings`}
-      icon="terminal"
       intro="The commands every workspace of this project uses. Leave one empty for none."
       submitLabel={changed ? 'Save' : 'Done'}
       onSubmit={save}
