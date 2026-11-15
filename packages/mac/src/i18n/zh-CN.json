@@ -768,7 +768,6 @@
  "Also archive {0}": "同时归档 {0}",
  "Also delete its messages from {0}": "同时从 {0} 中删除它的消息",
  "Also delete {0}": "同时删除 {0}",
- "Also earned · press one to wear it": "也已获得 · 点一个即可佩戴",
  "Also remove {0}{1} there": "也从那里删除 {0}{1}",
  "Also send this project’s open tasks": "同时发送这个项目的未完成任务",
  "Also waiting for you": "也在等你处理",
@@ -1133,7 +1132,6 @@
  "Based on": "基于",
  "Battery Power": "电池电源",
  "Battery: {0}%{1} ({2}{3})": "电池：{0}%{1}（{2}{3}）",
- "Because: {0}.": "因为：{0}。",
  "Before app-server. Beluga still sets each turn’s sandbox.": "在 app-server 之前。Beluga 仍会设置每一轮的沙盒。",
  "Behind a sign-in": "需要登录",
  "Behind {0}": "落后于 {0}",
@@ -12133,5 +12131,9 @@
  "A new pull request into {0} with {1}’s commits and your {2}, on a branch of its own{3}": "一个合并到 {0} 的新拉取请求，包含 {1} 的提交和你的 {2}，放在它自己的分支上{3}",
  "A new pull request into {0} with {1}’s commits and yours, instead": "改为创建一个合并到 {0} 的新拉取请求，包含 {1} 的提交和你的提交",
  "{0} here {1} on {2}, and {3}’s fork doesn’t let maintainers push to it": "这里的 {0} {1} 在 {2} 上，而且 {3} 的分叉不允许维护者推送",
- "{0} here {1} on {2} yet: {3}’s fork lets maintainers push to it": "这里的 {0} {1} 在 {2} 上：{3} 的分叉允许维护者推送"
+ "{0} here {1} on {2} yet: {3}’s fork lets maintainers push to it": "这里的 {0} {1} 在 {2} 上：{3} 的分叉允许维护者推送",
+ "Usage Pass": "用量通行证",
+ "Titles you’ve earned": "你获得的称号",
+ "Press one to wear it": "点一个即可佩戴",
+ "Show all {0}": "显示全部 {0} 个"
 }

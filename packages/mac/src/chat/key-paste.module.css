@@ -291,21 +291,28 @@
 /*
  * `$NAME` in the box: a key chip over the room its words take (MentionHighlighter). Just kept, it
  * grows in from where the key started, out of a soft blur, with a settle at the end.
+ *
+ * The room is "$NAME" in the box's own font, so the name is drawn in that font too, at the other
+ * chips' size: the icon takes the "$"'s place and the chip ends where the words end. (In mono it
+ * came out about a fifth narrower, leaving a bare stretch before the caret.) A name too short to
+ * fit the icon and padding in its room lets the chip run a hair past it, never cut.
  */
 .keyChip.keyChip {
   --keep: var(--worktree);
+  inset: -1px auto -1px 0;
+  width: max-content;
+  min-width: 100%;
   align-items: center;
   justify-content: flex-start;
-  gap: 3px;
-  padding: 0 5px 0 4px;
+  gap: 2px;
+  padding: 0 3px;
   border-radius: 6px;
   background: color-mix(in srgb, var(--keep) 14%, var(--bg));
   box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--keep) 36%, transparent);
   color: color-mix(in srgb, var(--keep) 84%, var(--text));
-  font-family: var(--font-mono);
-  font-size: 0.8em;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-family: inherit;
+  font-size: 0.92em;
+  font-weight: 500;
   transform-origin: 8% 55%;
 }
 .keyChip :global(svg) {

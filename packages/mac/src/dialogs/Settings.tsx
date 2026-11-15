@@ -744,6 +744,7 @@ function SettingsWindow({ pane }: { pane: SettingsPane }) {
         <Dialog.Overlay className={s.overlay} data-over-welcome={overWelcome} />
         <Dialog.Content
           className={s.window}
+          data-settings-window=""
           data-over-welcome={overWelcome}
           aria-describedby={undefined}
           onOpenAutoFocus={(e) => {
