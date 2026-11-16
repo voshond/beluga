@@ -1418,6 +1418,7 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
     case 'agent_term':
     case 'term_visuals':
     case 'shell_choices':
+    case 'font_choices':
     case 'env_keys':
     case 'pr_custom':
     case 'gh':

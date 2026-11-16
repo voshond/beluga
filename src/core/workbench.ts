@@ -3,7 +3,7 @@ import { chmod, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { type PtyProcess, type TerminalManager, defaultShell, listShells, scriptShell } from '../terminal/index.js';
+import { type PtyProcess, type TerminalManager, defaultShell, installedMonoFonts, listShells, scriptShell, watchFontDirs } from '../terminal/index.js';
 import { type ShellChoice, commandArgs, shellArgs } from '../shared/shells.js';
 import type { EnvPlace } from './env-vars.js';
 import { systemOpen } from './os-open.js';
@@ -120,6 +120,10 @@ export interface WorkbenchDeps {
   readonly envFor?: (where: EnvPlace) => Record<string, string>;
   /** The shells you can pick (injected in tests). */
   readonly listShells?: () => ShellChoice[];
+  /** The monospace fonts installed here, for the terminal's font (injected in tests). */
+  readonly listFonts?: (fresh: boolean) => Promise<string[]>;
+  /** Calls back when fonts are installed or removed; returns how to stop (injected in tests). */
+  readonly watchFonts?: (onChange: () => void) => () => void;
   /** What a project's setup should be after it failed in `dir` (a small model looks). */
   readonly fixSetup?: (dir: string, failed: string, output: string) => Promise<SetupFix | undefined>;
   /** What a project's run command should be after it failed in `dir` (a model looks). */
@@ -345,6 +349,8 @@ export class Workbench {
   private readonly stopping = new Set<string>();
   /** Worktrees asked "do you want me to fix it?" right now, by `<ws>:<setup|run>` (one question at a time). */
   private readonly offered = new Set<string>();
+  /** Stops watching the font folders. */
+  private unwatchFonts?: () => void;
 
   constructor(private readonly deps: WorkbenchDeps) {}
 
@@ -360,6 +366,8 @@ export class Workbench {
     this.deps.store.dispatch({ type: 'templates', templates: loadTemplates() });
     this.deps.store.dispatch({ type: 'pr_custom', custom: Boolean(customPrPrompt()) });
     this.deps.store.dispatch({ type: 'shell_choices', shells: (this.deps.listShells ?? listShells)() });
+    this.refreshFonts(false);
+    this.unwatchFonts = (this.deps.watchFonts ?? watchFontDirs)(() => this.refreshFonts(true));
     void (this.deps.hasGh ?? hasGh)().then((ok) => {
       this.deps.store.dispatch({ type: 'gh', ok });
       if (ok) void this.refreshPrs();
@@ -384,6 +392,14 @@ export class Workbench {
   }
 
   /** Ask Claude Code for its models again (at start, and after it moved to a newer one). */
+  /** Reads which monospace fonts are installed (a Nerd Font you just added shows in Settings › Terminal). */
+  refreshFonts(fresh: boolean): void {
+    void (this.deps.listFonts ?? installedMonoFonts)(fresh).then(
+      (fonts) => this.deps.store.dispatch({ type: 'font_choices', fonts }),
+      () => undefined, // Fonts unreadable: the app falls back to the ones it knows.
+    );
+  }
+
   refreshModels(): void {
     void this.deps.listModels?.().then((models) => models && this.deps.store.dispatch({ type: 'models', models }), () => undefined);
   }
@@ -395,6 +411,7 @@ export class Workbench {
     clearInterval(this.prTimer);
     clearTimeout(this.runtimeTimer);
     for (const off of this.watchers.values()) off();
+    this.unwatchFonts?.();
     this.deps.terminals?.closeAll();
   }
 

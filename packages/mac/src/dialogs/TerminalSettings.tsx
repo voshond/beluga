@@ -91,13 +91,14 @@ function ShellGroup() {
 /** How the terminal looks in this window (kept on this computer). */
 function LookGroup() {
   const prefs = usePrefs();
+  const installed = useApp((st) => st.fontChoices);
   return (
     <Group title={`Appearance on ${thisComputer()}`}>
       <div className={t.previewRow}>
         <TermPreview prefs={prefs} />
       </div>
       <Row label="Font">
-        <Select label="Terminal font" value={prefs.termFont} onChange={(v) => setPrefs({ termFont: v })} options={fontChoices(prefs.termFont)} />
+        <Select label="Terminal font" value={prefs.termFont} onChange={(v) => setPrefs({ termFont: v })} options={fontChoices(prefs.termFont, installed)} />
       </Row>
       <Row label="Size" detail={`${prefs.termFontSize} pt`}>
         <input className={s.slider} aria-label="Terminal font size" type="range" min={9} max={22} step={0.5} value={prefs.termFontSize} onChange={(e) => setPrefs({ termFontSize: Number(e.target.value) })} />
