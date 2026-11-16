@@ -224,8 +224,9 @@ button.stat:disabled {
   align-items: center;
   gap: 6px 12px;
 }
-/* A narrow page: the fields' words step aside (each says what it is in its tooltip and placeholder). */
-@container (max-width: 760px) {
+/* A narrow page: the fields' words step aside (each says what it is in its tooltip and placeholder).
+   With Then (BLG-973) the new worktree's line needs about 900px to keep them. */
+@container (max-width: 1000px) {
   .bar > label > span:first-child,
   .actions > label > span:first-child,
   .bar [data-runs-on-words] {
@@ -233,7 +234,7 @@ button.stat:disabled {
   }
 }
 /* Too narrow for one line: two rows, the fields on top and the actions (the mic, the button) under them on the right (#527). */
-@container (max-width: 520px) {
+@container (max-width: 700px) {
   .bar {
     flex-wrap: wrap;
   }

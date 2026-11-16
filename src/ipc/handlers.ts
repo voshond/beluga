@@ -234,7 +234,7 @@ export const HANDLERS = {
     const vars = opts?.vars?.filter((v) => v.key) ?? [];
     const preset = vars.length > 0 && Boolean(opts?.id) && s.env.presetWorktree(opts!.id!, vars);
     try {
-      const id = (maybeStatsOf(s)?.prompt(`new-worktree:${projectId}`, text, opts?.agent?.runtime), await byYourHand(text, () => ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.tasks ? { tasks: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.id ? { id: opts.id } : {}), nameLater: true })))?.id;
+      const id = (maybeStatsOf(s)?.prompt(`new-worktree:${projectId}`, text, opts?.agent?.runtime), await byYourHand(text, () => ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.tasks ? { tasks: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.id ? { id: opts.id } : {}), ...(opts?.land ? { land: true } : {}), nameLater: true })))?.id;
       if (id && preset && opts?.id === id) s.env.listInExample(id, vars);
       else if (id && vars.length) s.env.keepPasted({ workspaceId: id }, vars);
       // Made under another id (or not at all): the preset goes.
@@ -266,6 +266,8 @@ export const HANDLERS = {
   'workspaces.remove': (s, id, opts) => ctl(s)?.remove(id, opts),
   'workspaces.commit': (s, id, message) => ctl(s)?.commit(id, message),
   'workspaces.merge': (s, id) => ctl(s)?.merge(id),
+  'workspaces.land': (s, id) => ctl(s)?.land(id),
+  'workspaces.setLandOnBase': (s, id, on) => ctl(s)?.setLandOnBase(id, on),
   'workspaces.prepareRemoval': (s, id) => ctl(s)?.prepareRemoval(id),
   'workspaces.applyEnvBack': (s, id, removed) => ctl(s)?.applyEnvBack(id, removed),
   'workspaces.keepEnvHere': (s, id) => ctl(s)?.keepEnvHere(id),

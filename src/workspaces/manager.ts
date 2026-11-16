@@ -1,3 +1,4 @@
+import { type LandResult, landOnto } from './land.js';
 import { type MergePreview, mergePreview } from './merge-preview.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { systemOpen } from '../core/os-open.js';
@@ -96,6 +97,13 @@ const forkSessionOf = (source: Workspace, session: string | null | undefined): P
 });
 /** A record's agent and model from one AgentRef (its model kept as the workspace's model, as setAgent does). */
 /** Heads of a worktree's pull requests that merged (BLG-831, BLG-833): GitHub keeps them, so what's in them isn't pushed nowhere. */
+/**
+ * What a worktree's commits count against: its base. Straight to main's lands in the main folder,
+ * not on origin, so its base's own local branch (origin/main → main): landed there is landed.
+ */
+const ownBase = <T extends string | undefined>(base: T, landOnBase?: boolean): T => (landOnBase && base?.startsWith('origin/') ? base.slice('origin/'.length) : base) as T;
+const statusBase = (ws: Pick<WorkspaceRecord, 'kind' | 'base' | 'landOnBase'>): string | undefined => (ws.kind === 'main' ? undefined : ownBase(ws.base, ws.landOnBase));
+
 const shippedOf = (ws: Pick<WorkspaceRecord, 'mergedHead' | 'prShipped'>): string[] => [...new Set([ws.mergedHead, ws.prShipped?.head].filter((h): h is string => Boolean(h)))];
 
 const agentFields = (agent: AgentRef | undefined): Pick<WorkspaceRecord, 'agent' | 'model'> => {
@@ -579,7 +587,7 @@ export class WorkspaceManager {
     const find = (): Workspace | undefined => this.projects.flatMap((p) => p.workspaces).find((w) => !w.archived && w.kind !== 'chat' && real(w.path) === key);
     const read = find();
     if (!read) return false;
-    const status = await g.status(read.path, read.kind === 'main' ? undefined : read.base, shippedOf(read)).catch(() => undefined);
+    const status = await g.status(read.path, statusBase(read), shippedOf(read)).catch(() => undefined);
     if (this.refreshing) return false; // a full refresh started meanwhile: it has the newer reading
     // As it is now (a full refresh may have replaced it meanwhile), not as it was before git ran.
     const ws = find();
@@ -651,7 +659,7 @@ export class WorkspaceManager {
       }
       await this.followPullHeads(root, workspaces);
       const withStatus = await Promise.all(
-        workspaces.map(async (w) => (w.archived || w.kind === 'chat' ? w : { ...w, status: await g.status(w.path, w.kind === 'main' ? undefined : w.base, shippedOf(w)).catch(() => undefined) })),
+        workspaces.map(async (w) => (w.archived || w.kind === 'chat' ? w : { ...w, status: await g.status(w.path, statusBase(w), shippedOf(w)).catch(() => undefined) })),
       );
       // The main checkout's status (just read) says what it's on and how much is uncommitted.
       const mainStatus = withStatus.find((w) => w.kind === 'main')?.status;
@@ -924,7 +932,8 @@ export class WorkspaceManager {
   /** `opts.id`: the id it gets (from newWorktreeId), else a fresh one. */
   /** `opts.agent`: the agent it runs (unset: your default). */
   /** `opts.ticket`: the ticket it is for (RUN-117), so its branch is RUN-117/<name>. */
-  async createWorktree(projectIdOrRoot: string, name: string, base?: string, opts: { readonly id?: string; readonly agent?: AgentRef; readonly thread?: ThreadRecord; readonly ticket?: string } = {}): Promise<Workspace> {
+  /** `opts.landOnBase`: Straight to main (see WorkspaceRecord.landOnBase). */
+  async createWorktree(projectIdOrRoot: string, name: string, base?: string, opts: { readonly id?: string; readonly agent?: AgentRef; readonly thread?: ThreadRecord; readonly ticket?: string; readonly landOnBase?: boolean } = {}): Promise<Workspace> {
     const project = this.projects.find((p) => p.id === projectIdOrRoot || p.root === projectIdOrRoot);
     if (!project) throw new WorkspaceError('Project not found');
     if (base !== undefined && !(await g.isCommit(project.root, base))) throw new WorkspaceError(`There's no branch called ${base}`);
@@ -935,7 +944,7 @@ export class WorkspaceManager {
     await g.addWorktree(project.root, dir, branch, from);
     await g.excludeProjectDir(dir);
     await copyEnvFiles(project.root, dir);
-    const record: WorkspaceRecord = { id: opts.id && !this.records.some((r) => r.id === opts.id) ? opts.id : freshId(), projectRoot: project.root, name: s, path: dir, kind: 'worktree', branch, ...(opts.ticket ? { ticket: opts.ticket } : {}), base: from, createdAt: Date.now(), envSnapshot: await envSnapshot(dir), ...agentFields(opts.agent), ...(opts.thread ? { thread: opts.thread } : {}) };
+    const record: WorkspaceRecord = { id: opts.id && !this.records.some((r) => r.id === opts.id) ? opts.id : freshId(), projectRoot: project.root, name: s, path: dir, kind: 'worktree', branch, ...(opts.ticket ? { ticket: opts.ticket } : {}), base: from, createdAt: Date.now(), envSnapshot: await envSnapshot(dir), ...agentFields(opts.agent), ...(opts.thread ? { thread: opts.thread } : {}), ...(opts.landOnBase ? { landOnBase: true } : {}) };
     this.saveRecord(record);
     const status = await g.status(dir, from).catch(() => undefined);
     return this.adopt(project, { ...record, projectId: project.id, external: false, ...(status ? { status } : {}) });
@@ -1704,12 +1713,12 @@ export class WorkspaceManager {
 
   async review(id: string): Promise<g.Review> {
     const ws = this.require(id);
-    return g.review(ws.path, ws.base ?? this.projectOf(ws).base);
+    return g.review(ws.path, ownBase(ws.base ?? this.projectOf(ws).base, ws.landOnBase));
   }
 
   async fileDiff(id: string, file: string): Promise<string> {
     const ws = this.require(id);
-    return g.fileDiff(ws.path, ws.base ?? this.projectOf(ws).base, file);
+    return g.fileDiff(ws.path, ownBase(ws.base ?? this.projectOf(ws).base, ws.landOnBase), file);
   }
 
   async commitAll(id: string, message: string): Promise<boolean> {
@@ -1728,8 +1737,28 @@ export class WorkspaceManager {
     return result;
   }
 
+  /** Straight to main on or off for a worktree (see WorkspaceRecord.landOnBase). */
+  setLandOnBase(id: string, on: boolean): void {
+    const ws = this.require(id);
+    if (ws.kind !== 'worktree' || !ws.branch) throw new WorkspaceError('Only worktrees can go straight to main');
+    this.patchRecord(id, { landOnBase: on || undefined });
+  }
+
+  /**
+   * Land a worktree's work on its base in the main folder (Straight to main, workspaces/land.ts):
+   * what's left uncommitted is committed first, as `message`.
+   */
+  async land(id: string, message: string): Promise<LandResult> {
+    const ws = this.require(id);
+    if (ws.kind !== 'worktree' || !ws.branch || ws.archived) throw new WorkspaceError('Only worktrees can land on main');
+    await g.commitAll(ws.path, message);
+    const result = await landOnto(ws.projectRoot, ws.path, ws.branch, this.mergeTarget(ws));
+    await this.refresh();
+    return result;
+  }
+
   /** The branch a worktree merges into: its base, without the remote (undefined: whatever main is on). */
-  private mergeTarget(ws: Workspace): string | undefined {
+  mergeTarget(ws: Workspace): string | undefined {
     const base = ws.base ?? this.projectOf(ws).base;
     return base.startsWith('origin/') ? base.slice('origin/'.length) : base === 'HEAD' ? undefined : base;
   }

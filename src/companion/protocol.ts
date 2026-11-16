@@ -589,9 +589,9 @@ export type MergeView = z.infer<typeof MergeView>;
  * (core/branch-state.ts) but Merge into the main folder (its own sheet, companion.merge) and Open
  * PR (the phone's browser). Since BLG-753 also Push (an open PR's commits not pushed yet) and Re-run
  * Failed Checks, added at the end (an older Mac never offers them); since BLG-948 Open Your Own PR
- * (a fork's pull request that can't be pushed to).
+ * (a fork's pull request that can't be pushed to); since BLG-973 Straight to main's Land Now, on and off.
  */
-export const PHONE_BRANCH_STEPS = ['merge_pr', 'merge_auto', 'merge_admin', 'cancel_auto', 'update_branch', 'mark_ready', 'resolve_pr', 'fix_checks', 'merge_claude', 'review_claude', 'commit', 'pr', 'pr_claude', 'pr_draft', 'pr_original', 'continue_after_merge', 'archive', 'delete', 'push', 'rerun_checks', 'pr_own'] as const;
+export const PHONE_BRANCH_STEPS = ['merge_pr', 'merge_auto', 'merge_admin', 'cancel_auto', 'update_branch', 'mark_ready', 'resolve_pr', 'fix_checks', 'merge_claude', 'review_claude', 'commit', 'pr', 'pr_claude', 'pr_draft', 'pr_original', 'continue_after_merge', 'archive', 'delete', 'push', 'rerun_checks', 'pr_own', 'land', 'land_on', 'land_off'] as const;
 export type PhoneBranchStep = (typeof PHONE_BRANCH_STEPS)[number];
 
 /** 1.8: one of a branch's steps (core/branch-state.ts BranchStep). */

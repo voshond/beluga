@@ -138,6 +138,11 @@ export interface WorkspaceRecord {
    */
   readonly mergeWhenReady?: MergeWait;
   /**
+   * Straight to main: each time its agent's turn ends, its work lands on its base in the main folder
+   * (rebased onto it, then fast-forwarded; no pull request, nothing pushed). See workspaces/land.ts.
+   */
+  readonly landOnBase?: boolean;
+  /**
    * Remind Me Later from before BLG-770 (epoch ms): read once at start, carried into triage.json
    * (core/triage/service.ts, which keeps Remind Me Later now, per person), then cleared.
    */

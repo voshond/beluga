@@ -63,7 +63,7 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
   },
   { id: 'shell', label: 'Your shell is zsh', when: 'Every run, when its commands run in zsh', source: 'src/agent/prompt.ts', text: (c) => buildShellAppend(c.shell), sample: () => buildShellAppend('zsh-compat') },
   { id: 'keep', label: 'Processes that keep running', when: 'Worktree runs', source: 'src/agent/prompt.ts', text: (c) => (c.worktree ? buildKeepAppend(c.agent) : ''), sample: () => buildKeepAppend() },
-  { id: 'commit', label: 'Commit before ending', when: 'Worktree runs (not a plan’s, not in a main folder)', source: 'src/agent/prompt.ts', text: (c) => (c.worktree && !c.input.planBrief && !c.askOnly ? buildCommitAppend(c.input.place?.openPr) : ''), sample: () => buildCommitAppend() },
+  { id: 'commit', label: 'Commit before ending', when: 'Worktree runs (not a plan’s, not in a main folder)', source: 'src/agent/prompt.ts', text: (c) => (c.worktree && !c.input.planBrief && !c.askOnly ? buildCommitAppend(c.input.place?.openPr, c.input.place?.landsOn) : ''), sample: () => buildCommitAppend() },
   {
     id: 'shipped',
     label: 'Continue after merge',
