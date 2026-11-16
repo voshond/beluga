@@ -19,7 +19,19 @@ export interface OfferedKey {
   readonly product?: string;
   readonly why: KeyWhy;
   readonly from?: string;
+  /** Like one kept in another place in Beluga: where ("Ratel"). */
+  readonly fromPlace?: string;
   readonly replaces?: boolean;
+}
+
+/** The card: the keys it asks about, where they'd go, and how it ended. */
+export interface Offer {
+  readonly keys: readonly OfferedKey[];
+  readonly target: KeyTarget;
+  /** Kept: the card says so for a while, then folds away. */
+  readonly done?: boolean;
+  /** Said Not a Key: the prefixes remembered and the keys they took off, for Undo. */
+  readonly dismissed?: { readonly prefixes: readonly string[]; readonly keys: readonly OfferedKey[] };
 }
 
 /** The place a box sends to, from its channel and view. */
@@ -35,13 +47,72 @@ export const placeOf = (t: KeyTarget): { workspaceId?: string; projectId?: strin
 
 /** The card's title: what was pasted, in words. */
 export function titleOf(keys: readonly OfferedKey[]): string {
+  if (keys.every((k) => k.why === 'picked')) return keys.length > 1 ? 'Keep these safe' : 'Keep it safe';
+  if (keys.every((k) => k.why === 'maybe')) return keys.length > 1 ? `These look like keys` : 'Looks like a key';
   if (keys.length > 1) return `You pasted ${keys.length} secret keys`;
   const k = keys[0]!;
   if (k.why === 'yours') return `That’s your ${k.name}`;
   return `That looks like ${k.what}`;
 }
 
-/** Where they're kept, in a line under the names. */
+/** The line under the title: short, and only what this card is about. */
+export function subOf(keys: readonly OfferedKey[], agent: string): string {
+  const one = keys.length === 1;
+  if (keys.every((k) => k.why === 'yours')) return `${agent} has ${one ? 'it' : 'them'} already. Send the name instead.`;
+  if (keys.every((k) => k.why === 'maybe')) return `Keep ${one ? 'it' : 'them'} out of the chat? ${agent} gets a name, never the key.`;
+  if (keys.every((k) => k.why === 'picked')) return `${agent} gets a name, never the key.`;
+  return `${agent} gets ${one ? 'a variable' : 'variables'}, never the key.`;
+}
+
+/** The small word before a key on the card: its product, "Yours", or nothing we know. */
+export function kindOf(k: OfferedKey): string {
+  if (k.product) return k.product;
+  if (k.from) return k.fromPlace ? k.fromPlace : 'Yours';
+  if (k.why === 'maybe') return 'Maybe';
+  if (k.why === 'picked') return 'Picked';
+  return 'Secret';
+}
+
+/** The prefix "Not a Key" remembers for a maybe key (`rtl_`), or none. */
+export function notKeyPrefixOf(value: string): string | undefined {
+  return /^([a-z][a-z0-9]{1,7}(?:_[a-z0-9]{2,4})?[_-])[A-Za-z0-9]/.exec(value)?.[1];
+}
+
+/** Longest a picked word may be (a private key's lines are pasted, not picked). */
+const MAX_PICK = 4000;
+
+/**
+ * What's picked in the box, when it can be kept as a key: one token (no spaces), long enough to be
+ * a secret, and not already a `$NAME`. None otherwise.
+ */
+export function pickable(text: string, start: number, end: number): { value: string; start: number; end: number } | undefined {
+  if (end <= start) return undefined;
+  const raw = text.slice(start, end);
+  const lead = raw.length - raw.trimStart().length;
+  const value = raw.trim();
+  if (value.length < 6 || value.length > MAX_PICK || /\s/.test(value) || /^\$[A-Z_][A-Z0-9_]*$/.test(value)) return undefined;
+  // Quotes or a trailing comma picked with it (a double-click in "…"): the key without them.
+  const bare = value.replace(/^["'`(<[]+|["'`)>\],;.]+$/g, '');
+  if (bare.length < 6) return undefined;
+  const at = start + lead + value.indexOf(bare);
+  return { value: bare, start: at, end: at + bare.length };
+}
+
+/** Where they're kept, in a few words under the names (scopeDetail says the rest, on hover). */
+export function scopeShort(t: KeyTarget): string {
+  switch (t.kind) {
+    case 'chat':
+      return 'Kept for this chat only';
+    case 'draft':
+      return 'Kept for the new worktree only';
+    case 'project':
+      return `Kept with ${t.projectName}’s variables`;
+    case 'yours':
+      return 'Kept with your variables';
+  }
+}
+
+/** Where they're kept, in full. */
 export function scopeLine(t: KeyTarget, agent: string, n: number): string {
   const them = n === 1 ? 'it' : 'them';
   switch (t.kind) {
@@ -60,6 +131,11 @@ export function scopeLine(t: KeyTarget, agent: string, n: number): string {
 export function keepLabel(keys: readonly OfferedKey[]): string {
   if (keys.every((k) => k.why === 'yours')) return keys.length === 1 ? `Use $${keys[0]!.name}` : 'Use Your Variables';
   return keys.length === 1 ? 'Keep It Safe' : `Keep ${keys.length} Keys Safe`;
+}
+
+/** A key for a word picked in the box: named after its prefix, never a name in use. */
+export function pickedKey(value: string, name: string): OfferedKey {
+  return { value, name, what: 'a secret', why: 'picked' };
 }
 
 /** What's wrong with the names on the card (by index): a bad name or one used twice. */

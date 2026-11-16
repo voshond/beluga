@@ -252,6 +252,7 @@ export const PHONE: Record<Method, Side> = {
   'env.carryWorktree': 'mac',
   'env.pastedKeys': 'mac',
   'env.keepPasted': 'mac',
+  'env.notAKey': 'mac',
   'env.overview': 'mac',
   'env.addToExample': 'mac',
   'env.exampleSync': 'mac',

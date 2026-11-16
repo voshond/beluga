@@ -102,4 +102,42 @@ describe('keys pasted into a chat', () => {
     expect(brief).toContain('Never print');
     expect(buildChatVarsAppend([])).toBe('');
   });
+
+  // BLG-977: a key with no format we know.
+  const RATEL = fake('rtl_', 'k6RdVk9lLghguXqcpxATMBfV00FPbQPV');
+  const RATEL_KEPT = fake('rtl_', 'Q3wE8rT1yU6iO9pA2sD5fG7hJ4kL0zXc');
+
+  const withRatel = (): void => {
+    const ratelRoot = path.join(dir, 'ratel');
+    mkdirSync(ratelRoot);
+    const ratel: Project = { id: 'p2', name: 'Ratel', root: ratelRoot, base: 'origin/main', workspaces: [{ id: 'r', projectId: 'p2', path: ratelRoot, name: 'main', kind: 'main', projectRoot: ratelRoot } as never] };
+    store.dispatch({ type: 'projects', projects: [...store.getState().projects, ratel] });
+    env.set('p2', [{ key: 'RATEL_API_KEY', value: RATEL_KEPT }]);
+  };
+
+  it('alone, a key nobody lists is maybe one, named after its prefix', () => {
+    expect(env.pastedKeys({ workspaceId: 'w1' }, RATEL)).toMatchObject([{ value: RATEL, name: 'RTL_API_KEY', why: 'maybe' }]);
+  });
+
+  it('shaped like a key another project keeps: that key’s name, and where it is', () => {
+    withRatel();
+    expect(env.pastedKeys({ workspaceId: 'w1' }, `use ${RATEL}`)).toMatchObject([{ value: RATEL, name: 'RATEL_API_KEY', why: 'like-yours', fromPlace: 'Ratel' }]);
+    // In Ratel itself it's simply like yours.
+    expect(env.pastedKeys({ projectId: 'p2' }, RATEL)[0]).not.toHaveProperty('fromPlace');
+  });
+
+  it('Not a Key: that prefix is never asked about again, until Undo', () => {
+    env.notAKey('rtl_', true);
+    expect(env.pastedKeys({ workspaceId: 'w1' }, RATEL)).toEqual([]);
+    expect(JSON.parse(readFileSync(path.join(dir, 'env.json'), 'utf8')).notKeys).toEqual(['rtl_']);
+    env.notAKey('rtl_', false);
+    expect(env.pastedKeys({ workspaceId: 'w1' }, RATEL)).toHaveLength(1);
+    expect(() => env.notAKey('no spaces please', true)).toThrow();
+  });
+
+  it('Not a Key never hides a key like one you keep', () => {
+    withRatel();
+    env.notAKey('rtl_', true);
+    expect(env.pastedKeys({ workspaceId: 'w1' }, RATEL)).toMatchObject([{ name: 'RATEL_API_KEY', why: 'like-yours' }]);
+  });
 });

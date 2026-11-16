@@ -34,15 +34,27 @@ const stayInMenu = (e: MouseEvent): void => e.stopPropagation();
 /** A hint that is a shortcut (⌘J) sits at the right like a menu bar's; a description is a tooltip. */
 const isKeys = (hint: string | undefined): hint is string => !!hint && (/^[⌘⌥⇧⌃↩⌫]+.{0,3}$/.test(hint) || /^((Ctrl|Alt|Shift|Win|Super)\+)+.{1,5}$/.test(hint));
 
+/**
+ * How close a menu may come to the window's edges. The top keeps clear of the title bar,
+ * where the traffic lights would draw over the first rows (52 is --titlebar-h).
+ */
+const EDGES = { top: 52, right: 8, bottom: 8, left: 8 } as const;
+
+/** Whether a menu's rows leave room for an icon in front, so every row starts at the same place. */
+const hasIcons = (items: readonly ActionItem[]): boolean => items.some((it) => it.icon || it.mark || it.checked !== undefined);
+
 const isDanger = (id: string): boolean => /delete|remove|leave|revoke|stop|hide/.test(id);
 
 function Items({ menu, Item, Separator, extra = [], hide, kit }: { menu: MenuKind; Item: typeof Dropdown.Item; Separator: typeof Dropdown.Separator; extra?: readonly ActionItem[]; hide?: (id: string) => boolean; kit: SubKit }) {
   const actions = useActions();
   const items = useItems(menu, hide);
+  // The extras' icons set the column the names start in; the spec's own rows line up with it.
+  const icons = hasIcons(extra);
   // The spec's own actions first, then this window's extras (groups, icon), the dangerous ones last.
   const row = (o: (typeof items)[number]) => (
     <Item key={o.id} className={`${s.item} ${isDanger(o.id) ? s.danger : ''}`} onSelect={() => actions.pick(menu, o.index)} title={isKeys(guiHint(o.hint)) ? undefined : guiHint(o.hint)}>
       <span className={s.line}>
+        {icons ? <span className={s.icon} aria-hidden="true" /> : null}
         <span className={s.label}>{o.label}</span>
         {isKeys(guiHint(o.hint)) ? <span className={s.keys}>{guiHint(o.hint)}</span> : null}
       </span>
@@ -67,7 +79,7 @@ export function SpecDropdown({ menu, children, align = 'start', extra, hide }: {
     <Dropdown.Root modal={false}>
       <Dropdown.Trigger asChild>{children}</Dropdown.Trigger>
       <Dropdown.Portal>
-        <Dropdown.Content className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} align={align} sideOffset={4} collisionPadding={8}>
+        <Dropdown.Content className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} align={align} sideOffset={4} collisionPadding={EDGES}>
           <Items menu={menu} Item={Dropdown.Item} Separator={Dropdown.Separator} kit={DROPDOWN_SUB} {...(extra ? { extra } : {})} {...(hide ? { hide } : {})} />
         </Dropdown.Content>
       </Dropdown.Portal>
@@ -82,7 +94,7 @@ export function SpecContext({ menu, children, extra, hide }: { menu: MenuKind | 
     <ContextRoot>
       <Context.Trigger asChild>{children}</Context.Trigger>
       <Context.Portal>
-        <Context.Content className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} collisionPadding={8}>
+        <Context.Content className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} collisionPadding={EDGES}>
           <Items menu={menu} Item={Context.Item as unknown as typeof Dropdown.Item} Separator={Context.Separator as unknown as typeof Dropdown.Separator} kit={CONTEXT_SUB} {...(extra ? { extra } : {})} {...(hide ? { hide } : {})} />
         </Context.Content>
       </Context.Portal>
@@ -127,7 +139,7 @@ type AnySeparator = typeof Dropdown.Separator;
 
 /** The rows of an action menu: a line between groups and before the first dangerous one. */
 function ActionRows({ items, Item, Separator, kit = DROPDOWN_SUB }: { items: readonly ActionItem[]; Item: AnyItem; Separator: AnySeparator; kit?: SubKit }) {
-  const icons = items.some((it) => it.icon || it.mark || it.checked !== undefined);
+  const icons = hasIcons(items);
   return (
     <>
       {items.map((it, i) => (
@@ -144,7 +156,7 @@ function ActionRows({ items, Item, Separator, kit = DROPDOWN_SUB }: { items: rea
                 {it.hint ? <span className={`${s.hint} ${icons ? s.hintIndent : ''}`}>{it.hint}</span> : null}
               </kit.SubTrigger>
               <kit.Portal>
-                <kit.SubContent className={s.menu} sideOffset={2} alignOffset={-5} collisionPadding={8}>
+                <kit.SubContent className={s.menu} sideOffset={2} alignOffset={-5} collisionPadding={EDGES}>
                   <ActionRows items={it.submenu} Item={Item} Separator={Separator} kit={kit} />
                 </kit.SubContent>
               </kit.Portal>
@@ -177,7 +189,7 @@ export function ActionsContext({ items, children }: { items: readonly ActionItem
     <ContextRoot>
       <Context.Trigger asChild>{children}</Context.Trigger>
       <Context.Portal>
-        <Context.Content className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} collisionPadding={8}>
+        <Context.Content className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} collisionPadding={EDGES}>
           <LazyRows items={items} />
         </Context.Content>
       </Context.Portal>
@@ -196,7 +208,7 @@ export function ActionsDropdown({ items, children, align = 'end' }: { items: rea
     <Dropdown.Root modal={false}>
       <Dropdown.Trigger asChild>{children}</Dropdown.Trigger>
       <Dropdown.Portal>
-        <Dropdown.Content className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} align={align} sideOffset={4} collisionPadding={8}>
+        <Dropdown.Content className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} align={align} sideOffset={4} collisionPadding={EDGES}>
           <ActionRows items={items} Item={Dropdown.Item} Separator={Dropdown.Separator} />
         </Dropdown.Content>
       </Dropdown.Portal>

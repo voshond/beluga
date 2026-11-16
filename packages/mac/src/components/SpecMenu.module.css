@@ -3,8 +3,9 @@
   z-index: 88;
   min-width: 220px;
   max-width: 380px;
-  /* The room Radix measured on the side it opened (a menu low in a short window), else 70vh. */
-  max-height: min(var(--radix-dropdown-menu-content-available-height, var(--radix-context-menu-content-available-height, 70vh)), 560px);
+  /* As tall as the room Radix found for it (inside the edges it keeps clear), so a long menu
+     shows whole when the window has space and scrolls only when it truly doesn't. */
+  max-height: var(--radix-dropdown-menu-content-available-height, var(--radix-context-menu-content-available-height, 70vh));
   overflow: auto;
   overscroll-behavior: contain;
   padding: 5px;
