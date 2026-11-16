@@ -2,10 +2,15 @@
 // variable, so the key can stay in Beluga and the chat carries `$NAME` instead. Only what is
 // surely a key counts: a known provider's format, a `SECRET_NAME=value` line, or the same shape as
 // a key the project already has. A long random string alone never does, so ordinary pastes (a
-// commit hash, a UUID, a log) stay as they are. Browser-safe: no Node APIs.
+// commit hash, a UUID, a log) stay as they are. A prefix and a random body with no format we know
+// (`rtl_…`) is asked about softly, as maybe a key (BLG-977). Browser-safe: no Node APIs.
+import { keyShapes, suggestName } from './key-shape.js';
 
-/** Why a key was recognised: a provider's format, a NAME=value line, shaped like one of yours, or one of yours exactly. */
-export type KeyWhy = 'format' | 'assignment' | 'like-yours' | 'yours';
+/**
+ * Why a key was recognised: a provider's format, a NAME=value line, shaped like one of yours, one of
+ * yours exactly, shaped like a key with no format we know (asked softly), or picked by you in the box.
+ */
+export type KeyWhy = 'format' | 'assignment' | 'like-yours' | 'yours' | 'maybe' | 'picked';
 
 export interface FoundKey {
   /** The key as pasted. */
@@ -19,6 +24,8 @@ export interface FoundKey {
   readonly why: KeyWhy;
   /** like-yours / yours: the name of the variable it matched. */
   readonly from?: string;
+  /** like-yours from another place in Beluga: where that variable is kept ("Ratel", "Everywhere"). */
+  readonly fromPlace?: string;
 }
 
 /** What the project already has, to name a key the way it does (values stay where they're called from). */
@@ -27,6 +34,17 @@ export interface KeyHints {
   readonly known?: Readonly<Record<string, string>>;
   /** Names the project uses without a value here (its .env.example). */
   readonly names?: readonly string[];
+  /** Variables kept in other places in Beluga (other projects, worktrees): a key shaped like one takes its name. */
+  readonly elsewhere?: readonly ElsewhereVar[];
+  /** Prefixes you said aren't keys (`rtl_`): never asked about as maybe a key again. */
+  readonly notKeys?: readonly string[];
+}
+
+/** A variable kept somewhere else in Beluga, and where. */
+export interface ElsewhereVar {
+  readonly name: string;
+  readonly value: string;
+  readonly place: string;
 }
 
 interface Format {
@@ -165,14 +183,21 @@ const charsetOf = (s: string): string => (/^[a-f0-9]+$/.test(s) ? 'hex' : /^[A-Z
 const TOKEN = /(?<![A-Za-z0-9_\-.])([A-Za-z][A-Za-z0-9]{0,9}(?:[_\-.][A-Za-z0-9]{1,8}){0,2}[_\-.][A-Za-z0-9_\-+/=]{16,})(?![A-Za-z0-9_\-])/g;
 
 /** Values of yours shaped like keys (a prefix and a random body), for "like one of yours". */
-function shapesOf(known: Readonly<Record<string, string>>): { name: string; prefix: string; length: number; charset: string }[] {
-  const out: { name: string; prefix: string; length: number; charset: string }[] = [];
-  for (const [name, value] of Object.entries(known)) {
+interface Shape {
+  readonly name: string;
+  readonly prefix: string;
+  readonly length: number;
+  readonly charset: string;
+  readonly place?: string;
+}
+function shapesOf(vars: readonly { readonly name: string; readonly value: string; readonly place?: string }[]): Shape[] {
+  const out: Shape[] = [];
+  for (const { name, value, place } of vars) {
     const prefix = keyPrefix(value);
     if (!prefix || value.length < 20 || /\s/.test(value)) continue;
     const body = value.slice(prefix.length);
     if (!realValue(body, 3)) continue;
-    out.push({ name, prefix, length: value.length, charset: charsetOf(body) });
+    out.push({ name, prefix, length: value.length, charset: charsetOf(body), ...(place ? { place } : {}) });
   }
   return out;
 }
@@ -243,8 +268,10 @@ export function findKeys(text: string, hints: KeyHints = {}): FoundKey[] {
     }
   }
 
-  // Shaped like a key you have: same prefix and kind of body, about as long.
-  const shapes = shapesOf(known);
+  // Shaped like a key you have: same prefix and kind of body, about as long. Here first, then
+  // anywhere else in Beluga (a Ratel key kept in the Ratel project, pasted in another).
+  const elsewhere = (hints.elsewhere ?? []).filter((v) => !byValue.has(v.value));
+  const shapes = shapesOf([...Object.entries(known).map(([name, value]) => ({ name, value })), ...elsewhere]);
   if (shapes.length) {
     for (const m of text.matchAll(TOKEN)) {
       const value = m[1]!;
@@ -254,7 +281,7 @@ export function findKeys(text: string, hints: KeyHints = {}): FoundKey[] {
       const body = value.slice(prefix.length);
       const shape = shapes.find((s) => s.prefix === prefix && Math.abs(s.length - value.length) <= Math.max(2, s.length * 0.15) && charsetOf(body) === s.charset);
       if (!shape || !realValue(body, 3)) continue;
-      add(m.index ?? 0, { value, name: shape.name, what: `a key like your ${shape.name}`, why: 'like-yours', from: shape.name });
+      add(m.index ?? 0, { value, name: shape.name, what: `a key like your ${shape.name}`, why: 'like-yours', from: shape.name, ...(shape.place ? { fromPlace: shape.place } : {}) });
     }
   }
 
@@ -263,6 +290,21 @@ export function findKeys(text: string, hints: KeyHints = {}): FoundKey[] {
     if (value.length < 16 || seen.has(value) || !realValue(value, 3)) continue;
     const at = text.indexOf(value);
     if (at >= 0) add(at, { value, name, what: `your ${name}`, why: 'yours', from: name });
+  }
+  // Exactly one kept elsewhere: it isn't set here, so it's kept here too, under the same name.
+  for (const v of elsewhere) {
+    if (v.value.length < 16 || seen.has(v.value) || !realValue(v.value, 3)) continue;
+    const at = text.indexOf(v.value);
+    if (at >= 0) add(at, { value: v.value, name: v.name, what: `your ${v.name}`, why: 'like-yours', from: v.name, fromPlace: v.place });
+  }
+
+  // Shaped like a key, with no format we know: asked about softly.
+  const taken = [...names, ...found.map((f) => f.key.name)];
+  for (const shape of keyShapes(text, hints.notKeys)) {
+    if (seen.has(shape.value)) continue;
+    const name = suggestName(shape.value, taken);
+    taken.push(name);
+    add(shape.at, { value: shape.value, name, what: 'an API key', why: 'maybe' });
   }
 
   return found.sort((a, b) => a.at - b.at).map((f) => f.key);
@@ -273,8 +315,10 @@ export function maskKey(value: string): string {
   if (value.startsWith('-----BEGIN')) return value.split('\n')[0] ?? 'Private key';
   const url = /^([a-z+]+:\/\/[^:/]+:)[^@]+(@.*)$/i.exec(value);
   if (url) return `${url[1]}••••${url[2]!.replace(/[?#].*$/, '')}`;
-  const prefix = keyPrefix(value) ?? value.slice(0, Math.min(4, Math.floor(value.length / 4)));
-  return `${prefix}••••${value.slice(-4)}`;
+  const prefix = keyPrefix(value);
+  // A short secret with no kind to show (a password picked in the box): only its last two.
+  if (!prefix && value.length < 20) return `••••${value.slice(-2)}`;
+  return `${prefix ?? value.slice(0, Math.min(4, Math.floor(value.length / 4)))}••••${value.slice(-4)}`;
 }
 
 /** The text with each key replaced by `$NAME`. A NAME=value line keeps its name: `OPENAI_API_KEY=$OPENAI_API_KEY`. */

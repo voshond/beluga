@@ -14,6 +14,7 @@ import m from "./mention.module.css";
 import type { ChipSpan } from "./chip-caret.js";
 import { useChipCaret } from "./use-chip-caret.js";
 import { splitKeyRefs } from "./key-refs.js";
+import { useKeyChipFit } from "./key-chip-fit.js";
 import k from "./key-paste.module.css";
 import { boxedWorktrees, plainWorktrees, type WorktreeNames, worktreeNamesOf } from "./worktree-box.js";
 
@@ -191,6 +192,7 @@ export function MentionHighlighter({
   const chips = pieces.some(isChip);
   const spans = useMemo(() => chipSpans(pieces), [pieces]);
   useChipCaret(input, text, spans.all, spans.whole);
+  useKeyChipFit(layer, pieces);
   useWholeLinksOnCopy(input, known);
   useEffect(() => {
     const el = input.current;

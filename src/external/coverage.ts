@@ -220,6 +220,7 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'env.carryWorktree': 'gated',
   'env.pastedKeys': { refused: SECRET_VALUES },
   'env.keepPasted': { refused: SECRET_VALUES },
+  'env.notAKey': { refused: SECRET_VALUES },
   'env.overview': 'gated',
   'env.addToExample': 'gated',
   'env.exampleSync': 'gated',

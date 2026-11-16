@@ -375,6 +375,7 @@ export const HANDLERS = {
   'env.carryWorktree': (s, id) => s.env.carryWorktree(id),
   'env.pastedKeys': (s, where, text) => s.env.pastedKeys(where, text),
   'env.keepPasted': (s, where, rows) => s.env.keepPasted(where, rows),
+  'env.notAKey': (s, prefix, on) => s.env.notAKey(prefix, on),
   'env.overview': (s, projectId) => s.env.overview(projectId),
   'env.addToExample': (s, projectId) => s.env.addToExample(projectId),
   'env.exampleSync': (s, projectId, on) => s.env.setExampleSync(projectId, on),

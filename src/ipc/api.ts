@@ -498,6 +498,8 @@ export const API = {
   'env.pastedKeys': args(z.object({ workspaceId: opt(id), projectId: opt(id) }), str),
   // Keep pasted keys as a chat's own variables (its workspace's; none: yours everywhere) → the .env.example it listed them in.
   'env.keepPasted': args(z.object({ workspaceId: opt(id), projectId: opt(id) }), EnvRows),
+  // "Not a key" on a paste's card (BLG-977): that prefix (`rtl_`) is never asked about as maybe a key again; on false takes it back.
+  'env.notAKey': args(z.string().min(3).max(24), z.boolean()),
   // A project's environment in names and counts (its page, the phone): never a value.
   'env.overview': args(id),
   // List in the main folder's .env.example what's set and it doesn't list (placeholders, never values) → the names added.

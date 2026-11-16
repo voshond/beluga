@@ -799,6 +799,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
         <MentionedChats text={buffer} world={mentionWorld} />
         <DictationStrip box={ref} />
         <div className={s.inputWrap}>
+          {keys.marks}
           <MentionHighlighter text={buffer} world={mentionWorld} input={ref} className={s.input ?? ""} keys={keys.names} entering={keys.entering} />
           <textarea
             ref={ref}

@@ -1,33 +1,25 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { EnvVar } from '@beluga/shared/env-vars.js';
-import { findKeys, maskKey, mayHoldKey, withKeyRefs } from '@beluga/shared/key-detect.js';
-import { Icon } from '../components/Icon.js';
-import { Button, Kbd, Tip, cx } from '../components/ui.js';
+import { findKeys, mayHoldKey, withKeyRefs } from '@beluga/shared/key-detect.js';
+import { suggestName } from '@beluga/shared/key-shape.js';
+import { cx } from '../components/ui.js';
 import { toast, useApi, useApp, useBeluga } from '../lib/beluga.js';
+import { isShortcut, shortcutKeys } from '../lib/shortcuts.js';
 import { ChatKeys, type KeyStore } from './ChatKeys.js';
+import { KeyCard } from './KeyCard.js';
+import { KeyMarks, type TextPick, useTextPick } from './KeyMarks.js';
 import { knownKeyNames } from './key-refs.js';
-import { type KeyTarget, type OfferedKey, heldList, holdKeys, keepLabel, nameProblems, placeOf, renameRef, rowsOf, scopeLine, setHeld, tidyName, titleOf } from './key-paste-model.js';
+import { type Offer, type OfferedKey, type KeyTarget, heldList, holdKeys, nameProblems, notKeyPrefixOf, pickedKey, placeOf, renameRef, rowsOf, setHeld, tidyName } from './key-paste-model.js';
 import m from './mention.module.css';
 import s from './key-paste.module.css';
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
-/** How long "Kept safe" stays (a pointer on it holds it) before the card folds away. */
-const DONE_MS = 3600;
-/** After the pointer leaves a kept card, the moment before it folds. */
-const LINGER_MS = 1400;
 /** How long the pasted key takes to dissolve, and the chip to grow in where it was. */
 const DISSOLVE_MS = 700;
 const ENTER_MS = 1100;
 /** The card's fold, with a fallback when transitions are off (reduced motion). */
 const FOLD_MS = 460;
 const NO_NAMES: readonly string[] = [];
-
-interface Offer {
-  readonly keys: readonly OfferedKey[];
-  readonly target: KeyTarget;
-  /** Kept: the card says so for a while, then folds away. */
-  readonly done?: boolean;
-}
 
 /** The words as they were when a key was kept, for the moment its key dissolves where it was. */
 interface Ghost {
@@ -51,6 +43,8 @@ export interface KeyPaste {
   readonly card: ReactNode;
   /** The pasted key dissolving, for over the box's words (inside its input's wrapper). */
   readonly ghost: ReactNode;
+  /** The keys the card asks about, marked in the box, and Keep as Key over a picked word: behind the box's words, before its highlighter. */
+  readonly marks: ReactNode;
   /** The Keys pill and its panel, for the box's bar. */
   readonly button: ReactNode;
   /** Names `$NAME` may mean here (drawn as chips), and those growing in now. */
@@ -157,7 +151,7 @@ export function useKeyPaste({ target, box, agent, text, setText, input, resend, 
       sendAfter.current = true;
       return;
     }
-    if (!offer || offer.done || saving || nameProblems(offer.keys).size) return;
+    if (!offer || offer.done || offer.dismissed || saving || nameProblems(offer.keys).size) return;
     // A key taken out of the box since the card asked isn't kept.
     const before = text();
     const keys = offer.keys.filter((k) => before.includes(k.value));
@@ -195,7 +189,12 @@ export function useKeyPaste({ target, box, agent, text, setText, input, resend, 
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
-    if (!offer || offer.done) return false;
+    if (pick && isShortcut('composer-keep-key', e)) {
+      e.preventDefault();
+      pickKey(pick);
+      return true;
+    }
+    if (!offer || offer.done || offer.dismissed) return false;
     if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
       e.preventDefault();
       keep();
@@ -212,6 +211,48 @@ export function useKeyPaste({ target, box, agent, text, setText, input, resend, 
   const rename = (i: number, name: string): void => setOffer((o) => (o ? { ...o, keys: o.keys.map((k, j) => (j === i ? { ...k, name: tidyName(name) } : k)) } : o));
 
   // The panel's keys: this chat's own variables, or what a new worktree's page holds.
+  const marks = useMemo(() => marksOf(offer), [offer]);
+  // A word picked in the box (no card asking): Keep as Key over it.
+  const asking = Boolean(offer && !offer.done && !offer.dismissed);
+  const pick = useTextPick(input, !target || asking || checking);
+
+  const pickKey = (p: TextPick): void => {
+    if (!target) return;
+    const ask = ++asked.current;
+    const open = (key: OfferedKey): void => {
+      if (ask !== asked.current || !text().includes(key.value)) return;
+      setFolding(false);
+      setOffer({ keys: [key], target });
+      // The pick is the card's now: the box's selection goes, so the pill does too.
+      input.current?.setSelectionRange(p.end, p.end);
+    };
+    const fallback = (): void => open(pickedKey(p.value, suggestName(p.value, names)));
+    // Something Beluga knows (a provider's key, one like yours): its name. Anything else: named after its prefix.
+    api.env.pastedKeys(placeOf(target), p.value).then((found) => {
+      const same = found.find((k) => k.value === p.value);
+      return same ? open({ ...same, ...(same.why === 'maybe' ? { why: 'picked' as const } : {}) }) : fallback();
+    }, fallback);
+  };
+
+  const notKey = (rows: readonly number[]): void => {
+    if (!offer) return;
+    const off = offer.keys.filter((_, i) => rows.includes(i));
+    const prefixes = [...new Set(off.flatMap((k) => notKeyPrefixOf(k.value) ?? []))];
+    for (const p of prefixes) api.env.notAKey(p, true).catch((err: unknown) => toast(client, `Couldn’t remember that: ${errorText(err)}`, 'error'));
+    const keys = offer.keys.filter((_, i) => !rows.includes(i));
+    setOffer(keys.length ? { ...offer, keys } : { ...offer, keys, dismissed: { prefixes, keys: off } });
+    if (!keys.length) input.current?.focus();
+  };
+
+  const undo = (): void => {
+    const was = offer?.dismissed;
+    if (!offer || !was) return;
+    for (const p of was.prefixes) api.env.notAKey(p, false).catch((err: unknown) => toast(client, `Couldn’t undo: ${errorText(err)}`, 'error'));
+    const keys = was.keys.filter((k) => text().includes(k.value));
+    if (!keys.length) return setFolding(true);
+    setOffer({ keys, target: offer.target });
+  };
+
   const store = useMemo<KeyStore | undefined>(() => {
     if (wsId) return { load: () => api.env.worktree(wsId).then((w) => w.vars), save: (rows) => api.env.setWorktree(wsId, [...rows]).then(() => undefined) };
     if (target?.kind === 'draft')
@@ -242,6 +283,8 @@ export function useKeyPaste({ target, box, agent, text, setText, input, resend, 
         onKeep={keep}
         onClose={close}
         onFold={() => setFolding(true)}
+        onNotKey={notKey}
+        onUndo={undo}
         onSeeKeys={store && chatKeys.length ? () => setPanelOpen(true) : undefined}
       />
     </Fold>
@@ -250,10 +293,11 @@ export function useKeyPaste({ target, box, agent, text, setText, input, resend, 
   return {
     onPaste,
     onKey,
-    asking: checking || Boolean(offer && !offer.done),
+    asking: checking || asking,
     keep,
     card,
     ghost: ghost ? <KeyGhost key={ghost.id} ghost={ghost} input={input} className={inputClass} /> : null,
+    marks: target ? <KeyMarks text={text()} marks={marks} fading={Boolean(offer?.dismissed)} pick={pick} input={input} className={inputClass} keys={shortcutKeys('composer-keep-key')} onPick={pickKey} /> : null,
     button:
       target && store ? (
         <ChatKeys
@@ -367,106 +411,10 @@ function KeyGhost({ ghost, input, className }: { ghost: Ghost; input: React.RefO
   );
 }
 
-function KeyCard({ offer, agent, saving, onRename, onKeep, onClose, onFold, onSeeKeys }: { offer: Offer; agent: string; saving: boolean; onRename: (i: number, name: string) => void; onKeep: () => void; onClose: () => void; onFold: () => void; onSeeKeys: (() => void) | undefined }) {
-  const problems = nameProblems(offer.keys);
-  const n = offer.keys.length;
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  // Kept: it stays a while, longer while the pointer is on it, then folds away.
-  const wait = (ms: number): void => {
-    clearTimeout(timer.current);
-    timer.current = setTimeout(onFold, ms);
-  };
-  useEffect(() => {
-    if (offer.done) wait(DONE_MS);
-    return () => clearTimeout(timer.current);
-  }, [offer.done]);
-  if (offer.done) {
-    const yours = offer.keys.every((k) => k.why === 'yours');
-    return (
-      <section className={cx(s.card, s.done)} role="status" aria-live="polite" data-key-card="done" onMouseEnter={() => clearTimeout(timer.current)} onMouseLeave={() => wait(LINGER_MS)}>
-        <span className={s.doneMark}>
-          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-            <path className={s.tick} d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-        <span className={s.doneText}>
-          {yours ? 'Using ' : 'Kept safe. '}
-          {offer.keys.map((k, i) => (
-            <span key={k.name}>
-              {i ? ' ' : ''}
-              <span className={s.ref}>
-                <Icon name="key" size={10} />
-                {k.name}
-              </span>
-            </span>
-          ))}
-          <span className={s.doneHint}> goes to {agent}, never the key.</span>
-        </span>
-        {onSeeKeys ? (
-          <button type="button" className={s.seeKeys} onClick={onSeeKeys}>
-            See Keys
-          </button>
-        ) : null}
-      </section>
-    );
-  }
-  return (
-    <section className={s.card} role="dialog" aria-label="Keep the key out of the chat" data-key-card="ask">
-      <header className={s.head}>
-        <span className={s.badge} aria-hidden="true">
-          <Icon name="key" size={14} />
-        </span>
-        <div className={s.titles}>
-          <div className={s.title}>{titleOf(offer.keys)}</div>
-          <div className={s.sub}>
-            {offer.keys.every((k) => k.why === 'yours') ? (
-              <>
-                {agent} has {n === 1 ? 'it' : 'them'} already. Send the name instead, and the key stays out of the chat.
-              </>
-            ) : (
-              <>
-                Keep {n === 1 ? 'it' : 'them'} out of the chat: {agent} gets {n === 1 ? 'a variable' : 'variables'}, never the key.
-              </>
-            )}
-          </div>
-        </div>
-        <Tip label="Leave it as text" keys="esc">
-          <button type="button" className={s.close} aria-label="Leave it as text" onClick={onClose}>
-            <Icon name="x" size={12} />
-          </button>
-        </Tip>
-      </header>
-      <ul className={s.keys}>
-        {offer.keys.map((k, i) => (
-          <li key={k.value} className={s.key}>
-            <span className={s.product}>{k.product ?? (k.from ? 'Yours' : 'Secret')}</span>
-            <code className={s.masked} title="The key, hidden">
-              {maskKey(k.value)}
-            </code>
-            <Icon name="arrowRight" size={12} className={s.arrow} />
-            <label className={cx(s.name, problems.has(i) && s.bad)}>
-              <Icon name="key" size={10} />
-              <input value={k.name} readOnly={k.why === 'yours'} spellCheck={false} aria-label={`Variable name for ${k.what}`} onChange={(e) => onRename(i, e.target.value)} onKeyDown={(e) => (e.key === 'Enter' ? (e.preventDefault(), onKeep()) : e.key === 'Escape' ? (e.preventDefault(), onClose()) : undefined)} />
-            </label>
-            {problems.get(i) ? <span className={s.problem}>{problems.get(i)}</span> : k.why === 'like-yours' ? <span className={s.note}>Like your {k.from}</span> : k.replaces ? <span className={s.note}>Over the project’s, here</span> : null}
-          </li>
-        ))}
-      </ul>
-      <footer className={s.foot}>
-        <span className={s.scope}>
-          <Icon name="lock" size={11} />
-          {offer.keys.every((k) => k.why === 'yours') ? 'Nothing new is saved.' : scopeLine(offer.target, agent, n)}
-        </span>
-        <span className={s.buttons}>
-          <Button size="small" variant="quiet" onClick={onClose}>
-            Leave as Text
-          </Button>
-          <Button size="small" variant="primary" icon="lock" disabled={saving || problems.size > 0} onClick={onKeep} data-key-keep>
-            {keepLabel(offer.keys)}
-            <Kbd>↩</Kbd>
-          </Button>
-        </span>
-      </footer>
-    </section>
-  );
+const NO_MARKS: readonly { value: string; soft: boolean }[] = [];
+/** What the card asks about, for marking in the box: while it asks, and while "Got it" fades them. */
+function marksOf(offer: Offer | undefined): readonly { value: string; soft: boolean }[] {
+  if (!offer || offer.done) return NO_MARKS;
+  const keys = offer.dismissed ? offer.dismissed.keys : offer.keys;
+  return keys.map((k) => ({ value: k.value, soft: k.why === 'maybe' }));
 }

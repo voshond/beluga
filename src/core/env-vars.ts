@@ -13,6 +13,7 @@ import { DEFAULT_EXAMPLE_FILE, EXAMPLE_FILES, exampleKeys, syncExample } from '.
 import { type FoundKey, findKeys, mayHoldKey } from '../shared/key-detect.js';
 import { ENDPOINT_ID, endpointIdFor } from '../shared/local-endpoints.js';
 import type { Project, Workspace } from '../workspaces/types.js';
+import { varsElsewhere } from './env-elsewhere.js';
 import { belugaHome } from './home.js';
 import type { Store } from './store.js';
 
@@ -26,6 +27,10 @@ export const Endpoint = z.object({
 });
 export type Endpoint = z.infer<typeof Endpoint>;
 const MAX_ENDPOINTS = 12;
+
+/** A key's prefix as kept in notKeys: `rtl_`, `acme_live_`. */
+export const NOT_KEY_PREFIX = /^[a-z][a-z0-9]{1,7}(?:_[a-z0-9]{2,4})?[_-]$/;
+const MAX_NOT_KEYS = 200;
 
 const Vars = z.record(z.string().regex(ENV_KEY), z.string().max(MAX_ENV_VALUE));
 
@@ -51,12 +56,14 @@ export const EnvFile = z.object({
    * other secrets, never published. Screens get them without the key (local-endpoints.ts).
    */
   endpoints: z.array(Endpoint).max(MAX_ENDPOINTS).default([]),
+  /** Prefixes you said aren't keys (`rtl_`, BLG-977): a paste is never asked about as maybe a key for them. */
+  notKeys: z.array(z.string().regex(NOT_KEY_PREFIX)).max(MAX_NOT_KEYS).default([]),
   /** 2: `dotenv` unset means on. Files without it said false for "never switched on". */
   v: z.number().optional(),
 });
 export type EnvFile = z.infer<typeof EnvFile>;
 
-const EMPTY: EnvFile = { global: {}, claudeDotenv: false, projects: {}, worktrees: {}, endpoints: [], v: 2 };
+const EMPTY: EnvFile = { global: {}, claudeDotenv: false, projects: {}, worktrees: {}, endpoints: [], notKeys: [], v: 2 };
 
 /** A file from before .env loaded by default: its "off" was only never switched on, so it's the default now. */
 function upgrade(file: EnvFile): EnvFile {
@@ -448,7 +455,22 @@ export class EnvVars {
     const { project, dir, wsId } = this.placeOf(where);
     const known = mergeEnv(...this.layers(project, dir, wsId, true).map((l) => l.vars));
     const example = [project?.root, dir].flatMap((d) => (d ? [readExample(d)] : [])).flatMap((f) => (f ? exampleKeys(f.text) : []));
-    return findKeys(text, { known, names: example }).map((k) => (k.why !== 'yours' && known[k.name] !== undefined && known[k.name] !== k.value ? { ...k, replaces: true } : k));
+    const elsewhere = varsElsewhere(this.data, this.projects, { projectRoot: project?.root, wsId }, readDotenv);
+    return findKeys(text, { known, names: example, elsewhere, notKeys: this.data.notKeys }).map((k) => (k.why !== 'yours' && known[k.name] !== undefined && known[k.name] !== k.value ? { ...k, replaces: true } : k));
+  }
+
+  /**
+   * "Not a key" on a paste's card (BLG-977): tokens with this prefix aren't asked about as maybe a
+   * key again (`on: false` takes that back, the card's Undo). Keys in a format we know still are.
+   */
+  notAKey(prefix: string, on: boolean): void {
+    const p = prefix.toLowerCase();
+    if (!NOT_KEY_PREFIX.test(p)) throw new Error('That isn’t a key’s prefix');
+    const rest = this.data.notKeys.filter((k) => k !== p);
+    const notKeys = on ? [...rest, p].slice(-MAX_NOT_KEYS) : rest;
+    if (notKeys.length === this.data.notKeys.length && notKeys.every((k, i) => k === this.data.notKeys[i])) return;
+    this.data = { ...this.data, notKeys };
+    this.save();
   }
 
   /**

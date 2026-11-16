@@ -248,6 +248,7 @@ export const MACHINE: Record<Method, MachineSide> = {
   'env.carryWorktree': 'drive',
   'env.pastedKeys': 'drive',
   'env.keepPasted': 'drive',
+  'env.notAKey': 'drive',
   'env.overview': 'drive',
   'env.addToExample': 'drive',
   'env.exampleSync': 'drive',

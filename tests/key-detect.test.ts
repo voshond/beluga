@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { findKeys, keyPrefix, maskKey, mayHoldKey, withKeyRefs } from '../src/shared/key-detect.js';
+import { keyShapes, looksLikeKey, suggestName } from '../src/shared/key-shape.js';
 
 /** A random-looking string from a fixed seed (the same every run), in an alphabet. */
 function rand(n: number, alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789', seed = n * 7919): string {
@@ -124,7 +125,8 @@ describe('findKeys: the project’s own keys', () => {
 
   it('a different length or body is not like yours', () => {
     expect(findKeys(`bk_live_${rand(12, undefined, 5)}abcdefgh`, { known })).toEqual([]);
-    expect(findKeys(`bk_live_${rand(32, HEX, 5)}`, { known: { BILLING_KEY: `bk_live_${rand(32, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz')}` } })).toEqual([]);
+    // Hex where yours is letters: not like yours (it's only maybe a key).
+    expect(findKeys(`bk_live_${rand(32, HEX, 5)}`, { known: { BILLING_KEY: `bk_live_${rand(32, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz')}` } }).map((k) => k.why)).toEqual(['maybe']);
   });
 
   it('a provider key takes the name the project uses for it', () => {
@@ -144,6 +146,7 @@ describe('helpers', () => {
     expect(maskKey(STRIPE)).toBe(`sk_live_••••${STRIPE.slice(-4)}`);
     expect(maskKey('postgres://u:hunter22@db.example.com/app?ssl=1')).toBe('postgres://u:••••@db.example.com/app');
     expect(maskKey(AWS)).toBe(`AKIA••••${AWS.slice(-4)}`);
+    expect(maskKey('Hunter2Staging')).toBe('••••ng');
   });
 
   it('withKeyRefs swaps each key for $NAME, and a NAME=value keeps its name', () => {
@@ -156,5 +159,74 @@ describe('helpers', () => {
     expect(keyPrefix('dop_v1_abcdef')).toBe('dop_v1_');
     expect(keyPrefix(rand(30))).toBeUndefined();
     expect(keyPrefix(`re_${'Kd8Pq2Wx'}_7bN4mL1zR9cT6vY3hJ0fG5sQw`)).toBe('re_');
+  });
+});
+
+// BLG-977: keys with no format we know.
+const RATEL = `rtl_${'k6RdVk9lLghguXqcpxATMBfV00FPbQPV'}`;
+
+describe('findKeys: maybe a key', () => {
+  it('a short prefix and a random body is asked about softly, named after its prefix', () => {
+    expect(findKeys(`here is the key ${RATEL} thanks`)).toMatchObject([{ value: RATEL, name: 'RTL_API_KEY', why: 'maybe', what: 'an API key' }]);
+  });
+
+  it('long hex after a prefix too', () => {
+    const hex = `acme-${rand(40, HEX, 8)}`;
+    expect(findKeys(hex).map((k) => k.why)).toEqual(['maybe']);
+  });
+
+  it('a name already used gets a number', () => {
+    expect(findKeys(RATEL, { names: ['RTL_API_KEY'] })[0]?.name).toBe('RTL_API_KEY_2');
+  });
+
+  it('not after you said that prefix isn’t a key', () => {
+    expect(findKeys(RATEL, { notKeys: ['rtl_'] })).toEqual([]);
+  });
+
+  it.each([
+    ['an Anthropic message id', `msg_${'013Zva2CMHLNnXjNJJKqJ2EF'}`],
+    ['a tool use id', `toolu_${'01A09q90qw90lq917835lq9F'}`],
+    ['a request id', `req_${'011CRaB2kd8Wq7Zx4vN9mP3t'}`],
+    ['a Stripe payment', `pi_${'3MtwBwLkdIwHu7ix28a3tqPa'}`],
+    ['a Stripe customer', `cus_${'NffrFeUfNV2Hib9Kq3Lm7Tx2'}`],
+    ['a publishable key', `pk_live_${rand(40, undefined, 61)}`],
+    ['a Clerk user', `user_${'2NNEqL2nrIRdJ194ndJqAHwEfxC'}`],
+    ['a camelCase name', `get_${'UserProfileSettingsForAccount2'}`],
+    ['words joined up', 'user_profile_settings_v2_migration_backfill'],
+    ['inside a URL path', `https://example.com/download/rtl_${'k6RdVk9lLghguXqcpxATMBfV00FPbQPV'}`],
+    ['a short body', 'rtl_k6RdVk9lLghg'],
+    ['no prefix', rand(40, undefined, 71)],
+  ])('%s is not', (_label, text) => {
+    expect(findKeys(text)).toEqual([]);
+  });
+
+  it('looksLikeKey and keyShapes', () => {
+    expect(looksLikeKey(`use ${RATEL}`)).toBe(true);
+    expect(looksLikeKey('msg_013Zva2CMHLNnXjNJJKqJ2EF')).toBe(false);
+    expect(keyShapes(`a ${RATEL}`)).toEqual([{ value: RATEL, prefix: 'rtl_', at: 2 }]);
+  });
+
+  it('suggestName', () => {
+    expect(suggestName(RATEL)).toBe('RTL_API_KEY');
+    expect(suggestName('hunter2hunter2')).toBe('SECRET');
+    expect(suggestName('msg_013Zva2CMHLNnXjNJJKqJ2EF')).toBe('SECRET');
+    expect(suggestName(RATEL, ['RTL_API_KEY', 'RTL_API_KEY_2'])).toBe('RTL_API_KEY_3');
+  });
+});
+
+describe('findKeys: kept elsewhere in Beluga', () => {
+  const elsewhere = [{ name: 'RATEL_API_KEY', value: `rtl_${rand(32, undefined, 41)}`, place: 'Ratel' }];
+
+  it('shaped like a key another project keeps: its name, and where', () => {
+    expect(findKeys(RATEL, { elsewhere })).toMatchObject([{ value: RATEL, name: 'RATEL_API_KEY', why: 'like-yours', from: 'RATEL_API_KEY', fromPlace: 'Ratel' }]);
+  });
+
+  it('the very key another project keeps: kept here too, under its name', () => {
+    expect(findKeys(`use ${elsewhere[0]!.value}`, { elsewhere })).toMatchObject([{ name: 'RATEL_API_KEY', why: 'like-yours', fromPlace: 'Ratel' }]);
+  });
+
+  it('one here wins over one elsewhere', () => {
+    const known = { RTL_KEY: elsewhere[0]!.value };
+    expect(findKeys(elsewhere[0]!.value, { known, elsewhere })).toMatchObject([{ name: 'RTL_KEY', why: 'yours' }]);
   });
 });
