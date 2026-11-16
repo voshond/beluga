@@ -153,6 +153,8 @@ export const MACHINE: Record<Method, MachineSide> = {
   'workspaces.remove': 'drive',
   'workspaces.commit': 'drive',
   'workspaces.merge': 'drive',
+  'workspaces.land': 'drive',
+  'workspaces.setLandOnBase': 'drive',
   'workspaces.prepareRemoval': 'drive',
   'workspaces.applyEnvBack': 'drive',
   'workspaces.keepEnvHere': 'drive',

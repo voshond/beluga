@@ -551,6 +551,8 @@ export interface AgentPlace {
   readonly shipped?: { readonly number: number; readonly url?: string; readonly into: string };
   /** Its pull request is open (BLG-840): the run pushes its commits there (see prompt.ts buildCommitAppend). */
   readonly openPr?: OpenPr;
+  /** Straight to main (no open PR): when its turn ends, Beluga lands its commits on this branch in the main folder. */
+  readonly landsOn?: string;
 }
 
 /** A worktree's open pull request, for its run's commit rules (BLG-840). */

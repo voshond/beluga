@@ -134,6 +134,8 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'workspaces.remove': 'covered',
   'workspaces.commit': 'covered',
   'workspaces.merge': 'covered',
+  'workspaces.land': { refused: NO_TOOL },
+  'workspaces.setLandOnBase': { refused: NO_TOOL },
   'workspaces.prepareRemoval': 'covered',
   'workspaces.applyEnvBack': 'gated',
   'workspaces.keepEnvHere': 'gated',

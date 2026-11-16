@@ -37,7 +37,7 @@ import { QueueTray } from './QueueTray.js';
 import { BtwCard, askBtw } from './BtwCard.js';
 import { expectClaude, launchFlight } from './flight.js';
 import { lastMineIn } from './starting-model.js';
-import { type WorktreeChoice, WorktreeDraft } from './WorktreeDraft.js';
+import { type WorktreeChoice, WorktreeDraft, landsOnBase } from './WorktreeDraft.js';
 import { sendSteerNow, stopClaude } from '../lib/commands.js';
 import { useAttachments } from './use-attachments.js';
 import { useKeyPaste } from './KeyPasteCard.js';
@@ -449,7 +449,9 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     const terminal = Boolean(text.trim()) && sendsToTerminal(client.store.getState(), getPrefs(), 'draft', worktreeAgent?.runtime);
     // Started in the mode the picker shows (Act, Plan First or Plan with Tasks).
     const mode = worktreeMode({ terminal, plan: client.store.getState().planMode.draft === true, tasks: armed });
-    const opts = { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...mode };
+    // Straight to main (BLG-973): picked here, else as last time in this project.
+    const land = landsOnBase(worktree, projectId) ? { land: true } : {};
+    const opts = { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...mode, ...land };
     // Runs on one of your computers (BLG-788): made there, in the same project, and opened at once.
     // Held (the computer Runs on names can't take it now): nothing starts, the words stay in the box.
     const sent = sendToComputer(startDeps, projectId, worktreeAgent?.runtime ?? myRuntime(client.store.getState().prefs), { kind: 'worktree', text, opts });
@@ -465,7 +467,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     const ahead = makeAhead(client, projectId, name || text || 'worktree', { ...(worktree.base ? { base: worktree.base } : {}), asked: text });
     // Keys pasted into this message and kept (BLG-965) are the worktree's own before it starts (held until it's made).
     const vars = heldFor(boxKey, text);
-    void api.workspaces.startWorktree(projectId, text, { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...mode, ...(ahead ? { id: ahead.id } : {}), ...(vars.length ? { vars } : {}) }).then(() => forgetHeld(boxKey), (err: unknown) => {
+    void api.workspaces.startWorktree(projectId, text, { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...mode, ...land, ...(ahead ? { id: ahead.id } : {}), ...(vars.length ? { vars } : {}) }).then(() => forgetHeld(boxKey), (err: unknown) => {
       ahead?.drop();
       keepWords(text);
       toast(client, `Couldn't create the worktree: ${errorText(err)}`, 'error');

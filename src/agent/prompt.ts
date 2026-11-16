@@ -210,13 +210,21 @@ export function buildShellAppend(setup: ShellSetup): string {
  * With an open PR (BLG-840) it pushes there too, unless the owner turned that off, so Merge never
  * merges an older version; and its last answer always says where the work is.
  */
-export function buildCommitAppend(pr?: OpenPr): string {
+export function buildCommitAppend(pr?: OpenPr, landsOn?: string): string {
   const lines = [
     '',
     'You are on a branch of your own (a git worktree). When your turn changed files, commit them before you',
     'end it: one commit with a short message in the style of `git log` here (no attribution lines unless the',
     'repo uses them). Leave out scratch files, build output and anything secret. If the request says not to run git, don\'t.',
   ];
+  if (!pr && landsOn) {
+    return [
+      ...lines,
+      `This worktree goes straight to ${landsOn}: when your turn ends, Beluga lands your commits on ${landsOn} in the`,
+      `owner's main folder (rebased onto it, no pull request; nothing is pushed). Never push, merge, rebase or open`,
+      `a pull request yourself unless asked. Your last answer says the work lands on ${landsOn} in the main folder.`,
+    ].join('\n');
+  }
   if (!pr) {
     return [
       ...lines,

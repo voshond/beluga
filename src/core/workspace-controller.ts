@@ -23,7 +23,9 @@ import type { BranchList, DeletePlan, Project, PullHead, RenameResult, Workspace
 import { type MergeResult, git } from '../workspaces/git.js';
 import type { FoundConversation } from '../agent/runtime/claude/claude-sessions.js';
 import type { ShareService } from './shares.js';
-import { type LogItem, type Store, type WorkspaceTab, mergedText, settleRun } from './store.js';
+import { type LogItem, type Store, type WorkspaceTab, isRunning, mergedText, settleRun } from './store.js';
+import { Lander } from './land-on-base.js';
+import type { LandResult } from '../workspaces/land.js';
 import { type Conversation, isImportedItem } from '../agent/transcript.js';
 import type { Intent } from './intents.js';
 import { type OtherTools, OtherWorktrees } from './other-worktrees.js';
@@ -195,6 +197,8 @@ export class WorkspaceController {
   readonly others: OtherWorktrees;
   /** Keeping main folders current: fetching, Update main, and Claude's sync runs. */
   readonly mainSync: MainSync;
+  /** Straight to main: lands a worktree's work on its base when its agent's turn ends (core/land-on-base.ts). */
+  private readonly lander: Lander;
   /** Conversations whose next run may sync git in the main folder ("Let Claude handle it"), by workspace id. */
   private readonly syncRuns = new Map<string, { branch: string; upstream: string }>();
   /** Main-folder conversations that may edit one hidden worktree (a plan's Claude fixing a conflict there), by workspace id. */
@@ -302,6 +306,20 @@ export class WorkspaceController {
       fetchEvery: () => deps.store.getState().prefs.fetchEvery,
       open: (wsId) => this.open(wsId),
     });
+    this.lander = new Lander({
+      store: deps.store,
+      find: (id) => deps.manager.find(id),
+      land: (id, message) => deps.manager.land(id, message),
+      target: (ws) => deps.manager.mergeTarget(ws),
+      hasPr: (id) => deps.store.getState().prs[id]?.state === 'OPEN',
+      toast: deps.toast,
+      askClaude: (prompt, channel) => deps.askClaude(prompt, channel),
+      ensureLoaded: (id) => this.ensureLoaded(id),
+      landed: (id) => {
+        void this.refresh();
+        this.emit({ kind: 'merged', id });
+      },
+    });
   }
 
   get manager(): WorkspaceManager {
@@ -312,6 +330,7 @@ export class WorkspaceController {
     if (this.envTimer) clearTimeout(this.envTimer);
     this.unsubscribe();
     this.mainSync.stop();
+    this.lander.stop();
     this.saver.stop();
   }
 
@@ -743,6 +762,7 @@ export class WorkspaceController {
       ...(ws.effort ? { effort: ws.effort } : {}),
       ...(ws.prShipped && ws.kind === 'worktree' ? { shipped: ws.prShipped } : {}),
       ...this.openPrOf(ws),
+      ...this.landsOnOf(ws),
       ...(syncMain ? { syncMain } : {}),
       ...(ws.askOnly && this.fixups.has(ws.id) ? { fixup: this.fixups.get(ws.id)! } : {}),
     };
@@ -758,6 +778,12 @@ export class WorkspaceController {
     if (ws.kind !== 'worktree' || ws.askOnly || !ws.branch || pr?.state !== 'OPEN') return {};
     const fork = pullOfBranch(ws.path, ws.branch) !== undefined;
     return { openPr: { number: pr.number, url: pr.url, branch: ws.branch, push: state.prefs.pushToPr !== false, ...(fork ? { fork: true } : {}) } };
+  }
+
+  /** Straight to main, with no open pull request: the branch its work lands on (see core/land-on-base.ts). */
+  private landsOnOf(ws: Workspace): { landsOn?: string } {
+    if (ws.kind !== 'worktree' || !ws.landOnBase || ws.askOnly || this.deps.store.getState().prs[ws.id]?.state === 'OPEN') return {};
+    return { landsOn: this.deps.manager.mergeTarget(ws) ?? 'main' };
   }
 
   /** The agent a workspace conversation runs on: its pick, else yours (undefined: not a workspace, or the daemon's own runtime). */
@@ -894,7 +920,7 @@ export class WorkspaceController {
    */
   /** `agent`: the agent it runs (unset: your default). */
   /** `id`: the id it gets (from newWorktreeId), else a fresh one. */
-  async newWorktree(projectId: string, name: string, opts: { base?: string; quiet?: boolean; agent?: AgentRef; id?: string; thread?: ThreadRecord; ticket?: string } = {}): Promise<Workspace | undefined> {
+  async newWorktree(projectId: string, name: string, opts: { base?: string; quiet?: boolean; agent?: AgentRef; id?: string; thread?: ThreadRecord; ticket?: string; land?: boolean } = {}): Promise<Workspace | undefined> {
     const project = this.deps.manager.list.find((p) => p.root !== '' && (p.id === projectId || p.root === projectId));
     const id = opts.id ?? this.deps.manager.newWorktreeId();
     if (project) {
@@ -902,7 +928,7 @@ export class WorkspaceController {
       this.publish();
       if (!opts.quiet) this.deps.intend({ type: 'navigate', view: { kind: 'workspace', id, tab: 'chat' } });
     }
-    const ws = await this.act("Couldn't create the worktree", () => this.deps.manager.createWorktree(projectId, name, opts.base, { id, ...(opts.agent ? { agent: opts.agent } : {}), ...(opts.thread ? { thread: opts.thread } : {}), ...(opts.ticket ? { ticket: opts.ticket } : {}) }), undefined, { later: true });
+    const ws = await this.act("Couldn't create the worktree", () => this.deps.manager.createWorktree(projectId, name, opts.base, { id, ...(opts.agent ? { agent: opts.agent } : {}), ...(opts.thread ? { thread: opts.thread } : {}), ...(opts.ticket ? { ticket: opts.ticket } : {}), ...(opts.land ? { landOnBase: true } : {}) }), undefined, { later: true });
     const shown = this.ahead.making.delete(id);
     this.publish();
     if (ws) {
@@ -1065,9 +1091,10 @@ export class WorkspaceController {
    * made, it plans first instead). `quiet`: made
    * from elsewhere (the phone, Your Mac), so the Mac's window stays where it is. → the worktree,
    * by the name the model gave it; with `nameLater`, as soon as it's made (its id stays when the
-   * name comes, so a caller that only wants the id needn't wait for the model).
+   * name comes, so a caller that only wants the id needn't wait for the model). `land`: Straight to
+   * main, its work lands on its base in the main folder each time its agent's turn ends.
    */
-  async startWorktree(projectId: string, firstMessage: string, nameTask: (prompt: string) => Promise<string>, opts: { base?: string; name?: string; plan?: boolean; tasks?: boolean; quiet?: boolean; nameLater?: boolean; agent?: AgentRef; terminal?: boolean; id?: string } = {}): Promise<Workspace | undefined> {
+  async startWorktree(projectId: string, firstMessage: string, nameTask: (prompt: string) => Promise<string>, opts: { base?: string; name?: string; plan?: boolean; tasks?: boolean; quiet?: boolean; nameLater?: boolean; agent?: AgentRef; terminal?: boolean; id?: string; land?: boolean } = {}): Promise<Workspace | undefined> {
     const text = firstMessage.trim();
     const named = opts.name?.trim();
     const proper = named || !text ? undefined : nameTask(firstMessage).catch(() => undefined);
@@ -1076,7 +1103,7 @@ export class WorkspaceController {
     // Your message shows at once on its page while git makes the folder (BLG-531); Claude gets it when that's done.
     const shown = text && this.deps.showAsk ? this.deps.showAsk(firstMessage, channel) : undefined;
     const ticket = ticketKey(text);
-    const ws = await this.newWorktree(projectId, named || (text ? slugify(text) : 'worktree'), { id, ...(opts.base ? { base: opts.base } : {}), ...(opts.quiet ? { quiet: true } : {}), ...(opts.agent ? { agent: opts.agent } : {}), ...(ticket ? { ticket } : {}) });
+    const ws = await this.newWorktree(projectId, named || (text ? slugify(text) : 'worktree'), { id, ...(opts.base ? { base: opts.base } : {}), ...(opts.quiet ? { quiet: true } : {}), ...(opts.agent ? { agent: opts.agent } : {}), ...(ticket ? { ticket } : {}), ...(opts.land ? { land: true } : {}) });
     if (!ws && shown) this.deps.store.dispatch({ type: 'clear', channel });
     const tasks = Boolean(ws && opts.tasks && this.planHereOrSay(channel));
     // A plan's own conversation has no plan mode; one whose plan couldn't be made plans first.
@@ -1628,6 +1655,25 @@ export class WorkspaceController {
     }
     this.deps.toast(`Merge conflict in ${result.files.length} file(s). Click "Solve merge conflict" to let your agent handle it.`, 'warn');
     return result;
+  }
+
+  /** Land a worktree's work on its base in the main folder now (Straight to main). → how it went (undefined: a toast says why). */
+  land(id: string): Promise<LandResult | undefined> {
+    return this.lander.land(id);
+  }
+
+  /** Straight to main on or off for a worktree: on, what's done so far lands too, unless its agent is working. */
+  async setLandOnBase(id: string, on: boolean): Promise<void> {
+    const done = await this.act("Couldn't change it", async () => {
+      this.deps.manager.setLandOnBase(id, on);
+      return true;
+    });
+    if (!done) return;
+    const ws = this.deps.manager.find(id);
+    const into = (ws && this.deps.manager.mergeTarget(ws)) ?? 'main';
+    this.deps.toast(on ? `Straight to ${into}: its work lands on ${into} in the main folder when its agent finishes` : 'Its work stays on its branch', 'success');
+    const working = this.deps.store.getState().log.some((l) => l.type === 'agent' && l.channel === `${WS_PREFIX}${id}` && isRunning(l.status));
+    if (on && !working) void this.lander.land(id);
   }
 
   /** Put a project in a group (or none). */

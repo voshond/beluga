@@ -57,6 +57,9 @@ export type BranchStepId =
   | 'pr_own'
   | 'merge'
   | 'merge_base'
+  | 'land'
+  | 'land_on'
+  | 'land_off'
   | 'continue_after_merge'
   | 'archive'
   | 'delete';
@@ -221,6 +224,17 @@ export function branchState(state: Pick<DomainState, 'projects' | 'gh' | 'prs' |
   if (ws.prDone !== undefined && st?.landed && !pr && !changed) {
     return at('clean', 'No changes', 'muted', `PR #${ws.prDone} went into ${into}: nothing new on ${ws.branch} yet, and the next change gets a new PR`, []);
   }
+  // Straight to main (no open PR): its work lands in the main folder as its agent finishes (core/land-on-base.ts).
+  if (ws.landOnBase && pr?.state !== 'OPEN' && !planned) {
+    const ahead = st?.ahead ?? 0;
+    const off: BranchStep = { id: 'land_off', label: 'Keep on Its Branch', hint: `Stop landing on ${into}: what’s next stays on ${ws.branch}, for a PR or a merge` };
+    if (!changed && !ahead) return at('clean', `On ${into}`, 'ok', `Everything here is on ${into} in the main folder: what your agent does next lands there too`, [archive, off]);
+    const what = [changed && plural(changed, 'change'), ahead && plural(ahead, 'commit')].filter(Boolean).join(' and ');
+    return at('unshipped', `Lands on ${into}`, 'info', `${what} land${changed + ahead === 1 ? 's' : ''} on ${into} in the main folder when your agent finishes`, [
+      { id: 'land', label: `Land on ${into} Now`, hint: `${changed ? 'Commits what’s left, ' : ''}puts it on ${into} in the main folder (rebased, no PR, nothing pushed)` },
+      off,
+    ]);
+  }
   // Merged outside Beluga (on GitHub with no PR it knows of, squashed, or by hand).
   if (st?.landed && pr?.state !== 'OPEN' && !changed) {
     return at('merged', 'Merged', 'merged', `Its commits are already in ${into}, so this worktree is done: archive it, or continue here`, planned ? [] : finish);
@@ -337,9 +351,11 @@ export function branchState(state: Pick<DomainState, 'projects' | 'gh' | 'prs' |
           { id: 'merge_base', label: `Merge into ${into}…`, hint: `No pull request: ${changed ? 'commits what’s left, ' : ''}merges ${ws.branch} into origin/${into} and pushes it there` },
         ]
       : [];
+  // The small-change path (core/land-on-base.ts), last in the menu: on from now, and what's here lands at once.
+  const landOn: BranchStep | false = !planned && { id: 'land_on', label: `Straight to ${into}`, hint: `Lands its work on ${into} in the main folder now and each time your agent finishes (rebased, no PR, nothing pushed)` };
   if (pr?.state === 'CLOSED' && !changed && !ahead) return at('closed', 'PR closed', 'muted', `PR #${pr.number} was closed without merging`, planned ? [] : [archive, remove]);
   // Work in progress, not a problem: a quiet grey pill, never a warning (Kayra: a small thing stays small).
-  if (changed) return at('uncommitted', plural(changed, 'change'), 'muted', `${plural(changed, 'uncommitted change')}${ahead ? ` and ${plural(ahead, 'commit')}` : ''} not in ${into} yet`, github ? [ship, ...prWays, commit] : [commit, ship]);
-  if (ahead) return at('unshipped', github ? `${plural(ahead, 'commit')} · no PR` : 'Ready to merge', github ? 'info' : 'ok', `${plural(ahead, 'commit')} on ${ws.branch} not in ${into} yet`, [ship, ...prWays]);
+  if (changed) return at('uncommitted', plural(changed, 'change'), 'muted', `${plural(changed, 'uncommitted change')}${ahead ? ` and ${plural(ahead, 'commit')}` : ''} not in ${into} yet`, github ? [ship, ...prWays, commit, landOn] : [commit, ship, landOn]);
+  if (ahead) return at('unshipped', github ? `${plural(ahead, 'commit')} · no PR` : 'Ready to merge', github ? 'info' : 'ok', `${plural(ahead, 'commit')} on ${ws.branch} not in ${into} yet`, [ship, ...prWays, landOn]);
   return at('clean', 'No changes', 'muted', `Nothing on ${ws.branch} that isn’t in ${into}`, []);
 }

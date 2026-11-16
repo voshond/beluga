@@ -316,7 +316,8 @@ export const API = {
   // → the new worktree's id. `plan`: its Claude plans first. `tasks`: Plan with Tasks, its conversation is a
   // draft plan's home, written from the first message. `quiet`: started from the phone, the Mac's window stays put.
   // `id`: the id it gets, chosen by the screen that shows it as being made already (BLG-942; taken only when free).
-  'workspaces.startWorktree': args(id, str, opt(z.object({ base: opt(z.string().min(1).max(250)), name: opt(z.string().max(200)), plan: opt(bool), tasks: opt(bool), quiet: opt(bool), agent: opt(AgentRef), terminal: opt(bool), id: opt(WorktreeId), vars: opt(EnvRows) }))),
+  // `land`: Straight to main, its work lands on its base in the main folder each time its agent's turn ends (no PR).
+  'workspaces.startWorktree': args(id, str, opt(z.object({ base: opt(z.string().min(1).max(250)), name: opt(z.string().max(200)), plan: opt(bool), tasks: opt(bool), quiet: opt(bool), agent: opt(AgentRef), terminal: opt(bool), id: opt(WorktreeId), vars: opt(EnvRows), land: opt(bool) }))),
   // What a new worktree can start from: → { base: the default, branches: default first, then newest }.
   'workspaces.branches': args(id),
   'workspaces.fork': args(id, z.string().max(200)),
@@ -350,6 +351,10 @@ export const API = {
   'workspaces.remove': args(id, opt(z.object({ children: opt(z.enum(['with', 'keep'])), quiet: opt(bool) }).strict())),
   'workspaces.commit': args(id, opt(z.string().max(2000))),
   'workspaces.merge': args(id),
+  // Straight to main: land a worktree's work on its base in the main folder now (rebased, fast-forwarded, nothing pushed) → how it went.
+  'workspaces.land': args(id),
+  // Straight to main on or off for a worktree: on, each finished turn of its agent lands on its base in the main folder.
+  'workspaces.setLandOnBase': args(id, bool),
   'workspaces.prepareRemoval': args(id),
   'workspaces.applyEnvBack': args(id, opt(bool)),
   // A worktree's env changes stay there: not asked about again until they change (BLG-369).

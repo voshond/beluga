@@ -151,6 +151,9 @@ export const PHONE: Record<Method, Side> = {
   'workspaces.remove': 'mac',
   'workspaces.commit': 'mac',
   'workspaces.merge': 'mac',
+  // The phone lands through its branch steps (companion.branchStep: land, land_on, land_off).
+  'workspaces.land': 'mac',
+  'workspaces.setLandOnBase': 'mac',
   'workspaces.prepareRemoval': 'mac',
   'workspaces.applyEnvBack': 'mac',
   'workspaces.keepEnvHere': 'mac',
