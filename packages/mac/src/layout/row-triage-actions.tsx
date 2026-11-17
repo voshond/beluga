@@ -10,7 +10,7 @@ import { Button, IconButton } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
 import { toast, useBeluga } from '../lib/beluga.js';
 import { type CategoryEntry, conversationEntries, nextActive, wakeWords } from './attention-model.js';
-import { hereOf, openEntry } from './EntryRow.js';
+import { hereOf, openEntry } from './entry-open.js';
 import { toolbarActions } from './toolbar-actions.js';
 import s from './Sidebar.module.css';
 

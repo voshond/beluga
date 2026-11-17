@@ -4,13 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildCommitAppend } from '../src/agent/prompt.js';
-import { branchState } from '../src/core/branch-state.js';
+import { branchState, pushMainStep } from '../src/core/branch-state.js';
 import { Lander, landingWords, rebasePrompt, turnsEnded } from '../src/core/land-on-base.js';
 import type { LogItem, Store } from '../src/core/store.js';
 import { type LandResult, changedFiles, landOnto } from '../src/workspaces/land.js';
 import { WorkspaceManager } from '../src/workspaces/manager.js';
 import { WorkspaceStore } from '../src/workspaces/store.js';
-import type { Project, Workspace } from '../src/workspaces/types.js';
+import type { Project, ProjectSync, Workspace } from '../src/workspaces/types.js';
 
 /** Straight to main (BLG-973): a worktree's work lands on its base in the main folder, as a straight line. */
 
@@ -169,7 +169,7 @@ describe('when a turn ends', () => {
   });
 
   it('says what happened in plain words', () => {
-    expect(landingWords({ ok: true, landed: 2 }, 'main')?.text).toBe('Landed on main in the main folder');
+    expect(landingWords({ ok: true, landed: 2 }, 'main')?.text).toBe('Committed to main in the main folder · not pushed yet');
     expect(landingWords({ ok: true, landed: 0 }, 'main')).toBeUndefined();
     expect(landingWords({ ok: false, reason: 'dirty', files: ['a.ts'] }, 'main')?.text).toContain('your own changes in the main folder in a.ts');
     expect(landingWords({ ok: false, reason: 'wrong_branch', files: [], current: 'dev', expected: 'main' }, 'main')?.text).toContain('the main folder is on dev');
@@ -195,6 +195,41 @@ describe('where it stands', () => {
     const b = at(ws({ landOnBase: true }));
     expect([b.label, b.tone]).toEqual(['On main', 'ok']);
     expect(b.steps.map((s) => s.id)).toEqual(['archive', 'land_off']);
+  });
+
+  describe('main with commits origin doesn’t have', () => {
+    const sync = (over: Partial<ProjectSync> = {}): ProjectSync => ({ branch: 'main', upstream: 'origin/main', remote: 'origin', local: true, ahead: 3, behind: 0, current: 'main', onDefault: true, dirty: 0, ...over });
+    const pushing = (w: Workspace, s?: ProjectSync) => {
+      const project: Project = { id: 'p1', name: 'app', root: '/r', base: 'origin/main', workspaces: [w], ...(s ? { sync: s } : {}) };
+      return branchState({ projects: [project], gh: true, prs: {}, conflicts: {} }, w)!;
+    };
+
+    it('everything landed: Push main to origin leads, with how many', () => {
+      const b = pushing(ws({ landOnBase: true }), sync());
+      expect([b.label, b.tone]).toEqual(['3 commits not pushed', 'info']);
+      expect(b.steps.map((s) => s.id)).toEqual(['push_main', 'archive', 'land_off']);
+      expect(b.steps[0]?.label).toBe('Push main to origin');
+      expect(b.detail).toContain('aren’t on origin/main yet');
+    });
+
+    it('work still waiting: Land Now leads, and the push is in its menu', () => {
+      const b = pushing(ws({ landOnBase: true, status: { changed: 1, ahead: 0, behind: 0 } }), sync({ ahead: 1 }));
+      expect(b.steps.map((s) => s.id)).toEqual(['land', 'push_main', 'land_off']);
+    });
+
+    it('no push without a remote, nothing ahead, or another branch than the one tracked', () => {
+      expect(pushing(ws({ landOnBase: true }), sync({ ahead: 0 })).label).toBe('On main');
+      expect(pushing(ws({ landOnBase: true }), sync({ upstream: undefined })).label).toBe('On main');
+      expect(pushing(ws({ landOnBase: true, base: 'dev' }), sync()).steps.map((s) => s.id)).not.toContain('push_main');
+    });
+
+    it('a worktree on its own branch never offers it', () => {
+      expect(pushing(ws({ status: { changed: 0, ahead: 1, behind: 0 } }), sync()).steps.map((s) => s.id)).not.toContain('push_main');
+    });
+
+    it('names the remote it goes to', () => {
+      expect(pushMainStep(sync({ remote: 'upstream', upstream: 'upstream/main' }), 'main')?.step.label).toBe('Push main to upstream');
+    });
   });
 
   it('an open PR is how it ships, landing or not', () => {

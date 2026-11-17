@@ -168,6 +168,10 @@ export const API = {
   'session.copyText': args(str, z.string().max(500)),
   'session.setPrefs': args(PrefsPatch),
   'session.setPlanMode': args(channel, bool),
+  // Full Autopilot in a conversation (BLG-981): a stand-in agent answers what your agent asks there (a plan's own: the plan).
+  'session.setAutopilot': args(channel, bool),
+  // Plan here, build with another agent (BLG-982): who builds what's planned in this conversation once approved (null: the same agent).
+  'session.setBuildWith': args(channel, AgentRef.nullish()),
   'session.setClaudeSharing': args(Policy),
   'session.rename': args(z.string().max(64)),
   'session.zoom': args(z.enum(['in', 'out', 'reset'])),
@@ -518,6 +522,8 @@ export const API = {
   'attachments.add': args(z.enum(['png', 'jpg', 'jpeg', 'gif', 'webp']), z.string().max(6_000_000)),
   // An image file on this Mac (its path was pasted), copied in and made smaller if it's too big. → { n, chip, file }
   'attachments.addFile': args(path),
+  // A long paste kept as a text file (BLG-988): it goes with the message as its path. → PathInfo
+  'attachments.addText': args(z.string().min(1).max(2_000_000)),
   // An image you linked in a message (its file name), waiting in the box again. → { n, chip }
   'attachments.reattach': args(z.string().min(1).max(255)),
   // `only`: the images waiting in the box (others' "[image N]" stay words). `shown`: the number each

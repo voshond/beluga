@@ -19,9 +19,9 @@ const PILL_ICON: Record<BranchTone, IconName> = { merged: 'merge', ok: 'check', 
 
 export type BranchFold = 'none' | 'pill' | 'all';
 
-const STEP_ICON: Partial<Record<BranchStep['id'], IconName>> = { merge_pr: 'merge', merge: 'merge', merge_base: 'merge', land: 'merge', land_on: 'merge', land_off: 'branch', merge_auto: 'clock', cancel_auto: 'x', update_branch: 'refresh', mark_ready: 'check', open_pr: 'pr', continue_after_merge: 'branch', archive: 'archive', delete: 'x', commit: 'commit', pr: 'pr', pr_draft: 'pr', pr_original: 'pr', pr_own: 'pr', push: 'up', rerun_checks: 'refresh' };
+const STEP_ICON: Partial<Record<BranchStep['id'], IconName>> = { merge_pr: 'merge', merge: 'merge', merge_base: 'merge', land: 'merge', land_on: 'merge', land_off: 'branch', merge_auto: 'clock', cancel_auto: 'x', update_branch: 'refresh', mark_ready: 'check', open_pr: 'pr', continue_after_merge: 'branch', archive: 'archive', delete: 'x', commit: 'commit', pr: 'pr', pr_draft: 'pr', pr_original: 'pr', pr_own: 'pr', push: 'up', push_main: 'up', rerun_checks: 'refresh' };
 
-const STEP_SHORT: Partial<Record<BranchStep['id'], string>> = { pr: 'Create PR', open_pr: 'Open PR', pr_draft: 'Draft PR', pr_original: 'Create PR', pr_own: 'Own PR', pr_claude: 'Create PR', pr_custom: 'Create PR', merge_pr: 'Merge', merge: 'Merge', merge_base: 'Merge', land: 'Land', land_on: 'Straight', land_off: 'Keep', merge_auto: 'Auto-merge', merge_admin: 'Merge', cancel_auto: 'Cancel', update_branch: 'Update', mark_ready: 'Ready', review_claude: 'Review', fix_checks: 'Fix Checks', resolve_pr: 'Resolve Conflicts', merge_claude: 'Resolve Conflicts', push: 'Push', rerun_checks: 'Re-run' };
+const STEP_SHORT: Partial<Record<BranchStep['id'], string>> = { pr: 'Create PR', open_pr: 'Open PR', pr_draft: 'Draft PR', pr_original: 'Create PR', pr_own: 'Own PR', pr_claude: 'Create PR', pr_custom: 'Create PR', merge_pr: 'Merge', merge: 'Merge', merge_base: 'Merge', land: 'Land', land_on: 'Straight', land_off: 'Keep', merge_auto: 'Auto-merge', merge_admin: 'Merge', cancel_auto: 'Cancel', update_branch: 'Update', mark_ready: 'Ready', review_claude: 'Review', fix_checks: 'Fix Checks', resolve_pr: 'Resolve Conflicts', merge_claude: 'Resolve Conflicts', push: 'Push', push_main: 'Push', rerun_checks: 'Re-run' };
 
 /**
  * A step in a word or two, for the folded toolbar: the icon alone didn't say enough ("PR" alone didn't
@@ -142,8 +142,11 @@ export function BranchControl({ wsId, branch, fold = 'none' }: BranchProps) {
           run: () => void whileBusy(wsId, async () => showGitTrouble(wsId, await api.workbench.mergeToBase(wsId), 'merge_base')),
         });
       case 'land':
-        // Straight to main, now: into the main folder only (nothing pushed); how it went is a toast, and a line in its chat.
+        // Straight to main, now: committed into the main folder only (not pushed); how it went is a toast, and a line in its chat.
         return void whileBusy(wsId, () => api.workspaces.land(wsId));
+      case 'push_main':
+        // What Straight to main committed on main goes to origin; how it went is a toast.
+        return void whileBusy(wsId, () => api.git.pushMain(wsId));
       case 'land_on':
       case 'land_off':
         return void whileBusy(wsId, () => api.workspaces.setLandOnBase(wsId, step.id === 'land_on'));

@@ -8,7 +8,7 @@ import { remoteScratch } from '../core/friend-share/scratch.js';
 import type { AddResult, WorkspaceController } from '../core/workspace-controller.js';
 import type { Workbench } from '../core/workbench.js';
 import { browseDir, listLocalDirs, localDirKey, openWithSystem } from '../core/local.js';
-import { ATTACHMENT_SHARE, type FetchShared, attachmentOnDisk, chipText, expandChips, importImageFitting, mediaTypeOf, pathInfo, publishForRoom, reattach, readAttachment, registerAttachment, roomAttachmentsDir, saveImageBytes } from '../core/attachments.js';
+import { ATTACHMENT_SHARE, type FetchShared, attachmentOnDisk, chipText, expandChips, importImageFitting, mediaTypeOf, pathInfo, publishForRoom, reattach, readAttachment, registerAttachment, roomAttachmentsDir, saveImageBytes, savePastedText } from '../core/attachments.js';
 import { fetchBytes } from '../core/downloads.js';
 import { testDatabase } from '../core/views/sources.js';
 import { existsSync, statSync } from 'node:fs';
@@ -101,6 +101,8 @@ export const HANDLERS = {
   'session.copyText': (s, text, success) => s.copyText(text, success),
   'session.setPrefs': (s, prefs) => s.setPrefs(prefs),
   'session.setPlanMode': (s, channel, on) => s.setPlanMode(channel, on),
+  'session.setAutopilot': (s, channel, on) => s.setAutopilot(channel, on),
+  'session.setBuildWith': (s, channel, agent) => s.setBuildWith(channel, agent ?? null),
   'session.setClaudeSharing': (s, policy) => s.setClaudeSharing(policy),
   'session.rename': (s, name) => s.rename(name),
   'session.zoom': (s, dir) => s.zoom(dir),
@@ -407,6 +409,7 @@ export const HANDLERS = {
     const a = registerAttachment(saved, statSync(saved).size);
     return { n: a.n, chip: chipText(a.n), file: path.basename(saved) };
   },
+  'attachments.addText': (_s, text) => savePastedText(text),
   'attachments.reattach': (_s, file) => {
     const a = reattach(file);
     if (!a) throw new Error('That image is gone from this computer');

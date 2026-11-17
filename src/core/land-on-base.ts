@@ -36,7 +36,7 @@ export function turnsEnded(prev: readonly LogItem[], next: readonly LogItem[], s
 
 /** What landing says (a toast, and a line in the chat when it couldn't). */
 export function landingWords(result: LandResult, into: string): { readonly text: string; readonly level: 'success' | 'warn' } | undefined {
-  if (result.ok) return result.landed ? { text: `Landed on ${into} in the main folder`, level: 'success' } : undefined;
+  if (result.ok) return result.landed ? { text: `Committed to ${into} in the main folder · not pushed yet`, level: 'success' } : undefined;
   const some = (files: readonly string[]): string => files.slice(0, 3).join(', ') + (files.length > 3 ? '…' : '');
   if (result.reason === 'wrong_branch') return { text: `Didn’t land on ${into}: the main folder is on ${result.current}. Switch it to ${into}, then Land on ${into} again.`, level: 'warn' };
   if (result.reason === 'dirty') return { text: `Didn’t land on ${into}: you have your own changes in the main folder in ${some(result.files)}. Commit or stash them, then Land on ${into} again.`, level: 'warn' };

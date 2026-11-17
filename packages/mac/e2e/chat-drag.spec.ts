@@ -223,6 +223,35 @@ test('an Unread row is a source and a target (BLG-307)', async ({ page }) => {
   await boxIn(page, a).fill('');
 });
 
+test('with the sidebar categories on, a category row is a source and a target', async ({ page }) => {
+  const { self, a, b } = await setUp(page);
+  await daemon(page, `(c) => c.api.session.setPrefs({ chatCategories: true, folded: [] })`);
+  try {
+    // The same row as in a project's list, with the categories' extras.
+    const categoryRow = (w: Worktree) => sidebar(page).locator(`[data-category][data-chat-row="ws:${w.id}"]`);
+    await expect(categoryRow(a)).toBeVisible();
+    await expect(categoryRow(b)).toBeVisible();
+    await sidebar(page).getByText('Your Mac', { exact: true }).click();
+    await pause(page);
+    // Dropped on another category row: that chat opens with the chip in its draft.
+    await lift(page, categoryRow(a), categoryRow(b));
+    await expect(categoryRow(b)).toHaveClass(/over/);
+    await page.mouse.up();
+    await expect.poll(() => sentFrom(page, boxIn(page, b))).toBe(`${chip(self, a)} `);
+    await boxIn(page, b).fill('');
+    await pause(page);
+    // Dropped on the open chat's message box.
+    await lift(page, categoryRow(a), boxIn(page, b));
+    await expect(glow(page)).toBeVisible();
+    await page.mouse.up();
+    await expect.poll(() => sentFrom(page, boxIn(page, b))).toBe(`${chip(self, a)} `);
+    await pause(page);
+    await boxIn(page, b).fill('');
+  } finally {
+    await daemon(page, `(c) => c.api.session.setPrefs({ chatCategories: false })`);
+  }
+});
+
 test('Esc cancels; the row still opens its chat afterwards', async ({ page }) => {
   const { a, b } = await setUp(page);
   await rowOf(page, a).click();

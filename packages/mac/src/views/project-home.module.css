@@ -138,6 +138,8 @@ button.stat:disabled {
   background: var(--bg-raised);
   box-shadow: 0 0 0 var(--hair) var(--hairline-strong), 0 1px 3px rgba(0, 0, 0, 0.06);
   transition: box-shadow var(--dur);
+  /* Its line of controls follows the box's own width: the box stops at the column's 60rem however wide the page is. */
+  container: home-box / inline-size;
 }
 .box:focus-within {
   box-shadow: 0 0 0 var(--hair) var(--hairline-strong), 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent), 0 2px 10px rgba(0, 0, 0, 0.07);
@@ -200,7 +202,15 @@ button.stat:disabled {
 /* Only the name (it's optional) gives way, down to a short box; the branch, the chips and the button keep their shape. */
 .bar > label:has(.nameInput) {
   flex-shrink: 1;
-  min-width: 0;
+  min-width: 88px;
+}
+/* A long branch ("feat/live-topic-graph") gives way too, after the name, to the width of a short one, its name cut with an ellipsis. */
+.bar > label:first-child:has([role='combobox']) {
+  flex-shrink: 0.25;
+  min-width: 7.5rem;
+}
+.bar > label:first-child [role='combobox'] {
+  flex-shrink: 1;
 }
 /* Just Ask's and New Plan's line of words: it takes two lines before it pushes anything off. */
 .bar > .note {
@@ -224,17 +234,23 @@ button.stat:disabled {
   align-items: center;
   gap: 6px 12px;
 }
-/* A narrow page: the fields' words step aside (each says what it is in its tooltip and placeholder).
-   With Then (BLG-973) the new worktree's line needs about 900px to keep them. */
-@container (max-width: 1000px) {
+/*
+ * A narrow box: the fields' words step aside (each says what it is in its tooltip and placeholder).
+ * With Then (BLG-973) and Runs on, the new worktree's line needs about 32rem + 530px to keep them
+ * (the selects and the name are sized in px, the words in rem), so in the column's 60rem they step aside.
+ */
+@container home-box (width < calc(32rem + 590px)) {
   .bar > label > span:first-child,
   .actions > label > span:first-child,
   .bar [data-runs-on-words] {
     display: none;
   }
 }
-/* Too narrow for one line: two rows, the fields on top and the actions (the mic, the button) under them on the right (#527). */
-@container (max-width: 700px) {
+/*
+ * Too narrow for one line even without them (about 21.5rem + 430px, the name and the branch at their
+ * shortest): two rows, the fields on top and the actions (the mic, the button) under them on the right (#527).
+ */
+@container home-box (width < calc(21.5rem + 440px)) {
   .bar {
     flex-wrap: wrap;
   }

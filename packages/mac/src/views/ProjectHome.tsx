@@ -298,8 +298,8 @@ function HomeComposer({ project }: { project: Project }) {
   const task = text.trim();
   // A plan with no goal yet opens the sheet, so the button is always ready.
   const ready = worktree
-    ? Boolean(task || name.trim() || att.images.length)
-    : plan || Boolean(task || att.images.length);
+    ? Boolean(task || name.trim() || att.images.length || att.files.length)
+    : plan || Boolean(task || att.images.length || att.files.length);
   const chosen = base ?? branches?.base ?? project.base;
   const options = branches?.branches.length
     ? branches.branches
@@ -332,7 +332,9 @@ function HomeComposer({ project }: { project: Project }) {
         );
       return;
     }
-    if (plan && !task && !att.images.length) {
+    // A long paste still being kept as a file (BLG-988): this goes once it is.
+    if (att.whenSaved(() => void send(agent))) return;
+    if (plan && !task && !att.images.length && !att.files.length) {
       openSheet({ kind: "new_plan", projectId: project.id });
       return;
     }

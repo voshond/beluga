@@ -6,7 +6,7 @@ import type { BoardWork } from '../board/work.js';
 import type { Action, Store } from '../store.js';
 import { openMilestone } from './apply.js';
 import { openMilestoneEpic } from './epics.js';
-import { type MilestoneAlong, type Plan, type PlanMerge, type PlanMilestone, type PlanPr, allTasks, isMultiRepo, milestoneRepos, openMilestones, planBranchFor, planBranchName, planPrFor, planRepos, prRef, shipOrder, shippedIn } from './model.js';
+import { type MilestoneAlong, type Plan, type PlanMerge, type PlanMilestone, type PlanPr, allTasks, isMultiRepo, milestoneRepos, openMilestones, planAutonomy, planBranchFor, planBranchName, planPrFor, planRepos, prRef, shipOrder, shippedIn } from './model.js';
 import type { PlanGit } from './plan-git.js';
 import type { Plans } from './plans.js';
 import { FINISHED, type MilestoneView, type PlanView, type TaskState, type TaskView, agentTasks, agentsAtWork, liveFrom, planView, startable, tidyOffer, waitingOnYou } from './progress.js';
@@ -655,7 +655,7 @@ export class PlanPilot {
 
   /** One step up the ladder for a stalled milestone → what was done, in words (undefined: nothing left to try). */
   private rescueStep(plan: Plan, view: PlanView, m: MilestoneView | undefined, kind: StallKind, tries: number, tried: readonly string[], what: string): string | undefined {
-    const autopilot = (m?.autonomy ?? plan.autonomy) === 'autopilot';
+    const autopilot = (m?.autonomy ?? planAutonomy(plan)) === 'autopilot';
     const head = (): string => {
       this.deps.askClaude(stuckPrompt(what, tried, autopilot), plan.home, false);
       return 'asked the plan’s Claude to decide';

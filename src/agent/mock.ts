@@ -292,6 +292,8 @@ async function mockPlan(input: AgentRunInput, pace: number): Promise<string> {
   input.onEvent('text', MOCK_PLAN);
   const answer = input.askUser ? await input.askUser({ kind: 'plan', plan: MOCK_PLAN }) : ({ kind: 'skip' } as const);
   if (answer.kind === 'plan' && answer.approve) input.planTask?.approved();
+  // Approved, with another agent to build it (BLG-982): the planner stops there.
+  if (answer.kind === 'plan' && !answer.approve && answer.feedback.includes('builds it in this conversation from here')) return 'Approved: the plan is handed over.';
   if (answer.kind !== 'plan' || !answer.approve) return answer.kind === 'plan' && answer.feedback ? `Got it. I'll revise the plan: ${answer.feedback}` : 'Okay, I left everything as it was.';
   for (const step of ['Write src/auth.ts', 'Edit src/server.ts', 'Bash npm test']) {
     await sleep(450 * pace, input.signal);
@@ -954,6 +956,11 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
     titlePlan: async (goal) => {
       await new Promise((r) => setTimeout(r, 400 * pace));
       return mockPlanTitle(goal);
+    },
+    // Full Autopilot's stand-in: a beat of thought, then yes, with the agent's own pick for any question (core/autopilot fills it in).
+    standIn: async (req) => {
+      await sleep(700 * pace, req.signal ?? new AbortController().signal);
+      return JSON.stringify({ approve: true, allow: true, answers: {}, why: 'It keeps to the goal you set and is what your agent recommended.' });
     },
     titleChat: async (content) => {
       await new Promise((r) => setTimeout(r, 400 * pace));
