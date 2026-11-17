@@ -85,6 +85,23 @@ describe('a Codex run', () => {
     expect(run.events.some(([k]) => k === 'usage')).toBe(true);
   });
 
+  it('starts your own run with full access when your flags ask for it', async () => {
+    const codex = new FakeCodex();
+    expect(await backend(codex).run(input('hello', { launchArgs: { codex: ['--sandbox', 'danger-full-access', '-a', 'never'] } }))).toBe('echo: hello');
+    const [start] = codex.sent('thread/start');
+    expect(start).toMatchObject({ sandbox: 'danger-full-access', approvalPolicy: 'never' });
+    expect((start!.config as Record<string, unknown>)['permissions.beluga']).toBeUndefined();
+    expect((start!.config as Record<string, unknown>).default_permissions).toBeUndefined();
+  });
+
+  it('keeps the profile while planning, whatever your flags say', async () => {
+    const codex = new FakeCodex();
+    await backend(codex).run(input('hello', { plan: true, launchArgs: { codex: ['--yolo'] } })).catch(() => undefined);
+    const [start] = codex.sent('thread/start');
+    expect(start!.sandbox).toBeUndefined();
+    expect(start).toMatchObject({ approvalPolicy: 'never', config: { default_permissions: 'beluga' } });
+  });
+
   it('takes Codex model names and maps efforts, leaving Claude aliases to its default', () => {
     expect(codexModel('gpt-5.5')).toBe('gpt-5.5');
     expect(codexModel('sonnet')).toBeUndefined();

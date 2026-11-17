@@ -9,7 +9,7 @@ import t from './terminal-settings.module.css';
 
 const FLAGS: ReadonlyArray<{ readonly runtime: ArgsRuntime; readonly field: 'claudeArgs' | 'codexArgs'; readonly label: string; readonly example: string; readonly detail: string }> = [
   { runtime: 'claude', field: 'claudeArgs', label: 'Claude Code', example: '--dangerously-skip-permissions', detail: 'In the chat and in its terminal.' },
-  { runtime: 'codex', field: 'codexArgs', label: 'Codex', example: '-c key=value', detail: 'Before app-server. Beluga still sets each turn’s sandbox.' },
+  { runtime: 'codex', field: 'codexArgs', label: 'Codex', example: '-c key=value', detail: 'Before app-server. Beluga sets the sandbox unless you ask for --sandbox danger-full-access.' },
 ];
 
 /**
