@@ -2,7 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { agentName } from '../../../../src/shared/agent-label';
 import { resetWords } from '../../../../src/shared/run-failure';
 import { KeyboardLift } from '../../components/KeyboardLift';
-import { Activity, Bot, CalendarClock, Camera, ChevronRight, Map as MapIcon, CircleCheck, CircleX, Clock, Cpu, FolderTree, GitMerge, History, Images, Laptop, MessagesSquare, Monitor, Network, OctagonX, Plus, Send, Square, SquareTerminal, Trash2, Undo2 } from 'lucide-react-native';
+import { Activity, Bot, CalendarClock, Rocket, Camera, ChevronRight, Map as MapIcon, CircleCheck, CircleX, Clock, Cpu, FolderTree, GitMerge, History, Images, Laptop, MessagesSquare, Monitor, Network, OctagonX, Plus, Send, Square, SquareTerminal, Trash2, Undo2 } from 'lucide-react-native';
 import { AgentList, Breathe, LivePanel, StepList, StepsFold, ToolBadge, TypingDots } from '../../components/Live';
 import { ThreadsSheet, threadsSummary } from '../../components/ThreadsSheet';
 import { SchedulesSheet } from '../../components/ChatSchedules';
@@ -116,6 +116,8 @@ function Conversation() {
   const canEdit = useSupports('editPrompt');
   // 1.41 (BLG-702): a person's message in the room's or a workspace's chat takes emoji reactions.
   const reacts = useSupports('reactions');
+  // 1.61 (BLG-981): Full Autopilot in a worktree or chat of a project: a stand-in agent answers for you.
+  const autopilotOk = useSupports('autopilot');
   const supportsCancel = useSupports('cancelSteer');
   const [reacting, setReacting] = useState<TurnView | undefined>();
   const react = (t: TurnView, emoji: string, on: boolean): void => void call(calls.reactTurn(topic, t.id, emoji, on), { queue: false }).catch((e: Error) => store.toast({ text: e.message, tone: 'error' }));
@@ -394,6 +396,14 @@ function Conversation() {
           options={[
             { Icon: c?.agent ? markIcon(runtimeMark(c.agent.runtime)) : Bot, label: `Agent · ${c?.agent ? agentName(c.agent, { model: true }) : ''}`, sub: 'Pick the agent and model for this conversation', tone: 'lavender', hidden: !can.agentPicker, onPress: () => setPicking(true) },
             { Icon: Plus, label: 'New chat', sub: 'A fresh chat with your Mac, a new tab there too', tone: 'sky', hidden: !macChats, onPress: () => newMacChat((h) => router.replace(h as never)) },
+            {
+              Icon: Rocket,
+              label: c?.autopilot ? 'Full Autopilot · On' : 'Full Autopilot',
+              sub: c?.autopilot?.plan ? `On for the plan “${c.autopilot.plan}”: switch it on the plan` : c?.autopilot ? 'A stand-in agent answers for you. Tap to answer yourself again' : 'Never waits for you: a stand-in agent answers what your agent asks',
+              tone: c?.autopilot ? 'lavender' : 'plain',
+              hidden: !autopilotOk || !topic.startsWith('conv:ws:') || Boolean(c?.autopilot?.plan),
+              onPress: () => void call(calls.setAutopilot(topic, !c?.autopilot)).catch((e: Error) => store.toast({ text: e.message, tone: 'error' })),
+            },
             { Icon: Square, label: askedTask ? 'Stop asking' : 'Stop the agent', tone: 'rose', hidden: !c?.working, onPress: () => void call(askedTask ? calls.cancelTask(askedTask) : calls.stop(topic)) },
             { Icon: CalendarClock, label: 'Schedules', sub: schedulesSummary(c?.schedules), tone: 'sky', hidden: !c?.schedules?.length, onPress: () => setSchedulesOpen(true) },
             { Icon: Network, label: 'Threads', sub: threadsSummary(c?.threadFamily), tone: 'lavender', hidden: !c?.threadFamily, onPress: () => setThreadsOpen(true) },

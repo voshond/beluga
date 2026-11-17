@@ -9,7 +9,7 @@ import { z } from 'zod';
  * ignores what it doesn't know. A breaking change bumps the major, and the Mac keeps answering the
  * previous major for a release.
  */
-export const COMPANION_PROTO = { major: 1, minor: 60 } as const;
+export const COMPANION_PROTO = { major: 1, minor: 61 } as const;
 
 /**
  * What came in which minor, for a phone talking to an older Mac: it subscribes to a topic (and
@@ -160,8 +160,12 @@ export const COMPANION_PROTO = { major: 1, minor: 60 } as const;
  * neither ticked nor explained, and whether its work already merged. An older Mac sends none; an older phone shows none.
  * 1.60 (BLG-401, upstream's 1.57): `ConvView.schedules`, `TurnView.origin.sentinel`, `queue[].origin.sentinel`: a chat's
  * schedules (Run and Pause only), and a message one of your sentinels sent says so.
+ * 1.61 (BLG-981, BLG-982, upstream's 1.58): Full Autopilot, a stand-in agent answering for you: a chat's
+ * (`ConvView.autopilot`, `session.setAutopilot`) and a plan's (`PlanView.fullAuto`, `plans.setFullAuto`);
+ * and who plans, builds and checks a plan (`PlanView.planner` / `checker`, `plans.setRoleAgent`). An
+ * older Mac sends none, and the phone offers neither.
  */
-export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36, reactions: 41, cancelSteer: 47, triage: 48, draftReview: 49, threads: 50, threadAgents: 50, seen: 51, computers: 52, externalAgents: 53, chatLinks: 55, chatOrigin: 56, queuedOrigin: 57, sharedMark: 58, chatSchedules: 60 } as const;
+export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36, reactions: 41, cancelSteer: 47, triage: 48, draftReview: 49, threads: 50, threadAgents: 50, seen: 51, computers: 52, externalAgents: 53, chatLinks: 55, chatOrigin: 56, queuedOrigin: 57, sharedMark: 58, chatSchedules: 60, autopilot: 61, planRoles: 61 } as const;
 
 /** One frame's biggest payload, and a file piece. */
 export const MAX_COMPANION_FRAME = 1024 * 1024;
@@ -589,9 +593,10 @@ export type MergeView = z.infer<typeof MergeView>;
  * (core/branch-state.ts) but Merge into the main folder (its own sheet, companion.merge) and Open
  * PR (the phone's browser). Since BLG-753 also Push (an open PR's commits not pushed yet) and Re-run
  * Failed Checks, added at the end (an older Mac never offers them); since BLG-948 Open Your Own PR
- * (a fork's pull request that can't be pushed to); since BLG-973 Straight to main's Land Now, on and off.
+ * (a fork's pull request that can't be pushed to); since BLG-973 Straight to main's Land Now, on and off;
+ * since BLG-985 Push main (what Straight to main committed, to origin).
  */
-export const PHONE_BRANCH_STEPS = ['merge_pr', 'merge_auto', 'merge_admin', 'cancel_auto', 'update_branch', 'mark_ready', 'resolve_pr', 'fix_checks', 'merge_claude', 'review_claude', 'commit', 'pr', 'pr_claude', 'pr_draft', 'pr_original', 'continue_after_merge', 'archive', 'delete', 'push', 'rerun_checks', 'pr_own', 'land', 'land_on', 'land_off'] as const;
+export const PHONE_BRANCH_STEPS = ['merge_pr', 'merge_auto', 'merge_admin', 'cancel_auto', 'update_branch', 'mark_ready', 'resolve_pr', 'fix_checks', 'merge_claude', 'review_claude', 'commit', 'pr', 'pr_claude', 'pr_draft', 'pr_original', 'continue_after_merge', 'archive', 'delete', 'push', 'rerun_checks', 'pr_own', 'land', 'land_on', 'land_off', 'push_main'] as const;
 export type PhoneBranchStep = (typeof PHONE_BRANCH_STEPS)[number];
 
 /** 1.8: one of a branch's steps (core/branch-state.ts BranchStep). */
@@ -751,6 +756,11 @@ export const ConvView = z.object({
    * (sentinel.run) and pauses or turns on (sentinel.pause) one; it never makes or changes one.
    */
   schedules: z.array(z.object({ id, name: z.string().max(200), sentence: z.string().max(200), nextAt: z.number().optional(), paused: z.boolean(), running: z.boolean() })).max(20).optional(),
+  /**
+   * 1.61 (BLG-981, upstream's 1.58): Full Autopilot is on here: a stand-in agent answers what your agent asks. `plan`:
+   * on through the plan it works for (named; switched on the plan, not here). Off: left out.
+   */
+  autopilot: z.object({ plan: z.string().max(300).optional() }).optional(),
 });
 export type ConvView = z.infer<typeof ConvView>;
 
@@ -803,6 +813,10 @@ export const PlanView = z.object({
   /** 1.35 (BLG-498): who works its milestones and tasks from here on (none: your default), and the list to change it from (`plans.setWorkAgent`). */
   agent: AgentRefView.optional(),
   agents: AgentPickerView.optional(),
+  /** 1.61 (BLG-982, upstream's 1.58): who plans it and who checks it, when not `agent` (`plans.setRoleAgent`); BLG-981: Full Autopilot (`plans.setFullAuto`). */
+  planner: AgentRefView.optional(),
+  checker: AgentRefView.optional(),
+  fullAuto: z.boolean().optional(),
   /** 1.42 (BLG-8): what was settled while planning, and what's still open (the draft's, while there is one). */
   /** 1.49 (BLG-772): `replaced`: a later decision replaced it (kept for the record). */
   decisions: z.array(z.object({ question: z.string().max(400), answer: z.string().max(400), by: z.enum(['user', 'default']), why: z.string().max(400).optional(), replaced: z.boolean().optional() })).max(40).optional(),

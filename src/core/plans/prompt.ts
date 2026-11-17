@@ -1,7 +1,7 @@
 import { type Criterion, criteria, criterionLine } from '../board/criteria.js';
 import { type BoardState, STATUS_INFO, filterIssues } from '../board/model.js';
 import type { Project } from '../../workspaces/types.js';
-import { AUTONOMY_INFO, type MilestoneAgent, type Plan, type PlanBody, type PlanMilestone, type ReviewFinding, TESTS_AT_INFO, activeDecisions, decisionText, diffBodies, draftRepoPlan, isMultiRepo, milestoneDeps, milestoneRepos, planBranchFor, planRepos, shownBody } from './model.js';
+import { AUTONOMY_INFO, type MilestoneAgent, type Plan, type PlanBody, type PlanMilestone, type ReviewFinding, TESTS_AT_INFO, activeDecisions, decisionText, diffBodies, draftRepoPlan, isMultiRepo, milestoneDeps, milestoneRepos, planAutonomy, planBranchFor, planRepos, shownBody } from './model.js';
 import { coherenceWarnings } from './coherence.js';
 import { type MilestoneView, type PlanView, type TaskView, agentTasks, overlaps } from './progress.js';
 
@@ -317,7 +317,7 @@ export function planningBrief(plan: Plan, board: BoardState, style: string, repo
     'plan_get to see it. Nothing of the plan reaches the task board until the user approves the plan; you can\'t approve it yourself.',
     'The board tools (mcp__beluga_board__*) are for work outside this plan. Use them to read the board, or when the user asks for a separate task.',
     'Put work that belongs to this plan in the plan. Do not open tasks unasked here.',
-    plan.body && plan.autonomy === 'autopilot' ? 'This plan runs on autopilot: changes you make to it now apply at once and can start work, so change only what the plan needs.' : '',
+    plan.body && planAutonomy(plan) === 'autopilot' ? 'This plan runs on autopilot: changes you make to it now apply at once and can start work, so change only what the plan needs.' : '',
     'This conversation is the plan\'s own: don\'t move it to a worktree.',
     plan.body
       ? 'While the plan runs you don\'t change files here: code changes are the plan\'s tasks, each in its own worktree.'
@@ -391,9 +391,11 @@ export function headBrief(view: PlanView): string {
     '  unless the plan runs on autopilot.',
     `Tests: ${TESTS_AT_INFO[plan.testsAt].hint.toLowerCase()}. Don't ask a task to run the full suite.`,
     plan.paused ? 'The plan is paused: nothing starts until the user resumes it.' : '',
-    (m?.autonomy ?? plan.autonomy) === 'autopilot'
-      ? 'The plan runs on Autopilot: never end a turn waiting for the user to say how to go on. Decide, act with your tools and say in a line what you did; only a task assigned to the user, a secret or an account needs them.'
-      : '',
+    plan.fullAuto
+      ? 'The plan runs on Full Autopilot: nobody is watching. Never end a turn waiting for the user; decide, act with your tools and say in a line what you did. A question you do ask is answered by a stand-in agent for the user, from the plan; only a secret or an account still needs the user.'
+      : (m?.autonomy ?? plan.autonomy) === 'autopilot'
+        ? 'The plan runs on Autopilot: never end a turn waiting for the user to say how to go on. Decide, act with your tools and say in a line what you did; only a task assigned to the user, a secret or an account needs them.'
+        : '',
     'Each milestone is checked by a checker of its own (a separate Claude): its verdict comes to you here, and a failed one with what to fix.',
     WAIT_IN_TURN,
     now.length ? `Now: ${now.length > 1 ? 'milestones' : 'milestone'} ${now.join(', ')}${now.length > 1 ? ', side by side' : ''}; ${view.active.length} tasks in progress, ${view.ready.length} ready.` : 'Every milestone has passed.',

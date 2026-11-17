@@ -1382,6 +1382,8 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
     case 'member_set':
     case 'roster':
     case 'plan_mode':
+    case 'autopilot':
+    case 'build_with':
     case 'peer_gone':
     case 'shared_clear':
     case 'trust_prompt':

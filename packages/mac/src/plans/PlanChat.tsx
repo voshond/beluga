@@ -202,6 +202,8 @@ export function PlanChat({
   };
   /** While Claude works, your message reaches it now unless you queue it (⌥↩). */
   const send = (queue = false): void => {
+    // A long paste still being kept as a file (BLG-988): this goes once it is.
+    if (att.whenSaved(() => send(queue))) return;
     const { text: message, images, shown } = att.take(text.trim());
     if (!message) return;
     const planned = planMessage(message, images, shown);

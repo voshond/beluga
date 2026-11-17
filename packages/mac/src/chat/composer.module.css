@@ -90,6 +90,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A long paste being kept as a file (BLG-988): there at once, a touch quieter until it is. */
+.fileSaving {
+  color: var(--text-2);
+}
 /* A file from this Mac on its way to the computer a chat runs on (BLG-793). */
 .fileSending {
   padding-right: 8px;

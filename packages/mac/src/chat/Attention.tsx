@@ -150,11 +150,13 @@ function Question({ channel }: { channel?: string }) {
   const actions = useActions();
   const { ui } = useBeluga();
   // Only the question shown and who asked, so other events don't draw the card again.
-  const { q, owner, agent, selfId } = useApp((st) => {
+  const { q, owner, agent, selfId, builds } = useApp((st) => {
     const here = channel ?? channelOf(st.view);
     const q = st.questions.find((x) => x.channel === here);
     const peer = q ? st.peers.find((p) => p.peerId === q.owner) : undefined;
-    return { q, owner: peer?.name, agent: agentName(peer ? defaultAgentOf(peer) : defaultAgentOf(st.self)), selfId: st.selfId };
+    // Picked in the mode menu (BLG-982): another agent builds it once you approve.
+    const builder = q?.question.kind === 'plan' ? st.buildWith[q.channel] : undefined;
+    return { q, owner: peer?.name, agent: agentName(peer ? defaultAgentOf(peer) : defaultAgentOf(st.self)), selfId: st.selfId, builds: builder ? agentName(builder) : undefined };
   }, sameFields);
   // Read in full: the card grows up over the chat, the plan from its first line (no sheet on top of it).
   const full = useUi((u) => Boolean(q && u.planFull === q.qid));
@@ -180,7 +182,7 @@ function Question({ channel }: { channel?: string }) {
           <Button variant="primary" onClick={() => actions.run({ type: 'answer', qid: q.qid, pick: 'approve' })}>
             Approve plan
           </Button>
-          <span className={s.hint}>or type what to change below</span>
+          <span className={s.hint}>{builds ? `then ${builds} builds it, or type what to change below` : 'or type what to change below'}</span>
         </div>
       </div>
     );

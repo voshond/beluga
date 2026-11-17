@@ -20,7 +20,7 @@ import { localRuntime } from '../agent/runtime/local.js';
 import { LOCAL_RUNTIME } from '../shared/local-endpoints.js';
 import type { LocalEndpoints } from './local-endpoints.js';
 import type { IncomingMessage, PeerClient } from '../net/peer-client.js';
-import { type AgentRef, Body, type BodyInput, type BodyOf, CLAUDE_AGENT, chatMessageId, defaultAgentOf, type FsEntry, MAX_TEXT, type MessageVia, type PeerInfo, type Profile } from '../protocol.js';
+import { type AgentRef, Body, type BodyInput, type BodyOf, CLAUDE_AGENT, type ClaudeAnswer, chatMessageId, defaultAgentOf, type FsEntry, MAX_TEXT, type MessageVia, type PeerInfo, type Profile } from '../protocol.js';
 import { type UsageUpdate, withUsage } from '../agent/usage.js';
 import { dialoguesOf } from './dialogues/registry.js';
 import { agentName } from '../shared/agent-label.js';
@@ -35,7 +35,9 @@ import { type Attention, type Location, type MyShare, type Prefs, type Store, pe
 import { WorkspaceController } from './workspace-controller.js';
 import { QuestionBroker } from './questions.js';
 import type { RunAsks } from './run-asks.js';
-import { isPlanHome } from './plans/model.js';
+import { isPlanHome, planForHome } from './plans/model.js';
+import { plansOf } from './plans/registry.js';
+import type { StandInRequest } from '../agent/stand-in.js';
 import type { Conversation } from '../agent/transcript.js';
 import { slugify } from '../agent/namer.js';
 import type { ScriptFix, SetupFix, WorkedOutScripts } from '../agent/setup-fixer.js';
@@ -918,10 +920,14 @@ export class Session {
    * can't run on the endpoint yet), never quietly to Anthropic otherwise. Claude, the demo, tests: the backend's.
    */
   private sideRoute(project?: string): SideRoute {
+    return this.sideRouteOn(this.agentFor(project));
+  }
+
+  /** Where a side call on `agent` goes: its runtime's one-shot call, else Claude's (as sideRoute). */
+  private sideRouteOn(agent: AgentRef): SideRoute {
     const rt = this.opts.runtime;
     if (!this.runtime || !rt) return { claude: () => this.agent };
     const claude = (): AgentBackend | undefined => (this.runtime?.id === CLAUDE_AGENT.runtime ? this.agent : this.backendFor(CLAUDE_AGENT.runtime));
-    const agent = this.agentFor(project);
     if (agent.runtime === CLAUDE_AGENT.runtime) return { claude };
     if (agent.runtime === LOCAL_RUNTIME) return { claude: async () => ((await this.claudeSignedIn()) ? claude() : undefined) };
     const own = rt.runtimes(agent.runtime);
@@ -1031,6 +1037,68 @@ export class Session {
   /** A pull request reviewed before a sentinel merges it (undefined without an agent to ask, or on trouble). */
   async reviewPr(input: import('../agent/pr-reviewer.js').PrReviewInput): Promise<import('../agent/pr-reviewer.js').PrReview | undefined> {
     return routeSideCall(this.sideRoute(), (on) => on.reviewPr?.(input), undefined);
+  }
+
+  /**
+   * Full Autopilot's stand-in (BLG-981): what your agent asked, answered for you by `agent` (a plan's
+   * planner), else your default agent, with Claude when that one can't. Throws when none could answer.
+   */
+  async standIn(req: StandInRequest, agent?: AgentRef): Promise<string> {
+    const out = await routeSideCall(agent ? this.sideRouteOn(agent) : this.sideRoute(), (on) => on.standIn?.(req), undefined);
+    if (out === undefined) throw new Error('no agent here could answer');
+    return out;
+  }
+
+  /**
+   * Full Autopilot in a conversation (BLG-981): a stand-in agent answers what your agent asks there,
+   * so it never waits on you. A plan's own conversation switches its plan (and so all its work).
+   */
+  setAutopilot(channel: string, on: boolean): void {
+    const plan = planForHome(this.store.getState().plans, channel);
+    const plans = plansOf(this);
+    if (plan && plan.status !== 'done' && plans) {
+      plans.setFullAuto(plan.id, on);
+    } else this.store.dispatch({ type: 'autopilot', channel, on });
+    this.toast(on ? 'Full Autopilot: what your agent asks here, a stand-in agent answers for you' : 'Autopilot off: what your agent asks waits for you again', 'success');
+  }
+
+  /**
+   * Plan here, build with another agent (BLG-982): who builds what's planned in this conversation
+   * once you approve it (null: the agent that planned it). Plan First hands the conversation over;
+   * Plan with Tasks makes it the plan's builder (a plan already here: its builder from now on).
+   */
+  setBuildWith(channel: string, agent: AgentRef | null): void {
+    const plan = planForHome(this.store.getState().plans, channel);
+    const plans = plansOf(this);
+    if (plan && plan.status !== 'done' && plans) {
+      this.toast(plans.setRoleAgent(plan.id, 'builder', agent), 'success');
+      return;
+    }
+    this.store.dispatch({ type: 'build_with', channel, ...(agent ? { agent } : {}) });
+    const who = agent ? agentName(agent, { model: true }) : undefined;
+    this.toast(who ? `${who} builds what’s planned here, once you approve it` : 'The agent that plans here builds it too', 'success');
+  }
+
+  /**
+   * You approved a plan your agent proposed in a chat that builds with another agent (QuestionBroker's
+   * handOff): the planning agent is told to stop there, and once its turn ends the conversation moves
+   * to the builder (a quiet handoff: it gets the recent conversation), which is asked to build the plan.
+   * → what the planning agent is told; undefined when the builder is the agent already here.
+   */
+  handOffPlan(channel: string, plan: string): ClaudeAnswer | undefined {
+    const builder = this.store.getState().buildWith[channel];
+    if (!builder) return undefined;
+    const here = this.workspaces?.agentOf(channel, this.agentRef);
+    this.store.dispatch({ type: 'build_with', channel });
+    if (here && here.runtime === builder.runtime && (!builder.model || builder.model === here.model)) return undefined;
+    const who = agentName(builder, { model: true });
+    const planner = here ? agentName(here) : 'Your agent';
+    void this.host.idle(channel).then(() => {
+      if (!this.workbench?.setAgent(channel, builder, 'quiet')) return this.toast(`Couldn’t move this conversation to ${who}`, 'warn');
+      this.store.dispatch({ type: 'system', channel, text: `${planner} planned it; ${who} builds it now.`, level: 'info' });
+      this.askOwnClaude(`The user approved this plan. Build it now, step by step, and say what you did:\n\n${plan}`, channel, false, false);
+    });
+    return { kind: 'plan', approve: false, feedback: `The user approved your plan, and ${who} builds it in this conversation from here. Change nothing more: end your turn now with one line saying the plan is handed over.` };
   }
 
   /** Plan first in this conversation: Claude investigates read-only, then proposes a plan. */

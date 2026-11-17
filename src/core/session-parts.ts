@@ -185,6 +185,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       send: (body, o) => session.send(body, o),
       timeoutMs: () => session.approvalTimeoutMs,
       toast: (text, level) => session.toast(text, level),
+      handOff: (channel, plan) => session.handOffPlan(channel, plan),
     });
     const runAsks = new RunAsks({
       store: opts.store,

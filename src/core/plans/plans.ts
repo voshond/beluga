@@ -16,6 +16,7 @@ import {
   DEFAULT_AUTONOMY,
   type DraftReview,
   DEFAULT_PARALLEL,
+  FULL_AUTOPILOT_INFO,
   type GateCheck,
   KEEP_PLAN_ACTIVITY,
   MAX_PARALLEL,
@@ -110,6 +111,10 @@ const SavedPlan = z
     // Who works it (BLG-497): one that doesn't read is let go (your default works it).
     agent: AgentRef.optional().catch(undefined),
     request: z.string().optional().catch(undefined),
+    // Its planner and checker when not the builder (BLG-982), and Full Autopilot (BLG-981).
+    planner: AgentRef.optional().catch(undefined),
+    checker: AgentRef.optional().catch(undefined),
+    fullAuto: z.boolean().optional().catch(undefined),
     body: Body.optional().catch(undefined),
     draft: Body.optional().catch(undefined),
     paused: z.boolean().default(false),
@@ -158,7 +163,7 @@ export class Plans {
   // ------------------------------------------------------------------ drafting
 
   /** A new plan: an empty draft in its conversation (Claude writes it there). Your goal is never its title: a quick model names it (autoTitle), and Claude's plan_write after that. */
-  create(input: { readonly projectId: string; readonly repos?: readonly string[]; readonly home: string; readonly title?: string; readonly goal?: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentRef }, by: Actor): Plan {
+  create(input: { readonly projectId: string; readonly repos?: readonly string[]; readonly home: string; readonly title?: string; readonly goal?: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentRef; readonly planner?: AgentRef; readonly checker?: AgentRef; readonly fullAuto?: boolean }, by: Actor): Plan {
     const at = this.now();
     const repos = planRepos(input);
     const title = (input.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 80) || UNTITLED;
@@ -176,6 +181,9 @@ export class Plans {
       maxParallel: DEFAULT_PARALLEL,
       testsAt: input.testsAt ?? 'milestone',
       ...(input.agent ? { agent: input.agent } : {}),
+      ...(input.planner ? { planner: input.planner } : {}),
+      ...(input.checker ? { checker: input.checker } : {}),
+      ...(input.fullAuto ? { fullAuto: true, autonomy: 'autopilot' as const } : {}),
       paused: false,
       runs: {},
       activity: [event(by, 'created', 'started this plan', at)],
@@ -277,10 +285,32 @@ export class Plans {
       const patchBody = (b: PlanBody | undefined): PlanBody | undefined => (b ? { ...b, milestones: b.milestones.map((m) => (m.id === milestone ? { ...m, autonomy } : m)) } : b);
       return this.change(plan, { body: patchBody(plan.body), draft: patchBody(plan.draft) }, [event(by, 'autonomy', `set ${milestoneName(plan, milestone)} to ${AUTONOMY_INFO[autonomy].label}`, this.now())]);
     }
-    if (autonomy === plan.autonomy && !(plan.body ?? plan.draft)?.milestones.some((m) => m.autonomy)) return plan;
-    // A plan-wide choice wins over every milestone's own.
+    if (autonomy === plan.autonomy && !plan.fullAuto && !(plan.body ?? plan.draft)?.milestones.some((m) => m.autonomy)) return plan;
+    // A plan-wide choice wins over every milestone's own, and ends Full Autopilot.
     const clear = (b: PlanBody | undefined): PlanBody | undefined => (b ? { ...b, milestones: b.milestones.map(({ autonomy: _a, ...m }) => m) } : b);
-    return this.change(plan, { autonomy, body: clear(plan.body), draft: clear(plan.draft) }, [event(by, 'autonomy', `switched the plan to ${AUTONOMY_INFO[autonomy].label}`, this.now())]);
+    return this.change(plan, { autonomy, fullAuto: undefined, body: clear(plan.body), draft: clear(plan.draft) }, [event(by, 'autonomy', `switched the plan to ${AUTONOMY_INFO[autonomy].label}`, this.now())]);
+  }
+
+  /**
+   * Full Autopilot on or off (BLG-981): on, the plan runs on Autopilot (every milestone's own choice
+   * cleared) and a stand-in agent answers what would wait on you; off, it stays on Autopilot.
+   */
+  setFullAuto(id: string, on: boolean, by: Actor): Plan {
+    const plan = this.need(id);
+    if (Boolean(plan.fullAuto) === on) return plan;
+    if (!on) return this.change(plan, { fullAuto: undefined }, [event(by, 'autonomy', `switched the plan to ${AUTONOMY_INFO.autopilot.label}: questions wait for the user again`, this.now())]);
+    const clear = (b: PlanBody | undefined): PlanBody | undefined => (b ? { ...b, milestones: b.milestones.map(({ autonomy: _a, ...m }) => m) } : b);
+    return this.change(plan, { fullAuto: true, autonomy: 'autopilot', body: clear(plan.body), draft: clear(plan.draft) }, [event(by, 'autonomy', `switched the plan to ${FULL_AUTOPILOT_INFO.label}: a stand-in agent answers what would wait on the user`, this.now())]);
+  }
+
+  /** Who plans or checks it from here on (BLG-982); undefined: the builder does. */
+  setRoleAgent(id: string, role: 'planner' | 'checker', agent: AgentRef | undefined, by: Actor): Plan {
+    const plan = this.need(id);
+    const was = plan[role];
+    if (was?.runtime === agent?.runtime && was?.model === agent?.model && was?.label === agent?.label) return plan;
+    const part = role === 'planner' ? 'its planning' : 'its checks';
+    const text = agent ? `gave ${part} to ${agentName(agent, { model: true })} from here on` : `gave ${part} back to the agent that builds it`;
+    return this.change(plan, { [role]: agent ? { runtime: agent.runtime, label: agent.label, ...(agent.model ? { model: agent.model } : {}) } : undefined }, [event(by, 'note', text, this.now())]);
   }
 
   setPaused(id: string, paused: boolean, by: Actor, why?: string): Plan {

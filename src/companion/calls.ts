@@ -43,6 +43,7 @@ export const PhoneCalls = {
   'session.submit': entry('session.submit', done),
   // 1.41 (BLG-702): an emoji reaction in a worktree's or the room's chat.
   'session.react': entry('session.react', done),
+  'session.setAutopilot': entry('session.setAutopilot', done),
   'host.answerApproval': entry('host.answerApproval', done),
   'host.promote': entry('host.promote', done),
   'host.sendNext': entry('host.sendNext', done),
@@ -179,6 +180,8 @@ export const PhoneCalls = {
   // 1.35 (BLG-498): who works a task, and a plan's work, from their next start → what happened, in words.
   'board.setAgent': entry('board.setAgent', z.string()),
   'plans.setWorkAgent': entry('plans.setWorkAgent', z.string()),
+  'plans.setRoleAgent': entry('plans.setRoleAgent', z.string()),
+  'plans.setFullAuto': entry('plans.setFullAuto', done),
   // 1.7: a worktree's files (read-only) and terminals (shared with the Mac).
   'companion.files.list': entry('companion.files.list', FolderView),
   'companion.files.find': entry('companion.files.find', FoundView),

@@ -116,6 +116,15 @@ export function archivedMenu(state: AppState, id: string): MenuSpec | undefined 
   };
 }
 
+/**
+ * The archive menu's option for archiving a worktree, copying its env changes back first when asked
+ * (and the removed keys too with `removals`). Only `confirmMenu(…, 'archive', …)` has these options.
+ */
+export function archiveOptionId(withEnv: boolean, removals: boolean): string {
+  if (!withEnv) return 'confirm-archive';
+  return removals ? 'confirm-archive-env-all' : 'confirm-archive-env';
+}
+
 /** "Are you sure?" for archive and delete, explaining exactly what happens. */
 export function confirmMenu(state: AppState, action: 'archive' | 'delete', id: string): MenuSpec | undefined {
   const ws = state.projects.flatMap((p) => p.workspaces).find((w) => w.id === id);

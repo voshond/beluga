@@ -95,6 +95,7 @@ export const WORK_ROWS: readonly MethodRow[] = [
   { name: 'git_sync_fork', method: 'git.syncFork', params: ['project'], scope: project, description: 'Bring a fork\'s default branch up to its parent, and push it. A person is asked each time.' },
   { name: 'git_sync_fork_with_agent', method: 'git.syncForkWithClaude', params: ['project', 'words'], scope: project, description: 'Have your agent bring a fork up to its parent, and push it. It runs at this agent\'s level. A person is asked each time.' },
   { name: 'git_update_main', method: 'git.updateMain', params: ['project'], scope: project, description: 'Fetch and fast-forward a project\'s default branch.' },
+  { name: 'git_push_main', method: 'git.pushMain', params: ['project'], scope: project, description: 'Push a project\'s default branch to its remote, on top of anything new there, never forced (what Straight to main landed). A person is asked each time.' },
   { name: 'git_stash_and_update', method: 'git.stashAndUpdate', params: ['project'], scope: project, description: 'Stash changes in the main folder, update, and put them back.' },
   { name: 'git_move_and_update', method: 'git.moveAndUpdate', params: ['project', 'name'], scope: project, description: 'Move changes in the main folder to a new worktree, then update.' },
   { name: 'git_switch_to_default', method: 'git.switchToDefault', params: ['project', 'how'], scope: project, description: 'Put the main folder back on the default branch.' },

@@ -17,6 +17,7 @@ import { chatsWithThreadsWorking } from '../core/threads/model.js';
 import { type TaskView as GwTask, isFinal, requestGist, stateLabel, stateTone, targetLabel } from '../core/gateway/model.js';
 import { parseDecisionQid } from '../core/plans/decisions.js';
 import { type Plan, type PlanPr, draftRepoPlan, isMultiRepo, milestoneRepos, planForHome, planRepos, planTitle, prRef, reviewState } from '../core/plans/model.js';
+import { autopilotIn } from '../core/autopilot/model.js';
 import { verifyProgress } from '../core/plans/verify-progress.js';
 import { planOwnerOf } from '../core/plans/owner.js';
 import { branchState, notOnPr } from '../core/branch-state.js';
@@ -789,7 +790,15 @@ export function convView(state: DomainState, ctx: ViewContext, topic: Topic): Co
     ...terminalOf(state, channel),
     ...(reactableChannel(channel) ? { quick: quickRow(state) } : {}),
     ...schedulesOf(state, channel),
+    ...autopilotOf(state, channel),
   };
+}
+
+/** Full Autopilot here (BLG-981): on in this chat, or through the plan it works for (named; a plan's own conversation is the plan's switch). */
+function autopilotOf(state: DomainState, channel: string): Pick<ConvView, 'autopilot'> {
+  const on = autopilotIn(state, channel);
+  if (!on) return {};
+  return { autopilot: on.plan && on.plan.home !== channel ? { plan: clip(planTitle(on.plan), 300) } : {} };
 }
 
 /** The sentinels that send into this chat on a schedule (BLG-401), behind chat-schedules: run and pause only. */
@@ -1038,6 +1047,10 @@ export function planPageView(state: DomainState, id: string): PlanView | undefin
     // 1.35 (BLG-498): who works its milestones and tasks (none: your default), and the list to change it from.
     ...(plan.agent ? { agent: agentRefView(plan.agent) } : {}),
     ...(plan.status !== 'done' ? { agents: workPicker(state, plan.agent) } : {}),
+    // 1.61 (BLG-982, BLG-981): who plans and checks it when not its builder, and Full Autopilot.
+    ...(plan.planner ? { planner: agentRefView(plan.planner) } : {}),
+    ...(plan.checker ? { checker: agentRefView(plan.checker) } : {}),
+    ...(plan.fullAuto ? { fullAuto: true } : {}),
     // 1.49 (BLG-772): its draft's review.
     ...reviewOf(state, plan),
   };

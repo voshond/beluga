@@ -25,6 +25,8 @@ export const PHONE: Record<Method, Side> = {
   'session.copyText': 'mac',
   'session.setPrefs': 'mac',
   'session.setPlanMode': 'mac',
+  'session.setAutopilot': 'phone',
+  'session.setBuildWith': 'mac',
   'session.setClaudeSharing': 'mac',
   'session.rename': 'mac',
   'session.zoom': 'mac',
@@ -151,7 +153,7 @@ export const PHONE: Record<Method, Side> = {
   'workspaces.remove': 'mac',
   'workspaces.commit': 'mac',
   'workspaces.merge': 'mac',
-  // The phone lands through its branch steps (companion.branchStep: land, land_on, land_off).
+  // The phone lands through its branch steps (companion.branchStep: land, land_on, land_off, push_main).
   'workspaces.land': 'mac',
   'workspaces.setLandOnBase': 'mac',
   'workspaces.prepareRemoval': 'mac',
@@ -264,6 +266,7 @@ export const PHONE: Record<Method, Side> = {
   // ---- images in a message: a photo from the phone goes in as bytes, never as a Mac path
   'attachments.add': 'phone',
   'attachments.addFile': 'mac',
+  'attachments.addText': 'mac',
   'attachments.expand': 'phone',
   'attachments.read': 'phone',
   'attachments.open': 'mac',
@@ -475,6 +478,8 @@ export const PHONE: Record<Method, Side> = {
   'plans.setTestsAt': 'mac',
   // Who works the plan's milestones and tasks from here on (BLG-498): a pick from a list.
   'plans.setWorkAgent': 'phone',
+  'plans.setRoleAgent': 'phone',
+  'plans.setFullAuto': 'phone',
   'plans.tidyUp': 'mac',
   'plans.pass': 'phone',
   'plans.recheck': 'phone',
@@ -539,6 +544,8 @@ export const PHONE: Record<Method, Side> = {
   'git.fetch': 'mac',
   'git.fetchIfStale': 'mac',
   'git.updateMain': 'mac',
+  // The phone pushes main through a Straight to main worktree's branch step (companion.branchStep: push_main).
+  'git.pushMain': 'mac',
   'git.stashAndUpdate': 'mac',
   'git.moveAndUpdate': 'mac',
   'git.switchToDefault': 'mac',

@@ -142,6 +142,8 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `session.copyText` | ✓ |
 | `session.setPrefs` | ✓ |
 | `session.setPlanMode` | ✓ |
+| `session.setAutopilot` | ✓ the composer's mode menu › Full Autopilot (BLG-981), and its Autopilot chip to turn it off; a plan's own conversation switches its plan; the phone's conversation ⋯ › Full Autopilot (1.58) |
+| `session.setBuildWith` | ✓ the composer's mode menu › Build With ▸ under Plan First and Plan with Tasks (BLG-982): the agent in the chat plans, the picked one builds once you approve (Plan First hands the chat over; Plan with Tasks makes it the plan's builder); the banner and the plan card say who builds. Mac only for now |
 | `session.compact` | ✓ (context meter › Compact now) |
 | `session.btw` | ✓ (`/btw` in the composer: the side-question card above the box) |
 | `session.btwDismiss` | ✓ (the side-question card's ✕, or esc) |
@@ -359,9 +361,9 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `workspaces.moveUndo` | ✓ a worktree's ⋯ › Continue On ▸: a new one whose move didn't finish is archived again |
 | `workspaces.restore` | ✓ |
 | `workspaces.archivePlan` | ✓ the Archive dialog says how much space it frees |
-| `workspaces.deletePlan` | ✓ the Delete dialog says how many commits were never pushed or merged, and leads with Archive (the phone's Delete step says it too) |
+| `workspaces.deletePlan` | ✓ the Delete dialog says how many commits were never pushed or merged, and leads with Archive (the phone's Delete step says it too); the Overview's Delete for picked rows names each worktree that would lose some |
 | `workspaces.freeSpace` | ✓ Free Up Space on a worktree: clears its dependencies, builds and caches |
-| `workspaces.remove` | ✓ |
+| `workspaces.remove` | ✓ also the Overview's picked rows (⌘-click, Shift-click or ⌘A, live or archived), deleted together after one question that names any unpushed commits (⌘⌫ or the bar's Delete…) |
 | `workspaces.commit` | ✓ |
 | `workspaces.merge` | ✓ |
 | `workspaces.land` | ✓ Straight to main (BLG-973): the branch control's Land on main Now (a worktree that goes straight to main, with work waiting); the phone's branch step `land` |
@@ -471,6 +473,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `env.claudeDotenv` | ✓ Settings › Environment › Your agent (and a .env approval's Always) |
 | `attachments.add` | ✓ |
 | `attachments.addFile` | ✓ a pasted path of an image becomes a waiting thumbnail |
+| `attachments.addText` | ✓ a very long paste waits as a file chip and goes as its first lines and the file (BLG-988) |
 | `attachments.reattach` | ✓ a queued message pulled back to edit gets its images back as thumbnails |
 | `attachments.expand` | ✓ |
 | `attachments.read` | ✓ images shown in messages |
@@ -685,7 +688,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `team.answerKnock` | ✓ the knock's card in the worktree's chat (Let In as Editor, Let In as Viewer; ••• › Not Now) and the bell's row; the phone's card (Let In as Editor / Not Now / Let In as Viewer) |
 | `team.befriend` | ✓ the team badge on a project's row › its card › Add Friend beside someone on the team who isn't a friend (BLG-510); and Tasks › the faces beside Active and Backlog › someone › their card › Add Friend (BLG-906); they Accept like any friend request |
 | `team.leave` | ✓ project ••• › Leave Team with Ata (Leave Team with several teammates: off it for everyone, BLG-510) |
-| `plans.create` | ✓ Plans › New Plan (a goal; the agent plans in a conversation of its own in the project's main folder; `projectIds` adds more of this Mac's projects for a plan across repos, primary first, BLG-10: New Plan › Plan Across More Projects… ticks them, and a sidebar group's ⋯ › Plan Across Group… opens New Plan with the group's projects ticked, BLG-19; More options › Agent picks who works its milestones and tasks, BLG-497); the phone's Ask › a project › Plan (1.5); Your Mac's `start_plan` (quietly) |
+| `plans.create` | ✓ Plans › New Plan (a goal; the agent plans in a conversation of its own in the project's main folder; `projectIds` adds more of this Mac's projects for a plan across repos, primary first, BLG-10: New Plan › Plan Across More Projects… ticks them, and a sidebar group's ⋯ › Plan Across Group… opens New Plan with the group's projects ticked, BLG-19; How it runs › Autopilot › Never wait for me is Full Autopilot, BLG-981; Agents says “Planned, built and checked by …”, its Mix Agents a picker per part, BLG-982); the phone's Ask › a project › Plan (1.5); Your Mac's `start_plan` (quietly) |
 | `plans.here` | ✓ the composer's mode menu › Plan with Tasks (the agent plans in the conversation you're in) |
 | `plans.approve` | ✓ Approve Plan / Apply Changes on a plan's page and its strip above the conversation; Approve Plan's ▾ › Approve, worked by ▸ (BLG-506: `plans.setWorkAgent`, then approve) |
 | `plans.discard` | ✓ Discard Draft / Discard Changes on a plan's page |
@@ -695,7 +698,9 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `plans.setAutonomy` | ✓ Step by Step · Check-ins · Autopilot on a plan's page (a milestone's own from its menu); the phone plan page's autonomy chip (1.5) |
 | `plans.setPaused` | ✓ Pause / Resume on a plan's page |
 | `plans.setParallel` | ✓ a plan's ⋯ › Run at Once ▸ |
-| `plans.setWorkAgent` | ✓ a plan's ⋯ › Agent for Its Work ▸ (BLG-498): who works the milestones and tasks that start from now on (ones at work keep theirs, the toast says so); the phone's plan page › ⋯ › Agent for its work (1.35) |
+| `plans.setWorkAgent` | ✓ Approve Plan's ▾ › Approve, worked by ▸ and Verify, Then Approve ▸ (BLG-506); the header's agents button › Builder ▸ goes through `plans.setRoleAgent` (BLG-982); the phone's plan page › ⋯ › Agent for its work, with a Mac before 1.58 |
+| `plans.setRoleAgent` | ✓ a plan's header agents button (one name, or “3 Agents”) › Planner ▸ · Builder ▸ · Checker ▸ (BLG-982): who plans, builds or checks from now on (the toast says what changes); the phone's plan page › ⋯ › Plans with / Builds with / Checks with (1.58) |
+| `plans.setFullAuto` | ✓ a plan's “Runs on …” › Autopilot › Never wait for me (BLG-981); the header then says Runs on Full Autopilot; the phone's How it runs › Full Autopilot (1.58) |
 | `plans.setTestsAt` | ✓ a plan's ⋯ › When to Run Tests ▸ (each milestone, or once at the end) |
 | `plans.pass` | ✓ Pass Milestone on a plan's page |
 | `plans.recheck` | ✓ Check Again on a milestone the agent is checking or that failed its check |
@@ -755,6 +760,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `preview.snapshot` | ✓ a live preview's ••• › Save as Picture (a PNG in the worktree's .beluga/scratch/previews); with a phone paired, each preview's newest picture is kept there too, for the phone to show |
 | `git.fetch` | ✓ Fetch on a project's home (“fetched 3 min ago”, or why it couldn't: sign-in needed, offline) |
 | `git.fetchIfStale` | ✓ opening a project's home fetches quietly when the last fetch is a few minutes old (the daemon also fetches every project every ~15 min, or as Settings › Workspaces › Fetch in the background says: slower, or never) |
+| `git.pushMain` | ✓ Push main to origin (BLG-985): a Straight to main worktree's branch control (first when everything's on main and some isn't pushed, else in its menu) and the project home's bar when main has commits origin doesn't; on top of origin's new commits, never forced. The phone's branch step `push_main` |
 | `git.updateMain` | ✓ Update main on a project's home: fetch and fast-forward the default branch; what can't fast-forward asks (changes in the way, or Let Your Agent Handle It) |
 | `git.stashAndUpdate` | ✓ the “changes in the way” alert › Stash and Update (and put them back) |
 | `git.moveAndUpdate` | ✓ the “changes in the way” alert › Move to Worktree |

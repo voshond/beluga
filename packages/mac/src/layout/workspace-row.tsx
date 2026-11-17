@@ -20,7 +20,7 @@ import { inSections, isPrStep, toolbarActions } from './toolbar-actions.js';
 import { askBeforeWork } from '../lib/work-confirm.js';
 import { chatLinkItems } from '../lib/chat-links.js';
 import { isPlanAction, runPlanAction } from '../lib/plan-task.js';
-import { Row } from './sidebar-parts.js';
+import { ExtrasName, Row, type RowExtras } from './sidebar-parts.js';
 import type { RowColor } from '../lib/row-colors.js';
 import { triageItems } from './row-triage-actions.js';
 import { copyLinkItems } from './worktree-link.js';
@@ -107,8 +107,9 @@ export interface WorkspaceFold {
  * A chat or worktree in the sidebar. What it waits on sits at the row's right edge: a hand
  * when it needs you (the row faintly tinted), a count and a bold name when Claude finished or
  * someone wrote while you were elsewhere, Claude's pulse while it works; otherwise its git state.
+ * `extras`: what a list of conversations (the categories, Unread) adds to it; it stays this row.
  */
-export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold, inFamily }: { ws: Workspace; indent: number; fold?: WorkspaceFold; inFamily?: boolean }) {
+export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold, inFamily, extras }: { ws: Workspace; indent: number; fold?: WorkspaceFold; inFamily?: boolean; extras?: RowExtras }) {
   const actions = useActions();
   const { client } = useBeluga();
   const row = useWorkspaceRowActions(ws);
@@ -144,7 +145,8 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold, inFam
         indent={indent}
         selected={selected}
         className={s.pendingRow}
-        aria-label={ws.name}
+        {...extras?.data}
+        aria-label={extras?.label ?? ws.name}
         aria-busy
         icon={<Icon name={icon} size={14} />}
         label={ws.name}
@@ -173,8 +175,9 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold, inFam
         data-signal-row={signal.level}
         data-kind={ws.kind}
         data-chat-row={ws.kind === 'main' ? undefined : `ws:${ws.id}`}
-        // Named for itself alone (so it's found by name whatever it waits on); the tooltip says the rest.
-        aria-label={ws.name}
+        {...extras?.data}
+        // Named for itself alone (so it's found by name whatever it waits on); the tooltip says the rest. In a list of conversations, with what waits.
+        aria-label={extras?.label ?? ws.name}
         aria-expanded={fold ? fold.open : undefined}
         icon={
           fold ? (
@@ -204,13 +207,15 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold, inFam
         }}
         label={row.label(
           <>
-            <span className={cx(ws.external && s.external, nameClass(signal))}>{ws.name}</span>
+            <ExtrasName name={ws.name} extras={extras} className={cx(ws.external && s.external, nameClass(signal))} />
             {where ? <span className={o.where}>{where.folder}</span> : null}
           </>,
         )}
-        detail={archiving ? `${ws.name}: ${ARCHIVING[archiving]}` : `${ws.name}: ${signal.tip || st.label}${fold ? ` · ${fold.summary}` : ''}${where ? `\n${where.path}` : ''}`}
+        detail={`${extras ? `${extras.where} › ` : ''}${archiving ? `${ws.name}: ${ARCHIVING[archiving]}` : `${ws.name}: ${signal.tip || st.label}${fold ? ` · ${fold.summary}` : ''}${where ? `\n${where.path}` : ''}`}`}
         onClick={(event) => {
-          if (!row.pick(event)) actions.run({ type: 'open_ws', id: ws.id });
+          if (row.pick(event)) return;
+          if (extras) extras.open();
+          else actions.run({ type: 'open_ws', id: ws.id });
         }}
         trailing={
           archiving ? (
@@ -238,6 +243,7 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold, inFam
                   {gap.count}
                 </span>
               ) : null}
+              {extras?.trailing}
               {family ? (
                 <FamilyEnd row={family} now={now} />
               ) : (

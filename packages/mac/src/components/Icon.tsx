@@ -12,6 +12,8 @@ const PATHS = {
   chat: 'M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5A1.5 1.5 0 0 1 11.5 11H7l-3 2.5V11h.5A1.5 1.5 0 0 1 3 9.5z',
   folder: 'M2.5 4.5A1 1 0 0 1 3.5 3.5h3l1.5 1.5h4.5a1 1 0 0 1 1 1V11.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1z',
   file: 'M4 2.5h5l3 3v8H4z M9 2.5v3h3',
+  /** A file of text (a long paste kept as one). */
+  fileText: 'M4 2.5h5l3 3v8H4z M9 2.5v3h3 M6 8.5h4 M6 10.5h4',
   diff: 'M5 3v6 M2 6h6 M8.5 12.5h5.5 M11 2.5l-2 11',
   terminal: 'M2.5 3.5h11v9h-11z M4.5 6.5l2 1.5-2 1.5 M8 10h3',
   plus: 'M8 3.5v9 M3.5 8h9',

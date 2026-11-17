@@ -17,7 +17,7 @@ import { usePrefs } from '../lib/prefs.js';
 import { taskChatsItem } from './plan-task-chats.js';
 import { DotMark, nameClass, signalClass } from './signal-marks.js';
 import { triageItems } from './row-triage-actions.js';
-import { Row } from './sidebar-parts.js';
+import { ExtrasName, Row, type RowExtras } from './sidebar-parts.js';
 import { planPlace } from './project-rows.js';
 import { useProjectColor } from './row-color-view.js';
 import m from './signal.module.css';
@@ -29,8 +29,9 @@ import m from './signal.module.css';
  * (never its tasks' added up: news there is a quiet dot), as a chat row has.
  * It stays marked while you're in its conversation or in one of its tasks. A plan across repos shows
  * its repos' icons stacked in place of the flag (BLG-33), wherever its row sits.
+ * `extras`: what a list of conversations (the categories, Unread) adds to it; it stays this row.
  */
-export function PlanRow({ plan, indent }: { plan: Plan; indent: number }) {
+export function PlanRow({ plan, indent, extras }: { plan: Plan; indent: number; extras?: RowExtras }) {
   const view = usePlanView(plan)!;
   const { open, openList } = usePlanActions();
   const uiPrefs = usePrefs();
@@ -67,16 +68,18 @@ export function PlanRow({ plan, indent }: { plan: Plan; indent: number }) {
         selected={selected}
         color={color}
         className={signalClass(signal, selected)}
-        aria-label={title}
+        aria-label={extras?.label ?? title}
         data-plan-row={plan.id}
         data-chat-row={plan.home}
+        {...extras?.data}
         data-signal-row={signal.level}
         icon={isMultiRepo(plan) ? <RepoStack repos={planRepos(plan)} size={16} /> : <Icon name="flag" size={14} />}
-        label={<span className={nameClass(signal)}>{title}</span>}
-        detail={tip}
-        onClick={() => open(plan.id)}
+        label={<ExtrasName name={title} extras={extras} className={nameClass(signal)} />}
+        detail={extras ? `${extras.where} › ${tip}` : tip}
+        onClick={() => (extras ? extras.open() : open(plan.id))}
         trailing={
           <>
+            {extras?.trailing}
             {unread ? (
               <span className={m.count} data-signal="unread">
                 <Badge count={unread} urgent />

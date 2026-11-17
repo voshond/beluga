@@ -31,7 +31,7 @@ type Then = 'branch' | 'land';
 export function thenOptions(into: string): Array<SelectOption<Then>> {
   return [
     { value: 'branch', label: 'Its own branch', icon: 'branch', description: 'Open a PR or merge it when you like' },
-    { value: 'land', label: `Straight to ${into}`, icon: 'merge', description: `Lands on ${into} in your main folder each time the agent finishes: no PR, nothing pushed` },
+    { value: 'land', label: `Straight to ${into}`, icon: 'merge', description: `Commits to ${into} in your main folder each time the agent finishes. No PR; you push when you’re ready` },
   ];
 }
 
@@ -102,7 +102,7 @@ export function ThenField({ projectId, base, land, onChange }: { projectId: stri
   return (
     <label className={s.field}>
       <span className={s.fieldLabel}>Then</span>
-      <Tip label={`Where its work goes. Straight to ${into}: the agent still works in a worktree of its own, and each time it finishes, its work lands on ${into} in your main folder (your own changes there are never touched)`}>
+      <Tip label={`Where its work goes. Straight to ${into}: the agent still works in a worktree of its own, and each time it finishes, its work is committed to ${into} in your main folder (your own changes there are never touched). Push ${into} when you’re ready`}>
         <Select
           className={s.select}
           size="small"
