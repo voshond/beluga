@@ -1,6 +1,8 @@
 // First: zod never probes eval (blocked by the CSP, BLG-672), and Beluga's storage keys become Beluga's before any module reads them.
 import './lib/zod-jitless.js';
 import './lib/storage-rename.js';
+// And Enter that picks an input method's words reaches no box (lib/ime-guard.ts), before anything else listens for keys.
+import './lib/install-ime-guard.js';
 import { Fragment, StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { followOwnWords } from './i18n/own.js';

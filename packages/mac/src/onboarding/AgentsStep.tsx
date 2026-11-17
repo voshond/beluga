@@ -123,7 +123,7 @@ export function AgentsStep() {
         <Words text="Which agent is yours?" />
       </h2>
       <Rise delay={0.2} className={s.body}>
-        Beluga runs the coding agents you already use. Yours starts every new conversation and answers friends; any conversation can pick another.
+        Beluga works with the coding agents you already have. The one you pick here starts new conversations and answers your friends’ requests. Any conversation can switch to another.
       </Rise>
       <Glass radius={16} width="100%" className={s.rows}>
         <div role="radiogroup" aria-label="Your agent">

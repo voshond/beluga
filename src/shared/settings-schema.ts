@@ -8,6 +8,7 @@ import { AUTO_CONTINUE_OFF_MAX } from './auto-continue.js';
 import { MAX_AGENT_ARGS, MAX_AGENT_ARG_LENGTH } from './agent-args.js';
 import { THREAD_LIMITS_DEFAULT, THREAD_LIMITS_MAX } from './threads.js';
 import { FETCH_EVERY_DEFAULT, fetchEveryMinutes } from './background-fetch.js';
+import { AUTOPILOT_WAIT_DEFAULT, autopilotWaitMinutes } from './autopilot-wait.js';
 import { coercePerKind, coerceSound, DEFAULT_SOUND, DEFAULT_VOLUME, PerKindSounds, SoundChoice } from './notify-sound.js';
 
 // Settings as data (no file access), so the reducer and the clients can use them anywhere.
@@ -175,6 +176,8 @@ export const Settings = z.object({
   fetchEvery: z.number().transform(fetchEveryMinutes).catch(FETCH_EVERY_DEFAULT),
   /** A worktree's task moving to In Review has its agent open a draft pull request there (BLG-927). */
   prOnReview: z.boolean().catch(false),
+  /** Minutes work on Autopilot waits for your answer before your agent carries on without it; 0: until you answer (BLG-998). */
+  autopilotWait: z.number().transform(autopilotWaitMinutes).catch(AUTOPILOT_WAIT_DEFAULT),
   /** Claude keeps screenshots and scratch output in the workspace's git-ignored `.beluga/scratch/` folder. */
   scratchFolder: z.boolean().default(true),
   machineNote: z.string().max(MACHINE_NOTE_MAX).catch('').default(''),

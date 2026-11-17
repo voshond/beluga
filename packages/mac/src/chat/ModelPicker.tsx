@@ -15,6 +15,7 @@ import { cx } from '../components/ui.js';
 import { ModelList } from './ModelList.js';
 import { useApi, useApp } from '../lib/beluga.js';
 import s from './picker.module.css';
+import { knownOr } from '@beluga/shared/known-or.js';
 
 type Api = ReturnType<typeof useApi>;
 type Prefs = AppState['prefs'];
@@ -89,13 +90,13 @@ export function agentEntries(options: readonly AgentOption[]): SelectEntry<strin
 }
 
 /** Effort, in plain words, with what each level means (the same five steps for every agent). */
-export const EFFORT_INFO: Record<Effort, { label: string; detail: string }> = {
+export const EFFORT_INFO: Record<Effort, { label: string; detail: string }> = knownOr({
   low: { label: 'Low', detail: 'Answers fast; best for small, clear asks' },
   medium: { label: 'Medium', detail: 'Thinks enough for most everyday work' },
   high: { label: 'High', detail: 'Takes its time on tricky changes' },
   xhigh: { label: 'Extra High', detail: 'Works hard problems through carefully' },
   max: { label: 'Max', detail: 'As much thinking as it can; slowest' },
-};
+}, (v) => ({ label: v, detail: '' }));
 
 export const samePicker = (a: AgentPicker, b: AgentPicker): boolean => JSON.stringify(a) === JSON.stringify(b);
 

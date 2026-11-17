@@ -96,6 +96,7 @@ export const SETTINGS: readonly Entry[] = [
     ['Thinking effort', 'How hard your agent thinks.', 'reasoning think effort max high low'],
     ['Ask before running commands', 'Your own agent. Secrets stay blocked either way.', 'approval permission self approval bash'],
   ]),
+  ...rows('claude', 'Autopilot', [['Wait for your answer', 'How long Autopilot waits for your answer to a question or plan before your agent carries on without it.', 'autopilot question plan timeout unanswered skip wait minutes step by step check-ins']]),
   group('claude', 'Your agents', 'Each agent Beluga can run, and how to set it up.', 'sign in install login claude code codex'),
   ...rows('claude', 'Your agents', [['Signed in or installed one just now?', 'Check Again looks for your agents now.', 'check again refresh']]),
   group('claude', 'Launch flags', 'Your own flags for claude and codex.', 'args arguments cli flags dangerously skip permissions'),

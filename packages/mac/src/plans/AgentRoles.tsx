@@ -59,9 +59,8 @@ export function AgentRoles({ value, onChange }: { value: RoleChoice; onChange: (
     <div className={p.roles} role="group" aria-label="Agents">
       {PLAN_ROLES.map((role, i) => (
         <span key={role} className={p.rolePart} title={PLAN_ROLE_INFO[role].hint}>
-          <span className={p.rolesWords}>
-            {i === 0 ? PLAN_ROLE_INFO[role].verb : `${i === PLAN_ROLES.length - 1 ? 'and ' : ''}${PLAN_ROLE_INFO[role].verb}`} by
-          </span>
+          {/* One text node ("Planned by"), so a language can say it as a whole (docs/i18n.md). */}
+          <span className={p.rolesWords}>{`${i === PLAN_ROLES.length - 1 ? 'and ' : ''}${PLAN_ROLE_INFO[role].verb} by`}</span>
           <Popup label={PLAN_ROLE_INFO[role].label} value={value[role]} options={entries} onChange={(v) => onChange({ ...value, [role]: v })} />
         </span>
       ))}

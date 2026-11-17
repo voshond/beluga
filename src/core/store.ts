@@ -6,6 +6,7 @@ import type { ConnectionStatus } from '../net/peer-client.js';
 import type { Effort, NotifySettings, Settings, ThemeName, TrustLevel } from './settings.js';
 import { ARCHIVE_SETTLED_DAYS_DEFAULT, BRANCH_PREFIX_DEFAULT, NotifySettings as NotifySchema, SETTLE_IDLE_DAYS_DEFAULT } from '../shared/settings-schema.js';
 import { FETCH_EVERY_DEFAULT } from '../shared/background-fetch.js';
+import { AUTOPILOT_WAIT_DEFAULT } from '../shared/autopilot-wait.js';
 import type { Review } from '../workspaces/git.js';
 import type { Project, ProjectGroup } from '../workspaces/types.js';
 import type { EnvChange } from '../workspaces/env.js';
@@ -392,6 +393,8 @@ export interface Prefs {
   readonly fetchEvery: number;
   /** A worktree's task moving to In Review has its agent open a draft pull request there (BLG-927). */
   readonly prOnReview: boolean;
+  /** Minutes work on Autopilot waits for your answer before your agent carries on without it; 0: until you answer (BLG-998). */
+  readonly autopilotWait: number;
   /** Claude keeps screenshots and scratch output in the workspace's git-ignored `.beluga/scratch/` folder (watched live in the Mac app). */
   readonly scratchFolder: boolean;
   readonly machineNote: string;
@@ -836,6 +839,7 @@ export const DEFAULT_PREFS: Prefs = {
   pushToPr: true,
   fetchEvery: FETCH_EVERY_DEFAULT,
   prOnReview: false,
+  autopilotWait: AUTOPILOT_WAIT_DEFAULT,
   scratchFolder: true,
   machineNote: '',
   machineNoteOn: false,

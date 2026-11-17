@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { BodyInput, BodyOf, ClaudeAnswer, ClaudeQuestion } from '../protocol.js';
+import { autopilotWaitWords } from '../shared/autopilot-wait.js';
 import { type Store, clean } from './store.js';
 
 export interface QuestionDeps {
@@ -8,6 +9,11 @@ export interface QuestionDeps {
   readonly send: (body: BodyInput, opts: { to: string }) => boolean;
   /** How long Claude waits for a friend's answer before carrying on without one (yours: no limit). */
   readonly timeoutMs: () => number;
+  /**
+   * How long your own agent's question waits in a conversation before it carries on without your
+   * answer (BLG-998: only work on Autopilot gives up); undefined: until you answer or press Stop.
+   */
+  readonly ownWaitMs?: (channel: string) => number | undefined;
   readonly toast: (text: string, level?: 'info' | 'warn') => void;
   /**
    * You approved your own agent's plan in a chat that builds with another agent (BLG-982): Beluga
@@ -79,15 +85,19 @@ export class QuestionBroker {
     const mine = requester === this.deps.selfId();
     return new Promise((resolve) => {
       // Your own agent's plan or question waits for you (as in Claude Code): skipping it after a
-      // while read as a declined plan when you came back to it. Stop ends it. A friend's times out.
-      const timer = mine
-        ? undefined
-        : setTimeout(() => {
-            if (!this.waiting.delete(qid)) return;
-            this.deps.store.dispatch({ type: 'question_remove', qid, unanswered: true });
-            this.deps.toast(`Your agent's ${question.kind === 'plan' ? 'plan' : 'question'} went unanswered, so it carried on without it`, 'warn');
-            resolve(SKIP);
-          }, this.deps.timeoutMs());
+      // while read as a declined plan when you came back to it. Stop ends it. Only work on
+      // Autopilot carries on after the wait you chose (BLG-998). A friend's times out.
+      const wait = mine ? this.deps.ownWaitMs?.(channel) : this.deps.timeoutMs();
+      const what = question.kind === 'plan' ? 'plan' : 'question';
+      const timer =
+        wait === undefined
+          ? undefined
+          : setTimeout(() => {
+              if (!this.waiting.delete(qid)) return;
+              this.deps.store.dispatch({ type: 'question_remove', qid, unanswered: true });
+              this.deps.toast(mine ? `Autopilot: your agent's ${what} went unanswered for ${autopilotWaitWords(Math.round(wait / 60_000))}, so it carried on without it` : `Your agent's ${what} went unanswered, so it carried on without it`, 'warn');
+              resolve(SKIP);
+            }, wait);
       timer?.unref();
       this.waiting.set(qid, { peer: requester, channel, resolve, ...(timer ? { timer } : {}) });
       if (mine) {

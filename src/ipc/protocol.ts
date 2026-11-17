@@ -46,7 +46,13 @@ export const ClientFrame = z.discriminatedUnion('t', [
     kind: z.enum(['mac', 'cli', 'test', 'remote-app']),
     version: z.string().max(40),
     launchDir: z.string().max(4096).optional(),
-    caps: z.array(z.enum(CAPS)).max(CAPS.length).default([]),
+    // A newer screen offers caps this daemon doesn't know: those are left out, never the whole hello
+    // (it was dropped, and the screen only saw "the daemon did not answer").
+    caps: z
+      .array(z.string().max(40))
+      .max(32)
+      .default([])
+      .transform((caps) => caps.filter((c): c is Cap => (CAPS as readonly string[]).includes(c))),
     // A remote app offering its own machine to the server's agents (shared/devices.ts).
     device: z.object({ name: z.string().trim().min(1).max(100), os: z.enum(DEVICE_OS), caps: z.array(z.enum(DEVICE_CAPS)).max(DEVICE_CAPS.length) }).optional(),
   }),

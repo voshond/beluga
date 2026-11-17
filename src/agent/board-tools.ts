@@ -132,7 +132,7 @@ export function createBoardToolDefs(board: BoardTools) {
     ),
     tool(
       'task_update',
-      'Change a task: its title, status, priority, estimate, labels (the full list), the repo it runs in (project), or who it’s for (me: the user; nobody). A task is for a person, never a Claude. Mark a task done or canceled only when the user asked or said its work shipped (its sub-tasks still open go Done with it). in_review is refused while an acceptance criterion is neither ticked nor explained.',
+      'Change a task: its title, status, priority, estimate, labels (the full list), the repo it runs in (project), or who it’s for (me: the user; nobody). A task is for a person, never a Claude. Mark a task done or canceled only when the user asked or said its work shipped (its sub-tasks still open go Done with it). Before in_review, settle its acceptance criteria with one task_brief_edit (section acceptance): tick each one that is true ("- [x]"), give each other one its reason on its line ("- [ ] … — not done: why" or "— deferred: why"); in_review is refused while one is neither.',
       { key, title: z.string().min(1).max(200).optional(), status: STATUS.optional(), priority: PRIORITY.optional(), estimate: ESTIMATE.optional(), labels: LABELS(12), assign: z.enum(['me', 'nobody']).optional(), project: z.string().max(80).optional().describe('The repo it runs in from now on (a project’s name): it stays on its board') },
       (a) =>
         guarded(() =>

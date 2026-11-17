@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Board } from '../src/core/board/board.js';
-import { criteria, criterionLine, tally, tallyWords, unexplained } from '../src/core/board/criteria.js';
+import { criteria, criterionLine, needsChecksText, tally, tallyWords, unexplained, unreadReasonWord } from '../src/core/board/criteria.js';
 import type { Issue } from '../src/core/board/model.js';
 import { BoardWork } from '../src/core/board/work.js';
 import { taskPageView, tasksView } from '../src/companion/views.js';
@@ -45,6 +45,41 @@ describe('criteria: ticked, explained, or open', () => {
     expect(tallyWords(tally(text))).toBe('1/5 · 2 deferred · 1 not done');
     expect(tallyWords(tally('- [x] a\n- [ ] b'))).toBe('1/2');
     expect(criterionLine(criteria(text)[1]!)).toBe('- [ ] Two — deferred: suites run at the end of the plan');
+  });
+
+  it('reads the other words agents explain a criterion with', () => {
+    const text = [
+      '- [ ] A — not verified: WebKit never showed the jump',
+      '- [ ] B — untested: needs the Intel Mac',
+      '- [ ] C -- Blocked: waits on BLG-2',
+      '- [ ] D (out of scope: next task)',
+      '- [ ] E — won’t do: the user dropped it',
+      '- [ ] F — n/a: no UI',
+      '- [ ] G — postponed: after the release',
+      '- [ ] H — follow-up: BLG-3',
+    ].join('\n');
+    expect(criteria(text).map((c) => [c.text, c.state])).toEqual([
+      ['A', 'not_done'],
+      ['B', 'not_done'],
+      ['C', 'not_done'],
+      ['D', 'not_done'],
+      ['E', 'not_done'],
+      ['F', 'not_done'],
+      ['G', 'deferred'],
+      ['H', 'deferred'],
+    ]);
+    expect(criteria(text)[0]!.reason).toBe('WebKit never showed the jump');
+    expect(unexplained(text)).toEqual([]);
+    // Written back in Beluga's own words.
+    expect(criterionLine(criteria(text)[0]!)).toBe('- [ ] A — not done: WebKit never showed the jump');
+  });
+
+  it('a reason word it doesn’t read is named in the refusal, with what to write instead', () => {
+    const open = unexplained('- [ ] Headlines keep their line breaks — needs eyes: on the Intel Mac\n- [ ] Plain one');
+    expect(open.map(unreadReasonWord)).toEqual(['needs eyes', undefined]);
+    const text = needsChecksText('BLG-1', open);
+    expect(text).toContain('“needs eyes:” isn\'t a reason Beluga reads: write “— not done: why” or “— deferred: why”');
+    expect(text).toContain('- Plain one\n');
   });
 
   it('on the Mac: counted with their states, and ticking one drops its reason', () => {

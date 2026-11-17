@@ -6,6 +6,7 @@ import type { MetricColumn } from './columns.js';
 import type { Dashboard } from './dashboard-model.js';
 import { ASSISTANT_TITLE, THE_COMPUTER } from '../../shared/assistant.js';
 import { chatMentionsAsTitles } from '../../shared/chat-ref.js';
+import { knownOr } from '../../shared/known-or.js';
 
 /**
  * Sentinel (docs/sentinel.md): watchers that run on a schedule, by hand, or when something
@@ -342,11 +343,11 @@ export const KEEP_CHATS = ['all', 'failed', 'latest'] as const;
 export type KeepChats = (typeof KEEP_CHATS)[number];
 export const DEFAULT_KEEP_CHATS: KeepChats = 'all';
 /** `keeps`: what it does, after its name ("Hourly check keeps only failed runs’ chats"). */
-export const KEEP_CHATS_INFO: Readonly<Record<KeepChats, { readonly label: string; readonly description: string; readonly keeps: string }>> = {
+export const KEEP_CHATS_INFO: Readonly<Record<KeepChats, { readonly label: string; readonly description: string; readonly keeps: string }>> = knownOr({
   all: { label: 'Every run', description: 'Each run’s chat stays, to read or carry on', keeps: 'keeps every run’s chat' },
   failed: { label: 'Failed runs only', description: 'A run that went fine puts its chat away; its report stays', keeps: 'keeps only failed runs’ chats' },
   latest: { label: 'The latest run only', description: 'Each run puts the one before’s chat away; reports stay', keeps: 'keeps only the latest run’s chat' },
-};
+}, (v) => ({ label: v, description: '', keeps: '' }));
 
 /** Whether a run that ended keeps its conversation; `latest`: the newest ended run with one. */
 export function keepsChat(keep: KeepChats, run: Pick<Run, 'id' | 'state'>, latest: string | undefined): boolean {
@@ -960,7 +961,7 @@ export const slugOf = (name: string): string =>
 
 export const sentinelLabel = (s: Pick<Sentinel, 'name'>): string => `sentinel:${slugOf(s.name)}`;
 
-export const TRIGGER_INFO: Readonly<Record<TriggerKind, { readonly label: string; readonly phase: 1 | 2 | 3 }>> = {
+export const TRIGGER_INFO: Readonly<Record<TriggerKind, { readonly label: string; readonly phase: 1 | 2 | 3 }>> = knownOr({
   schedule: { label: 'On a schedule', phase: 1 },
   once: { label: 'One time', phase: 1 },
   manual: { label: 'Only when you press Run', phase: 1 },
@@ -970,9 +971,9 @@ export const TRIGGER_INFO: Readonly<Record<TriggerKind, { readonly label: string
   uptime: { label: 'When a site stops answering', phase: 3 },
   sentry: { label: 'When Sentry sees something', phase: 3 },
   webhook: { label: 'When something posts to its URL', phase: 3 },
-};
+}, (v) => ({ label: v, phase: 3 }));
 
-export const STEP_INFO: Readonly<Record<StepKind, { readonly label: string; readonly hint: string; readonly needs: Access; readonly phase: 1 | 2 | 3 | 5 }>> = {
+export const STEP_INFO: Readonly<Record<StepKind, { readonly label: string; readonly hint: string; readonly needs: Access; readonly phase: 1 | 2 | 3 | 5 }>> = knownOr({
   claude: { label: 'Ask your agent', hint: 'The agent reads, writes a brief, fixes, makes tasks', needs: 'look', phase: 1 },
   script: { label: 'Run a script', hint: 'One shell line or a script, in the project or your home folder', needs: 'look', phase: 1 },
   notify: { label: 'Notify me', hint: `On ${THE_COMPUTER}, and the phone if you like, with the report`, needs: 'look', phase: 1 },
@@ -985,18 +986,18 @@ export const STEP_INFO: Readonly<Record<StepKind, { readonly label: string; read
   trigger: { label: 'Run another sentinel', hint: 'Starts it with this run’s last output', needs: 'look', phase: 2 },
   measure: { label: 'Keep the numbers', hint: 'Numbers or rows from the step before, a source, or the agent, kept over time', needs: 'look', phase: 5 },
   tool: { label: 'Run a Toolbox tool', hint: "A named command from this project's Toolbox", needs: 'look', phase: 1 },
-};
+}, (v) => ({ label: v, hint: '', needs: 'ship', phase: 5 }));
 
 /** The steps and triggers this Beluga runs (phase 5: every one); later ones show, but a run says they aren't available yet. */
 export const SENTINEL_PHASE = 5;
 export const stepAvailable = (kind: StepKind): boolean => STEP_INFO[kind].phase <= SENTINEL_PHASE;
 export const triggerAvailable = (kind: TriggerKind): boolean => TRIGGER_INFO[kind].phase <= SENTINEL_PHASE;
 
-export const ACCESS_INFO: Readonly<Record<Access, { readonly label: string; readonly sentence: string }>> = {
+export const ACCESS_INFO: Readonly<Record<Access, { readonly label: string; readonly sentence: string }>> = knownOr({
   look: { label: 'Look', sentence: 'Your agent can look and tell you' },
   work: { label: 'Work', sentence: 'Your agent can change code in a worktree and open pull requests' },
   ship: { label: 'Ship', sentence: 'Your agent can change code in a worktree, open pull requests, and merge when the checks pass and you’ve approved' },
-};
+}, (v) => ({ label: v, sentence: '' }));
 
 /** Access ranked: Look < Work < Ship. */
 export const accessRank = (a: Access): number => RANK[a];
@@ -1149,7 +1150,7 @@ export function stepRefusal(access: Access, kind: StepKind, where?: ClaudeWhere)
   return `Needs ${ACCESS_INFO[needs].label} access`;
 }
 
-export const RUN_STATE_INFO: Readonly<Record<RunState, { readonly label: string; readonly tone: 'muted' | 'neutral' | 'claude' | 'info' | 'ok' | 'error' }>> = {
+export const RUN_STATE_INFO: Readonly<Record<RunState, { readonly label: string; readonly tone: 'muted' | 'neutral' | 'claude' | 'info' | 'ok' | 'error' }>> = knownOr({
   queued: { label: 'Queued', tone: 'neutral' },
   running: { label: 'Running', tone: 'claude' },
   'needs-you': { label: 'Needs you', tone: 'info' },
@@ -1157,7 +1158,7 @@ export const RUN_STATE_INFO: Readonly<Record<RunState, { readonly label: string;
   skipped: { label: 'Skipped', tone: 'muted' },
   failed: { label: 'Failed', tone: 'error' },
   stopped: { label: 'Stopped', tone: 'muted' },
-};
+}, (v) => ({ label: v, tone: 'muted' }));
 
 // ---------------------------------------------------------------- sentences
 

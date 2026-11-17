@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { RunProcess } from '../../types.js';
 import { endProcess, keepLines, niceForWorktree } from '../claude/claude-process.js';
-import { isMiseBinary, miseWhich, versionManagerShimDirs } from '../version-managers.js';
+import { type FolderReader, isMiseBinary, miseWhich, nodeGlobalBinDirs } from '../version-managers.js';
 import { CodexRpc } from './rpc.js';
 
 /** `codex app-server` for one run (or one side call): its JSON-RPC and its process. */
@@ -46,11 +46,12 @@ export const pathVar = (env: Readonly<Record<string, string | undefined>>): stri
 /**
  * Where Codex is: BELUGA_CODEX_PATH, then the Codex app's own binary (self-contained), then `codex`
  * on PATH (the npm shim, which can lose its platform binary on an upgrade), then the folders the
- * Mac app's PATH may not have: Homebrew's, ~/.local/bin, and mise's and asdf's shims (#548). On
+ * Mac app's PATH may not have: Homebrew's, ~/.local/bin, npm's global ones under nvm, fnm, Volta
+ * or a prefix of your own (#568), and mise's and asdf's shims (#548). On
  * Windows, codex.exe on PATH, else npm's codex.cmd (never the extensionless shim npm puts beside
  * it, a script for sh that Windows can't start). Undefined: not installed.
  */
-export function findCodex(env: Readonly<Record<string, string | undefined>> = process.env, platform: NodeJS.Platform = process.platform, runs: (file: string) => boolean = executable, home: string = os.homedir()): string | undefined {
+export function findCodex(env: Readonly<Record<string, string | undefined>> = process.env, platform: NodeJS.Platform = process.platform, runs: (file: string) => boolean = executable, home: string = os.homedir(), fs?: FolderReader): string | undefined {
   const set = env.BELUGA_CODEX_PATH;
   if (set) return runs(set) ? set : undefined;
   const p = platform === 'win32' ? path.win32 : path.posix;
@@ -61,7 +62,7 @@ export function findCodex(env: Readonly<Record<string, string | undefined>> = pr
     return [...exes, ...shims].find(runs);
   }
   const apps = ['/Applications/Codex.app/Contents/Resources/codex', p.join(home, 'Applications/Codex.app/Contents/Resources/codex')];
-  const extra = ['/opt/homebrew/bin', '/usr/local/bin', p.join(home, '.local/bin'), ...versionManagerShimDirs(env, home)].filter((d) => !dirs.includes(d));
+  const extra = ['/opt/homebrew/bin', '/usr/local/bin', p.join(home, '.local/bin'), ...nodeGlobalBinDirs(env, home, platform, fs)].filter((d) => !dirs.includes(d));
   return [...apps, ...[...dirs, ...extra].map((dir) => p.join(dir, 'codex'))].find(runs);
 }
 
