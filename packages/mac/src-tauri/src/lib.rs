@@ -273,6 +273,7 @@ pub fn run() {
         w.user_agent = agent.clone();
         if !run_here {
             w.url = tauri::WebviewUrl::App(remote::PAGE.into());
+            w.drag_drop_enabled = false;
         }
     }
     // Whether the window shows comes from the config (hidden only for the background relaunch),

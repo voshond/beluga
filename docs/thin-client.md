@@ -43,6 +43,11 @@ what you save); the window's own bits (notifications, tray, clipboard, the app's
 app's. If the server can't be reached the window says why, with **Retry** and **Change server**
 (where Run Beluga here is too).
 
+Files you drop on the window (a message box, a task, the project list) upload to the server, as
+they would in a browser, and land in `~/.beluga/uploads/<day>/<random>/` there. The window takes
+drops this way from launch in server mode; switched from Run here to a server while the app is
+open, drops work after the next launch.
+
 ## Device reach
 
 While the app is connected, the server's agents see it as a device: `list_devices` names it,
