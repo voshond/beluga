@@ -6,7 +6,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type CodexConnect, findCodex, spawnAppServer } from '../src/agent/runtime/codex/app-server.js';
 import { codexComplete } from '../src/agent/runtime/codex/complete.js';
 import { worktreeGitDirs } from '../src/workspaces/git.js';
-import { CODEX_TRUST_TABLE, PROFILE, codexConfinement, originOf, sideCallConfinement, trustRow, trustTableMarkdown } from '../src/agent/runtime/codex/sandbox.js';
+import { codexLaunch } from '../src/agent/runtime/codex/launch-args.js';
+import { CODEX_TRUST_TABLE, PROFILE, approvalFor, codexConfinement, originOf, sideCallConfinement, trustRow, trustTableMarkdown } from '../src/agent/runtime/codex/sandbox.js';
 
 /** A JSON value as TOML (inline tables), for `codex -c key=value`. */
 function toml(value: unknown): string {
@@ -45,6 +46,25 @@ describe('the Codex trust table', () => {
     const table = /<!-- codex-trust-table -->\n([\s\S]*?)\n<!-- \/codex-trust-table -->/.exec(doc)?.[1];
     expect(table).toBe(trustTableMarkdown());
     expect(CODEX_TRUST_TABLE.length).toBe(table!.split('\n').length - 2);
+  });
+
+  it('drops the profile only for your own run that may write its worktree', () => {
+    const place = { cwd: '/p/wt', folders: [], writable: ['/p/wt'], home: '/h', belugaHome: '/h/.beluga', fullAccess: true };
+    expect(codexConfinement('own', 'full', place)).toMatchObject({ sandbox: 'danger-full-access', config: {} });
+    expect(codexConfinement('own', 'full', { ...place, writable: [] }).sandbox).toBeUndefined();
+    expect(codexConfinement('friend', 'full', place).sandbox).toBeUndefined();
+    expect(codexConfinement('agent', 'folder', place).sandbox).toBeUndefined();
+    expect(approvalFor(trustRow('own', 'full'), { neverAsks: true })).toBe('never');
+    expect(approvalFor(trustRow('agent', 'folder'), { neverAsks: true })).toBe('on-request');
+  });
+
+  it('reads full access and never-ask from your Codex flags', () => {
+    expect(codexLaunch(['--sandbox', 'danger-full-access'])).toEqual({ fullAccess: true, neverAsks: false });
+    expect(codexLaunch(['--sandbox=danger-full-access'])).toEqual({ fullAccess: true, neverAsks: false });
+    expect(codexLaunch(['-c', 'sandbox_mode="danger-full-access"'])).toEqual({ fullAccess: true, neverAsks: false });
+    expect(codexLaunch(['--yolo'])).toEqual({ fullAccess: true, neverAsks: true });
+    expect(codexLaunch(['-a', 'never'])).toEqual({ fullAccess: false, neverAsks: true });
+    expect(codexLaunch(['--sandbox', 'workspace-write', '-c', 'model_reasoning_effort=high'])).toEqual({ fullAccess: false, neverAsks: false });
   });
 
   it('a main folder is read only, a fix-up worktree in it still writable', () => {

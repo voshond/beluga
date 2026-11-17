@@ -18,6 +18,7 @@ import { CodexSubAgents } from './subagents.js';
 import { codexComplete } from './complete.js';
 import { CodexEvents, type TurnSink, contextEvent, usageEvent } from './events.js';
 import { type AskForApproval, type Model, REASONING_EFFORTS, type ReasoningEffort, type ThreadStartResponse, type ThreadTokenUsage, type Turn, type UserInput } from './protocol.js';
+import { codexLaunch } from './launch-args.js';
 import { approvalFor, codexConfinement, originOf, trustRow } from './sandbox.js';
 import { ELICITATION, mcpToolCallOf } from './tool-questions.js';
 import { CODEX_USAGE_AGENT, type CodexRateLimits, fromRateLimits } from './rate-limits.js';
@@ -239,7 +240,7 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
          * it's opened, never by a turn, so the work isn't done under the plan's read-only one.
          */
         const open = async (planning: boolean, resume: string | undefined): Promise<string> => {
-          // Your `codex` flags (Settings › Agents) on your own runs; Beluga still sets each turn's sandbox.
+          // Your `codex` flags (Settings › Agents) on your own runs; Beluga sets the sandbox unless they ask for full access.
           const link = await connect({ cwd, env: { ...process.env, ...input.env }, ...(opts.codexPath ? { bin: opts.codexPath } : {}), ...(input.launchArgs?.codex?.length ? { args: input.launchArgs.codex } : {}) });
           conn = link;
           const { rpc } = link;
@@ -295,8 +296,9 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
           const yourServers = trustRow(origin, input.scope).yourTools ? [] : await rpc.request<{ config?: { mcp_servers?: Record<string, unknown> } }>('config/read', {}).then((r) => Object.keys(r.config?.mcp_servers ?? {}), () => []);
           const writableRoots = planning || !autoEdit ? (fixup ? [fixup] : []) : [cwd, ...extraDirs, ...(fixup ? [fixup] : [])];
           const gitDirs = writableRoots.includes(cwd) ? await worktreeGitDirs(cwd) : undefined;
-          const confined = codexConfinement(origin, input.scope, { cwd, folders: [...extraDirs, ...(fixup ? [fixup] : [])], writable: writableRoots, yourServers, ...(gitDirs ? { gitDirs } : {}) });
-          approval = approvalFor(confined.row, { planning, ...(input.askBeforeCommands ? { askBeforeCommands: true } : {}) });
+          const launch = codexLaunch(input.launchArgs?.codex ?? []);
+          const confined = codexConfinement(origin, input.scope, { cwd, folders: [...extraDirs, ...(fixup ? [fixup] : [])], writable: writableRoots, yourServers, ...(gitDirs ? { gitDirs } : {}), ...(launch.fullAccess ? { fullAccess: true } : {}) });
+          approval = approvalFor(confined.row, { planning, ...(input.askBeforeCommands ? { askBeforeCommands: true } : {}), ...(launch.neverAsks ? { neverAsks: true } : {}) });
           const routing = input.routing && confined.row.yourTools ? input.routing : undefined;
           if (!settled) {
             settled = true;
@@ -304,7 +306,7 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
             await settle(rpc, routing ? (codexTierModel(want, await listOf(rpc)) ?? want) : want);
           }
           const roles = routing ? await codexRoleConfig(routing, await listOf(rpc), path.join(belugaHome(), 'codex-roles')) : {};
-          const params = { cwd, ...(model ? { model } : {}), developerInstructions: runInstructions(input, opts.bridge.selfName(), CODEX_AGENT), config: { ...confined.config, ...PROJECT_DOCS, ...runFeatures(confined.row.yourTools), ...mcpConfig(mounted.servers), ...roles }, approvalPolicy: approval };
+          const params = { cwd, ...(model ? { model } : {}), developerInstructions: runInstructions(input, opts.bridge.selfName(), CODEX_AGENT), config: { ...confined.config, ...PROJECT_DOCS, ...runFeatures(confined.row.yourTools), ...mcpConfig(mounted.servers), ...roles }, approvalPolicy: approval, ...(confined.sandbox ? { sandbox: confined.sandbox } : {}) };
           let thread: ThreadStartResponse | undefined;
           if (resume) {
             thread = await rpc.request<ThreadStartResponse>('thread/resume', { threadId: resume, ...params }).catch(() => undefined);

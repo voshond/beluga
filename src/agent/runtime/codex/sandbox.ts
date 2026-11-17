@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { belugaHomeDir } from '../../../core/shares.js';
 import type { AgentRunInput } from '../../types.js';
-import type { AskForApproval } from './protocol.js';
+import type { AskForApproval, SandboxMode } from './protocol.js';
 
 /**
  * How a Codex run is confined (BLG-454). Codex runs its own commands and edits without asking
@@ -63,8 +63,9 @@ export function trustRow(origin: RunOrigin, scope: 'folder' | 'full'): TrustRow 
  * commands" on, for every command that isn't plainly read-only ('untrusted'); the same for an
  * external agent's run its level makes ask. Friends' rows never change.
  */
-export function approvalFor(row: TrustRow, opts: { readonly planning?: boolean; readonly askBeforeCommands?: boolean }): AskForApproval {
+export function approvalFor(row: TrustRow, opts: { readonly planning?: boolean; readonly askBeforeCommands?: boolean; readonly neverAsks?: boolean }): AskForApproval {
   if (opts.planning) return 'never';
+  if (opts.neverAsks && row.origin === 'own') return 'never';
   return row.approval === 'on-request' && opts.askBeforeCommands ? 'untrusted' : row.approval;
 }
 
@@ -110,6 +111,7 @@ export interface CodexConfinement {
   /** Thread config: the profile, made the default, and what's switched off. */
   readonly config: Record<string, unknown>;
   readonly approval: AskForApproval;
+  readonly sandbox?: SandboxMode;
 }
 
 export interface ConfinementPlace {
@@ -124,6 +126,7 @@ export interface ConfinementPlace {
   readonly belugaHome?: string;
   /** A linked worktree's git folders (workspaces/git.ts worktreeGitDirs): your own run commits, branches and merges there. */
   readonly gitDirs?: { readonly shared: string; readonly own: string };
+  readonly fullAccess?: boolean;
 }
 
 /**
@@ -196,6 +199,7 @@ export function codexConfinement(origin: RunOrigin, scope: 'folder' | 'full', pl
   const home = place.home ?? os.homedir();
   const roots = [...new Set([place.cwd, ...place.folders].map((p) => path.resolve(p)))];
   const writable = new Set(place.writable.map((p) => path.resolve(p)));
+  if (place.fullAccess && row.origin === 'own' && writable.has(path.resolve(place.cwd))) return { row, config: {}, approval: row.approval, sandbox: 'danger-full-access' };
   const filesystem: Record<string, string> = {};
   // Your home out of reach first (a friend reaching only shared folders); git still reads its config.
   if (row.home === 'denied') {
