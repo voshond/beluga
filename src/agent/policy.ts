@@ -1,6 +1,6 @@
 import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { isOwnImageFile } from '../core/attachments.js';
+import { isOwnImageFile, isOwnPastedText } from '../core/attachments.js';
 import { isDotenvPath, isReceivedTaskFile, isSecretPath, realOf } from '../core/shares.js';
 import { expandHome } from '../core/home-path.js';
 import { isReadOnlyCommand } from './read-only.js';
@@ -601,6 +601,8 @@ function decideToolPlain(toolName: string, input: Record<string, unknown>, ctx: 
     const target = resolveTarget(ctx.cwd, input[readField]);
     // An image you attached, read by your own run: one file right in the attachments folder, where it really is.
     if (toolName === 'Read' && ctx.yourRun && isOwnImageFile(target)) return 'allow';
+    // A long text you pasted (BLG-988), kept as a file for your own run to read.
+    if (toolName === 'Read' && ctx.yourRun && isOwnPastedText(target)) return 'allow';
     // A secret a friend approved sending you (BLG-209) is your user's file now: your own Claude may read it, once you say so.
     if (ctx.dotenv && isReceivedTaskFile(target) && !namesOf(toolName, input).some(isSecretPath)) return 'ask';
     const real = realOf(target);

@@ -380,6 +380,20 @@ export async function savePastedText(text: string, dir = pastesDir()): Promise<P
   return { path: file, name: path.basename(file), kind: 'file', size: Buffer.byteLength(text, 'utf8'), image: false };
 }
 
+/** A paste kept by savePastedText, right in the pastes folder where it really is (links followed). */
+export function isOwnPastedText(target: string, dir = pastesDir()): boolean {
+  let real: string;
+  let realDir: string;
+  try {
+    real = realpathSync.native(target);
+    realDir = realpathSync.native(dir);
+  } catch {
+    return false;
+  }
+  const rel = path.relative(realDir, real);
+  return rel === path.basename(real) && /^pasted-[\w-]+\.txt$/.test(rel) && isFile(real);
+}
+
 /** Put a copy where friends can fetch it; returns the file name to link to. */
 export function publishForRoom(a: Attachment, dir = roomAttachmentsDir()): string {
   const name = path.basename(a.path);

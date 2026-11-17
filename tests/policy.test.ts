@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { confineSearch, decideTool, isYourRun, limitSearchScanForTest, scanSearch, writesCode } from '../src/agent/policy.js';
-import { attachmentsDir } from '../src/core/attachments.js';
+import { attachmentsDir, pastesDir } from '../src/core/attachments.js';
 
 const ctx = { cwd: '/work/proj', roots: ['/work/proj', '/work/docs'], autoEdit: false };
 const rw = { ...ctx, autoEdit: true };
@@ -356,6 +356,19 @@ describe('an image you attached (an answer to a question links it)', () => {
     expect(decideTool('Read', { file_path: `${dir}/received/../../identity.png` }, own)).toBe('deny');
     expect(decideTool('Read', { file_path: `${dir}/../attachments-x.png` }, own)).toBe('deny');
     expect(decideTool('NotebookRead', { notebook_path: path.join(dir, 'shot.png') }, own)).toBe('deny');
+  });
+
+  it('a long text you pasted (BLG-988): your own run reads it, nobody else, nothing else there', () => {
+    const pastes = pastesDir();
+    mkdirSync(pastes, { recursive: true });
+    writeFileSync(path.join(pastes, 'pasted-20261117-134412-3cg7.txt'), 'x');
+    writeFileSync(path.join(pastes, 'key.pem'), 'x');
+    expect(decideTool('Read', { file_path: path.join(pastes, 'pasted-20261117-134412-3cg7.txt') }, own)).toBe('allow');
+    expect(decideTool('Read', { file_path: path.join(pastes, 'pasted-20261117-134412-3cg7.txt') }, { ...own, scope: 'folder' })).toBe('allow');
+    expect(decideTool('Read', { file_path: path.join(pastes, 'pasted-20261117-134412-3cg7.txt') }, friend)).toBe('deny');
+    expect(decideTool('Read', { file_path: path.join(pastes, 'key.pem') }, own)).toBe('deny');
+    expect(decideTool('Read', { file_path: path.join(pastes, 'pasted-missing.txt') }, own)).toBe('deny');
+    expect(decideTool('Read', { file_path: path.join(dir, 'notes.txt') }, own)).toBe('deny');
   });
 
   // Symlinks need privileges on Windows.
