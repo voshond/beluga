@@ -265,7 +265,7 @@ export function App() {
       <CallLayer />
       <MessageBanner />
       <UndoToast />
-      {welcome.open ? <Onboarding start={welcome.start} onClose={welcome.close} onArrive={welcome.arrive} /> : null}
+      {welcome.open ? <Onboarding start={welcome.start} fade={welcome.fade} onClose={welcome.close} onArrive={welcome.arrive} /> : null}
     </Tooltip.Provider>
   );
 }

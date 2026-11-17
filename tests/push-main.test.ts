@@ -37,7 +37,7 @@ beforeEach(() => {
   mkdirSync(repo);
   execFileSync('git', ['init', '--bare', '-q', '-b', 'main', origin]);
   git(repo, 'init', '-q', '-b', 'main');
-  // Push Main rebases with the repo's own identity: tests/setup.ts empties the global one, and a host with no domain can't make one up.
+  // The repo's own identity: pushDefault's rebase commits, and a CI runner has none of its own.
   git(repo, 'config', 'user.email', 't@t');
   git(repo, 'config', 'user.name', 'T');
   commit(repo, 'a.txt', 'one\n');

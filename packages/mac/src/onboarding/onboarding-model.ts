@@ -1,5 +1,5 @@
 /**
- * The first time Beluga opens: a welcome, your agents found and one picked as yours (BLG-507), a short tour (Sentinel's two steps among it, BLG-362), a look (and another terminal's, BLG-212), a few settings, the macOS permissions
+ * The first time Beluga opens: a welcome, your agents found and one picked as yours (BLG-507), a short tour (BLG-362, BLG-989), a look (and another terminal's, BLG-212), a few settings, the macOS permissions
  * (each optional), notifications, the phone app, then the app. It shows
  * once per Mac. Updating the app never brings it back (the mark is kept with this window's own
  * storage, which an update leaves alone), and someone who used Beluga before it existed never
@@ -22,7 +22,7 @@ export const FORCE_PARAM = 'welcome';
 /** The document event File › Onboard Again, Help › Welcome to Beluga and the palette send to show it again. */
 export const SHOW_WELCOME = 'beluga:welcome';
 
-const ALL_STEPS = ['hello', 'yourAgents', 'parallel', 'agents', 'tables', 'machines', 'friends', 'sentinel', 'uses', 'archive', 'look', 'terminal', 'fire', 'setup', 'screen', 'accessibility', 'disk', 'automation', 'popups', 'phone', 'ready'] as const;
+const ALL_STEPS = ['hello', 'yourAgents', 'parallel', 'scratch', 'tables', 'machines', 'friends', 'together', 'sentinel', 'archive', 'look', 'terminal', 'fire', 'setup', 'screen', 'accessibility', 'disk', 'automation', 'popups', 'phone', 'ready'] as const;
 export type Step = (typeof ALL_STEPS)[number];
 
 /** The steps on this computer: the macOS permissions only on a Mac (Linux and Windows don't ask). */
@@ -32,7 +32,10 @@ export const STEPS: readonly Step[] = keyPlatform() === 'mac' ? ALL_STEPS : ALL_
 export const LAST_SETTING: Step = 'phone';
 
 /** The tour: what Beluga does, one idea a step (Skip Tour goes past all of them). */
-export const TOUR: readonly Step[] = ['parallel', 'agents', 'tables', 'machines', 'friends', 'sentinel', 'uses', 'archive'];
+export const TOUR: readonly Step[] = ['parallel', 'scratch', 'tables', 'machines', 'friends', 'together', 'sentinel', 'archive'];
+
+/** Every other tour step puts its scene on the left, so the tour reads as a zigzag. */
+export const sceneFirst = (step: Step): boolean => TOUR.indexOf(step) % 2 === 1;
 
 /**
  * The macOS permissions, one a step, every one optional (Skip Permissions goes past all of them).

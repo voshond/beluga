@@ -138,7 +138,7 @@ export default function Plan() {
             label: AUTONOMY[a].label,
             sub: AUTONOMY[a].sub,
             tone: a === p?.autonomy && !p?.fullAuto ? ('lavender' as const) : ('plain' as const),
-            // From Full Autopilot, Autopilot keeps it on Autopilot and lets questions wait for you again.
+            // From Full Autopilot, Autopilot keeps it on Autopilot and sends questions to you again (skipped after the Autopilot wait in Settings).
             onPress: () => void store.call(p?.fullAuto && a === 'autopilot' ? calls.setFullAuto(id ?? '', false) : calls.setAutonomy(id ?? '', a, AUTONOMY[a].label)).catch((e: Error) => store.toast({ text: e.message, tone: 'error' })),
           })),
           { Icon: FULL.Icon, label: FULL.label, sub: FULL.sub, tone: p?.fullAuto ? ('lavender' as const) : ('plain' as const), hidden: !fullOk, onPress: () => void store.call(calls.setFullAuto(id ?? '', true)).catch((e: Error) => store.toast({ text: e.message, tone: 'error' })) },

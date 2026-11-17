@@ -40,6 +40,7 @@ import type { ToolboxTools } from '../agent/types.js';
 import { guestPlace, sharedWorktreeBrief } from './shared-guest.js';
 import { belugaHome } from './home.js';
 import { peerName } from './store.js';
+import { autopilotWaitMs } from './autopilot/wait.js';
 
 /** Everything a session is made of, wired to each other and to the session. */
 export interface SessionParts {
@@ -184,6 +185,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       selfId: () => session.selfId,
       send: (body, o) => session.send(body, o),
       timeoutMs: () => session.approvalTimeoutMs,
+      ownWaitMs: (channel) => autopilotWaitMs(opts.store.getState(), channel),
       toast: (text, level) => session.toast(text, level),
       handOff: (channel, plan) => session.handOffPlan(channel, plan),
     });

@@ -15,14 +15,14 @@ test('the welcome finds your agents, picks the first ready one, and lets you pic
   await page.goto('/');
   const welcome = page.getByRole('dialog', { name: 'Welcome to Beluga' });
   await expect(welcome).toBeVisible();
-  await expect(welcome.getByText('Claude Code, Codex, OpenCode, GitHub Copilot or a model of your own')).toBeVisible();
+  await expect(welcome.getByText('Claude Code, Codex, OpenCode, GitHub Copilot or a local model')).toBeVisible();
   await expect(welcome.getByText('starting with Claude')).toHaveCount(0);
   if (shots) {
     // Once the welcome has drawn itself in (about three seconds).
     await page.waitForTimeout(3500);
     await page.screenshot({ path: `${shots}/01-hello.png` });
   }
-  await welcome.getByRole('button', { name: /Get Started/ }).click();
+  await welcome.getByRole('button', { name: /Set Up Beluga/ }).click();
 
   await expect(welcome.getByRole('heading', { name: 'Which agent is yours?' })).toBeVisible();
   const yours = welcome.getByRole('radiogroup', { name: 'Your agent' });
@@ -67,5 +67,5 @@ test('the welcome finds your agents, picks the first ready one, and lets you pic
 
   // Back on the welcome: Continue goes on to the tour.
   await welcome.getByRole('button', { name: 'Continue', exact: true }).click();
-  await expect(welcome.getByRole('heading', { name: 'Work on everything at once.' })).toBeVisible();
+  await expect(welcome.getByRole('heading', { name: 'Run several tasks at the same time.' })).toBeVisible();
 });

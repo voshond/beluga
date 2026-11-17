@@ -298,7 +298,7 @@ export class Plans {
   setFullAuto(id: string, on: boolean, by: Actor): Plan {
     const plan = this.need(id);
     if (Boolean(plan.fullAuto) === on) return plan;
-    if (!on) return this.change(plan, { fullAuto: undefined }, [event(by, 'autonomy', `switched the plan to ${AUTONOMY_INFO.autopilot.label}: questions wait for the user again`, this.now())]);
+    if (!on) return this.change(plan, { fullAuto: undefined }, [event(by, 'autonomy', `switched the plan to ${AUTONOMY_INFO.autopilot.label}: questions go to the user again, and are skipped after the wait set in Settings`, this.now())]);
     const clear = (b: PlanBody | undefined): PlanBody | undefined => (b ? { ...b, milestones: b.milestones.map(({ autonomy: _a, ...m }) => m) } : b);
     return this.change(plan, { fullAuto: true, autonomy: 'autopilot', body: clear(plan.body), draft: clear(plan.draft) }, [event(by, 'autonomy', `switched the plan to ${FULL_AUTOPILOT_INFO.label}: a stand-in agent answers what would wait on the user`, this.now())]);
   }

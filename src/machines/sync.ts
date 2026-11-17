@@ -26,6 +26,7 @@ export const SYNCED_SETTINGS = [
   // How you work, and which experimental features you turned on (a computer then runs them too).
   'pushToPr',
   'prOnReview',
+  'autopilotWait',
   'experiments',
   'agentThreads',
   'runOn',
@@ -106,6 +107,7 @@ export const SETTING_LABELS: Readonly<Record<SyncedSetting, string>> = {
   agentThreads: 'Agent threads',
   runOn: 'Run New Work On',
   selfApproval: 'Ask before risky actions',
+  autopilotWait: 'How long Autopilot waits for you',
   notify: 'Notifications',
   model: 'Model',
   effort: 'Effort',

@@ -226,7 +226,7 @@ export function PlanModeSheet({ planId, close }: { planId: string; close: () => 
       onSubmit={async () => {
         close();
         if (fullNow) await act(() => api.setFullAuto(plan.id, true), `Runs on ${FULL_AUTOPILOT_INFO.label} now`);
-        else if (plan.fullAuto && mode === 'autopilot') await act(() => api.setFullAuto(plan.id, false), 'Runs on Autopilot now: questions wait for you again');
+        else if (plan.fullAuto && mode === 'autopilot') await act(() => api.setFullAuto(plan.id, false), 'Runs on Autopilot now: questions come to you again, for as long as Settings › Agent › Autopilot says');
         else await act(() => api.setAutonomy(plan.id, mode), `Runs on ${AUTONOMY_INFO[mode].label} now`);
       }}
     >

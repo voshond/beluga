@@ -13,20 +13,36 @@ import type { Approval, DomainState, LogItem } from '../store.js';
 
 const WS = 'ws:';
 
-/** The live plan on Full Autopilot that a conversation works for: its own, a milestone's worktree or checker, its draft's review, a task's worktree. */
-export function fullAutoPlanOf(state: Pick<DomainState, 'plans' | 'board'>, channel: string): Plan | undefined {
-  const plans = state.plans.plans.filter((p) => p.fullAuto && p.status !== 'done' && !p.movedTo);
+/** A live plan a conversation works for, and the milestone when it works on one (its worktree, its checker, a task of it). */
+export interface PlanWork {
+  readonly plan: Plan;
+  readonly milestone?: string;
+}
+
+/**
+ * The live plan (of those `which` keeps) a conversation works for: its own, a milestone's worktree
+ * or checker, its draft's review, a task's worktree.
+ */
+export function planWorkOf(state: Pick<DomainState, 'plans' | 'board'>, channel: string, which: (plan: Plan) => boolean = () => true): PlanWork | undefined {
+  const plans = state.plans.plans.filter((p) => which(p) && p.status !== 'done' && !p.movedTo);
   if (!plans.length) return undefined;
   const ws = channel.startsWith(WS) ? channel.slice(WS.length) : undefined;
   for (const plan of plans) {
-    if (plan.home === channel) return plan;
+    if (plan.home === channel) return { plan };
     if (!ws) continue;
-    if (plan.review?.chat === ws) return plan;
-    if (Object.values(plan.runs).some((run) => run?.agent?.worktree === ws || run?.checker === ws)) return plan;
+    if (plan.review?.chat === ws) return { plan };
+    const run = Object.entries(plan.runs).find(([, r]) => r?.agent?.worktree === ws || r?.checker === ws);
+    if (run) return { plan, milestone: run[0] };
   }
   if (!ws) return undefined;
   const issue = state.board.issues.find((i) => i.plan && i.worktrees.includes(ws));
-  return issue ? plans.find((p) => p.id === issue.plan!.id) : undefined;
+  const plan = issue ? plans.find((p) => p.id === issue.plan!.id) : undefined;
+  return plan ? { plan, milestone: issue!.plan!.milestone } : undefined;
+}
+
+/** The live plan on Full Autopilot that a conversation works for. */
+export function fullAutoPlanOf(state: Pick<DomainState, 'plans' | 'board'>, channel: string): Plan | undefined {
+  return planWorkOf(state, channel, (p) => Boolean(p.fullAuto))?.plan;
 }
 
 /** Whether a conversation runs on Full Autopilot: turned on for that chat, or it works for a plan that is (with that plan). */

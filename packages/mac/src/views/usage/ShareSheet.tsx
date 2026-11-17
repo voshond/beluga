@@ -3,7 +3,7 @@ import { joinPath } from '@beluga/shared/os-path.js';
 import { FormSheet } from '../../components/FormSheet.js';
 import { Button } from '../../components/ui.js';
 import { inApp } from '../../lib/boot.js';
-import { copyPng } from '../../lib/copy.js';
+import { copyPng, pngOf } from '../../lib/copy.js';
 import { toast, useApi, useBeluga } from '../../lib/beluga.js';
 import { type ShareInput, drawShare } from './share-image.js';
 import s from './your-card.module.css';
@@ -49,7 +49,7 @@ export function ShareSheet({ input, onClose }: { input: ShareInput; onClose: () 
   const copy = (): void => {
     if (!png) return;
     // The picture, to paste into a chat or a post.
-    copyPng(fetch(png).then((r) => r.blob()))
+    copyPng(pngOf(png))
       .then(() => setCopied(true))
       .catch(() => toast(client, 'Couldn’t copy the picture: save it instead', 'warn'));
   };
