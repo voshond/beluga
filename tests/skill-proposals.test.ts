@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdtempSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, lstatSync, mkdtempSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -8,6 +8,7 @@ import type { AgentRunInput, SkillTools } from '../src/agent/types.js';
 import { PHONE } from '../src/companion/coverage.js';
 import { waitingNeeds } from '../src/companion/needs-you.js';
 import { type AgentDirs, readSharedSkill, saveSharedSkill } from '../src/core/agent-setup.js';
+import { launchSkillProposals, loadSkillProposals } from '../src/core/skill-proposal-file.js';
 import { MAX_PENDING_SKILLS, keepSkillProposal, newSkillText, proposeNewSkill, proposeSkillChange, skillSecret } from '../src/core/skill-proposals.js';
 import { type DomainState, type SkillProposal, Store, initialState } from '../src/core/store.js';
 import { AGENT_SETUP_HANDLERS } from '../src/ipc/agent-setup-handlers.js';
@@ -186,5 +187,41 @@ describe('what a run is told', () => {
 
   it('names its three tools', () => {
     expect(SKILL_TOOL_NAMES).toEqual(['mcp__beluga_skills__skill_read', 'mcp__beluga_skills__skill_propose', 'mcp__beluga_skills__skill_propose_change']);
+  });
+});
+
+describe('proposals across a restart', () => {
+  const fileFor = (): string => path.join(mkdtempSync(path.join(os.tmpdir(), 'beluga-skill-file-')), 'skill-proposals.json');
+
+  it('a proposal waiting for an answer is still there, with its card, after the daemon restarts', () => {
+    const file = fileFor();
+    const before = new Store(initialState('room'));
+    const stop = launchSkillProposals({ store: before, file });
+    const p = proposed(proposeNewSkill(deployDraft, 'Claude', [], dirsFor()));
+    before.dispatch({ type: 'skill_proposal_add', proposal: p });
+    stop();
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+
+    const after = new Store(initialState('room'));
+    const stopAfter = launchSkillProposals({ store: after, file });
+    expect(after.getState().skillProposals).toEqual([p]);
+    expect(waitingNeeds(after.getState()).some((n) => n.id === `skill-propose:${p.id}`)).toBe(true);
+
+    after.dispatch({ type: 'skill_proposal_remove', id: p.id });
+    stopAfter();
+    expect(loadSkillProposals(file)).toEqual([]);
+  });
+
+  it('never writes a proposal a secret check refuses', () => {
+    const file = fileFor();
+    const store = new Store(initialState('room'));
+    const stop = launchSkillProposals({ store, file });
+    const fine = proposed(proposeNewSkill(deployDraft, 'Claude', [], dirsFor()));
+    const leaky: SkillProposal = { ...fine, id: 'skill-leak', name: 'leak', previous: 'GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123456789' };
+    store.dispatch({ type: 'skill_proposal_add', proposal: fine });
+    store.dispatch({ type: 'skill_proposal_add', proposal: leaky });
+    stop();
+    expect(readFileSync(file, 'utf8')).not.toContain('ghp_');
+    expect(loadSkillProposals(file).map((p) => p.id)).toEqual([fine.id]);
   });
 });

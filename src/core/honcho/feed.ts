@@ -5,11 +5,13 @@ import { type HonchoConfig, defaultHonchoConfig, honchoPath, loadHonchoConfig, s
 import { type Outgoing, pickOutgoing, sessionMetadata } from './filter.js';
 import { HONCHO_USER_PEER } from './mapping.js';
 import { HonchoQueue } from './queue.js';
+import { type QueueTarget, honchoQueuePath, loadHonchoQueue, removeHonchoQueue, saveHonchoQueue } from './queue-file.js';
 
 export type HonchoFeedDeps = {
   readonly store: Store;
   readonly sharedWith: (channel: string) => boolean;
   readonly file?: string | null;
+  readonly queueFile?: string | null;
   readonly fetch?: HonchoFetch;
   readonly now?: () => number;
   readonly queue?: { readonly baseDelayMs?: number; readonly maxAttempts?: number };
@@ -24,6 +26,7 @@ export type HonchoPatch = {
 };
 
 const SAVE_MS = 3000;
+const QUEUE_SAVE_MS = 1000;
 
 export class HonchoFeed {
   private config: HonchoConfig;
@@ -34,17 +37,21 @@ export class HonchoFeed {
   private readonly queue: HonchoQueue;
   private off?: () => void;
   private saveTimer?: ReturnType<typeof setTimeout>;
+  private queueTimer?: ReturnType<typeof setTimeout>;
+  private stopped = false;
 
   constructor(private readonly deps: HonchoFeedDeps) {
     this.config = deps.file === null ? defaultHonchoConfig() : loadHonchoConfig(this.file);
     this.queue = new HonchoQueue({
       deliver: (batch) => this.deliver(batch),
       onSent: (count) => {
+        this.saveQueueNow();
         if (this.config.enabled) this.change({ ...this.config, sent: this.config.sent + count, lastSentAt: this.now(), lastError: undefined });
       },
       onError: (message) => {
         if (this.config.enabled) this.change({ ...this.config, lastError: message.slice(0, 300) });
       },
+      onChange: () => this.queueChanged(),
       ...(deps.queue ?? {}),
     });
   }
@@ -53,9 +60,19 @@ export class HonchoFeed {
     return this.deps.file ?? honchoPath();
   }
 
+  private get queueFile(): string | null {
+    if (this.deps.queueFile !== undefined) return this.deps.queueFile;
+    return this.deps.file === null ? null : honchoQueuePath();
+  }
+
+  private get target(): QueueTarget {
+    return { url: this.config.url, workspace: this.config.workspace };
+  }
+
   private readonly now = (): number => this.deps.now?.() ?? Date.now();
 
   start = (): void => {
+    this.restoreQueue();
     this.off = this.deps.store.onAction((a) => {
       if (!this.config.enabled) return;
       const item = pickOutgoing(a, { state: this.deps.store.getState(), excluded: this.config.excluded, since: this.config.since ?? Number.POSITIVE_INFINITY, sharedWith: this.deps.sharedWith });
@@ -65,7 +82,9 @@ export class HonchoFeed {
 
   stop = (): void => {
     this.off?.();
+    this.stopped = true;
     this.queue.stop();
+    this.saveQueueNow();
     if (!this.saveTimer) return;
     clearTimeout(this.saveTimer);
     this.saveNow();
@@ -84,19 +103,23 @@ export class HonchoFeed {
       ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
       ...(turningOn ? { since: this.now(), lastError: undefined } : {}),
     };
-    if (patch.apiKey === null) delete next.apiKey;
+    const keyStaysHome = url !== this.config.url && patch.apiKey === undefined;
+    if (patch.apiKey === null || keyStaysHome) delete next.apiKey;
     else if (patch.apiKey !== undefined) next.apiKey = patch.apiKey;
     const moved = next.url !== this.config.url || next.workspace !== this.config.workspace || next.apiKey !== this.config.apiKey;
     if (moved || !next.enabled) this.reset();
     this.config = next;
     this.saveNow();
+    this.saveQueueNow();
     return this.status();
   };
 
   test = async (draft?: { readonly url?: string; readonly apiKey?: string }): Promise<HonchoTestResult> => {
+    const url = draft?.url ? trimUrl(draft.url) : this.config.url;
+    const apiKey = draft?.apiKey ?? (url === this.config.url ? this.config.apiKey : undefined);
     const client = new HonchoClient({
-      url: draft?.url ? trimUrl(draft.url) : this.config.url,
-      ...((draft?.apiKey ?? this.config.apiKey) ? { apiKey: draft?.apiKey ?? this.config.apiKey } : {}),
+      url,
+      ...(apiKey ? { apiKey } : {}),
       workspace: this.config.workspace,
       ...(this.deps.fetch ? { fetch: this.deps.fetch } : {}),
     });
@@ -158,6 +181,38 @@ export class HonchoFeed {
       conversation.session,
       batch.map((b) => ({ peerId: b.peer.id, content: b.content, createdAt: b.ts, metadata: b.metadata })),
     );
+  }
+
+  private restoreQueue(): void {
+    const file = this.queueFile;
+    if (file === null) return;
+    if (!this.config.enabled) return removeHonchoQueue(file);
+    this.queue.restore(loadHonchoQueue(file, this.target));
+    this.saveQueueNow();
+  }
+
+  private queueChanged(): void {
+    if (this.queueFile === null) return;
+    if (this.stopped) return this.saveQueueNow();
+    if (this.queueTimer) return;
+    this.queueTimer = setTimeout(() => {
+      this.queueTimer = undefined;
+      this.saveQueueNow();
+    }, QUEUE_SAVE_MS);
+    this.queueTimer.unref?.();
+  }
+
+  private saveQueueNow(): void {
+    const file = this.queueFile;
+    if (file === null) return;
+    if (this.queueTimer) clearTimeout(this.queueTimer);
+    this.queueTimer = undefined;
+    try {
+      if (this.config.enabled) saveHonchoQueue(file, this.target, this.queue.waiting);
+      else removeHonchoQueue(file);
+    } catch {
+      return;
+    }
   }
 
   private change(next: HonchoConfig): void {
