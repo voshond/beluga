@@ -2,6 +2,8 @@ import type { ChatChain, PlanAskInput, PlanTools } from '../../agent/types.js';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { AgentRef } from '../../protocol.js';
+import type { AgentPick } from '../../shared/settings-schema.js';
+import { builderFor } from '../build-with.js';
 import { agentName } from '../../shared/agent-label.js';
 import type { RuntimeChoice } from '../../shared/agent-runtimes.js';
 import type { Workspace } from '../../workspaces/types.js';
@@ -122,7 +124,7 @@ export interface PlanStart {
   readonly goal: string;
   readonly autonomy?: Autonomy;
   readonly testsAt?: TestsAt;
-  readonly agent?: AgentRef;
+  readonly agent?: AgentPick;
   readonly planner?: AgentRef;
   readonly checker?: AgentRef;
   readonly fullAuto?: boolean;
@@ -427,9 +429,9 @@ export class PlansWork {
     const ws = channel.startsWith(WS) ? this.deps.store.getState().projects.flatMap((p) => p.workspaces).find((w) => w.id === channel.slice(WS.length)) : undefined;
     const project = ws ? this.deps.store.getState().projects.find((p) => p.id === ws.projectId && p.root) : undefined;
     if (!ws || !project) throw new Error('Plans belong to a project: start one from a conversation in a project');
-    // Picked in the mode menu (BLG-982): another agent builds it; the one in this chat plans it, as it is.
-    const builder = this.deps.store.getState().buildWith[channel];
-    if (builder) this.deps.store.dispatch({ type: 'build_with', channel });
+    // Picked in the mode menu (BLG-982), else Settings' default: another agent builds it; the one in this chat plans it, as it is.
+    const builder = builderFor(this.deps.store.getState(), channel);
+    this.deps.store.dispatch({ type: 'build_with', channel });
     const planner = builder ? this.deps.board.myClaude(channel).agent : undefined;
     return this.plans.create({ projectId: project.id, home: channel, ...(autonomy ? { autonomy } : {}), ...(builder ? { agent: builder } : {}), ...(planner ? { planner } : {}) }, this.me());
   }
@@ -576,7 +578,7 @@ export class PlansWork {
    * (switching mid-run would lose their sessions). A task's own agent still beats it. The plan's own
    * conversation moves to it too. → in words.
    */
-  setWorkAgent(id: string, agent: AgentRef | null): string {
+  setWorkAgent(id: string, agent: AgentPick | null): string {
     const was = this.plans.need(id).agent;
     const plan = this.plans.setWorkAgent(id, agent ?? undefined, this.me());
     // The plan's own conversation follows it, so the one you plan with is the one you picked (even when the pick didn't change: it brings a drifted conversation back).
@@ -594,7 +596,7 @@ export class PlansWork {
    * own conversation to its agent (null: back to the builder's); the checker takes the checks and
    * draft reviews that start from now on. → in words.
    */
-  setRoleAgent(id: string, role: PlanRole, agent: AgentRef | null): string {
+  setRoleAgent(id: string, role: PlanRole, agent: AgentPick | null): string {
     if (role === 'builder') return this.setWorkAgent(id, agent);
     const before = this.plans.need(id);
     const was = roleAgent(before, role);

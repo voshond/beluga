@@ -26,6 +26,14 @@ export type TrustLevel = (typeof TRUST_LEVELS)[number];
 export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type Effort = (typeof EFFORTS)[number];
 
+/** An agent, its model and how hard it thinks: who builds what you plan (Build With ▸, Settings › Agent). */
+export const AgentPick = AgentRef.extend({ effort: z.enum(EFFORTS).optional() });
+export type AgentPick = z.infer<typeof AgentPick>;
+
+/** A chat's own Build With pick: an agent, or 'here' (the agent that plans it builds it, whatever Settings says). */
+export const BuildWithPick = z.union([AgentPick, z.literal('here')]);
+export type BuildWithPick = z.infer<typeof BuildWithPick>;
+
 /** What new worktrees' branches start with (`beluga/fix-login`); empty: just the name. */
 export const BRANCH_PREFIX_DEFAULT = 'beluga/';
 /** A prefix git accepts in front of a slug: letters, digits, `. _ - /`, no `..`, `//`, or part starting with `.` `-` `/`. */
@@ -140,6 +148,8 @@ export const Settings = z.object({
   defaultAgent: AgentRef.optional(),
   /** A project's own default agent (by project name), over `defaultAgent` for work in that project. */
   projectAgents: z.record(z.string().min(1).max(80), AgentRef).optional(),
+  /** Who builds what you plan once you approve it (Plan First, Plan with Tasks, new plans); unset: the agent that planned it. */
+  buildWith: AgentPick.optional().catch(undefined),
   /** What new worktrees' branches start with (`beluga/<name>`); empty: no prefix. */
   branchPrefix: z.string().regex(BRANCH_PREFIX_RE).catch(BRANCH_PREFIX_DEFAULT),
   /** Where new projects and clones go (Settings › Workspaces); unset: the first code folder found in your home (workspaces/new-project.ts). */

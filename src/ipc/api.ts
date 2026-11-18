@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AgentRef, ClaudeAnswer, GuestCan, WsRole } from '../protocol.js';
 import { EmojiSchema } from '../shared/reactions.js';
 import { SSH_HOST } from '../shared/terminal-keys.js';
-import { ARCHIVE_SETTLED_DAYS_MAX, BRANCH_PREFIX_RE, EFFORTS, KEEP_AWAKE, LOW_POWER, NotifySettings, REFLECTION_MODEL_MAX, RUN_ON, SETTLE_IDLE_DAYS_MAX, THEMES, ThreadLimitsSchema, TRUST_LEVELS } from '../shared/settings-schema.js';
+import { AgentPick, ARCHIVE_SETTLED_DAYS_MAX, BRANCH_PREFIX_RE, BuildWithPick, EFFORTS, KEEP_AWAKE, LOW_POWER, NotifySettings, REFLECTION_MODEL_MAX, RUN_ON, SETTLE_IDLE_DAYS_MAX, THEMES, ThreadLimitsSchema, TRUST_LEVELS } from '../shared/settings-schema.js';
 import { AUTO_COMPACT_MAX, AUTO_COMPACT_MIN } from '../shared/context-usage.js';
 import { PARALLEL_RUNS_MAX, PARALLEL_RUNS_MIN } from '../shared/run-slots.js';
 import { CHAT_LIMIT_MAX } from '../shared/chat-limit.js';
@@ -109,6 +109,7 @@ export const PrefsPatch = z
     // Who answers "@you" (null: back to Claude), and per-project ones by project name (BLG-444).
     defaultAgent: AgentRef.nullable().optional(),
     projectAgents: z.record(z.string().min(1).max(80), AgentRef),
+    buildWith: AgentPick.nullable().optional(),
     autoSetup: bool,
     branchPrefix: z.string().regex(BRANCH_PREFIX_RE, 'Use letters, digits and . _ - / only'),
     contextMeter: bool,
@@ -180,7 +181,7 @@ export const API = {
   // Full Autopilot in a conversation (BLG-981): a stand-in agent answers what your agent asks there (a plan's own: the plan).
   'session.setAutopilot': args(channel, bool),
   // Plan here, build with another agent (BLG-982): who builds what's planned in this conversation once approved (null: the same agent).
-  'session.setBuildWith': args(channel, AgentRef.nullish()),
+  'session.setBuildWith': args(channel, BuildWithPick.nullish()),
   'session.setClaudeSharing': args(Policy),
   'session.rename': args(z.string().max(64)),
   'session.zoom': args(z.enum(['in', 'out', 'reset'])),
@@ -325,12 +326,12 @@ export const API = {
   'workspaces.newWorktree': args(id, z.string().max(200), opt(z.object({ base: opt(z.string().min(1).max(250)), agent: opt(AgentRef) }))),
   'workspaces.newChat': args(id, z.string().max(200), opt(path)),
   // `terminal`: you see it as its agent's terminal, so that opens on the message (BLG-553). `agent`: start with a non-default agent (BLG-83).
-  'workspaces.startChat': args(id, str, opt(path.nullable()), opt(z.object({ terminal: opt(bool), plan: opt(bool), agent: opt(AgentRef) }))),
+  'workspaces.startChat': args(id, str, opt(path.nullable()), opt(z.object({ terminal: opt(bool), plan: opt(bool), agent: opt(AgentRef), builder: opt(BuildWithPick) }))),
   // → the new worktree's id. `plan`: its Claude plans first. `tasks`: Plan with Tasks, its conversation is a
   // draft plan's home, written from the first message. `quiet`: started from the phone, the Mac's window stays put.
   // `id`: the id it gets, chosen by the screen that shows it as being made already (BLG-942; taken only when free).
   // `land`: Straight to main, its work lands on its base in the main folder each time its agent's turn ends (no PR).
-  'workspaces.startWorktree': args(id, str, opt(z.object({ base: opt(z.string().min(1).max(250)), name: opt(z.string().max(200)), plan: opt(bool), tasks: opt(bool), quiet: opt(bool), agent: opt(AgentRef), terminal: opt(bool), id: opt(WorktreeId), vars: opt(EnvRows), land: opt(bool) }))),
+  'workspaces.startWorktree': args(id, str, opt(z.object({ base: opt(z.string().min(1).max(250)), name: opt(z.string().max(200)), plan: opt(bool), tasks: opt(bool), quiet: opt(bool), agent: opt(AgentRef), builder: opt(BuildWithPick), terminal: opt(bool), id: opt(WorktreeId), vars: opt(EnvRows), land: opt(bool) }))),
   // What a new worktree can start from: → { base: the default, branches: default first, then newest }.
   'workspaces.branches': args(id),
   'workspaces.fork': args(id, z.string().max(200)),

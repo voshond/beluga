@@ -232,13 +232,13 @@ export const HANDLERS = {
   'workspaces.refresh': (s) => ctl(s)?.refresh(),
   'workspaces.newWorktree': async (s, projectId, name, opts) => (await ctl(s)?.newWorktree(projectId, name, { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.agent ? { agent: opts.agent } : {}) }))?.id,
   'workspaces.newChat': async (s, projectId, title, dir) => (await ctl(s)?.newChat(projectId, title, dir))?.id,
-  'workspaces.startChat': (s, projectId, text, dir, opts) => (maybeStatsOf(s)?.prompt(`new-chat:${projectId}`, text), byYourHand(text, () => ctl(s)?.startChat(projectId, text, dir ?? undefined, { ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}) }))),
+  'workspaces.startChat': (s, projectId, text, dir, opts) => (maybeStatsOf(s)?.prompt(`new-chat:${projectId}`, text), byYourHand(text, () => ctl(s)?.startChat(projectId, text, dir ?? undefined, { ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.builder ? { builder: opts.builder } : {}) }))),
   // Keys pasted into its first message (BLG-965) are its own variables before it starts, so its first run has them.
   'workspaces.startWorktree': async (s, projectId, text, opts) => {
     const vars = opts?.vars?.filter((v) => v.key) ?? [];
     const preset = vars.length > 0 && Boolean(opts?.id) && s.env.presetWorktree(opts!.id!, vars);
     try {
-      const id = (maybeStatsOf(s)?.prompt(`new-worktree:${projectId}`, text, opts?.agent?.runtime), await byYourHand(text, () => ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.tasks ? { tasks: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.id ? { id: opts.id } : {}), ...(opts?.land ? { land: true } : {}), nameLater: true })))?.id;
+      const id = (maybeStatsOf(s)?.prompt(`new-worktree:${projectId}`, text, opts?.agent?.runtime), await byYourHand(text, () => ctl(s)?.startWorktree(projectId, text, (prompt) => s.nameTask(prompt), { ...(opts?.base ? { base: opts.base } : {}), ...(opts?.name ? { name: opts.name } : {}), ...(opts?.plan ? { plan: true } : {}), ...(opts?.tasks ? { tasks: true } : {}), ...(opts?.quiet ? { quiet: true } : {}), ...(opts?.agent ? { agent: opts.agent } : {}), ...(opts?.builder ? { builder: opts.builder } : {}), ...(opts?.terminal ? { terminal: true } : {}), ...(opts?.id ? { id: opts.id } : {}), ...(opts?.land ? { land: true } : {}), nameLater: true })))?.id;
       if (id && preset && opts?.id === id) s.env.listInExample(id, vars);
       else if (id && vars.length) s.env.keepPasted({ workspaceId: id }, vars);
       // Made under another id (or not at all): the preset goes.

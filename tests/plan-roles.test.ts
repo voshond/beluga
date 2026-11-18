@@ -11,6 +11,8 @@ import { PlansWork } from '../src/core/plans/work.js';
 import { Store, initialState } from '../src/core/store.js';
 import type { WorkspaceController } from '../src/core/workspace-controller.js';
 import type { AgentRef } from '../src/protocol.js';
+import type { AgentPick, BuildWithPick } from '../src/shared/settings-schema.js';
+import { builderFor } from '../src/core/build-with.js';
 import type { Project, Workspace } from '../src/workspaces/types.js';
 
 /** BLG-982: who plans, who builds and who checks a plan, each any agent; BLG-981: Full Autopilot on a plan. */
@@ -139,6 +141,51 @@ describe('who plans, builds and checks a plan (BLG-982)', () => {
       t.plans.flush?.();
       const again = new Plans({ store: new Store(initialState('room')), dir });
       expect(again.need(plan.id)).toMatchObject({ agent: CODEX, planner: CLAUDE, checker: LOCAL, fullAuto: true, autonomy: 'autopilot' });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('Build plans with a smaller model (BLG-982)', () => {
+  const SONNET: AgentPick = { runtime: 'claude', label: 'Claude', model: 'sonnet', effort: 'low' };
+
+  it('a chat’s own pick beats Settings’ default, and “here” means the agent that plans it', () => {
+    const state = (buildWith: Record<string, BuildWithPick>, fallback?: AgentPick) => ({ buildWith, prefs: fallback ? { buildWith: fallback } : {} });
+    expect(builderFor(state({}), 'ws:a')).toBeUndefined();
+    expect(builderFor(state({}, SONNET), 'ws:a')).toEqual(SONNET);
+    expect(builderFor(state({ 'ws:a': CODEX }, SONNET), 'ws:a')).toEqual(CODEX);
+    expect(builderFor(state({ 'ws:a': 'here' }, SONNET), 'ws:a')).toBeUndefined();
+  });
+
+  it('Plan with Tasks builds with Settings’ default, effort and all, while the chat’s agent plans it', async () => {
+    const t = setup();
+    t.store.dispatch({ type: 'prefs', prefs: { buildWith: SONNET } });
+    const chat = await (t.work as unknown as { deps: { controller: WorkspaceController } }).deps.controller.newChat('api', 'Ideas');
+    t.patchWs(chat!.id, { agent: CLAUDE } as Partial<Workspace>);
+    expect(t.work.here(`ws:${chat!.id}`)).toMatchObject({ agent: SONNET, planner: CLAUDE });
+  });
+
+  it('a chat that picked the agent planning here builds with it, over Settings’ default', async () => {
+    const t = setup();
+    t.store.dispatch({ type: 'prefs', prefs: { buildWith: SONNET } });
+    const chat = await (t.work as unknown as { deps: { controller: WorkspaceController } }).deps.controller.newChat('api', 'Ideas');
+    t.store.dispatch({ type: 'build_with', channel: `ws:${chat!.id}`, agent: 'here' });
+    const plan = t.work.here(`ws:${chat!.id}`);
+    expect(plan.agent).toBeUndefined();
+    expect(plan.planner).toBeUndefined();
+  });
+
+  it('keeps the builder’s effort when saved, read back and changed', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'plan-build-with-'));
+    try {
+      const t = setup(dir);
+      const plan = t.plans.create({ projectId: 'api', home: 'ws:h', agent: SONNET, planner: CLAUDE }, { kind: 'beluga' });
+      t.plans.flush?.();
+      expect(new Plans({ store: new Store(initialState('room')), dir }).need(plan.id).agent).toEqual(SONNET);
+      const changed = t.plans.setWorkAgent(plan.id, { ...SONNET, effort: 'high' }, { kind: 'beluga' });
+      expect(changed.agent).toEqual({ ...SONNET, effort: 'high' });
+      expect(changed.activity.at(-1)).toMatchObject({ text: expect.stringContaining('high effort') });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

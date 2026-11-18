@@ -12,6 +12,7 @@ import { sessionBefore } from '../agent/runtime/claude/session-rewind.js';
 import { promptRef, restoreSnapshot, snapshot, snapshotAt } from '../workspaces/snapshots.js';
 import type { AgentPlace, OpenPr } from '../agent/types.js';
 import type { AgentRef } from '../protocol.js';
+import type { AgentPick, BuildWithPick } from '../shared/settings-schema.js';
 import { placeAgent } from '../shared/agent-picker.js';
 import { agentName } from '../shared/agent-label.js';
 import { carriedPrompt, transcriptOf } from './agent-switch.js';
@@ -920,7 +921,7 @@ export class WorkspaceController {
    */
   /** `agent`: the agent it runs (unset: your default). */
   /** `id`: the id it gets (from newWorktreeId), else a fresh one. */
-  async newWorktree(projectId: string, name: string, opts: { base?: string; quiet?: boolean; agent?: AgentRef; id?: string; thread?: ThreadRecord; ticket?: string; land?: boolean } = {}): Promise<Workspace | undefined> {
+  async newWorktree(projectId: string, name: string, opts: { base?: string; quiet?: boolean; agent?: AgentPick; id?: string; thread?: ThreadRecord; ticket?: string; land?: boolean } = {}): Promise<Workspace | undefined> {
     const project = this.deps.manager.list.find((p) => p.root !== '' && (p.id === projectId || p.root === projectId));
     const id = opts.id ?? this.deps.manager.newWorktreeId();
     if (project) {
@@ -1066,12 +1067,13 @@ export class WorkspaceController {
   }
 
   /** Turn a draft into a real chat with your first message, then send it to Claude. */
-  async startChat(projectId: string, firstMessage: string, inDir?: string, opts: { terminal?: boolean; plan?: boolean; agent?: AgentRef } = {}): Promise<void> {
+  async startChat(projectId: string, firstMessage: string, inDir?: string, opts: { terminal?: boolean; plan?: boolean; agent?: AgentRef; builder?: BuildWithPick } = {}): Promise<void> {
     const title = firstMessage.replace(/\s+/g, ' ').trim().slice(0, 40);
     const ws = await this.newChat(projectId, title, inDir, { ...(opts.agent ? { agent: opts.agent } : {}) });
     if (!ws) return;
     const channel = `${WS_PREFIX}${ws.id}`;
     if (opts.plan) this.deps.store.dispatch({ type: 'plan_mode', channel, on: true });
+    if (opts.plan && opts.builder) this.deps.store.dispatch({ type: 'build_with', channel, agent: opts.builder });
     this.deps.askClaude(firstMessage, channel, opts.terminal && !opts.plan ? { terminal: true } : undefined);
   }
 
@@ -1093,8 +1095,9 @@ export class WorkspaceController {
    * by the name the model gave it; with `nameLater`, as soon as it's made (its id stays when the
    * name comes, so a caller that only wants the id needn't wait for the model). `land`: Straight to
    * main, its work lands on its base in the main folder each time its agent's turn ends.
+   * `builder`: who builds what it plans (Build With ▸ in the draft; 'here': the agent that plans it).
    */
-  async startWorktree(projectId: string, firstMessage: string, nameTask: (prompt: string) => Promise<string>, opts: { base?: string; name?: string; plan?: boolean; tasks?: boolean; quiet?: boolean; nameLater?: boolean; agent?: AgentRef; terminal?: boolean; id?: string; land?: boolean } = {}): Promise<Workspace | undefined> {
+  async startWorktree(projectId: string, firstMessage: string, nameTask: (prompt: string) => Promise<string>, opts: { base?: string; name?: string; plan?: boolean; tasks?: boolean; quiet?: boolean; nameLater?: boolean; agent?: AgentRef; builder?: BuildWithPick; terminal?: boolean; id?: string; land?: boolean } = {}): Promise<Workspace | undefined> {
     const text = firstMessage.trim();
     const named = opts.name?.trim();
     const proper = named || !text ? undefined : nameTask(firstMessage).catch(() => undefined);
@@ -1105,6 +1108,8 @@ export class WorkspaceController {
     const ticket = ticketKey(text);
     const ws = await this.newWorktree(projectId, named || (text ? slugify(text) : 'worktree'), { id, ...(opts.base ? { base: opts.base } : {}), ...(opts.quiet ? { quiet: true } : {}), ...(opts.agent ? { agent: opts.agent } : {}), ...(ticket ? { ticket } : {}), ...(opts.land ? { land: true } : {}) });
     if (!ws && shown) this.deps.store.dispatch({ type: 'clear', channel });
+    // Build With ▸ picked in the draft (BLG-982): set before the plan is made, so Plan with Tasks gets it too.
+    if (ws && opts.builder && (opts.plan || opts.tasks)) this.deps.store.dispatch({ type: 'build_with', channel, agent: opts.builder });
     const tasks = Boolean(ws && opts.tasks && this.planHereOrSay(channel));
     // A plan's own conversation has no plan mode; one whose plan couldn't be made plans first.
     if (ws && !tasks && (opts.plan || opts.tasks)) this.deps.store.dispatch({ type: 'plan_mode', channel, on: true });
