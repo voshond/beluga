@@ -342,6 +342,7 @@ export const MACHINE: Record<Method, MachineSide> = {
   'honcho.sends': 'drive',
   'honcho.configure': 'drive',
   'honcho.test': 'drive',
+  'honcho.picture': 'drive',
   'stats.get': 'drive',
   'stats.leaderboard': 'drive',
   'stats.note': 'drive',

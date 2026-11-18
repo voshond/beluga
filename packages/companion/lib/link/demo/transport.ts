@@ -588,6 +588,9 @@ export class DemoTransport implements Transport {
           user: { scope: { kind: 'user' }, label: 'About you', entries: [{ id: 'a1b2c3', text: 'Prefers short answers and plain words.', at: Date.now() - 86_400_000, by: 'agent' }], used: 38, cap: 1375 },
           projects: [{ scope: { kind: 'project', root: '/demo/landing' }, label: 'landing', entries: [{ id: 'd4e5f6', text: 'Deploys go through the NAS; never push to main directly.', at: Date.now() - 3_600_000, by: 'you' }], used: 56, cap: 2200 }],
         });
+      // 1.64 (BLG-101): Honcho's picture of you, read-only on the phone.
+      case 'honcho.picture':
+        return ok({ enabled: true, text: 'Works mostly in TypeScript and React. Prefers short commit messages and plain answers.', at: Date.now() - 120_000 });
       case 'host.stopRun': {
         const c = w.convs.get(`conv:${str(0)}`);
         const last = c?.turns.at(-1);

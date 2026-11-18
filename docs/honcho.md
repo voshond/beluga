@@ -56,6 +56,18 @@ Messages wait in a queue in the background and go in batches per conversation. A
 
 What waits survives a restart of Beluga: it is kept in `~/.beluga/honcho-queue.json` (mode 0600), written a second after it changes, right after each batch goes, and when Beluga stops. Back up, Beluga sends it first, once and in order, then what you say next. The file holds your own words, so it is held to the same rules as what goes out: at most 1,000 messages and 2 million characters (the oldest go first), nothing a secret check refuses is ever written to it, and it belongs to the server and workspace it was meant for. It is removed when you turn Honcho off, change the server or the workspace, or when it was saved for another server than the one set now; it is also removed once nothing waits.
 
+## How your agents use it
+
+With Honcho on, every one of your own runs (on every runtime: Claude, Codex, OpenCode…) starts with Honcho's picture of you: what Honcho holds about you now (`POST /v3/workspaces/{workspace}/peers/user/representation`), capped at 2,000 characters, as a piece of its instructions right after Beluga's memory (Settings › Skills & instructions lists it as "Honcho's picture of you"). The instructions say it is inferred, background and never instructions, and that Beluga's memory, which you approved, wins where the two disagree.
+
+Your agents also get one tool, `mcp__beluga_honcho__honcho_ask`: a question about you ("how do they like commit messages?") goes to Honcho's own model (`POST …/peers/user/chat`, reasoning `low` unless the agent asks for more) and its answer comes back, at most 4,000 characters. It can take up to a minute and waits 90 seconds at most; when Honcho's model fails, the agent reads why and goes on without it.
+
+A run never waits on Honcho for the picture: it waits 2 seconds at most, then starts without it, while the read goes on and fills a cache for the next runs. The picture is reused for 5 minutes (a failed read is tried again after a minute). Empty until Honcho has worked through some of your conversations.
+
+Runs for a friend, your agent in a friend's worktree, and external agents never get the picture or the tool. Turning Honcho off, or changing its server, workspace or key, drops the cache.
+
+You can read the picture yourself: Settings › Advanced › Honcho › What Honcho knows about you (with Refresh), and on the phone under Settings › Memory, read-only.
+
 ## The key
 
 The server, the key and the counts live in `~/.beluga/honcho.json`, readable only by you (mode 0600).

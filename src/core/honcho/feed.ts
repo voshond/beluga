@@ -1,4 +1,4 @@
-import type { HonchoStatus, HonchoTestResult } from '../../shared/honcho.js';
+import type { HonchoPicture, HonchoReasoning, HonchoStatus, HonchoTestResult } from '../../shared/honcho.js';
 import type { Store } from '../store.js';
 import { HonchoClient, HonchoError, type HonchoFetch, type HonchoSessionPeer } from './client.js';
 import { type HonchoConfig, defaultHonchoConfig, honchoPath, loadHonchoConfig, saveHonchoConfig, statusOf, trimUrl } from './config.js';
@@ -26,6 +26,15 @@ export type HonchoPatch = {
 };
 
 const SAVE_MS = 3000;
+/** BLG-101: how long a run waits for the picture, how long the picture is reused, and how long a question may take. */
+export const PICTURE_WAIT_MS = 2000;
+export const PICTURE_TTL_MS = 5 * 60_000;
+const PICTURE_RETRY_MS = 60_000;
+const PICTURE_FETCH_MS = 15_000;
+const ASK_TIMEOUT_MS = 90_000;
+const ANSWER_MAX = 4000;
+
+type CachedPicture = { readonly text: string; readonly at: number; readonly error?: string };
 const QUEUE_SAVE_MS = 1000;
 
 export class HonchoFeed {
@@ -39,6 +48,8 @@ export class HonchoFeed {
   private saveTimer?: ReturnType<typeof setTimeout>;
   private queueTimer?: ReturnType<typeof setTimeout>;
   private stopped = false;
+  private picture?: CachedPicture;
+  private pictureLoad?: Promise<CachedPicture>;
 
   constructor(private readonly deps: HonchoFeedDeps) {
     this.config = deps.file === null ? defaultHonchoConfig() : loadHonchoConfig(this.file);
@@ -142,8 +153,68 @@ export class HonchoFeed {
     return this.client;
   };
 
+  /**
+   * Honcho's picture of the user for a run (BLG-101): from the cache when fresh, otherwise fetched,
+   * waiting `waitMs` at most (the fetch goes on and fills the cache for the next run). Undefined when
+   * Honcho is off; empty when it holds nothing yet or can't be reached.
+   */
+  userPicture = async (waitMs = PICTURE_WAIT_MS): Promise<string | undefined> => {
+    if (!this.clientFor()) return undefined;
+    const cached = this.picture;
+    if (cached && this.now() - cached.at < (cached.error ? PICTURE_RETRY_MS : PICTURE_TTL_MS)) return cached.text;
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => resolve(undefined), waitMs);
+      timer.unref();
+    });
+    const fresh = await Promise.race([this.loadPicture(), late]);
+    clearTimeout(timer);
+    return (fresh ?? cached)?.text ?? '';
+  };
+
+  /** Settings and the phone (`honcho.picture`): the picture fetched now, or why it couldn't be. */
+  pictureView = async (): Promise<HonchoPicture> => {
+    if (!this.clientFor()) return { enabled: false, text: '' };
+    const p = await this.loadPicture();
+    return { enabled: true, text: p.text, at: p.at, ...(p.error ? { error: p.error } : {}) };
+  };
+
+  /** An agent's question about the user (BLG-101), answered by Honcho's own model; throws a message the agent can read. */
+  askAboutUser = async (question: string, level: HonchoReasoning = 'low'): Promise<string> => {
+    const client = this.clientFor();
+    if (!client) throw new HonchoError('Honcho is off: turn it on in Settings › Advanced › Honcho.', false);
+    let answer: string;
+    try {
+      answer = await client.chat(HONCHO_USER_PEER, question, level, ASK_TIMEOUT_MS);
+    } catch (err) {
+      const why = err instanceof HonchoError ? err.message : 'Couldn’t reach Honcho';
+      throw new HonchoError(`${why}. Honcho’s model may be busy: try again later, or go on without it.`, false);
+    }
+    const text = answer.trim();
+    return text ? text.slice(0, ANSWER_MAX) : 'Honcho had no answer: it may not have learned enough about the user yet.';
+  };
+
+  private loadPicture(): Promise<CachedPicture> {
+    const client = this.clientFor();
+    if (!client) return Promise.resolve({ text: '', at: this.now() });
+    if (this.pictureLoad) return this.pictureLoad;
+    const load = client.representation(HONCHO_USER_PEER, PICTURE_FETCH_MS).then(
+      (text): CachedPicture => ({ text: text.trim(), at: this.now() }),
+      (err): CachedPicture => ({ text: this.picture?.text ?? '', at: this.now(), error: err instanceof HonchoError ? err.message : 'Couldn’t reach Honcho' }),
+    );
+    this.pictureLoad = load;
+    return load.then((p) => {
+      if (this.pictureLoad !== load) return p;
+      this.pictureLoad = undefined;
+      this.picture = p;
+      return p;
+    });
+  }
+
   private reset(): void {
     this.client = undefined;
+    this.picture = undefined;
+    this.pictureLoad = undefined;
     this.workspaceReady = false;
     this.peersReady.clear();
     this.sessions.clear();

@@ -3,6 +3,7 @@ import type { AgentRef } from '../protocol.js';
 import type { InstructionPieceView } from '../shared/agent-setup.js';
 import { type MemoryView, PROJECT_MEMORY_MAX, USER_MEMORY_MAX } from '../shared/memory.js';
 import { buildGraphAppend } from './graph-prompt.js';
+import { buildHonchoAppend } from './honcho-prompt.js';
 import { buildMemoryAppend } from './memory-prompt.js';
 import { type ShellSetup, buildAskOnlyAppend, buildChatRecallAppend, buildChatSendAppend, buildChatVarsAppend, buildCommitAppend, buildKeepAppend, buildMachineAppend, buildScratchAppend, buildSetupAppend, buildShellAppend, buildShippedAppend, buildSystemAppend, loginShellSetup } from './prompt.js';
 import { buildSkillProposeAppend } from './skill-tools.js';
@@ -39,6 +40,7 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
   { id: 'room', label: 'Who you are in the room', when: 'Every run', source: 'src/agent/prompt.ts', text: (c) => buildSystemAppend(c.ownerName, c.agent), sample: (owner) => buildSystemAppend(owner) },
   { id: 'machine', label: 'About this machine', when: 'Your own runs, when About this machine is on', source: 'Settings › Skills', text: (c) => c.input.machineBrief ?? '' },
   { id: 'memory', label: 'Beluga’s memory', when: 'Your own runs, on every runtime (never a friend’s)', source: 'Settings › Skills & instructions › Memory', text: (c) => c.input.memoryBrief ?? '', sample: () => buildMemoryAppend(SAMPLE_USER_MEMORY, SAMPLE_PROJECT_MEMORY) },
+  { id: 'honcho', label: 'Honcho’s picture of you', when: 'Your own runs, with Honcho on (never a friend’s)', source: 'Settings › Advanced › Honcho', text: (c) => c.input.honchoBrief ?? '', sample: () => buildHonchoAppend('Works in TypeScript and React; prefers short commit messages.') },
   { id: 'graphs', label: 'Graphs', when: 'Every run', source: 'src/agent/graph-prompt.ts', text: (c) => buildGraphAppend(Boolean(c.input.terminal)), sample: () => buildGraphAppend() },
   { id: 'views', label: 'Views', when: 'Every run', source: 'src/agent/view-prompt.ts', text: (c) => buildViewAppend(Boolean(c.input.terminal)), sample: () => buildViewAppend() },
   { id: 'chat-link', label: 'This chat’s address', when: 'Runs in a chat, with chat links on', source: 'src/agent/view-prompt.ts', text: (c) => (c.input.chatLink ? buildChatLinkAppend(c.input.chatLink) : '') },

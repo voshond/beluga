@@ -4,6 +4,7 @@ import { createChatTools } from './chat-tools.js';
 import { createDashboardTools } from './dashboard-tools.js';
 import { createMacTools } from './mac-tools.js';
 import { createMcpTools } from './mcp-tools.js';
+import { createHonchoTools } from './honcho-tools.js';
 import { createMemoryTools } from './memory-tools.js';
 import { createPhoneTools } from './phone-tools.js';
 import { createPlanTools } from './plan-tools.js';
@@ -54,6 +55,8 @@ export function runToolSuites(input: AgentRunInput, bridge: RoomBridge, shelf: V
     ...(input.skillTools ? { beluga_skills: createSkillTools(input.skillTools) } : {}),
     // Your own runs keep Beluga's memory, about you and the project (core/memory, BLG-95).
     ...(input.memoryTools ? { beluga_memory: createMemoryTools(input.memoryTools) } : {}),
+    // Your own runs ask Honcho about you, with Honcho on (core/honcho, BLG-101).
+    ...(input.honchoTools ? { beluga_honcho: createHonchoTools(input.honchoTools) } : {}),
     beluga_view: createViewTools(shelf, cwd),
   };
 }

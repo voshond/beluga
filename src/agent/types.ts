@@ -7,6 +7,7 @@ import type { UsageUpdate } from './usage.js';
 import type { Effort } from '../shared/settings-schema.js';
 import type { StepRecord } from '../shared/steps.js';
 import type { ArgsRuntime } from '../shared/agent-args.js';
+import type { HonchoReasoning } from '../shared/honcho.js';
 import type { MemoryKind } from '../shared/memory.js';
 
 /** How far a request may reach on the owner's computer. */
@@ -170,6 +171,9 @@ export interface AgentRunInput {
   /** Your own runs: Beluga's memory (core/memory, BLG-95), what it holds and the tools to keep it. Never a friend's run. */
   readonly memoryBrief?: string;
   readonly memoryTools?: MemoryTools;
+  /** Your own runs, with Honcho on (core/honcho/run.ts, BLG-101): its picture of you, and a tool to ask it about you. Never a friend's run. */
+  readonly honchoBrief?: string;
+  readonly honchoTools?: HonchoTools;
   /** Your own runs: dashboards and the numbers sentinels keep (server `beluga_dashboard`; sentinel_measure inside a run). */
   readonly dashboardTools?: DashboardTools;
   /** Your own runs: the notes of calls you were in (core/calls, BLG-715), to look up, never pasted in. */
@@ -745,6 +749,11 @@ export interface MemoryTools {
   add(scope: MemoryKind, text: string): string;
   replace(scope: MemoryKind, entry: string, text: string): string;
   remove(scope: MemoryKind, entry: string): string;
+}
+
+/** Honcho's model of the user as an agent tool (agent/honcho-tools.ts, server `beluga_honcho`, BLG-101). Throws a message the agent can read. */
+export interface HonchoTools {
+  ask(question: string, level?: HonchoReasoning): Promise<string>;
 }
 
 /** Other chats, as a run finds and reads them (core/chat-links/transcript.ts). A refusal throws, and its message starts with the refusal code. */

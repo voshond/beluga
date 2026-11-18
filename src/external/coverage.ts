@@ -585,6 +585,7 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'honcho.sends': { refused: HONCHO },
   'honcho.configure': { refused: HONCHO },
   'honcho.test': { refused: HONCHO },
+  'honcho.picture': { refused: HONCHO },
   'stats.get': { refused: STATS },
   'stats.leaderboard': { refused: STATS },
   'stats.note': { refused: STATS },

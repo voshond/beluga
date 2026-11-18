@@ -21,5 +21,7 @@ export const HONCHO_API = {
         .strict(),
     ]),
   },
+  // BLG-101: what Honcho holds about you now (its representation of the user peer) → HonchoPicture.
+  'honcho.picture': { args: z.tuple([]) },
   'honcho.test': { args: z.tuple([z.object({ url: url.optional(), apiKey: apiKey.optional() }).strict().optional()]) },
 } as const;

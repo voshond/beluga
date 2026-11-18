@@ -36,6 +36,8 @@ import { AgentTerminals } from './agent-term.js';
 import { claudeHome } from './claude-code/launch.js';
 import { callNotesToolsOf } from './calls/launch.js';
 import { toolboxOf } from './toolbox/registry.js';
+import { maybeHonchoOf } from './honcho/feed.js';
+import { honchoForRun } from './honcho/run.js';
 import { memoryForRun } from './memory/run.js';
 import type { MemoryChange } from '../shared/memory.js';
 import { MemoryStore } from './memory/store.js';
@@ -339,6 +341,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
         const onChange = learn ? (change: MemoryChange) => learn({ kind: 'memory', change, ...(change.scope.kind === 'project' && project ? { project: project.name } : {}) }) : undefined;
         return memoryForRun(new MemoryStore(), project ? { root: project.root, name: project.name } : undefined, onChange);
       },
+      honcho: () => honchoForRun(maybeHonchoOf(session)),
       onBashCommand: (cwd, command) => {
         const service = toolboxOf(session);
         if (!service) return;

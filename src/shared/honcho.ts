@@ -20,3 +20,11 @@ export type HonchoStatus = {
 };
 
 export type HonchoTestResult = { readonly ok: true } | { readonly ok: false; readonly error: string };
+
+/** How hard Honcho's own model thinks about a question (BLG-101): `low` is the default, the higher ones are slower. */
+export const HONCHO_REASONING = ['minimal', 'low', 'medium', 'high', 'max'] as const;
+
+export type HonchoReasoning = (typeof HONCHO_REASONING)[number];
+
+/** What Honcho holds about the user now (BLG-101), for Settings and the phone. `error` when it couldn't be read. */
+export type HonchoPicture = { readonly enabled: boolean; readonly text: string; readonly at?: number; readonly error?: string };
