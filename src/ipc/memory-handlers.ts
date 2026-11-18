@@ -1,3 +1,4 @@
+import { reflectionOf } from '../core/memory/reflection.js';
 import { MemoryError, MemoryStore } from '../core/memory/store.js';
 import type { Session } from '../core/session.js';
 import type { MemoryOverview, MemoryView } from '../shared/memory.js';
@@ -34,4 +35,7 @@ export const MEMORY_HANDLERS = {
   'memory.replace': (_s, scope, entry, text) => new MemoryStore().replace(scope, entry, text, 'you'),
   'memory.remove': (_s, scope, entry) => new MemoryStore().remove(scope, entry),
   'memory.undo': (s, channel, itemId, markId) => undoMemoryMark(s, channel, itemId, markId),
+  'memory.keepProposal': (s, id) => reflectionOf(s).keep(id),
+  'memory.discardProposal': (s, id) => reflectionOf(s).discard(id),
+  'memory.reflect': (s, channel) => reflectionOf(s).reflect(channel, 'manual'),
 } satisfies MemoryHandlers;

@@ -8,6 +8,8 @@ export interface StandInRequest {
   readonly prompt: string;
   readonly system: string;
   readonly signal?: AbortSignal;
+  /** A model other than the backend's default (the reflection pass picks a cheap one, BLG-96). */
+  readonly model?: string;
 }
 
 /**
@@ -21,8 +23,9 @@ export async function standIn(req: StandInRequest, opts: { cwd: string; complete
   req.signal?.addEventListener('abort', stop, { once: true });
   const timer = setTimeout(stop, STAND_IN_TIMEOUT_MS);
   timer.unref();
+  const model = req.model ?? opts.model;
   try {
-    return await opts.complete({ prompt: req.prompt, cwd: opts.cwd, system: req.system, maxTurns: 1, signal: abortController.signal, ...(opts.model ? { model: opts.model } : {}) });
+    return await opts.complete({ prompt: req.prompt, cwd: opts.cwd, system: req.system, maxTurns: 1, signal: abortController.signal, ...(model ? { model } : {}) });
   } catch (err) {
     if (abortController.signal.aborted) throw new Error(req.signal?.aborted ? 'Stopped' : 'it took too long');
     if (err instanceof CompletionError) throw new Error('it ended without an answer');

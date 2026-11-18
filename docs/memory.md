@@ -28,7 +28,7 @@ Your own runs get the `beluga_memory` server, on every runtime:
 | `memory_replace` | Rewrites one entry (by its id, or a piece of text only it has). Use it to merge entries. |
 | `memory_remove` | Forgets one entry. |
 
-An agent's write goes in directly, with no Keep / Discard card: you asked it to remember, or it saw something worth keeping. It is never silent, though: each write shows under the agent's answer with Undo (see below), and you can change or delete any entry in Settings at any time. The reflection pass (BLG-96) will propose entries for you to keep instead.
+An agent's write goes in directly, with no Keep / Discard card: you asked it to remember, or it saw something worth keeping. It is never silent, though: each write shows under the agent's answer with Undo (see below), and you can change or delete any entry in Settings at any time. The reflection pass (below) proposes entries for you to keep instead.
 
 A write is refused when:
 
@@ -51,6 +51,18 @@ The chips are kept on the run's card in the conversation (`learned` on the agent
 
 The phone shows the same chips read-only (protocol 1.63, `TurnView.learned`): what was remembered, whose memory, and "Undone on your Mac" once it was. Undo is on the Mac.
 
+## Reflection: what to remember when work ends
+
+When a piece of work ends, Beluga looks back at the conversation once and proposes what is worth keeping: a correction you gave, a preference you showed, something about the project that cost time to find out (BLG-96, `src/core/memory/reflection.ts`). Nothing is written before you answer.
+
+- **When it runs.** When a worktree merges (the merged divider in its chat, whatever merged it: Beluga's Merge, Merge When Ready, GitHub, the main folder), and when you pick **Look Back** on a chat or worktree in the sidebar (`memory.reflect`). At most once per conversation per trigger: a second Look Back says it was done already. Idle chats don't trigger it.
+- **What it reads.** The conversation's messages view (what `read_chat` reads, no tool output), secrets redacted, newest 30,000 characters; your memory about you and the project's as they are now, with their ids; and what you discarded before.
+- **What it skips.** Anything not yours: a friend's conversation, a worktree you share, the room, an agent thread. Conversations under 6 messages, or with fewer than 3 of yours, get no pass and no card.
+- **The model.** One turn, no tools, through the same one-off call Full Autopilot's stand-in uses (`session.standIn`, your default agent's runtime), on a small model: `haiku` unless you pick another in Settings › Skills & instructions › Learn from your conversations. The switch there turns it off. It uses your agent's tokens.
+- **What it proposes.** At most 3 per pass and 10 waiting at once. Each is one entry about you or the project, or a change to an existing entry (by its id). A proposal is dropped when it is already remembered, already waiting, was discarded before, is over 300 characters, or looks like a secret (the same check every memory write makes). Most conversations have nothing new: then no card.
+- **The card.** Each proposal is a `decision` card in Needs You, on the Mac and the phone, with the bell's notice: **Keep** (or **Update** for a change) and **Discard**. Review shows why it is worth keeping and the entry, or for a change the entry now and after. Keep writes it through `MemoryStore` as yours (`memory.keepProposal`, the cap applies); an Update is refused when the entry changed or was removed since. Discard (`memory.discardProposal`) writes nothing, and its text is remembered so it isn't proposed again.
+- **A restart.** Waiting proposals, the last 200 discarded texts and which conversations were looked back at live in `~/.beluga/memory-reflection.json` (0600). A proposal that would hold a secret is never written there.
+
 ## Claude Code's own memory
 
 Claude Code keeps a memory of its own per project. Beluga doesn't touch it, and Claude runs get Beluga's memory on top of it. The instructions tell every agent so: keep using your runtime's own memory, and put what any agent should know in Beluga's, since that is the one every runtime shares.
@@ -65,5 +77,5 @@ Settings › Memory on the phone shows both, read-only (`memory.list`, protocol 
 
 ## For later
 
-- BLG-96 (reflection pass) proposes entries through `MemoryStore` in `src/core/memory/store.ts`.
+- The reflection pass's token use is not in the Usage tab yet: side calls (`session.standIn`) are not counted there.
 - BLG-100 (team memory) adds a project memory teammates share, next to this one.

@@ -735,6 +735,9 @@ export const MACHINE: Record<Method, MachineSide> = {
   'memory.replace': 'drive',
   'memory.remove': 'drive',
   'memory.undo': 'drive',
+  'memory.keepProposal': 'drive',
+  'memory.discardProposal': 'drive',
+  'memory.reflect': 'drive',
 
   // ---- chats (chat links: a chat's chip, a chat's copy)
   'chats.resolve': 'drive',

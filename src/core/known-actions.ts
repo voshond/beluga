@@ -81,6 +81,8 @@ const KNOWN = {
   link_set: true,
   log_upsert: true,
   member_set: true,
+  memory_proposal_add: true,
+  memory_proposal_remove: true,
   models: true,
   my_shares: true,
   needs_dismissed: true,

@@ -1,5 +1,5 @@
 import { isExternalRequester } from '../core/trust.js';
-import type { Approval, DomainState, SkillProposal, ToolboxSuggestion } from '../core/store.js';
+import type { Approval, DomainState, MemoryProposal, SkillProposal, ToolboxSuggestion } from '../core/store.js';
 import { OFFER_DETAIL, knockWords, offerWords } from '../core/team/model.js';
 import type { PendingQuestion } from '../core/collab-store.js';
 import type { TaskView as GwTask } from '../core/gateway/model.js';
@@ -686,6 +686,31 @@ function skillProposalItems(state: DomainState): NeedsYou[] {
   });
 }
 
+/** Where a proposed memory goes, in words: about you, or a project's. */
+const memoryPlace = (p: MemoryProposal): string => (p.kind === 'user' ? 'about you' : `for ${clip(p.project ?? p.root?.split('/').filter(Boolean).pop() ?? 'this project', 60)}`);
+
+/** A memory card's words: why, then the entry it would write, or for a change the entry now and after. */
+const memoryDetail = (p: MemoryProposal): string => [p.reason ?? '', p.previous === undefined ? p.text : `Now: ${p.previous}\nNew: ${p.text}`].filter(Boolean).join('\n\n');
+
+/** What the reflection pass proposes to remember (BLG-96): Keep / Discard, or Update / Discard for a change to an entry. */
+function memoryProposalItems(state: DomainState): NeedsYou[] {
+  return (state.memoryProposals ?? []).map((p): NeedsYou => {
+    const change = p.entry !== undefined;
+    return {
+      id: `memory-propose:${p.id}`,
+      kind: 'decision',
+      from: 'Beluga',
+      title: change ? `Update what your agents remember ${memoryPlace(p)}?` : `Remember this ${memoryPlace(p)}?`,
+      detail: clip(memoryDetail(p), 4000),
+      askedAt: p.askedAt,
+      actions: [
+        { label: change ? 'Update' : 'Keep', tone: 'main' as const, method: 'memory.keepProposal', args: [p.id] },
+        { label: 'Discard', tone: 'danger' as const, method: 'memory.discardProposal', args: [p.id] },
+      ],
+    };
+  });
+}
+
 /** Everything waiting for you, in no order and uncut (needsYou sorts and keeps 50), minus what you dismissed. */
 export function allNeeds(state: DomainState): NeedsYou[] {
   const dismissed = state.dismissedNeeds ?? [];
@@ -713,6 +738,7 @@ export function waitingNeeds(state: DomainState): NeedsYou[] {
     ...dialogueItems(state),
     ...toolboxSuggestionItems(state),
     ...skillProposalItems(state),
+    ...memoryProposalItems(state),
   ];
 }
 

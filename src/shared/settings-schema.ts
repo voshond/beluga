@@ -33,6 +33,10 @@ export const BRANCH_PREFIX_RE = /^(?![./-])(?!.*\.\.)(?!.*\/\/)(?!.*\/[.-])[\w./
 
 /** How many days without activity settle a chat (core/triage); 0: never. */
 export const SETTLE_IDLE_DAYS_DEFAULT = 3;
+
+/** The reflection pass runs on a small, cheap model unless you pick another (BLG-96). */
+export const REFLECTION_MODEL_DEFAULT = 'haiku';
+export const REFLECTION_MODEL_MAX = 80;
 export const SETTLE_IDLE_DAYS_MAX = 365;
 export const ARCHIVE_SETTLED_DAYS_DEFAULT = 14;
 export const ARCHIVE_SETTLED_DAYS_MAX = 3650;
@@ -182,6 +186,10 @@ export const Settings = z.object({
   scratchFolder: z.boolean().default(true),
   machineNote: z.string().max(MACHINE_NOTE_MAX).catch('').default(''),
   machineNoteOn: z.boolean().default(false),
+  /** When work ends, a cheap model looks back at the conversation and proposes what to remember (BLG-96). */
+  reflection: z.boolean().catch(true).default(true),
+  /** The model the reflection pass runs on. */
+  reflectionModel: z.string().min(1).max(REFLECTION_MODEL_MAX).catch(REFLECTION_MODEL_DEFAULT).default(REFLECTION_MODEL_DEFAULT),
   /** How much of Claude's sub-agent work the chat shows. */
   subagents: z.enum(['full', 'compact', 'hidden']).default('full'),
   /** Workspace buttons you chose to hide from the top bar. */

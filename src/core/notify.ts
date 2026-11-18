@@ -420,6 +420,19 @@ function skillNews(prev: DomainState, next: DomainState): NoticeEvent[] {
   });
 }
 
+/** What the reflection pass just proposed to remember (BLG-96): noted in the bell, so it stays in your history once answered. */
+function memoryNews(prev: DomainState, next: DomainState): NoticeEvent[] {
+  if (prev.memoryProposals === next.memoryProposals) return [];
+  const seen = new Set(prev.memoryProposals.map((p) => p.id));
+  const needs = allNeeds(next);
+  return next.memoryProposals.flatMap((p): NoticeEvent[] => {
+    if (seen.has(p.id)) return [];
+    const item = needs.find((n) => n.id === `memory-propose:${p.id}`);
+    if (!item) return [];
+    return [{ kind: 'needsYou', tag: 'question', title: item.title, body: firstLine(p.text), need: item.id, key: `memory:${p.id}` }];
+  });
+}
+
 /** A dialogue between your agents that just paused at its cap: it waits for your Continue. */
 function dialogueNews(prev: DomainState, next: DomainState): NoticeEvent[] {
   if (prev.dialogues === next.dialogues) return [];
@@ -437,7 +450,7 @@ function dialogueNews(prev: DomainState, next: DomainState): NoticeEvent[] {
  * stopped, needs an answer or approval, a merge conflict, someone joined or invited you.
  */
 export function detectNotices(prev: DomainState, next: DomainState, now = Date.now()): NoticeEvent[] {
-  const out = [...finishedRuns(prev, next), ...finishedSetups(prev, next), ...messagesForYou(prev, next), ...taskMentions(prev, next, now), ...networkMessages(prev, next, now), ...planNews(prev, next), ...dialogueNews(prev, next), ...toolboxNews(prev, next), ...skillNews(prev, next)];
+  const out = [...finishedRuns(prev, next), ...finishedSetups(prev, next), ...messagesForYou(prev, next), ...taskMentions(prev, next, now), ...networkMessages(prev, next, now), ...planNews(prev, next), ...dialogueNews(prev, next), ...toolboxNews(prev, next), ...skillNews(prev, next), ...memoryNews(prev, next)];
   if (prev.approvals !== next.approvals) {
     const seen = new Set(prev.approvals.map((a) => a.id));
     // Someone else's request waits for you either way; on Do Not Disturb it just doesn't make a sound.

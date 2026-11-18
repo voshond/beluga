@@ -36,6 +36,7 @@ import { launchSupport } from '../core/merge-counter.js';
 import { launchAttachmentSweep } from '../core/attachment-sweep.js';
 import { launchStats } from '../core/stats/counter.js';
 import { launchHoncho } from '../core/honcho/feed.js';
+import { launchReflection } from '../core/memory/reflection.js';
 import { launchSkillProposals } from '../core/skill-proposal-file.js';
 import { launchLeaderboard } from '../core/leaderboard/launch.js';
 import { claudeHome, launchClaudeCode } from '../core/claude-code/launch.js';
@@ -390,6 +391,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
   let stopStats = (): void => undefined;
   let stopHoncho = (): void => undefined;
   let stopSkillProposals = (): void => undefined;
+  let stopReflection = (): void => undefined;
   let stopLeaderboard = (): void => undefined;
   let stopClaudeCode = (): void => undefined;
   let stopGateway = (): void => undefined;
@@ -417,6 +419,15 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     if (opts.network) stopStats = launchStats({ session, store, demo: Boolean(demo), sparse: belugaEnv('DEMO_STATS') === 'sparse' });
     // Skill proposals waiting for your answer, kept on disk so a restart doesn't drop them (BLG-103).
     if (opts.network && !demo) stopSkillProposals = launchSkillProposals({ store });
+    // When work merges, or when you ask, a cheap model proposes what to remember from your own conversation (BLG-96).
+    if (opts.network && !demo)
+      stopReflection = launchReflection({
+        session,
+        store,
+        ask: (req) => session.standIn(req),
+        sharedWith: (channel) => session.sharing.recipients(channel).length > 0,
+        load: (channel) => void (channel.startsWith('ws:') && session.workspaces?.ensureLoaded(channel.slice(3))),
+      });
     if (opts.network && !demo) stopHoncho = launchHoncho({ session, store, sharedWith: (channel) => session.sharing.recipients(channel).length > 0 });
     // The leaderboard: friends swap three numbers a day (prompt characters, merged PRs, agent time) while the network is on.
     if (opts.network) stopLeaderboard = launchLeaderboard({ session, store, demo: Boolean(demo) });
@@ -527,6 +538,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     stopStats();
     stopHoncho();
     stopSkillProposals();
+    stopReflection();
     stopClaudeCode();
     await session.stop();
     terminals.closeAll();
