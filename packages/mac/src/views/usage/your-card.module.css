@@ -21,8 +21,8 @@
 }
 /*
  * The pass hangs here: out to the page's left edge, over the words, a little past the box's right
- * side and well below it (YourCard measures and sets these), so the card hangs past the box's
- * bottom and swings out of it without being cut off. Only the card takes the pointer (Lanyard's
+ * side and well below it (YourCard measures and sets these), so the card rests inside the box
+ * and swings out of it without being cut off. Only the card takes the pointer (Lanyard's
  * passThrough); the rest of the layer lets everything under it be clicked.
  */
 .layer {
