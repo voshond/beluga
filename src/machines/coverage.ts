@@ -339,6 +339,7 @@ export const MACHINE: Record<Method, MachineSide> = {
   'support.answer': 'drive',
   // ---- stats
   'honcho.status': 'drive',
+  'honcho.sends': 'drive',
   'honcho.configure': 'drive',
   'honcho.test': 'drive',
   'stats.get': 'drive',
@@ -732,6 +733,7 @@ export const MACHINE: Record<Method, MachineSide> = {
   'memory.add': 'drive',
   'memory.replace': 'drive',
   'memory.remove': 'drive',
+  'memory.undo': 'drive',
 
   // ---- chats (chat links: a chat's chip, a chat's copy)
   'chats.resolve': 'drive',

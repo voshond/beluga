@@ -37,3 +37,20 @@ export type MemoryOverview = {
 export const memoryCap = (scope: MemoryScope): number => (scope.kind === 'user' ? USER_MEMORY_MAX : PROJECT_MEMORY_MAX);
 
 export const memoryUsed = (entries: readonly MemoryEntry[]): number => entries.reduce((sum, e) => sum + e.text.length, 0);
+
+export type MemoryOp = 'add' | 'replace' | 'remove';
+
+/**
+ * What one write did (BLG-102): the entry before it (replace, remove) and after it (add, replace),
+ * and where it stood. Enough to undo it: an add is removed, a replace restored, a remove put back.
+ */
+export type MemoryChange = {
+  readonly scope: MemoryScope;
+  readonly op: MemoryOp;
+  readonly before?: MemoryEntry;
+  readonly after?: MemoryEntry;
+  readonly index: number;
+};
+
+/** The entry a change is about: the one written, or the one removed. */
+export const changedEntry = (change: MemoryChange): MemoryEntry => (change.after ?? change.before)!;

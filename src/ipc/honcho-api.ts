@@ -6,6 +6,8 @@ const apiKey = z.string().trim().min(1).max(4096);
 
 export const HONCHO_API = {
   'honcho.status': { args: z.tuple([]) },
+  // BLG-102: whether this conversation's messages go to Honcho (it's on and the conversation isn't left out) → boolean.
+  'honcho.sends': { args: z.tuple([z.string().min(1).max(4096)]) },
   'honcho.configure': {
     args: z.tuple([
       z

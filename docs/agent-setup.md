@@ -44,6 +44,8 @@ Your own runs get three tools in the `beluga_skills` MCP server, on every runtim
 | `skill_propose` | Proposes a new skill from a name, a description and a body. It shows as a "Keep / Discard" card |
 | `skill_propose_change` | Proposes a whole new SKILL.md for a skill you have, with what was wrong. It shows as an "Update / Discard" card |
 
+A proposal also shows under the answer of the run that made it (BLG-102): "Proposed the skill deploy-nas" with Keep / Discard (Update / Discard for a change). A click opens Needs You, where its card is; once you answered it the chip says Answered. On the phone the chip is read-only and says when the card waits for you.
+
 This works like the Toolbox's `tool_propose` (docs/toolbox.md). Nothing is written until you answer. The card is in Needs You on the Mac (the bell, where Review shows the text) and on the phone (Read all). A new skill's card shows the reason and the whole SKILL.md. A change's card shows the reason and only the lines that change, with two lines around them, as Before and After.
 
 - **Keep** writes `~/.agents/skills/<name>/SKILL.md` through the same code as New Skill, and links it for Claude. If a skill by that name appeared since, Keep refuses and the card stays.

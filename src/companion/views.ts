@@ -38,6 +38,8 @@ import type { MessageView, PersonView } from '../net/mesh/views.js';
 import { type Reaction, quickReactions } from '../shared/reactions.js';
 import { chatReactions, reactableChannel } from '../core/chat-reactions.js';
 import { resumeOf } from '../core/auto-continue.js';
+import { learnedScope, learnedTitle } from '../shared/learned.js';
+import { changedEntry } from '../shared/memory.js';
 import { chatPeople, claudePill, offlineNote, waitingIn, waitingLabel } from '../core/chat-people.js';
 import { type AgentRef, CLAUDE_AGENT, type Profile, defaultAgentOf } from '../protocol.js';
 import { threadNesting } from '../ui/thread-tree.js';
@@ -74,6 +76,7 @@ import {
   type TasksView,
   Topic,
   type TurnView,
+  type LearnedView,
   type UsageView,
   VIEW_TURNS,
   type WorkView,
@@ -459,6 +462,18 @@ function editOf(state: DomainState, channel: string, text: string, prose: ProseV
   return ws && !ws.archived && (ws.kind === 'worktree' || ws.kind === 'chat') ? { ws: clip(id, 200), kind: ws.kind } : undefined;
 }
 
+/** What your agent's run remembered, proposed or looked up (BLG-102), read-only: Undo is on the Mac. */
+export function learnedOf(state: DomainState, item: LogItem): LearnedView[] {
+  if (item.type !== 'agent' || item.owner !== myId(state) || !item.learned?.length) return [];
+  const waiting = new Set((state.skillProposals ?? []).map((p) => p.id));
+  return item.learned.slice(-40).map((m): LearnedView => {
+    const base = { id: clip(m.id, 200), kind: m.kind, title: clip(learnedTitle(m), 300) };
+    if (m.kind === 'memory') return { ...base, text: clip(changedEntry(m.change).text, 2200), scope: clip(learnedScope(m), 200), ...(m.undone !== undefined ? { undone: true } : {}) };
+    if (m.kind === 'skill') return { ...base, ...(waiting.has(m.proposal) ? { waiting: true } : {}) };
+    return { ...base, text: clip(m.query, 2200) };
+  });
+}
+
 function turnOf(state: DomainState, item: LogItem, outputs: readonly OutputView[], cc: ReadonlyMap<string, CcAgent> = new Map(), steer?: SteeredMessage, pictures: (prose: ProseView) => ProseView = (p) => p, appSteps?: ViewContext['appSteps']): TurnView | undefined {
   const me = myId(state);
   if (item.type === 'chat') {
@@ -508,6 +523,7 @@ function turnOf(state: DomainState, item: LogItem, outputs: readonly OutputView[
   // Only a card with an MCP step can have an app: the others never ask.
   const apps = appSteps && mayHaveApps(item.steps) ? appSteps(item.channel, item.id) : undefined;
   const trail = trailOf(item.steps, 40, apps);
+  const learned = learnedOf(state, item);
   return {
     id: item.id,
     who: 'claude',
@@ -524,6 +540,7 @@ function turnOf(state: DomainState, item: LogItem, outputs: readonly OutputView[
     ...(item.endTs !== undefined ? { endTs: item.endTs } : {}),
     ...(live ? { live } : {}),
     ...(trail.length ? { trail } : {}),
+    ...(learned.length ? { learned } : {}),
   };
 }
 

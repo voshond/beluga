@@ -29,6 +29,7 @@ import { brandText } from '../lib/brand.js';
 import { messageItems } from './message-menu.js';
 import { Markdown } from './Markdown.js';
 import { AgentSteps, StepsFold, StepsToggle } from './steps/AgentSteps.js';
+import { LearnedMarks } from './LearnedMarks.js';
 import { McpApps } from './mcp-app/McpApps.js';
 import { useDisclosure } from './steps/step-memory.js';
 import { useFlightLanding } from './flight.js';
@@ -610,6 +611,8 @@ function TurnCard({
             // Sending it now, editing or moving it: the queue above the box.
             <div className={s.idle}>Starts when the current task finishes.</div>
           ) : null}
+          {/* What its run remembered, proposed or looked up (BLG-102): your own agent's card only. */}
+          {mine ? <LearnedMarks item={item} /> : null}
           {/* Sign In runs Claude Code's own login: only for a Claude run (Codex says how to sign in on its card). */}
           {limited && failure?.kind === 'signed_out' && (failure.runtime ?? 'claude') === 'claude' ? (
             <div className={s.limitActions}>

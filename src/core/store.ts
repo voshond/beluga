@@ -35,6 +35,7 @@ import { type ChatTriage, triageKey } from './triage/model.js';
 import type { CompanionSlice } from '../companion/protocol.js';
 import type { ReactionEvent } from '../shared/reactions.js';
 import { type ChatReactAction, reactOnLog } from './chat-reactions.js';
+import { type LearnedMark, MAX_LEARNED } from '../shared/learned.js';
 
 export type { CompactMark, ContextInfo } from './context-log.js';
 
@@ -147,6 +148,8 @@ export type LogItem =
       readonly betweenAt?: number;
       /** What it said before a later step: drawn quietly among its steps, not as its answer (see agentRemarks). */
       readonly remarks?: readonly Remark[];
+      /** BLG-102: what the run remembered, proposed or looked up (shared/learned.ts), drawn under its answer. Only your own run's card. */
+      readonly learned?: readonly LearnedMark[];
     }
   | ShellItem;
 
@@ -742,6 +745,8 @@ export type Action =
   | { type: 'system'; text: string; level?: 'info' | 'warn' | 'error'; channel?: string; id?: string; ts?: number; said?: SaidBy; shipped?: ShippedMark; merged?: MergedMark; dialogue?: DialogueMark }
   | { type: 'shell'; item: ShellItem }
   /** `itemId` (stamped before reducing) names the chat item a new run creates. */
+  | { type: 'agent_learned'; owner: string; requestId: string; mark: LearnedMark }
+  | { type: 'agent_learned_undone'; itemId: string; markId: string; at: number }
   | { type: 'agent_event'; owner: string; requestId: string; requester: string; event: AgentEventKind; text: string; ts: number; channel?: string; itemId?: string; slotWait?: SlotWait; agent?: AgentRef; via?: MessageVia; fromChat?: { origin: ChatOrigin; text: string } }
   /** One owner's waiting requests in a conversation, in their new order (see orderQueued). */
   | { type: 'queue_order'; owner: string; ids: readonly string[] }
@@ -1045,6 +1050,18 @@ export function orderQueued(log: readonly LogItem[], owner: string, ids: readonl
   return slots.every((slot) => placed.get(slot) === log[slot]) ? log : log.map((l, i) => placed.get(i) ?? l);
 }
 
+/** A run's card gains a marker (BLG-102), or one of its memory markers was undone. A card that isn't here changes nothing. */
+function reduceLearned(state: DomainState, action: Extract<Action, { type: 'agent_learned' | 'agent_learned_undone' }>): DomainState {
+  const idx = state.log.findIndex((l) => l.type === 'agent' && (action.type === 'agent_learned' ? l.requestId === action.requestId && l.owner === action.owner : l.id === action.itemId));
+  const item = state.log[idx];
+  if (!item || item.type !== 'agent') return state;
+  const learned =
+    action.type === 'agent_learned'
+      ? [...(item.learned ?? []).filter((m) => m.id !== action.mark.id), action.mark].slice(-MAX_LEARNED)
+      : (item.learned ?? []).map((m) => (m.id === action.markId && m.kind === 'memory' ? { ...m, undone: action.at } : m));
+  return { ...state, log: state.log.map((l, i) => (i === idx ? { ...item, learned } : l)) };
+}
+
 function reduceAgent(state: DomainState, raw: Extract<Action, { type: 'agent_event' }>): DomainState {
   const a = { ...raw, text: clean(raw.text) };
   const idx = state.log.findIndex((l) => l.type === 'agent' && l.requestId === a.requestId && l.owner === a.owner);
@@ -1306,6 +1323,9 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
       if (idx >= 0) return { ...state, log: state.log.map((l, i) => (i === idx ? item : l)) };
       return bumpUnread({ ...state, log: appendLog(state.log, item) }, item.channel, true);
     }
+    case 'agent_learned':
+    case 'agent_learned_undone':
+      return reduceLearned(state, action);
     case 'agent_event':
       if (action.event === 'usage') return state;
       if (action.event === 'context' || action.event === 'compact') return reduceContext(state, action);

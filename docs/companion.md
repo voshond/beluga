@@ -669,6 +669,10 @@ Advanced at the bottom. Learn it once and it works everywhere.
   through the Mac only (the browser's microphone; the demo Mac answers with sample lines).
 - **Settings › Memory** (BLG-95, 1.62): what your agents remember about you and each project
   (`memory.list`), read-only; you change it on the Mac. See [memory.md](memory.md).
+- **Under your agent's answer** (BLG-102, 1.63, `TurnView.learned`): what its run remembered,
+  changed or forgot in Beluga's memory (the entry, whose memory, "Undone on your Mac" once it was),
+  a skill it proposed (and whether its card waits in Needs You) and a search of past chats (the
+  words). Read-only: Undo is on the Mac. An older Mac sends none.
 - **Plans** (in Work and on Home when one runs): milestones as a vertical timeline (each says what it
   runs after), tasks as rows with their state and what they wait on (tap one for its goal and what
   done means), decisions as cards with their buttons (Approve or Discard a draft, pass a milestone's

@@ -1,0 +1,158 @@
+/* Under an agent's answer: what its run remembered, proposed or looked up (BLG-102). The task chip's look (mention.module.css), one tint per kind. */
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.chip {
+  --tint: var(--info);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(36em, 100%);
+  min-height: 20px;
+  padding: 0 4px 0 7px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.86rem;
+  color: var(--text);
+  background: color-mix(in srgb, var(--tint) 11%, transparent);
+  cursor: default;
+}
+
+.memory {
+  --tint: var(--claude);
+}
+
+.skill {
+  --tint: var(--plan);
+  cursor: pointer;
+}
+
+.skill:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tint) 18%, transparent);
+}
+
+.skill:disabled {
+  cursor: default;
+}
+
+.recall {
+  --tint: var(--info);
+  padding-right: 8px;
+}
+
+.chip:focus-visible,
+.action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.chip svg {
+  flex: none;
+  color: color-mix(in srgb, var(--tint) 80%, var(--text));
+}
+
+.main {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.what {
+  flex: none;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--tint) 80%, var(--text));
+}
+
+.text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.scope {
+  flex: none;
+  color: var(--text-3);
+}
+
+.scope::before {
+  content: '·';
+  margin-right: 5px;
+}
+
+.action {
+  flex: none;
+  height: 16px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--tint) 80%, var(--text));
+  background: color-mix(in srgb, var(--tint) 14%, transparent);
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tint) 24%, transparent);
+}
+
+.action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.state {
+  flex: none;
+  padding-right: 4px;
+  font-size: 0.8rem;
+  color: var(--text-3);
+}
+
+.undone .text {
+  text-decoration: line-through;
+  color: var(--text-3);
+}
+
+/* In the box you type in: this conversation goes to Honcho. As quiet as the MCP chip beside it. */
+.honcho {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px 0 6px;
+  border: 0;
+  border-radius: 11px;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--text-3);
+  background: none;
+  cursor: pointer;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+
+.honcho:hover {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+
+.honcho:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@container composer (max-width: 440px) {
+  .honchoLabel {
+    display: none;
+  }
+}

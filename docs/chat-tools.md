@@ -18,6 +18,8 @@ Only runs you asked for, in a chat nobody else sees (`HostChatLinks.toolsFor`). 
 
 `search_chats` lets your agent look up how something went before ("how did we fix the tunnel last time") instead of you pasting it in. It reads what the Search page reads (`Workbench.searchSources`): open, saved and archived worktrees and chats, Your Mac's saved chats and chats shared with you. It matches words the way the Search page does (any order, any case, a word inside a longer one), with no index; the ranking is `src/core/chat-links/recall.ts`.
 
+Each search also shows under the answer of the run that made it (BLG-102): a chip reading "Searched past chats for “…”" with the words it searched, on the Mac and, read-only, on the phone. It is kept on the run's card, so it comes back with the conversation.
+
 - **Only what it may open, before any cap.** The run's own chat (it already has it), the room, DMs, groups and drafts (no ref names them, so `read_chat` couldn't open them), chats it may not read, Beluga's notices and runs that never answered are dropped first, so a busy room never pushes a real hit out.
 - **One hit per chat.** The best match in each chat, with `more`: how many other messages there match. `read_chat` with `ref` and `around: pos` opens them.
 - **Ranked by relevance.** First the hits that cover the most of the query's words (a word in the chat's title counts), then a match in the title, then the newest. `order: newest` ("where did we leave X") and `order: oldest` ("how did X start") sort by time only.

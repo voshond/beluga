@@ -1,5 +1,7 @@
 import { actingVia, asActingAgent } from './acting-agent.js';
 import { randomUUID } from 'node:crypto';
+import { type Learn, withRecall } from './learned.js';
+import type { LearnedMark } from '../shared/learned.js';
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import type { AgentBackend, AgentPlace, AgentRunInput, BoardTools, FollowUp, LiveStatus, MacTools, RunProcess, Steer, TerminalLaunch, TerminalSink } from '../agent/types.js';
@@ -104,10 +106,10 @@ export interface AgentHostDeps {
   readonly sentinel?: (channel: string, from: string) => { readonly tools: import('../agent/types.js').SentinelTools; readonly dashboard?: import('../agent/types.js').DashboardTools; readonly brief: string; readonly inRun: boolean } | undefined;
   /** Project Toolbox (your own runs): the agent's list/run/propose tools for the project in `channel` (BLG-75). */
   readonly toolbox?: (channel: string) => import('../agent/types.js').ToolboxTools | undefined;
-  /** Your shared skills (your own runs): read them and propose new ones or fixes behind a card (BLG-98); `agent` is who proposes ("Claude"). */
-  readonly skills?: (agent: string) => import('../agent/types.js').SkillTools | undefined;
-  /** Beluga's memory for one of your own runs (core/memory, BLG-95): the user's, and the project's when the run is in one. */
-  readonly memory?: (channel: string, cwd?: string) => import('./memory/run.js').MemoryRun | undefined;
+  /** Your shared skills (your own runs): read them and propose new ones or fixes behind a card (BLG-98); `agent` is who proposes ("Claude"), `learn` marks each proposal on the run's card (BLG-102). */
+  readonly skills?: (agent: string, learn?: Learn) => import('../agent/types.js').SkillTools | undefined;
+  /** Beluga's memory for one of your own runs (core/memory, BLG-95): the user's, and the project's when the run is in one. `learn` marks each write on the run's card (BLG-102). */
+  readonly memory?: (channel: string, cwd?: string, learn?: Learn) => import('./memory/run.js').MemoryRun | undefined;
   /** Called when Claude runs a Bash command in a worktree: records it for Toolbox detection (BLG-75). */
   readonly onBashCommand?: (worktree: string, command: string) => void;
   /** A plan's home conversation (your own runs): its plan tools and what Claude is told about the plan (core/plans); `said` is what this run was asked, `chain` the chat chain it is in. */
@@ -1581,7 +1583,9 @@ export class AgentHost {
       const openPage = this.deps.openPage;
       const mcpTools = from === this.selfId && !external && openPage && agent.mcpSignIn ? mcpSignInTools(agent, { roots: () => this.store.getState().projects.map((p) => p.root), openPage }) : undefined;
       // Other chats (core/chat-links): only runs you asked for find and read them, never a friend's, a guest's or an external agent's.
-      const chats = this.links.toolsFor({ from, external: Boolean(external), channel: body.channel, chain: () => chain, signal: controller.signal });
+      // What the run remembers, proposes and looks up shows on its card (BLG-102): your own runs only.
+      const learn = from === this.selfId && !external ? this.learnFor(body.requestId) : undefined;
+      const chats = withRecall(this.links.toolsFor({ from, external: Boolean(external), channel: body.channel, chain: () => chain, signal: controller.signal }), learn);
       // Live previews (Settings › Experimental): your own runs in a project's folder learn to show what they build.
       const previewBrief = from === this.selfId && place && experimentOn(this.store.getState().prefs.experiments, 'previews') ? buildPreviewAppend() : undefined;
       // A plan's home conversation (a main folder's chat, often): the plan's tools.
@@ -1597,7 +1601,7 @@ export class AgentHost {
       const sentinel = from === this.selfId && !place?.syncMain ? this.deps.sentinel?.(body.channel, from) : undefined;
       const toolboxTools = from === this.selfId ? this.deps.toolbox?.(body.channel) : undefined;
       // Your shared skills (BLG-98): runs you asked for, never a friend's, a guest's or an external agent's, nor syncing main.
-      const skillTools = from === this.selfId && !external && !place?.syncMain ? this.deps.skills?.((named ?? this.deps.agentRef?.(body.channel) ?? CLAUDE_AGENT).label) : undefined;
+      const skillTools = from === this.selfId && !external && !place?.syncMain ? this.deps.skills?.((named ?? this.deps.agentRef?.(body.channel) ?? CLAUDE_AGENT).label, learn) : undefined;
       const noBoard = place?.syncMain || (place?.askOnly && plans?.checker && !sentinel?.inRun);
       // A friend's run gets its repo's board too, as their trust allows (BLG-701; see boardAccess).
       const friendBoard = from === this.selfId ? undefined : this.boardAccess(from);
@@ -1728,7 +1732,7 @@ export class AgentHost {
         ...(yours ? this.launchArgs() : {}),
         ...(yours ? this.machineBrief() : {}),
         // Beluga's memory (BLG-95): about you and this project. A friend's run never gets it.
-        ...(yours ? this.memoryFor(body.channel, place?.cwd) : {}),
+        ...(yours ? this.memoryFor(body.channel, place?.cwd, learn) : {}),
         // Your variables can hold secrets: only runs you asked for get them, never a friend's.
         // Your own runs also get adb on PATH (and ANDROID_SERIAL) when a phone is set up, so Bash can drive it (BLG-174).
         // Keys pasted into this chat and kept out of it (BLG-965): Claude is told their names (the values are in env).
@@ -1868,9 +1872,14 @@ export class AgentHost {
     return { text, tokens };
   }
 
-  private memoryFor(channel: string, cwd?: string): Pick<AgentRunInput, 'memoryBrief' | 'memoryTools'> {
-    const memory = this.deps.memory?.(channel, cwd);
+  private memoryFor(channel: string, cwd?: string, learn?: Learn): Pick<AgentRunInput, 'memoryBrief' | 'memoryTools'> {
+    const memory = this.deps.memory?.(channel, cwd, learn);
     return memory ? { memoryBrief: memory.brief, memoryTools: memory.tools } : {};
+  }
+
+  /** Puts a marker on your own run's card (BLG-102): kept with the card, so it shows again after a reload. */
+  private learnFor(requestId: string): Learn {
+    return (draft) => this.store.dispatch({ type: 'agent_learned', owner: this.selfId, requestId, mark: { ...draft, id: randomUUID().slice(0, 8), ts: Date.now() } as LearnedMark });
   }
 
   private machineBrief(): Pick<AgentRunInput, 'machineBrief'> {

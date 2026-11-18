@@ -46,6 +46,10 @@ Only while the switch is on, and only from the moment it was turned on (nothing 
 
 In Honcho, everything goes to one workspace (default `beluga`). You are one peer, `user`; each agent runtime is its own peer (`agent-claude`, `agent-codex`, …), set so Honcho models you and not the agents. Each conversation is one session, `beluga-<channel>`. Honcho is yours alone: it is never shared with a room or with friends, and two of your own computers pointed at the same server and workspace both feed the same `user`.
 
+## Which conversation is sent
+
+A conversation whose messages go to Honcho shows a quiet "Honcho" sign in the box you type in, beside your MCP servers (BLG-102); a click opens Settings › Advanced › Honcho. It asks `honcho.sends` with the same rule the feed sends by (`allowedConversation` in `src/core/honcho/filter.ts`): Honcho is on, the conversation is a worktree, a project chat, a main folder's chat or Your Mac's, it isn't a thread, it isn't shared with anyone, and its project isn't left out. Anywhere else there is no sign. The phone doesn't show it.
+
 ## Never in the way
 
 Messages wait in a queue in the background and go in batches per conversation. A run never waits for Honcho, and Honcho being down never fails one. When it does not answer, Beluga tries again (2 s, 4 s, 8 s… up to 5 minutes between tries) and gives up on a batch after 8 tries; a refusal that won't change (a bad key, a malformed request) drops that batch at once. Settings shows the last problem.

@@ -52,7 +52,7 @@ export const conversationOf = (state: DomainState, channel: string): Conversatio
   return undefined;
 };
 
-const allowedConversation = (ctx: FilterContext, channel: string | undefined): Conversation | undefined => {
+export const allowedConversation = (ctx: FilterContext, channel: string | undefined): Conversation | undefined => {
   if (!channel || channel === 'room') return undefined;
   if (ctx.sharedWith(channel)) return undefined;
   const conversation = conversationOf(ctx.state, channel);

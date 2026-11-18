@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { copyFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import { type MemoryAuthor, type MemoryEntry, type MemoryScope, type MemoryView, memoryCap, memoryUsed } from '../../shared/memory.js';
+import { type MemoryAuthor, type MemoryChange, type MemoryEntry, type MemoryScope, type MemoryView, memoryCap, memoryUsed } from '../../shared/memory.js';
 import { secretIn } from '../../shared/secret-text.js';
 import { writeJson } from '../../workspaces/store.js';
 import { belugaHome } from '../home.js';
@@ -18,6 +18,12 @@ type MemoryFile = {
 };
 
 export class MemoryError extends Error {}
+
+/** One write: the text for an add, the entry (id or a piece of its text) for a replace or remove. */
+export type MemoryWriteOp = { readonly op: 'add'; readonly text: string } | { readonly op: 'replace'; readonly entry: string; readonly text: string } | { readonly op: 'remove'; readonly entry: string };
+
+/** The memory after a write, and what the write changed (BLG-102: what Undo needs). */
+export type MemoryWrite = { readonly view: MemoryView; readonly change: MemoryChange };
 
 const SECRET_WORDS = /\b(password|passwd|passphrase|api[ _-]?key|secret|token|bearer)\s*[:=]\s*\S{4,}/i;
 
@@ -45,6 +51,8 @@ const checkCap = (scope: MemoryScope, before: readonly MemoryEntry[], after: rea
   if (used <= cap || used <= memoryUsed(before)) return;
   throw new MemoryError(`${scopeName(scope)} is full: this would use ${used} of ${cap} characters. Merge related entries into one with memory_replace, or drop stale ones with memory_remove, then try again.`);
 };
+
+const sameEntry = (a: MemoryEntry | undefined, b: MemoryEntry | undefined): boolean => Boolean(a && b && a.id === b.id && a.text === b.text && a.at === b.at);
 
 const findEntry = (entries: readonly MemoryEntry[], ref: string): MemoryEntry => {
   const exact = entries.find((e) => e.id === ref.trim());
@@ -94,23 +102,63 @@ export class MemoryStore {
   }
 
   add(scope: MemoryScope, text: string, by: MemoryAuthor): MemoryView {
-    const clean = checkText(text);
-    const { entries } = this.load(this.fileOf(scope));
-    if (entries.some((e) => e.text.toLowerCase() === clean.toLowerCase())) throw new MemoryError('That is remembered already.');
-    return this.save(scope, entries, [...entries, { id: newId(), text: clean, at: Date.now(), by }]);
+    return this.write(scope, { op: 'add', text }, by).view;
   }
 
   replace(scope: MemoryScope, ref: string, text: string, by: MemoryAuthor): MemoryView {
-    const clean = checkText(text);
-    const { entries } = this.load(this.fileOf(scope));
-    const target = findEntry(entries, ref);
-    return this.save(scope, entries, entries.map((e) => (e.id === target.id ? { ...e, text: clean, at: Date.now(), by } : e)));
+    return this.write(scope, { op: 'replace', entry: ref, text }, by).view;
   }
 
   remove(scope: MemoryScope, ref: string): MemoryView {
+    return this.write(scope, { op: 'remove', entry: ref }, 'you').view;
+  }
+
+  /** Add, replace or remove one entry, and say what changed (the entry before and after, and where it stood). */
+  write(scope: MemoryScope, op: MemoryWriteOp, by: MemoryAuthor): MemoryWrite {
     const { entries } = this.load(this.fileOf(scope));
-    const target = findEntry(entries, ref);
-    return this.save(scope, entries, entries.filter((e) => e.id !== target.id));
+    if (op.op === 'add') {
+      const clean = checkText(op.text);
+      if (entries.some((e) => e.text.toLowerCase() === clean.toLowerCase())) throw new MemoryError('That is remembered already.');
+      const after: MemoryEntry = { id: newId(), text: clean, at: Date.now(), by };
+      return { view: this.save(scope, entries, [...entries, after]), change: { scope, op: 'add', after, index: entries.length } };
+    }
+    if (op.op === 'replace') {
+      const clean = checkText(op.text);
+      const before = findEntry(entries, op.entry);
+      const after: MemoryEntry = { ...before, text: clean, at: Date.now(), by };
+      return { view: this.save(scope, entries, entries.map((e) => (e.id === before.id ? after : e))), change: { scope, op: 'replace', before, after, index: entries.indexOf(before) } };
+    }
+    const before = findEntry(entries, op.entry);
+    return { view: this.save(scope, entries, entries.filter((e) => e.id !== before.id)), change: { scope, op: 'remove', before, index: entries.indexOf(before) } };
+  }
+
+  /**
+   * Undo one write (BLG-102): an add is removed, a replace restored, a remove put back where it was.
+   * Refused, with nothing changed, when the entry changed again since (or the undo was done already),
+   * or when putting it back would take the memory over its cap.
+   */
+  undo(change: MemoryChange): MemoryView {
+    const { scope } = change;
+    const { entries } = this.load(this.fileOf(scope));
+    const id = (change.after ?? change.before)!.id;
+    const now = entries.find((e) => e.id === id);
+    if (change.op === 'remove') {
+      if (now) throw new MemoryError('That entry is back already.');
+      const before = change.before!;
+      if (entries.some((e) => e.text.toLowerCase() === before.text.toLowerCase())) throw new MemoryError('That is remembered again already.');
+      return this.restore(scope, entries, [...entries.slice(0, change.index), before, ...entries.slice(change.index)]);
+    }
+    if (!now) throw new MemoryError(change.op === 'add' ? 'That entry is gone already.' : 'That entry was removed since: nothing to restore.');
+    if (!sameEntry(now, change.after)) throw new MemoryError('That entry changed since: change it in Settings instead.');
+    if (change.op === 'add') return this.restore(scope, entries, entries.filter((e) => e.id !== id));
+    return this.restore(scope, entries, entries.map((e) => (e.id === id ? change.before! : e)));
+  }
+
+  private restore(scope: MemoryScope, before: readonly MemoryEntry[], after: readonly MemoryEntry[]): MemoryView {
+    const used = memoryUsed(after);
+    const cap = memoryCap(scope);
+    if (used > cap && used > memoryUsed(before)) throw new MemoryError(`${scopeName(scope)} is full: putting it back would use ${used} of ${cap} characters. Make room first, then undo again.`);
+    return this.save(scope, before, after);
   }
 
   projectRoots(): string[] {

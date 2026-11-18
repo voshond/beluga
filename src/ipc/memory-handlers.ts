@@ -1,6 +1,6 @@
-import { MemoryStore } from '../core/memory/store.js';
+import { MemoryError, MemoryStore } from '../core/memory/store.js';
 import type { Session } from '../core/session.js';
-import type { MemoryOverview } from '../shared/memory.js';
+import type { MemoryOverview, MemoryView } from '../shared/memory.js';
 import type { Args, Method } from './api.js';
 
 type MemoryMethod = Extract<Method, `memory.${string}`>;
@@ -16,9 +16,22 @@ const overview = (s: Session, store: MemoryStore): MemoryOverview => {
   };
 };
 
+/** Undo the memory write a marker on your own run's card stands for (BLG-102), and mark it undone. */
+export const undoMemoryMark = (s: Pick<Session, 'store'>, channel: string, itemId: string, markId: string, store: MemoryStore = new MemoryStore()): MemoryView => {
+  const { log, selfId } = s.store.getState();
+  const item = log.find((l) => l.type === 'agent' && l.channel === channel && l.id === itemId && l.owner === selfId);
+  const mark = item?.type === 'agent' ? item.learned?.find((m) => m.id === markId) : undefined;
+  if (!mark || mark.kind !== 'memory') throw new MemoryError('That memory change isn’t in this conversation any more.');
+  if (mark.undone !== undefined) throw new MemoryError('That was undone already.');
+  const view = store.undo(mark.change);
+  s.store.dispatch({ type: 'agent_learned_undone', itemId, markId, at: Date.now() });
+  return view;
+};
+
 export const MEMORY_HANDLERS = {
   'memory.list': (s) => overview(s, new MemoryStore()),
   'memory.add': (_s, scope, text) => new MemoryStore().add(scope, text, 'you'),
   'memory.replace': (_s, scope, entry, text) => new MemoryStore().replace(scope, entry, text, 'you'),
   'memory.remove': (_s, scope, entry) => new MemoryStore().remove(scope, entry),
+  'memory.undo': (s, channel, itemId, markId) => undoMemoryMark(s, channel, itemId, markId),
 } satisfies MemoryHandlers;

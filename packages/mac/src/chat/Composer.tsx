@@ -31,6 +31,7 @@ import { ModelPicker, myRuntime } from './ModelPicker.js';
 import { AutopilotChip, useAutopilot } from './AutopilotChip.js';
 import { useBuildWith } from './BuildWith.js';
 import { ContextMeter } from './ContextMeter.js';
+import { HonchoSign } from './HonchoSign.js';
 import { McpChip } from './McpChip.js';
 import { boxChats, plainWords } from './chat-box.js';
 import { RunsOnLabel, RunsOnPicker } from './RunsOn.js';
@@ -886,6 +887,8 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
           <span className={s.flex} />
           {/* Your MCP servers, on the box's right beside how full the context is (BLG-252). */}
           {!shared ? <McpChip /> : null}
+          {/* This conversation goes to Honcho (BLG-102): a quiet sign that opens its settings. */}
+          {!shared && channel !== 'draft' ? <HonchoSign channel={channel} /> : null}
           {keys.button}
           {channel !== 'draft' ? <ContextMeter channel={channel} /> : null}
           {/* While you talk, only your voice's control shows: two square buttons side by side stopped Claude by mistake. */}
