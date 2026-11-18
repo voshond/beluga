@@ -16,11 +16,16 @@ Only runs you asked for, in a chat nobody else sees (`HostChatLinks.toolsFor`). 
 
 ## Searching past conversations
 
-`search_chats` lets your agent look up how something went before ("how did we fix the tunnel last time") instead of you pasting it in. It reads what the Search page reads (`Workbench.searchSources`): open, saved and archived worktrees and chats, Your Mac's saved chats and chats shared with you. The search is `searchConversations` (`src/core/search.ts`): every word must appear, in any order and any case, newest first.
+`search_chats` lets your agent look up how something went before ("how did we fix the tunnel last time") instead of you pasting it in. It reads what the Search page reads (`Workbench.searchSources`): open, saved and archived worktrees and chats, Your Mac's saved chats and chats shared with you. It matches words the way the Search page does (any order, any case, a word inside a longer one), with no index; the ranking is `src/core/chat-links/recall.ts`.
 
-- Each hit gives the chat (`ref`, `link`, `title`, `kind`, `state`), when it was said (`at`), who said it, an excerpt of about 300 characters around the match, the messages just before and after (160 characters each), and a `pos`. `read_chat` with `ref` and `around: pos` opens the rest.
-- Capped: 10 hits by default, 25 at most, and an answer stops adding hits past about 20,000 characters. Secrets and paths to secret files are redacted, as in `read_chat`.
-- Left out: the run's own chat (it already has it), the room, DMs, groups and drafts (no ref names them, so `read_chat` could not open them), Beluga's notices and runs that never answered.
+- **Only what it may open, before any cap.** The run's own chat (it already has it), the room, DMs, groups and drafts (no ref names them, so `read_chat` couldn't open them), chats it may not read, Beluga's notices and runs that never answered are dropped first, so a busy room never pushes a real hit out.
+- **One hit per chat.** The best match in each chat, with `more`: how many other messages there match. `read_chat` with `ref` and `around: pos` opens them.
+- **Ranked by relevance.** First the hits that cover the most of the query's words (a word in the chat's title counts), then a match in the title, then the newest. `order: newest` ("where did we leave X") and `order: oldest` ("how did X start") sort by time only.
+- **Loosened on a miss.** When no message has every word, it searches again for any of them, most words first; the answer says `loosened` and each hit lists the words it `matched`. Exact matches never get loosened.
+- **Time bounds.** `after` and `before` take an ISO date (2026-11-01) or a span back from now (24h, 7d, 2w).
+- **What a hit gives.** The chat (`ref`, `link`, `title`, `kind`, `state`), when it was said (`at`), who said it, an excerpt around the match and the messages around it: about 600 characters and two messages either side for the top hit, 240 characters and one either side for the rest.
+- **Capped.** 10 chats by default, 25 at most (`moreChats` says how many more matched), and an answer stops adding hits past about 20,000 characters. Secrets and paths to secret files are redacted, as in `read_chat`.
+- **Nothing found** says how to broaden the search, and both the answer and the tool's description say an empty search is no proof that something never happened.
 - The run's instructions (Settings › Skills & instructions › Past conversations) tell the agent to search when a request points back, before asking you to repeat something.
 
-What the search does not do yet: no ranking (newest wins over most relevant), no stemming or synonyms (a word matches inside longer ones, so "fix" finds "fixed", but "fixed" doesn't find "fix"), and every saved history is read from disk on each call. An index (SQLite FTS5) is the next step if that proves too slow or too literal.
+Still open: no index (SQLite FTS5) and so no word-frequency ranking, no stemming ("fixed" doesn't find "fix"), no summary of the hits by a model, and every saved history is read from disk on each call.

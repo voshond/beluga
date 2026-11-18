@@ -14,23 +14,24 @@ import { humanizeTool } from '../src/shared/step-titles.js';
 
 const ME = 'me-me-me-me-me-me-me-me-me-me-me0';
 const FRIEND = 'friend-friend-friend-friend-frie';
+const DAY = 86_400_000;
 
 const ws = (id: string, name: string, extra: Record<string, unknown> = {}) => ({ id, name, projectId: 'p1', projectRoot: '/p', path: `/p/${id}`, kind: 'worktree', createdAt: 1000, ...extra });
 const said = (id: string, channel: string, text: string, ts: number): LogItem => ({ id, type: 'chat', channel, from: ME, name: 'rob', text, ts, byAgent: false }) as LogItem;
 const run = (id: string, channel: string, text: string, ts: number, extra: Record<string, unknown> = {}): LogItem =>
   ({ id, type: 'agent', channel, subagents: [], requestId: id, owner: ME, ownerName: 'rob', requesterName: 'rob', status: 'done', text, steps: [], ts, ...extra }) as LogItem;
 
-const stateWith = (log: readonly LogItem[] = []): DomainState =>
+const stateWith = (log: readonly LogItem[] = [], more: ReadonlyArray<ReturnType<typeof ws>> = []): DomainState =>
   ({
     ...initialState('room'),
     selfId: ME,
     projectsLoaded: true,
-    projects: [{ id: 'p1', name: 'Beluga', root: '/p', workspaces: [ws('main1', 'main', { kind: 'main' }), ws('wt-1', 'fix-tunnel'), ws('wt-2', 'old-work', { archived: true }), ws('wt-3', 'this-chat')] }],
+    projects: [{ id: 'p1', name: 'Beluga', root: '/p', workspaces: [ws('main1', 'main', { kind: 'main' }), ws('wt-1', 'fix-tunnel'), ws('wt-2', 'old-work', { archived: true }), ws('wt-3', 'this-chat'), ...more] }],
     log,
   }) as unknown as DomainState;
 
-type Hit = { ref: string; title?: string; state: string; pos: string; at: string; author: string; text: string; before?: string; after?: string };
-type Answer = { query: string; hits: Hit[]; note?: string };
+type Hit = { ref: string; title?: string; state: string; pos: string; at: string; author: string; text: string; before?: string[]; after?: string[]; more?: number; matched?: string[] };
+type Answer = { query: string; order: string; loosened?: boolean; note?: string; hits: Hit[]; moreChats?: number };
 
 const tools = (state: DomainState, opts: { requester?: string; own?: string; sources?: () => readonly SearchSource[] } = {}) =>
   chatToolsOf({ state: () => state, requester: opts.requester ?? ME, chain: () => ({ chainId: 'c', hop: 0 }), ...(opts.own ? { own: opts.own } : {}), ...(opts.sources ? { sources: opts.sources } : {}) });
@@ -40,6 +41,7 @@ const answer = (text: string): Answer => {
   if (inside === undefined) throw new Error(`no fence in: ${text}`);
   return JSON.parse(inside) as Answer;
 };
+const positions = (text: string): string[] => answer(text).hits.map((h) => h.pos);
 
 const tunnel = [
   said('m1', 'ws:wt-1', 'the cloudflare tunnel keeps dropping', 1000),
@@ -49,47 +51,55 @@ const tunnel = [
 ];
 
 describe('search_chats', () => {
-  it('finds past messages with every word, newest first, with the chat, when and the lines around', () => {
+  it('gives each chat’s best match, with when, who and the lines around it', () => {
     const got = answer(tools(stateWith(tunnel)).search('tunnel', {}));
-    expect(got.hits.map((h) => h.pos)).toEqual(['m3', 'r1', 'm1']);
-    expect(got.hits[1]).toMatchObject({
+    expect(got.hits.map((h) => h.pos)).toEqual(['r1', 'm3']);
+    expect(got.hits[0]).toMatchObject({
       ref: `${ME}/ws:wt-1`,
       title: 'fix-tunnel',
       state: 'idle',
       pos: 'r1',
       at: new Date(2000).toISOString(),
       author: "rob's Claude",
-      before: 'rob: the cloudflare tunnel keeps dropping',
-      after: 'rob: thanks',
+      before: ['rob: the cloudflare tunnel keeps dropping'],
+      after: ['rob: thanks'],
+      more: 1,
     });
-    expect(got.hits[1]!.text).toContain('keepalive was 0');
-    expect(got.hits[0]).toMatchObject({ title: 'old-work', state: 'archived' });
+    expect(got.hits[0]!.text).toContain('keepalive was 0');
+    expect(got.hits[1]).toMatchObject({ title: 'old-work', state: 'archived' });
+    expect(got.hits[1]!.more).toBeUndefined();
   });
 
-  it('needs every word, in any case', () => {
-    expect(answer(tools(stateWith(tunnel)).search('TUNNEL keepalive', {})).hits.map((h) => h.pos)).toEqual(['r1']);
+  it('needs every word, in any case, while some message has them all', () => {
+    const got = answer(tools(stateWith(tunnel)).search('TUNNEL keepalive', {}));
+    expect(got.hits.map((h) => h.pos)).toEqual(['r1']);
+    expect(got.loosened).toBeUndefined();
   });
 
-  it('says so when nothing matches', () => {
+  it('counts a word in the chat’s title toward the words a hit covers', () => {
+    expect(positions(tools(stateWith(tunnel)).search('tunnel thanks', {}))).toEqual(['m2']);
+  });
+
+  it('says how to broaden when nothing matches, and that nothing found is no proof', () => {
     const got = answer(tools(stateWith(tunnel)).search('kubernetes', {}));
     expect(got.hits).toEqual([]);
-    expect(got.note).toMatch(/other words/);
+    expect(got.note).toMatch(/fewer words/);
+    expect(got.note).toMatch(/not proof/);
   });
 
   it('leaves out the run’s own chat, the room and what has no address', () => {
     const log = [...tunnel, said('x1', 'ws:wt-3', 'how did we fix the tunnel', 5000), said('x2', 'room', 'tunnel in the room', 6000), said('x3', 'dm:abc', 'tunnel in a dm', 7000)];
-    const pos = answer(tools(stateWith(log), { own: 'ws:wt-3' }).search('tunnel', {})).hits.map((h) => h.pos);
-    expect(pos).toEqual(['m3', 'r1', 'm1']);
+    expect(positions(tools(stateWith(log), { own: 'ws:wt-3' }).search('tunnel', {}))).toEqual(['r1', 'm3']);
   });
 
   it('leaves out what read_chat does not show: notices and runs that never answered', () => {
-    const log = [{ id: 's1', type: 'system', channel: 'ws:wt-1', text: 'tunnel notice', ts: 9000, level: 'info' } as LogItem, run('r9', 'ws:wt-1', 'tunnel half', 9500, { status: 'started' }), ...tunnel];
-    expect(answer(tools(stateWith(log)).search('tunnel', {})).hits.map((h) => h.pos)).toEqual(['m3', 'r1', 'm1']);
+    const log = [{ id: 's1', type: 'system', channel: 'ws:wt-2', text: 'tunnel notice', ts: 9000, level: 'info' } as LogItem, run('r9', 'ws:wt-2', 'tunnel half', 9500, { status: 'started' }), ...tunnel];
+    expect(positions(tools(stateWith(log)).search('tunnel', {}))).toEqual(['r1', 'm3']);
   });
 
   it('reads saved and archived conversations it is given, not only the log', () => {
     const saved: SearchSource[] = [{ channel: 'ws:wt-2', place: 'old-work', items: [said('d1', 'ws:wt-2', 'tunnel from disk', 500)], archived: true }];
-    expect(answer(tools(stateWith(), { sources: () => saved }).search('tunnel', {})).hits.map((h) => h.pos)).toEqual(['d1']);
+    expect(positions(tools(stateWith(), { sources: () => saved }).search('tunnel', {}))).toEqual(['d1']);
   });
 
   it('redacts secrets in what it shows', () => {
@@ -99,30 +109,115 @@ describe('search_chats', () => {
     expect(hit.text).not.toContain('id_rsa');
   });
 
-  describe('the cap', () => {
-    const many = Array.from({ length: 60 }, (_, i) => said(`n${i}`, 'ws:wt-1', `tunnel note ${i} ${'x'.repeat(2000)}`, i));
+  it('finds a match past the first 4,000 characters of a long message', () => {
+    const log = [said('long', 'ws:wt-2', `${'filler '.repeat(1000)} the needle is here`, 1)];
+    expect(answer(tools(stateWith(log)).search('needle', {})).hits[0]!.text).toContain('needle');
+  });
 
-    it('gives 10 hits by default and never more than the most it allows', () => {
-      expect(answer(tools(stateWith(many)).search('tunnel', {})).hits).toHaveLength(10);
-      expect(answer(tools(stateWith(many)).search('tunnel', { limit: 500 })).hits.length).toBeLessThanOrEqual(MAX_SEARCH_HITS);
+  it('filters before the cap: a crowded room and DMs never push out a hit it may read', () => {
+    const crowd = Array.from({ length: 400 }, (_, i) => said(`c${i}`, i % 2 ? 'room' : 'dm:abc', `tunnel chatter ${i}`, 10_000 + i));
+    const log = [said('old', 'ws:wt-2', 'the tunnel fix from long ago', 1), ...crowd];
+    expect(positions(tools(stateWith(log)).search('tunnel', {}))).toEqual(['old']);
+  });
+
+  it('gives one hit for a chat with many matches, and says how many more it has', () => {
+    const many = Array.from({ length: 30 }, (_, i) => said(`n${i}`, 'ws:wt-1', `tunnel note ${i}`, 100 + i));
+    const got = answer(tools(stateWith([...many, said('m3', 'ws:wt-2', 'tunnel elsewhere', 1)])).search('tunnel', {}));
+    expect(got.hits.map((h) => h.pos)).toEqual(['n29', 'm3']);
+    expect(got.hits[0]!.more).toBe(29);
+  });
+
+  describe('ranking', () => {
+    const log = [said('both', 'ws:wt-2', 'the deploy broke the cache', 1000), said('one', 'ws:wt-3', 'the deploy went fine', 9000), said('first', 'ws:chat-x', 'deploy plan drafted', 500)];
+    const state = () => stateWith(log, [ws('chat-x', 'notes', { kind: 'chat' })]);
+
+    it('puts the hit covering more words first, newer ones first at the same coverage', () => {
+      expect(positions(tools(state()).search('deploy cache', {}))).toEqual(['both']);
+      expect(positions(tools(state()).search('deploy', {}))).toEqual(['one', 'both', 'first']);
     });
 
-    it('cuts each hit to an excerpt, and the answer to a size', () => {
-      const text = tools(stateWith(many)).search('tunnel', { limit: MAX_SEARCH_HITS });
-      for (const hit of answer(text).hits) expect(hit.text.length).toBeLessThan(400);
+    it('prefers a match in the chat’s title at the same coverage', () => {
+      const titled = [said('t1', 'ws:wt-1', 'tunnel', 1), said('t2', 'ws:wt-2', 'tunnel', 99)];
+      expect(positions(tools(stateWith(titled)).search('tunnel', {}))).toEqual(['t1', 't2']);
+    });
+
+    it('takes newest or oldest first when asked', () => {
+      expect(positions(tools(state()).search('deploy', { order: 'newest' }))).toEqual(['one', 'both', 'first']);
+      expect(positions(tools(state()).search('deploy', { order: 'oldest' }))).toEqual(['first', 'both', 'one']);
+      expect(answer(tools(state()).search('deploy', { order: 'oldest' })).order).toBe('oldest');
+    });
+  });
+
+  describe('the loosened retry', () => {
+    const log = [said('a', 'ws:wt-2', 'the deploy broke the cache', 1000), said('b', 'ws:wt-3', 'cache only', 9000)];
+
+    it('when no message has every word, finds any of them, most words first, and says so', () => {
+      const got = answer(tools(stateWith(log)).search('deploy cache redis', {}));
+      expect(got.loosened).toBe(true);
+      expect(got.note).toMatch(/loosened/);
+      expect(got.hits.map((h) => [h.pos, h.matched])).toEqual([
+        ['a', ['deploy', 'cache']],
+        ['b', ['cache']],
+      ]);
+    });
+
+    it('stays exact when some message has every word', () => {
+      const got = answer(tools(stateWith(log)).search('deploy cache', {}));
+      expect(got.loosened).toBeUndefined();
+      expect(got.hits.map((h) => h.pos)).toEqual(['a']);
+      expect(got.hits[0]!.matched).toBeUndefined();
+    });
+  });
+
+  describe('time bounds', () => {
+    const now = Date.now();
+    const log = [said('old', 'ws:wt-2', 'tunnel then', now - 30 * DAY), said('new', 'ws:wt-3', 'tunnel now', now - DAY)];
+
+    it('takes a span back from now', () => {
+      expect(positions(tools(stateWith(log)).search('tunnel', { after: '7d' }))).toEqual(['new']);
+      expect(positions(tools(stateWith(log)).search('tunnel', { before: '2w' }))).toEqual(['old']);
+    });
+
+    it('takes an ISO date', () => {
+      expect(positions(tools(stateWith(log)).search('tunnel', { before: new Date(now - 7 * DAY).toISOString() }))).toEqual(['old']);
+    });
+
+    it('refuses what is not a time', () => {
+      expect(() => tools(stateWith(log)).search('tunnel', { after: 'last week' })).toThrow(/^bad_time/);
+    });
+  });
+
+  describe('the cap', () => {
+    const many = Array.from({ length: 60 }, (_, i) => said(`n${i}`, `ws:c${i}`, `tunnel note ${i} ${'x'.repeat(2000)}`, i));
+    const crowded = () => stateWith(many, many.map((_, i) => ws(`c${i}`, `chat ${i}`, { kind: 'chat' })));
+
+    it('gives 10 chats by default and never more than the most it allows', () => {
+      const got = answer(tools(crowded()).search('tunnel', {}));
+      expect(got.hits).toHaveLength(10);
+      expect(got.moreChats).toBe(50);
+      expect(answer(tools(crowded()).search('tunnel', { limit: 500 })).hits.length).toBeLessThanOrEqual(MAX_SEARCH_HITS);
+    });
+
+    it('cuts each hit to an excerpt, wider for the top one, and the answer to a size', () => {
+      const text = tools(crowded()).search('tunnel', { limit: MAX_SEARCH_HITS });
+      const [top, ...rest] = answer(text).hits;
+      expect(top!.text.length).toBeLessThan(700);
+      expect(top!.text.length).toBeGreaterThan(rest[0]!.text.length);
+      for (const hit of rest) expect(hit.text.length).toBeLessThan(300);
       expect(text.length).toBeLessThan(MAX_SEARCH_CHARS + 1000);
     });
 
-    it('refuses a limit past the most through the tool', async () => {
+    it('refuses a limit past the most through the tool, and says an empty search proves nothing', async () => {
       const client = new Client({ name: 'test', version: '1' });
       const [a, b] = InMemoryTransport.createLinkedPair();
-      await sdkServer(createChatTools(tools(stateWith(many)))).instance.connect(b);
+      await sdkServer(createChatTools(tools(crowded()))).instance.connect(b);
       await client.connect(a);
       try {
         const got = await client.callTool({ name: 'search_chats', arguments: { query: 'tunnel', limit: MAX_SEARCH_HITS + 1 } });
         expect(got.isError).toBe(true);
         const listed = (await client.listTools()).tools.find((t) => t.name === 'search_chats');
         expect(listed?.annotations).toEqual({ readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+        expect(listed?.description).toMatch(/not proof/);
       } finally {
         await client.close();
       }

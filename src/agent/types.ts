@@ -743,6 +743,6 @@ export interface ChatTools {
   list(opts: { readonly query?: string; readonly state?: 'idle' | 'working' | 'archived'; readonly limit?: number }): string;
   /** A page of one chat, oldest first. `after` is the `next` position of the page before; `around` centres the page on a position (a search hit). */
   read(ref: string, opts: { readonly view?: 'messages' | 'activity'; readonly after?: string; readonly around?: string; readonly limit?: number }): string;
-  /** Past messages with all these words, newest first, from the chats this run may read: each hit with its chat, when, and the lines around it. */
-  search(query: string, opts: { readonly limit?: number }): string;
+  /** Past messages from the chats this run may read, the best one per chat (core/chat-links/recall.ts): each hit with its chat, when, and the lines around it. */
+  search(query: string, opts: { readonly limit?: number; readonly order?: 'relevance' | 'newest' | 'oldest'; readonly after?: string; readonly before?: string }): string;
 }
