@@ -1,10 +1,13 @@
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { PHONE } from '../src/companion/coverage.js';
 import { waitingNeeds } from '../src/companion/needs-you.js';
-import { MAX_PENDING_MEMORY, REFLECTION_MIN_MESSAGES, Reflection, type ReflectionAsk, loadReflection, proposalsFrom, reflectionSource } from '../src/core/memory/reflection.js';
+import { MAX_PENDING_MEMORY, REFLECTION_MIN_MESSAGES, Reflection, type ReflectionAsk, launchReflection, loadReflection, proposalsFrom, reflectionSource } from '../src/core/memory/reflection.js';
+import { COMMANDS, runCommand } from '../src/core/commands.js';
+import { Session } from '../src/core/session.js';
+import { lookBackWords } from '../src/shared/memory.js';
 import { MemoryStore } from '../src/core/memory/store.js';
 import { type Action, type MemoryProposal, Store, initialState } from '../src/core/store.js';
 import type { Project, Workspace } from '../src/workspaces/types.js';
@@ -117,28 +120,27 @@ describe('a pass', () => {
     expect(waitingNeeds(store.getState()).filter((i) => i.id.startsWith('memory-propose:'))).toHaveLength(0);
   });
 
-  it('is off when the setting is off', async () => {
+  it('the setting switches only the merge look back: Look Back by hand works with it off', async () => {
     const { store, asked, reflection } = setup(answer([]));
     store.dispatch({ type: 'prefs', prefs: { reflection: false } });
     talk(store, 'ws:a', 3);
-    expect(await reflection.reflect('ws:a', 'manual')).toMatchObject({ skipped: 'off' });
+    expect(await reflection.reflect('ws:a', 'merge')).toMatchObject({ skipped: 'off' });
     expect(asked.calls).toHaveLength(0);
+    expect(await reflection.reflect('ws:a', 'manual')).toEqual({ proposed: 0 });
+    expect(asked.calls).toHaveLength(1);
   });
 
-  it('runs once per conversation per trigger, and again after trouble', async () => {
-    const { store, reflection, asked } = setup(answer([]));
-    talk(store, 'ws:a', 3);
-    await reflection.reflect('ws:a', 'manual');
-    expect(await reflection.reflect('ws:a', 'manual')).toMatchObject({ skipped: 'done' });
-    await reflection.reflect('ws:a', 'merge');
-    expect(asked.calls).toHaveLength(2);
-
+  it('tries again after trouble, reading what the failed look back would have', async () => {
+    const { store } = setup(answer([]));
     let fail = true;
-    const flaky = new Reflection({ store, ask: async () => (fail ? Promise.reject(new Error('it took too long')) : answer([])), sharedWith: () => false, memory: new MemoryStore(homeDir()), file: null });
+    const calls: string[] = [];
+    const flaky = new Reflection({ store, ask: async (req) => (calls.push(req.prompt), fail ? Promise.reject(new Error('it took too long')) : answer([])), sharedWith: () => false, memory: new MemoryStore(homeDir()), file: null });
     talk(store, 'ws:b', 3);
     expect(await flaky.reflect('ws:b', 'manual')).toMatchObject({ skipped: 'trouble' });
     fail = false;
     expect(await flaky.reflect('ws:b', 'manual')).toEqual({ proposed: 0 });
+    expect(calls[1]).not.toContain('since the last look back');
+    expect(calls[1]).toContain('Request 0');
   });
 
   it('refuses a shared conversation', async () => {
@@ -146,6 +148,106 @@ describe('a pass', () => {
     talk(store, 'ws:shared', 3);
     expect(await reflection.reflect('ws:shared', 'manual')).toMatchObject({ skipped: 'not_yours' });
     expect(asked.calls).toHaveLength(0);
+  });
+});
+
+describe('Look Back as you go (BLG-108)', () => {
+  it('runs again on the same conversation, reading only what is new, with what came before as context', async () => {
+    const { store, asked, reflection } = setup(answer([]));
+    talk(store, 'ws:a', 3);
+    expect(await reflection.reflect('ws:a', 'manual')).toEqual({ proposed: 0 });
+    store.dispatch(said('ws:a', 'Later: always run the linter before committing.'));
+    store.dispatch(said('ws:a', 'Noted.', true));
+    expect(await reflection.reflect('ws:a', 'manual')).toEqual({ proposed: 0 });
+    expect(asked.calls).toHaveLength(2);
+    const [context, fresh] = asked.calls[1]!.prompt.split('The conversation since the last look back');
+    expect(context).toContain('Said before the last look back (context only');
+    expect(context).toContain('Request 2');
+    expect(fresh).toContain('always run the linter');
+    expect(fresh).not.toContain('Request 2');
+  });
+
+  it('says there is nothing new without calling a model', async () => {
+    const { store, asked, reflection } = setup(answer([]));
+    talk(store, 'ws:a', 3);
+    await reflection.reflect('ws:a', 'manual');
+    expect(await reflection.reflect('ws:a', 'manual')).toMatchObject({ skipped: 'nothing_new', why: expect.stringContaining('Nothing new') });
+    expect(asked.calls).toHaveLength(1);
+  });
+
+  it('keeps only a little of what came before as context', async () => {
+    const { store, asked, reflection } = setup(answer([]));
+    talk(store, 'ws:a', 3);
+    store.dispatch(said('ws:a', `old ${'x'.repeat(5_000)}`));
+    await reflection.reflect('ws:a', 'manual');
+    store.dispatch(said('ws:a', 'new words'));
+    await reflection.reflect('ws:a', 'manual');
+    expect(asked.calls[1]!.prompt).not.toContain('old x');
+    expect(asked.calls[1]!.prompt).toContain('new words');
+  });
+
+  it('the merge look back after a manual one reads only what came after it, and runs once', async () => {
+    const { store, asked, reflection } = setup(answer([]));
+    talk(store, 'ws:a', 3);
+    await reflection.reflect('ws:a', 'manual');
+    expect(await reflection.reflect('ws:a', 'merge')).toMatchObject({ skipped: 'nothing_new' });
+    expect(asked.calls).toHaveLength(1);
+    store.dispatch(said('ws:a', 'One more thing: tests live in tests/.'));
+    expect(await reflection.reflect('ws:a', 'merge')).toMatchObject({ skipped: 'done' });
+    expect(asked.calls).toHaveLength(1);
+    expect(await reflection.reflect('ws:a', 'manual')).toEqual({ proposed: 0 });
+    expect(asked.calls[1]!.prompt.split('since the last look back').at(-1)).toContain('tests live in tests/');
+  });
+
+  it('a merge after a manual look back with something new reads only the new part', async () => {
+    const { store, asked, reflection } = setup(answer([]));
+    talk(store, 'ws:a', 3);
+    await reflection.reflect('ws:a', 'manual');
+    store.dispatch(said('ws:a', 'Use the staging database for this.'));
+    expect(await reflection.reflect('ws:a', 'merge')).toEqual({ proposed: 0 });
+    const fresh = asked.calls[1]!.prompt.split('The conversation since the last look back').at(-1)!;
+    expect(fresh).toContain('staging database');
+    expect(fresh).not.toContain('Request 0');
+  });
+
+  it('two quick asks never run two passes on one conversation at once', async () => {
+    const { store, asked, reflection } = setup(answer([]));
+    talk(store, 'ws:a', 3);
+    const [one, two] = await Promise.all([reflection.reflect('ws:a', 'manual'), reflection.reflect('ws:a', 'manual')]);
+    expect(one).toEqual({ proposed: 0 });
+    expect(two).toMatchObject({ skipped: 'running' });
+    expect(asked.calls).toHaveLength(1);
+  });
+
+  it('says what came of it in words', () => {
+    expect(lookBackWords({ proposed: 2 })).toBe('2 things to remember: see Needs You.');
+    expect(lookBackWords({ proposed: 2, skill: 'new' })).toBe('1 thing to remember and a skill to keep: see Needs You.');
+    expect(lookBackWords({ proposed: 1, skill: 'change' })).toBe('A fix to a skill: see Needs You.');
+    expect(lookBackWords({ proposed: 0 })).toBe('Looked back: nothing worth keeping this time.');
+    expect(lookBackWords({ skipped: 'short', why: 'Too short.' })).toBe('Too short.');
+  });
+
+  it('/lookback is a command that looks back at the conversation you are in, and says what came of it', async () => {
+    expect(COMMANDS.find((c) => c.name === 'lookback')?.desc).toBeTruthy();
+    const { store, asked } = setup(answer([{ scope: 'user', text: 'Prefers pnpm over npm.' }]));
+    talk(store, 'ws:a', 3);
+    const toasts: Array<[string, string]> = [];
+    const session = { store, toast: (text: string, level: string) => void toasts.push([text, level]), lookBack: (channel: string) => Session.prototype.lookBack.call(session as never, channel) };
+    const stop = launchReflection({ session, store, ask: asked.ask, sharedWith: () => false, file: null });
+    runCommand(session as never, 'lookback', [], 'ws:a', '/lookback');
+    await vi.waitFor(() => expect(toasts).toHaveLength(1));
+    expect(toasts[0]).toEqual(['1 thing to remember: see Needs You.', 'success']);
+    runCommand(session as never, 'lookback', [], 'ws:a', '/lookback');
+    await vi.waitFor(() => expect(toasts).toHaveLength(2));
+    expect(toasts[1]).toEqual(['Nothing new was said here since the last look back.', 'info']);
+    stop();
+  });
+
+  it('/lookback without the daemon says where it runs', async () => {
+    const toasts: string[] = [];
+    const session = { toast: (text: string) => void toasts.push(text) };
+    expect(await Session.prototype.lookBack.call(session as never, 'ws:a')).toBeUndefined();
+    expect(toasts[0]).toContain('Beluga’s app');
   });
 });
 
@@ -175,7 +277,7 @@ describe('the merge trigger', () => {
 });
 
 const ctx = (more: Partial<Parameters<typeof proposalsFrom>[1]> = {}): Parameters<typeof proposalsFrom>[1] => ({
-  source: { channel: 'ws:a', root: ROOT, project: 'app', lines: [], messages: 6, yours: 3 },
+  source: { channel: 'ws:a', root: ROOT, project: 'app', lines: [], earlier: [], messages: 6, yours: 3, latest: 0 },
   user: { scope: { kind: 'user' }, label: 'About you', entries: [{ id: 'u1', text: 'Writes in English.', at: 0, by: 'you' }], used: 18, cap: 1375 },
   project: { scope: { kind: 'project', root: ROOT }, label: 'app', entries: [], used: 0, cap: 2200 },
   discarded: [],
@@ -254,6 +356,7 @@ describe('Keep, Update and Discard', () => {
     await reflection.reflect('ws:a', 'manual');
     reflection.discard(store.getState().memoryProposals[0]!.id);
     expect(memory.read({ kind: 'user' }).entries).toHaveLength(0);
+    store.dispatch(said('ws:a', 'Still pnpm, please.'));
     expect(await reflection.reflect('ws:a', 'merge')).toEqual({ proposed: 0 });
     expect(asked.calls[1]?.prompt).toContain('- Prefers pnpm over npm.');
   });
@@ -266,22 +369,26 @@ describe('Keep, Update and Discard', () => {
 });
 
 describe('a restart', () => {
-  it('keeps what waits, what was discarded and what was looked back at, 0600', async () => {
+  it('keeps what waits, what was discarded and how far each conversation was looked back at, 0600', async () => {
     const file = path.join(homeDir(), 'memory-reflection.json');
     const first = setup(answer([{ scope: 'user', text: 'Prefers pnpm over npm.' }, { scope: 'user', text: 'Likes short answers.' }]), file);
-    talk(first.store, 'ws:a', 3);
+    const lines = Array.from({ length: 6 }, (_, i) => said('ws:a', `Line ${i}`, i % 2 === 1));
+    const latest = NOW + n;
+    for (const line of lines) first.store.dispatch(line);
     const stop = first.reflection.start();
     await first.reflection.reflect('ws:a', 'manual');
     first.reflection.discard(first.store.getState().memoryProposals[1]!.id);
     stop();
     expect(statSync(file).mode & 0o777).toBe(0o600);
-    expect(loadReflection(file)).toMatchObject({ discarded: ['Likes short answers.'], ran: ['ws:a:manual'] });
+    expect(loadReflection(file)).toMatchObject({ discarded: ['Likes short answers.'], ran: [], covered: { 'ws:a': latest } });
 
     const store = storeWith();
-    talk(store, 'ws:a', 3);
-    const again = new Reflection({ store, ask: answering(answer([])).ask, sharedWith: () => false, memory: first.memory, file });
+    for (const line of lines) store.dispatch(line);
+    const asked = answering(answer([]));
+    const again = new Reflection({ store, ask: asked.ask, sharedWith: () => false, memory: first.memory, file });
     expect(store.getState().memoryProposals.map((p) => p.text)).toEqual(['Prefers pnpm over npm.']);
-    expect(await again.reflect('ws:a', 'manual')).toMatchObject({ skipped: 'done' });
+    expect(await again.reflect('ws:a', 'manual')).toMatchObject({ skipped: 'nothing_new' });
+    expect(asked.calls).toHaveLength(0);
   });
 
   it('never loads a proposal that holds a secret', () => {

@@ -131,7 +131,7 @@ export const SETTING_LABELS: Readonly<Record<SyncedSetting, string>> = {
   settleIdleDays: 'Settle after',
   archiveSettledDays: 'Archive settled chats after',
   scratchFolder: 'Scratch folder',
-  reflection: 'Propose what to remember',
+  reflection: 'Look back when work merges',
   reflectionModel: 'Reflection model',
   reflectionSkills: 'Propose skills',
   reflectionSkillModel: 'Skill draft model',

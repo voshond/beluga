@@ -54,3 +54,19 @@ export type MemoryChange = {
 
 /** The entry a change is about: the one written, or the one removed. */
 export const changedEntry = (change: MemoryChange): MemoryEntry => (change.after ?? change.before)!;
+
+/** What starts a look back (BLG-96): a worktree merging (once, and only with the setting on), or you asking (any time, BLG-108). */
+export type ReflectionTrigger = 'merge' | 'manual';
+
+export type ReflectionSkip = 'off' | 'not_yours' | 'short' | 'nothing_new' | 'done' | 'running' | 'full' | 'trouble';
+
+export type ReflectionOutcome = { readonly proposed: number; readonly skill?: 'new' | 'change' } | { readonly skipped: ReflectionSkip; readonly why: string };
+
+/** What a Look Back came to, in one sentence: how many proposals arrived, or why none (BLG-108). */
+export const lookBackWords = (outcome: ReflectionOutcome): string => {
+  if ('skipped' in outcome) return outcome.why;
+  const memories = outcome.proposed - (outcome.skill ? 1 : 0);
+  const found = [...(memories ? [`${memories} thing${memories === 1 ? '' : 's'} to remember`] : []), ...(outcome.skill ? [outcome.skill === 'new' ? 'a skill to keep' : 'a fix to a skill'] : [])];
+  const words = found.join(' and ');
+  return words ? `${words.charAt(0).toUpperCase()}${words.slice(1)}: see Needs You.` : 'Looked back: nothing worth keeping this time.';
+};

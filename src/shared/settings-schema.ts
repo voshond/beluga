@@ -198,11 +198,11 @@ export const Settings = z.object({
   scratchFolder: z.boolean().default(true),
   machineNote: z.string().max(MACHINE_NOTE_MAX).catch('').default(''),
   machineNoteOn: z.boolean().default(false),
-  /** When work ends, a cheap model looks back at the conversation and proposes what to remember (BLG-96). */
+  /** When a worktree merges, a cheap model looks back at its conversation and proposes what to remember (BLG-96). Look Back by hand works either way (BLG-108). */
   reflection: z.boolean().catch(true).default(true),
   /** The model the reflection pass runs on. */
   reflectionModel: z.string().min(1).max(REFLECTION_MODEL_MAX).catch(REFLECTION_MODEL_DEFAULT).default(REFLECTION_MODEL_DEFAULT),
-  /** The pass also proposes a shared skill, or a fix to one, after multi-step work (BLG-106). Off with `reflection`. */
+  /** The pass also proposes a shared skill, or a fix to one, after multi-step work (BLG-106). */
   reflectionSkills: z.boolean().catch(true).default(true),
   /** The model that drafts the skill. */
   reflectionSkillModel: z.string().min(1).max(REFLECTION_MODEL_MAX).catch(REFLECTION_SKILL_MODEL_DEFAULT).default(REFLECTION_SKILL_MODEL_DEFAULT),

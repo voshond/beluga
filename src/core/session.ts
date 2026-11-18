@@ -74,6 +74,8 @@ import { gatewayOf } from './gateway/registry.js';
 import { receiveFriendOffer } from './friend-offers.js';
 import { onChatReact, reactInChat, type RoomReactDeps } from './room-reactions.js';
 import { receiveRoomCall } from './calls/launch.js';
+import { maybeReflectionOf } from './memory/reflection.js';
+import { type ReflectionOutcome, lookBackWords } from '../shared/memory.js';
 
 /** Bigger, smaller, or back to normal text. */
 export type ZoomDir = 'in' | 'out' | 'reset';
@@ -811,6 +813,25 @@ export class Session {
   btw(channel: string, question: string): Promise<void> {
     if (channel.startsWith('ws:')) this.workspaces?.ensureLoaded(channel.slice(3));
     return this.host.btw.ask(channel, question);
+  }
+
+  /** Look Back at a conversation now (/lookback, BLG-108): what was said since the last look back, and what came of it in a toast. */
+  lookBack(channel: string): Promise<ReflectionOutcome | undefined> {
+    const reflection = maybeReflectionOf(this);
+    if (!reflection) {
+      this.toast('Look Back runs in Beluga’s app (its daemon)', 'info');
+      return Promise.resolve(undefined);
+    }
+    return reflection.reflect(channel, 'manual').then(
+      (outcome) => {
+        this.toast(lookBackWords(outcome), 'skipped' in outcome ? 'info' : 'success');
+        return outcome;
+      },
+      (err: unknown) => {
+        this.toast(err instanceof Error ? err.message : 'Cannot look back at this conversation', 'warn');
+        return undefined;
+      },
+    );
   }
 
   /** Close a conversation's side question. */
