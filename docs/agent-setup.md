@@ -58,7 +58,7 @@ A proposal is refused, with the reason going back to the agent, when:
 - the text holds a secret, such as a provider's key format or a `SECRET_NAME=value` line (`src/shared/key-detect.ts`). Naming a variable (`$GITHUB_TOKEN`) is fine;
 - 10 proposals already wait for you.
 
-A newer proposal for the same skill replaces the older card. Proposals wait in memory: a restart of Beluga drops the ones you haven't answered.
+A newer proposal for the same skill replaces the older card. Proposals you haven't answered survive a restart of Beluga (BLG-103): they are kept in `~/.beluga/skill-proposals.json` (mode 0600, written a second after a change and when Beluga stops) and their cards come back at start. A proposal holding anything a secret check refuses (in its text, the SKILL.md it changes or its reason) is never written there: it waits in memory only. The code is in `src/core/skill-proposal-file.ts`.
 
 The run's instructions say when proposing is right: after multi-step work you'll likely want again, or when a skill it followed was wrong or incomplete. They also say when it isn't: a one-off, something the project's own docs already say, something that fits only one repo, or a preference, which belongs in memory. That piece is "Skills you propose" in Built-in instructions. A friend's, a guest's or an external agent's run never gets these tools.
 

@@ -32,6 +32,7 @@ export function HonchoSettings() {
   const [workspaceDraft, setWorkspaceDraft] = useState<string>();
   const [apiKey, setApiKey] = useState('');
   const [check, setCheck] = useState<Check>();
+  const [keyNote, setKeyNote] = useState<string>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -44,11 +45,13 @@ export function HonchoSettings() {
 
   const url = urlDraft ?? status.url;
   const workspace = workspaceDraft ?? status.workspace;
+  const movingKey = status.hasKey && Boolean(url.trim()) && url.trim().replace(/\/+$/, '') !== status.url;
 
   const save = (patch: Patch): void => {
     setError(undefined);
     client.api.honcho.configure(patch).then(
       (next) => {
+        setKeyNote(status.hasKey && !next.hasKey && next.url !== status.url ? `The saved key was for ${status.url}, so Beluga forgot it. Type ${next.url}’s key if it needs one.` : undefined);
         setStatus(next);
         setUrlDraft(undefined);
         setWorkspaceDraft(undefined);
@@ -59,7 +62,9 @@ export function HonchoSettings() {
 
   const handleToggle = (on: boolean): void => save({ enabled: on });
   const handleSaveUrl = (): void => {
-    if (url.trim() && url.trim() !== status.url) save({ url: url.trim() });
+    if (!url.trim() || url.trim() === status.url) return;
+    save({ url: url.trim(), ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) });
+    setApiKey('');
   };
   const handleSaveWorkspace = (): void => {
     if (workspace.trim() && workspace.trim() !== status.workspace) save({ workspace: workspace.trim() });
@@ -89,7 +94,14 @@ export function HonchoSettings() {
         <Row label="Send conversations to Honcho" detail={`Your own messages and your agents’ answers in your chats, worktrees and Your ${computerTitle()} go to Honcho, which learns how you work. Friends’ messages, runs for friends, tool output and anything that looks like a secret stay here. Only what you say from now on is sent.`}>
           <Switch on={status.enabled} onChange={handleToggle} label="Send conversations to Honcho" />
         </Row>
-        <Row label="Server" detail={`Your own server, on this computer or your network (http://<host>:8000), or Honcho’s cloud at ${HONCHO_CLOUD_URL}.`}>
+        <Row
+          label="Server"
+          detail={
+            movingKey
+              ? `The saved key only goes to ${status.url}: saving this address forgets it. Type the new server’s key below first to save both together.`
+              : `Your own server, on this computer or your network (http://<host>:8000), or Honcho’s cloud at ${HONCHO_CLOUD_URL}.`
+          }
+        >
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -99,7 +111,10 @@ export function HonchoSettings() {
             <input aria-label="Honcho server" className={s.text} value={url} spellCheck={false} placeholder={HONCHO_LOCAL_URL} onChange={(e) => setUrlDraft(e.target.value)} onBlur={handleSaveUrl} />
           </form>
         </Row>
-        <Row label="API key" detail={status.hasKey ? 'A key is saved on this computer, readable only by you. Type a new one to replace it.' : 'Leave it empty for your own server without auth. For Honcho’s cloud, a key from app.honcho.dev.'}>
+        <Row
+          label="API key"
+          detail={keyNote ?? (status.hasKey ? `A key for ${status.url} is saved on this computer, readable only by you. It only ever goes to that server. Type a new one to replace it.` : 'Leave it empty for your own server without auth. For Honcho’s cloud, a key from app.honcho.dev.')}
+        >
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -124,7 +139,7 @@ export function HonchoSettings() {
             <input aria-label="Honcho workspace" className={s.text} value={workspace} spellCheck={false} onChange={(e) => setWorkspaceDraft(e.target.value)} onBlur={handleSaveWorkspace} />
           </form>
         </Row>
-        <Row label="Test connection" detail={check?.text ?? 'Checks the server and key above, saved or not.'}>
+        <Row label="Test connection" detail={check?.text ?? 'Checks the server and key above, saved or not. The saved key is only sent to the saved server: to test another address, type its key.'}>
           <Button size="small" disabled={busy} onClick={handleTest}>
             {busy ? 'Testing…' : 'Test'}
           </Button>

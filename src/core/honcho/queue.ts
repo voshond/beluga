@@ -7,13 +7,16 @@ export type QueueDeps = {
   readonly deliver: Deliver;
   readonly onSent: (count: number) => void;
   readonly onError: (message: string) => void;
+  readonly onChange?: () => void;
   readonly maxItems?: number;
+  readonly maxChars?: number;
   readonly maxAttempts?: number;
   readonly baseDelayMs?: number;
   readonly maxDelayMs?: number;
 };
 
 const MAX_ITEMS = 1000;
+const MAX_CHARS = 2_000_000;
 const MAX_ATTEMPTS = 8;
 const BASE_DELAY_MS = 2000;
 const MAX_DELAY_MS = 5 * 60_000;
@@ -34,13 +37,26 @@ export class HonchoQueue {
     return this.items.length;
   }
 
+  get waiting(): readonly Outgoing[] {
+    return this.items;
+  }
+
   push = (item: Outgoing): void => {
     if (this.stopped || this.seen.has(item.id)) return;
     this.remember(item.id);
     this.items.push(item);
-    const max = this.deps.maxItems ?? MAX_ITEMS;
-    if (this.items.length > max) this.items.splice(0, this.items.length - max);
+    this.trim();
+    this.deps.onChange?.();
     if (!this.timer) this.schedule(0);
+  };
+
+  restore = (items: readonly Outgoing[]): void => {
+    if (this.stopped) return;
+    const fresh = items.filter((i) => !this.seen.has(i.id));
+    for (const i of fresh) this.remember(i.id);
+    this.items = [...fresh, ...this.items];
+    this.trim();
+    if (this.items.length && !this.timer) this.schedule(0);
   };
 
   clear = (): void => {
@@ -48,11 +64,13 @@ export class HonchoQueue {
     this.attempts = 0;
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
+    this.deps.onChange?.();
   };
 
   stop = (): void => {
     this.stopped = true;
-    this.clear();
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = undefined;
   };
 
   flush = async (): Promise<void> => {
@@ -99,6 +117,15 @@ export class HonchoQueue {
   private drop(batch: readonly Outgoing[]): void {
     const gone = new Set(batch);
     this.items = this.items.filter((i) => !gone.has(i));
+    this.deps.onChange?.();
+  }
+
+  private trim(): void {
+    const max = this.deps.maxItems ?? MAX_ITEMS;
+    if (this.items.length > max) this.items.splice(0, this.items.length - max);
+    const maxChars = this.deps.maxChars ?? MAX_CHARS;
+    let chars = this.items.reduce((n, i) => n + i.content.length, 0);
+    while (chars > maxChars && this.items.length > 1) chars -= this.items.shift()!.content.length;
   }
 
   private remember(id: string): void {

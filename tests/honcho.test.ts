@@ -1,13 +1,14 @@
-import { mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HonchoClient, HonchoError, type HonchoFetch } from '../src/core/honcho/client.js';
-import { loadHonchoConfig } from '../src/core/honcho/config.js';
+import { loadHonchoConfig, saveHonchoConfig } from '../src/core/honcho/config.js';
 import { HonchoFeed } from '../src/core/honcho/feed.js';
 import { type FilterContext, type Outgoing, cleanText, conversationOf, pickOutgoing } from '../src/core/honcho/filter.js';
 import { HONCHO_USER_PEER, agentPeerId, honchoId, sessionIdOf } from '../src/core/honcho/mapping.js';
 import { HonchoQueue } from '../src/core/honcho/queue.js';
+import { loadHonchoQueue, saveHonchoQueue } from '../src/core/honcho/queue-file.js';
 import { type Action, Store, initialState } from '../src/core/store.js';
 import { parseArgs } from '../src/ipc/api.js';
 import type { Project, Workspace } from '../src/workspaces/types.js';
@@ -181,6 +182,13 @@ describe('the queue', () => {
     queue.push(item('3'));
     expect(queue.size).toBe(2);
   });
+
+  it('keeps at most its cap in characters too, oldest out first', () => {
+    const queue = new HonchoQueue({ deliver: () => new Promise(() => undefined), onSent: () => undefined, onError: () => undefined, maxChars: 5 });
+    queue.push(item('aaa'));
+    queue.push(item('bbb'));
+    expect(queue.waiting.map((i) => i.id)).toEqual(['bbb']);
+  });
 });
 
 describe('the client', () => {
@@ -300,5 +308,120 @@ describe('the API', () => {
     expect(() => parseArgs('honcho.configure', [{ url: 'file:///etc/passwd' }])).toThrow();
     expect(() => parseArgs('honcho.configure', [{ workspace: 'bad name' }])).toThrow();
     expect(() => parseArgs('honcho.configure', [{ other: 1 }])).toThrow();
+  });
+});
+
+describe('the queue on disk', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const filesIn = () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'honcho-queue-'));
+    return { file: path.join(dir, 'honcho.json'), queueFile: path.join(dir, 'honcho-queue.json') };
+  };
+
+  const feedAt = (files: { file: string; queueFile: string }, fetch: HonchoFetch) => {
+    const store = storeWith();
+    const feed = new HonchoFeed({ store, sharedWith: () => false, ...files, fetch, now: () => NOW, queue: { baseDelayMs: 60_000, maxAttempts: 50 } });
+    feed.start();
+    return { store, feed };
+  };
+
+  const sentWords = (calls: Call[]): string[] => calls.filter((c) => c.url.endsWith('/messages')).flatMap((c) => (c.body.messages as { content: string }[]).map((m) => m.content));
+
+  const waitingWhileDown = (files: { file: string; queueFile: string }) => {
+    const { store, feed } = feedAt(files, fakeFetch(() => 503).fetch);
+    feed.configure({ enabled: true });
+    store.dispatch(mine('first'));
+    store.dispatch(mine('second'));
+    store.dispatch(answer('third'));
+    return feed;
+  };
+
+  it('sends what waited before a restart once it is back, once and in order', async () => {
+    const files = filesIn();
+    const before = waitingWhileDown(files);
+    await vi.advanceTimersByTimeAsync(0);
+    before.stop();
+    expect(statSync(files.queueFile).mode & 0o777).toBe(0o600);
+    expect(loadHonchoQueue(files.queueFile, { url: 'http://localhost:8000', workspace: 'beluga' })).toHaveLength(3);
+
+    const up = fakeFetch();
+    const { feed: after } = feedAt(files, up.fetch);
+    await vi.runAllTimersAsync();
+    expect(sentWords(up.calls)).toEqual(['first', 'second', 'third']);
+    expect(after.status()).toMatchObject({ queued: 0, sent: 3 });
+    after.stop();
+    expect(existsSync(files.queueFile)).toBe(false);
+
+    const again = fakeFetch();
+    const { feed: third } = feedAt(files, again.fetch);
+    await vi.runAllTimersAsync();
+    expect(sentWords(again.calls)).toEqual([]);
+    third.stop();
+  });
+
+  it('empties the file when Honcho is turned off or pointed at another server or workspace', async () => {
+    for (const patch of [{ enabled: false }, { url: 'http://nas.local:8000' }, { workspace: 'other' }]) {
+      const files = filesIn();
+      const feed = waitingWhileDown(files);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(existsSync(files.queueFile)).toBe(true);
+      feed.configure(patch);
+      expect(existsSync(files.queueFile)).toBe(false);
+      feed.stop();
+      expect(existsSync(files.queueFile)).toBe(false);
+    }
+  });
+
+  it('never sends a queue saved for another server, and drops it', async () => {
+    const files = filesIn();
+    saveHonchoQueue(files.queueFile, { url: 'http://localhost:8000', workspace: 'beluga' }, [item('for-localhost')]);
+    saveHonchoConfig({ ...loadHonchoConfig(files.file), enabled: true, url: 'http://nas.local:8000' }, files.file);
+    const up = fakeFetch();
+    const { feed } = feedAt(files, up.fetch);
+    await vi.runAllTimersAsync();
+    expect(sentWords(up.calls)).toEqual([]);
+    expect(existsSync(files.queueFile)).toBe(false);
+    feed.stop();
+  });
+
+  it('writes nothing a secret check refuses', () => {
+    const { queueFile } = filesIn();
+    const secret = { ...item('leak'), content: 'my key is sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123' };
+    saveHonchoQueue(queueFile, { url: 'http://localhost:8000', workspace: 'beluga' }, [item('fine'), secret]);
+    const text = readFileSync(queueFile, 'utf8');
+    expect(text).toContain('fine');
+    expect(text).not.toContain('sk-ant-');
+  });
+});
+
+describe('the saved key stays home', () => {
+  const feedWith = (fetch: HonchoFetch) => new HonchoFeed({ store: storeWith(), sharedWith: () => false, file: null, fetch, now: () => NOW });
+
+  it('a test of another address never sends the saved key, only one typed for it', async () => {
+    const { fetch, calls } = fakeFetch();
+    const feed = feedWith(fetch);
+    feed.configure({ url: 'http://localhost:8000', apiKey: KEY });
+    const authFor = async (draft?: { url?: string; apiKey?: string }): Promise<readonly (string | undefined)[]> => {
+      calls.length = 0;
+      await feed.test(draft);
+      expect(calls.length).toBeGreaterThan(0);
+      return calls.map((c) => c.auth);
+    };
+    expect(await authFor({ url: 'http://evil.example:8000' })).toEqual(calls.map(() => undefined));
+    expect(calls[0]!.url).toBe('http://evil.example:8000/v3/workspaces');
+    expect(new Set(await authFor({ url: 'http://nas.local:8000', apiKey: 'typed-for-the-nas-0001' }))).toEqual(new Set(['Bearer typed-for-the-nas-0001']));
+    expect(new Set(await authFor({ url: 'http://localhost:8000/' }))).toEqual(new Set([`Bearer ${KEY}`]));
+    expect(new Set(await authFor())).toEqual(new Set([`Bearer ${KEY}`]));
+  });
+
+  it('changing the saved address drops the saved key unless a key comes with it', () => {
+    const feed = feedWith(fakeFetch().fetch);
+    feed.configure({ url: 'http://localhost:8000', apiKey: KEY });
+    expect(feed.configure({ workspace: 'other' }).hasKey).toBe(true);
+    expect(feed.configure({ url: 'http://localhost:8000/' }).hasKey).toBe(true);
+    expect(feed.configure({ url: 'http://nas.local:8000' }).hasKey).toBe(false);
+    expect(feed.configure({ url: 'https://api.honcho.dev', apiKey: 'cloud-key-0123456789' }).hasKey).toBe(true);
   });
 });

@@ -16,7 +16,7 @@ Your own Honcho keeps your conversations on your machines. It runs as a Docker s
    - **Server**: `http://localhost:8000` when Honcho runs on the same computer, or `http://<lan-address>:8000` (for example `http://192.168.2.125:8000`) on another one on your network. A plain `http` address is fine there; no domain is needed.
    - **API key**: leave it empty when the server runs without auth (Honcho's default, `AUTH_USE_AUTH=false`). With auth on, paste a JWT made with Honcho's `scripts/generate_jwt_secret.py`.
    - **Workspace**: `beluga` unless you want another name.
-4. Press **Test**. It says *Connected* when Honcho answered and the workspace exists, or what went wrong (not reachable, refused key, not a Honcho server).
+4. Press **Test**. It says *Connected* when Honcho answered and the workspace exists, or what went wrong (not reachable, refused key, not a Honcho server). Testing an address other than the saved one never sends the saved key: type that server's key in **API key** first if it needs one.
 5. Turn on **Send conversations to Honcho**.
 
 Honcho's compose file binds its ports to `127.0.0.1`. To reach it from another computer on your network, publish port 8000 on the LAN address, or put it behind your reverse proxy. Without auth, anyone who reaches that port can read and write your Honcho: keep it off the internet, or turn auth on.
@@ -48,12 +48,16 @@ In Honcho, everything goes to one workspace (default `beluga`). You are one peer
 
 ## Never in the way
 
-Messages wait in a queue in the background and go in batches per conversation. A run never waits for Honcho, and Honcho being down never fails one. When it does not answer, Beluga tries again (2 s, 4 s, 8 s… up to 5 minutes between tries) and gives up on a batch after 8 tries; a refusal that won't change (a bad key, a malformed request) drops that batch at once. Settings shows the last problem. What waits is kept in memory only: quitting Beluga drops it.
+Messages wait in a queue in the background and go in batches per conversation. A run never waits for Honcho, and Honcho being down never fails one. When it does not answer, Beluga tries again (2 s, 4 s, 8 s… up to 5 minutes between tries) and gives up on a batch after 8 tries; a refusal that won't change (a bad key, a malformed request) drops that batch at once. Settings shows the last problem.
+
+What waits survives a restart of Beluga: it is kept in `~/.beluga/honcho-queue.json` (mode 0600), written a second after it changes, right after each batch goes, and when Beluga stops. Back up, Beluga sends it first, once and in order, then what you say next. The file holds your own words, so it is held to the same rules as what goes out: at most 1,000 messages and 2 million characters (the oldest go first), nothing a secret check refuses is ever written to it, and it belongs to the server and workspace it was meant for. It is removed when you turn Honcho off, change the server or the workspace, or when it was saved for another server than the one set now; it is also removed once nothing waits.
 
 ## The key
 
-The server, the key and the counts live in `~/.beluga/honcho.json`, readable only by you (mode 0600). The key is never shown back in Settings, never sent to the phone, never in a report, a log or the black box, and external agents and friends' runs cannot read or change any of this (`honcho.*` is refused to them). The phone has no Honcho settings at all.
+The server, the key and the counts live in `~/.beluga/honcho.json`, readable only by you (mode 0600).
+
+The saved key only ever goes to the server it was saved for. **Test** with another address uses only a key typed for that test, never the saved one. Saving a new **Server** forgets the saved key, unless you typed the new server's key before saving the address (both are then saved together); Settings says so under Server while you edit it, and under API key once the key was forgotten. Changing only the workspace keeps the key. The key is never shown back in Settings, never sent to the phone, never in a report, a log or the black box, and external agents and friends' runs cannot read or change any of this (`honcho.*` is refused to them). The phone has no Honcho settings at all.
 
 ## Turning it off
 
-Turning the switch off stops sending at once and drops what was waiting. What Honcho already has stays on that server: delete the workspace there (Honcho's API or its dashboard) to remove it.
+Turning the switch off stops sending at once and drops what was waiting, on disk too. What Honcho already has stays on that server: delete the workspace there (Honcho's API or its dashboard) to remove it.
