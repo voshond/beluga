@@ -8,6 +8,8 @@ import type { Action } from './store.js';
 const KNOWN = {
   access: true,
   agent_event: true,
+  agent_learned: true,
+  agent_learned_undone: true,
   agent_origins: true,
   agent_term: true,
   approval_add: true,

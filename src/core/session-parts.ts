@@ -37,6 +37,7 @@ import { claudeHome } from './claude-code/launch.js';
 import { callNotesToolsOf } from './calls/launch.js';
 import { toolboxOf } from './toolbox/registry.js';
 import { memoryForRun } from './memory/run.js';
+import type { MemoryChange } from '../shared/memory.js';
 import { MemoryStore } from './memory/store.js';
 import type { ToolboxTools } from '../agent/types.js';
 import { listSharedSkills, readSharedSkill } from './agent-setup.js';
@@ -311,7 +312,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
           },
         } satisfies ToolboxTools;
       },
-      skills: (agent) => ({
+      skills: (agent, learn) => ({
         read: (name?: string) => {
           if (name) return readSharedSkill(name) ?? `There is no skill called ${name}. Call skill_read without a name to list them.`;
           const { root, skills } = listSharedSkills();
@@ -321,19 +322,22 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
           const result = proposeNewSkill(draft, agent, opts.store.getState().skillProposals);
           if ('error' in result) throw new Error(result.error);
           opts.store.dispatch({ type: 'skill_proposal_add', proposal: result.proposal });
+          learn?.({ kind: 'skill', proposal: result.proposal.id, name: result.proposal.name, update: false });
           return `Proposed skill "${draft.name}". It appears as a "Keep / Discard" card; it is written only when the user keeps it.`;
         },
         proposeChange: (draft) => {
           const result = proposeSkillChange(draft, agent, opts.store.getState().skillProposals);
           if ('error' in result) throw new Error(result.error);
           opts.store.dispatch({ type: 'skill_proposal_add', proposal: result.proposal });
+          learn?.({ kind: 'skill', proposal: result.proposal.id, name: result.proposal.name, update: true });
           return `Proposed a change to "${draft.name}". It appears as an "Update / Discard" card; the file changes only when the user updates it.`;
         },
       }),
-      memory: (channel, cwd) => {
+      memory: (channel, cwd, learn) => {
         const wsId = channel.startsWith('ws:') ? channel.slice(3) : undefined;
         const project = opts.store.getState().projects.find((p) => p.root && ((wsId && (p.id === wsId || p.workspaces?.some((w) => w.id === wsId))) || (cwd && (p.root === cwd || p.workspaces?.some((w) => w.path === cwd)))));
-        return memoryForRun(new MemoryStore(), project ? { root: project.root, name: project.name } : undefined);
+        const onChange = learn ? (change: MemoryChange) => learn({ kind: 'memory', change, ...(change.scope.kind === 'project' && project ? { project: project.name } : {}) }) : undefined;
+        return memoryForRun(new MemoryStore(), project ? { root: project.root, name: project.name } : undefined, onChange);
       },
       onBashCommand: (cwd, command) => {
         const service = toolboxOf(session);

@@ -37,6 +37,7 @@ import { type ConvView, type HomeView, type OutputView, type SubAgentView, type 
 import { type Send as Pending, sends, useSends, whereOf } from '../../lib/sends';
 import { SendStatus } from '../../components/SendStatus';
 import { AgentStrip, SubAgentSheet } from '../../components/SubAgents';
+import { LearnedChips } from '../../components/Learned';
 import { store } from '../../lib/store';
 import { upload } from '../../lib/pick';
 import { color } from '../../lib/theme';
@@ -570,6 +571,7 @@ function ClaudeTurn({ t, all, onAgent, topic, runtime, chatLinks, chips }: { t: 
       </View>
       {t.prose.text ? <Prose prose={t.prose} at={{ topic, turn: t.id }} tasks chats={chats} /> : null}
       {chips}
+      {t.learned?.length ? <LearnedChips items={t.learned} /> : null}
       {working ? <LivePanel t={t} /> : <StepsFold t={t} />}
       {t.subagents?.length ? (
         working || t.subagents.length <= 3 ? (

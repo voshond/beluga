@@ -678,6 +678,7 @@ export const PHONE: Record<Method, Side> = {
   'voice.transcribe': 'mac',
   'voice.load': 'mac',
   'honcho.status': 'mac',
+  'honcho.sends': 'mac',
   'honcho.configure': 'mac',
   'honcho.test': 'mac',
   // Calls (BLG-706): the Mac's window makes the sound. The phone answers one on your Mac, declines
@@ -777,6 +778,8 @@ export const PHONE: Record<Method, Side> = {
   'memory.add': 'mac',
   'memory.replace': 'mac',
   'memory.remove': 'mac',
+  // BLG-102: Undo under an agent's answer; the phone shows the markers read-only
+  'memory.undo': 'mac',
 
   // External agents: only the Mac app and `beluga mcp` manage who connects.
   'external.status': 'mac',

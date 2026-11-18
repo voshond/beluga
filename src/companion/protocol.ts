@@ -9,7 +9,7 @@ import { z } from 'zod';
  * ignores what it doesn't know. A breaking change bumps the major, and the Mac keeps answering the
  * previous major for a release.
  */
-export const COMPANION_PROTO = { major: 1, minor: 62 } as const;
+export const COMPANION_PROTO = { major: 1, minor: 63 } as const;
 
 /**
  * What came in which minor, for a phone talking to an older Mac: it subscribes to a topic (and
@@ -166,8 +166,10 @@ export const COMPANION_PROTO = { major: 1, minor: 62 } as const;
  * older Mac sends none, and the phone offers neither.
  * 1.62 (BLG-95): Beluga's memory, about you and per project, read-only (`memory.list`, SINCE.memory). An older Mac
  * has no such call: the phone's Settings leaves the Memory row out.
+ * 1.63 (BLG-102): under your agent's answer, what its run remembered, proposed or looked up (`TurnView.learned`),
+ * read-only: Undo is on the Mac. An older Mac sends none; an older phone shows none.
  */
-export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36, reactions: 41, cancelSteer: 47, triage: 48, draftReview: 49, threads: 50, threadAgents: 50, seen: 51, computers: 52, externalAgents: 53, chatLinks: 55, chatOrigin: 56, queuedOrigin: 57, sharedMark: 58, chatSchedules: 60, autopilot: 61, planRoles: 61, memory: 62 } as const;
+export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36, reactions: 41, cancelSteer: 47, triage: 48, draftReview: 49, threads: 50, threadAgents: 50, seen: 51, computers: 52, externalAgents: 53, chatLinks: 55, chatOrigin: 56, queuedOrigin: 57, sharedMark: 58, chatSchedules: 60, autopilot: 61, planRoles: 61, memory: 62, learned: 63 } as const;
 
 /** One frame's biggest payload, and a file piece. */
 export const MAX_COMPANION_FRAME = 1024 * 1024;
@@ -438,6 +440,23 @@ export const AgentRefView = z.object({ runtime: z.string().max(32), model: z.str
 export type AgentRefView = z.infer<typeof AgentRefView>;
 
 /** 1.41 (BLG-702): one emoji under a message: how many put it there, whether you did, and who (their names, you as "You"). */
+/**
+ * 1.63 (BLG-102): one thing your agent's run did with Beluga's learning features, under its answer:
+ * `memory` (remembered, changed or forgot an entry: its text, whose memory, whether it was undone),
+ * `skill` (proposed a skill: `waiting` while its Keep / Discard card is in Needs You), `recall`
+ * (searched past chats: the words). Read-only on the phone.
+ */
+export const LearnedView = z.object({
+  id,
+  kind: z.enum(['memory', 'skill', 'recall']),
+  title: z.string().max(300),
+  text: z.string().max(2200).optional(),
+  scope: z.string().max(200).optional(),
+  undone: z.boolean().optional(),
+  waiting: z.boolean().optional(),
+});
+export type LearnedView = z.infer<typeof LearnedView>;
+
 export const ChatReactionView = z.object({
   emoji: z.string().min(1).max(32),
   count: z.number().int().min(1),
@@ -491,6 +510,8 @@ export const TurnView = z.object({
   resumesAt: ts.optional(),
   /** 1.41 (BLG-702): a person's message in the room's or a workspace's chat: its emoji reactions (`session.react` changes yours). */
   reactions: z.array(ChatReactionView).max(20).optional(),
+  /** 1.63 (BLG-102): what your agent's run remembered, proposed or looked up, drawn under its answer. */
+  learned: z.array(LearnedView).max(40).optional(),
   /** 1.41: it takes reactions (a message of the room's or a workspace's chat, not an earlier line). */
   reactable: z.boolean().optional(),
   /**

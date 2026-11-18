@@ -19,4 +19,7 @@ export const MEMORY_API = {
   'memory.replace': { args: z.tuple([scope, entry, text]) },
   // Delete an entry → MemoryView.
   'memory.remove': { args: z.tuple([scope, entry]) },
+  // BLG-102: undo a memory write an agent's run made (the marker under its answer: the card's item id, the marker's id) → MemoryView.
+  // An add is removed, a replace restored, a remove put back; refused when it was undone already or the entry changed since.
+  'memory.undo': { args: z.tuple([z.string().min(1).max(4096), z.string().min(1).max(200), z.string().min(1).max(40)]) },
 };
