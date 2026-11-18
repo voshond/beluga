@@ -315,9 +315,9 @@ describe('a chat’s own agent', () => {
     expect(a.place(ch).agent).toEqual({ ...CODEX, model: 'gpt-5' });
     expect(store.getState().assistant.chats.find((c) => c.id === b)?.agent).toEqual({ ...CODEX, model: 'gpt-5' });
     expect((json(path.join(dir, 'chats.json')) as { chats: { id: string; agent?: unknown }[] }).chats.find((c) => c.id === b)?.agent).toEqual({ ...CODEX, model: 'gpt-5' });
-    expect(a.place(ASSISTANT_CHANNEL).agent.runtime).toBe('claude');
+    expect(a.place(ASSISTANT_CHANNEL).agent?.runtime).toBe('claude');
     expect(a.setAgent(ch, undefined)).toBe(true);
-    expect(a.place(ch).agent.runtime).toBe('claude');
+    expect(a.place(ch).agent?.runtime).toBe('claude');
     expect(store.getState().assistant.chats.find((c) => c.id === b)?.agent).toBeUndefined();
     a.stop();
   });

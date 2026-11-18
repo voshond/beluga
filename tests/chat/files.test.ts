@@ -70,7 +70,9 @@ describe('files in chats', () => {
 
     // Small enough to come by itself.
     const got = await settle(() => b.states[file!.sha]?.state === 'here' && b.states[file!.sha]);
-    expect(readFileSync(got.path!)).toEqual(bytes);
+    // Byte for byte, natively: toEqual walks a 3 MB Buffer index by index (about 20 s, and past the
+    // test's timeout on a busy machine).
+    expect(readFileSync(got.path!).equals(bytes)).toBe(true);
     expect(path.basename(got.path!)).toBe('notes.bin');
     expect(bob.mesh.dmHistory(id(ann)).at(-1)).toMatchObject({ text: 'here you go', files: [{ sha: file!.sha, name: 'notes.bin' }] });
     a.files.stop();
@@ -128,7 +130,7 @@ describe('files in chats', () => {
     await settle(() => !cat.mesh.isLinked(id(ann)));
     c.files.download(file!.sha, groupConversation(g.id));
     const got = await settle(() => c.states[file!.sha]?.state === 'here' && c.states[file!.sha]);
-    expect(readFileSync(got.path!)).toEqual(bytes);
+    expect(readFileSync(got.path!).equals(bytes)).toBe(true);
     b.files.stop();
     c.files.stop();
   });
