@@ -233,11 +233,11 @@ describe('nothing', () => {
     expect(loadReflection(file).skills).toEqual([{ name: 'deploy-nas', description: 'Deploy the app to the NAS.' }]);
   });
 
-  it('is off with reflection, and with its own switch', async () => {
+  it('is off at a merge with reflection off (Look Back by hand still runs), and with its own switch', async () => {
     const off = setup(newBlock());
     off.store.dispatch({ type: 'prefs', prefs: { reflection: false } });
     work(off.store);
-    expect(await off.reflection.reflect(CH, 'manual')).toMatchObject({ skipped: 'off' });
+    expect(await off.reflection.reflect(CH, 'merge')).toMatchObject({ skipped: 'off' });
     expect(off.calls).toHaveLength(0);
 
     const memoryOnly = setup(newBlock());
@@ -318,6 +318,7 @@ describe('a fix', () => {
     const [p] = store.getState().skillProposals;
     reflection.skillDiscarded(p!);
     store.dispatch({ type: 'skill_proposal_remove', id: p!.id });
+    store.dispatch(said('One more deploy note.'));
     expect(await reflection.reflect(CH, 'merge')).toEqual({ proposed: 0 });
     expect(skillCalls()).toHaveLength(1);
   });

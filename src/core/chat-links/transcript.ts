@@ -268,7 +268,7 @@ export function chatSnapshot(state: DomainState, text: string, now = Date.now())
 }
 
 /** A conversation's messages view (no tool output), secrets redacted: what the reflection pass reads (BLG-96). */
-export const redactedMessages = (log: readonly LogItem[], channel: string): ReadonlyArray<Pick<ChatItem, 'author' | 'provenance' | 'text'>> => itemsOf(log, channel, 'messages', redactSecrets);
+export const redactedMessages = (log: readonly LogItem[], channel: string): ReadonlyArray<Pick<ChatItem, 'ts' | 'author' | 'provenance' | 'text'>> => itemsOf(log, channel, 'messages', redactSecrets);
 
 /**
  * A conversation's activity view (messages and each run's steps), secrets redacted: what the reflection

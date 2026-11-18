@@ -45,6 +45,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   { name: 'schedule', args: '[prompt]', desc: 'send a prompt into this chat on a schedule, as from Sentinel (Beluga’s app; chat-schedules experiment)' },
   { name: 'btw', args: '<question>', desc: 'a side question: Claude answers beside the chat, without stopping or remembering it' },
   { name: 'compact', args: '[focus]', desc: "shrink this conversation's context (your agent keeps what matters)" },
+  { name: 'lookback', desc: 'propose what to remember from what was said here since the last look back' },
   { name: 'merge', desc: 'merge this worktree into the main folder' },
   { name: 'commit', args: '[message]', desc: 'commit all changes in this workspace' },
   { name: 'fork', args: '<name>', desc: 'copy this workspace and its conversation' },
@@ -151,6 +152,9 @@ export function runCommand(session: Session, name: string, args: readonly string
       session.btw(channel, question).catch((err: unknown) => session.toast(err instanceof Error ? err.message : String(err), 'warn'));
       return;
     }
+    case 'lookback':
+      void session.lookBack(channel);
+      return;
     case 'overview':
     case 'projects':
     case 'workspaces':

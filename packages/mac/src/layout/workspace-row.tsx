@@ -32,6 +32,8 @@ import { FamilyEnd, FamilyMark } from '../threads/FamilyRow.js';
 import { threadFamilyRow } from '../threads/threads-model.js';
 import { useNow } from '../chat/Items.js';
 import { useWorkspaceColor } from './row-color-view.js';
+import { lookBackItem } from '../lib/look-back.js';
+import { lookBackOffered } from '../lib/look-back-model.js';
 import s from './Sidebar.module.css';
 import o from './other-worktrees.module.css';
 
@@ -54,8 +56,8 @@ export function workspaceItems(state: AppState, ws: Workspace, run: ReturnType<t
     ...(color ? [color] : []),
     // Variables for this worktree alone, over its project's (BLG-924).
     ...(ws.kind === 'worktree' && !ws.archived && !isAgentWorktree(ws) ? [{ label: 'Environment…', icon: 'lock' as const, onSelect: () => openSheet({ kind: 'worktree_env', workspaceId: ws.id }) }] : []),
-    // Propose what to remember from this conversation (BLG-96).
-    ...(ws.kind !== 'main' && !isAgentWorktree(ws) && state.prefs.reflection ? [{ label: 'Look Back', icon: 'sparkles' as const, onSelect: () => lookBack(client, ws) }] : []),
+    // Propose what to remember from what was said here since the last look back (BLG-96, BLG-108).
+    ...(lookBackOffered(ws, ws.kind !== 'main' && worktreeSharedWith(state, ws.id).length > 0) ? [lookBackItem(client, `ws:${ws.id}`)] : []),
     // Its link, to mention it in another chat (BLG-878).
     ...copyLinkItems(ws, client).map((item) => ({ ...item, separate: false })),
     ...sections.flatMap((section) =>
@@ -70,20 +72,6 @@ export function workspaceItems(state: AppState, ws: Workspace, run: ReturnType<t
       })),
     ),
   ];
-}
-
-/** Look back at a conversation now, and say what came of it. */
-function lookBack(client: ReturnType<typeof useBeluga>['client'], ws: Workspace): void {
-  client.api.memory.reflect(`ws:${ws.id}`).then(
-    (outcome) => {
-      if ('skipped' in outcome) return toast(client, outcome.why, 'info');
-      const memories = outcome.proposed - (outcome.skill ? 1 : 0);
-      const found = [...(memories ? [`${memories} thing${memories === 1 ? '' : 's'} to remember`] : []), ...(outcome.skill ? [outcome.skill === 'new' ? 'a skill to keep' : 'a fix to a skill'] : [])];
-      const words = found.join(' and ');
-      toast(client, words ? `${words.charAt(0).toUpperCase()}${words.slice(1)}: see Needs You.` : 'Nothing new to remember from this conversation.', 'info');
-    },
-    (err: unknown) => toast(client, err instanceof Error ? err.message : 'Cannot look back at this conversation', 'error'),
-  );
 }
 
 /** Chats, and worktrees of yours (a sub-agent's is Claude's): a worktree's branch takes the new name too. */
