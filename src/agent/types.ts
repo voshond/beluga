@@ -741,6 +741,8 @@ export interface ChatTools {
   wait(messageId: string, timeoutSec?: number): Promise<string>;
   /** The chats this run may read, newest activity first. */
   list(opts: { readonly query?: string; readonly state?: 'idle' | 'working' | 'archived'; readonly limit?: number }): string;
-  /** A page of one chat, oldest first. `after` is the `next` position of the page before. */
-  read(ref: string, opts: { readonly view?: 'messages' | 'activity'; readonly after?: string; readonly limit?: number }): string;
+  /** A page of one chat, oldest first. `after` is the `next` position of the page before; `around` centres the page on a position (a search hit). */
+  read(ref: string, opts: { readonly view?: 'messages' | 'activity'; readonly after?: string; readonly around?: string; readonly limit?: number }): string;
+  /** Past messages with all these words, newest first, from the chats this run may read: each hit with its chat, when, and the lines around it. */
+  search(query: string, opts: { readonly limit?: number }): string;
 }

@@ -128,6 +128,8 @@ function belugaTool(name: string, input: Readonly<Record<string, unknown>>): Hum
       return both('Looked through your chats', 'Looking through your chats');
     case 'read_chat':
       return both('Read another chat', 'Reading another chat');
+    case 'search_chats':
+      return str(input.query) ? both(`Searched past chats for “${str(input.query)}”`, `Searching past chats for “${str(input.query)}”`) : both('Searched past chats', 'Searching past chats');
     case 'send_to_chat':
       return str(input.ref) ? both(`Sent a message to chat:${refWord(str(input.ref))}`, `Sending a message to chat:${refWord(str(input.ref))}`) : both('Sent a message to another chat', 'Sending a message to another chat');
     case 'wait_for_chat':

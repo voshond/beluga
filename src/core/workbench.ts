@@ -2095,6 +2095,13 @@ export class Workbench {
 
   /** Search every conversation: open ones, saved ones and archived ones. */
   search(query: string): void {
+    const sources = this.searchSources();
+    const hits = searchConversations(query, sources);
+    this.deps.store.dispatch({ type: 'search', search: { query, hits, searched: sources.length } });
+  }
+
+  /** Every conversation a search reads: open ones, saved ones and archived ones (your own agents' search_chats too). */
+  searchSources(): SearchSource[] {
     const state = this.deps.store.getState();
     const loaded = new Set(state.log.map((l) => l.channel));
     const sources: SearchSource[] = [];
@@ -2122,8 +2129,7 @@ export class Workbench {
     for (const { channel, items } of this.deps.savedChats?.(loaded) ?? []) {
       if (items.length) sources.push({ channel, place: macChatPlace(channel, items), items });
     }
-    const hits = searchConversations(query, sources);
-    this.deps.store.dispatch({ type: 'search', search: { query, hits, searched: sources.length } });
+    return sources;
   }
 
   /** Open a search hit's conversation. */

@@ -47,6 +47,7 @@ import { fromMachine } from './client-context.js';
 import { buildPreviewAppend } from '../agent/preview-prompt.js';
 import { experimentOn } from '../shared/experiments.js';
 import { type RoutedRun, type TaskRoute, routableRuntime, routedRun } from './board/routing.js';
+import type { SearchSource } from './search.js';
 
 /** How an external agent's message goes in, and what happened to it. */
 export type ExternalSendMode = 'auto' | 'queue' | 'steer' | 'restart';
@@ -62,6 +63,8 @@ export interface AgentHostDeps {
   /** Which agent this Mac runs (named on its run events; default: Claude). */
   /** The agent that runs in `channel` (its place's pick, else your default; BLG-448). */
   readonly agentRef?: (channel?: string) => AgentRef;
+  /** Every conversation a search reads, saved and archived ones too (Workbench.searchSources): search_chats. */
+  readonly searchSources?: () => readonly SearchSource[];
   /** The agents your card lists: a friend's room ask may name one of those (BLG-520). */
   readonly agents?: () => readonly AgentRef[];
   /** Whether this Mac runs that agent now (unset: only your default). */
@@ -380,6 +383,7 @@ export class AgentHost {
       sharing: deps.sharing,
       ...(deps.agentRef ? { agentRef: deps.agentRef } : {}),
       ...(deps.terminalDriving ? { terminalDriving: deps.terminalDriving } : {}),
+      ...(deps.searchSources ? { searchSources: deps.searchSources } : {}),
       placeOf: (channel) => deps.assistant?.(channel, this.selfId)?.place ?? deps.sentinelChat?.(channel, this.selfId) ?? deps.workspaces?.place(channel),
       load: (channel) => void (channel.startsWith('ws:') && deps.workspaces?.ensureLoaded(channel.slice(3))),
       queuedFromChats: (channel) => this.lanes.get(channel)?.waiting.filter((w) => w.body.origin).length ?? 0,
