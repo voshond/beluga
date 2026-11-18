@@ -303,3 +303,39 @@ describe('the phone', () => {
     a.stop();
   });
 });
+
+describe('a chat’s own agent', () => {
+  const CODEX = { runtime: 'codex', label: 'Codex' };
+
+  it('is picked from the composer, kept in chats.json, and runs there; undefined is your default again', () => {
+    const { a, store, dir } = make();
+    const b = a.newChat();
+    const ch = assistantChannel(b);
+    expect(a.setAgent(ch, { ...CODEX, model: 'gpt-5' })).toBe(true);
+    expect(a.place(ch).agent).toEqual({ ...CODEX, model: 'gpt-5' });
+    expect(store.getState().assistant.chats.find((c) => c.id === b)?.agent).toEqual({ ...CODEX, model: 'gpt-5' });
+    expect((json(path.join(dir, 'chats.json')) as { chats: { id: string; agent?: unknown }[] }).chats.find((c) => c.id === b)?.agent).toEqual({ ...CODEX, model: 'gpt-5' });
+    expect(a.place(ASSISTANT_CHANNEL).agent.runtime).toBe('claude');
+    expect(a.setAgent(ch, undefined)).toBe(true);
+    expect(a.place(ch).agent.runtime).toBe('claude');
+    expect(store.getState().assistant.chats.find((c) => c.id === b)?.agent).toBeUndefined();
+    a.stop();
+  });
+
+  it('a model is picked on the agent the chat runs on now', () => {
+    const { a } = make();
+    a.setAgent(ASSISTANT_CHANNEL, { ...CODEX, model: 'gpt-5' });
+    expect(a.setModel(ASSISTANT_CHANNEL, 'gpt-5-mini')).toBe(true);
+    expect(a.place(ASSISTANT_CHANNEL).agent).toEqual({ ...CODEX, model: 'gpt-5-mini' });
+    expect(a.setModel(ASSISTANT_CHANNEL, '')).toBe(true);
+    expect(a.place(ASSISTANT_CHANNEL).agent).toEqual(CODEX);
+    a.stop();
+  });
+
+  it('a chat that is not there takes no pick', () => {
+    const { a } = make();
+    expect(a.setAgent('mac:assistant:gone1', CODEX)).toBe(false);
+    expect(a.setModel('ws:abc', 'gpt-5')).toBe(false);
+    a.stop();
+  });
+});

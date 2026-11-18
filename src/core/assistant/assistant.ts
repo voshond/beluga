@@ -236,7 +236,30 @@ export class MacAssistant {
 
   /** The chats, as the screens see them (the shared state's `assistant`). */
   chats(): AssistantChats {
-    return { chats: this.list.chats.map((c) => ({ id: c.id, channel: assistantChannel(c.id), createdAt: c.createdAt, ...(c.auto ? { auto: true as const } : {}) })), active: this.list.active };
+    return { chats: this.list.chats.map((c) => ({ id: c.id, channel: assistantChannel(c.id), createdAt: c.createdAt, ...(c.auto ? { auto: true as const } : {}), ...(c.agent ? { agent: c.agent } : {}) })), active: this.list.active };
+  }
+
+  /**
+   * Pick a chat's own agent (undefined: your default again). Another runtime can't read the chat's
+   * session, so it starts afresh there with the next message (see place). False: no such chat.
+   */
+  setAgent(channel: string, agent: AgentRef | undefined): boolean {
+    const id = assistantChatOf(channel);
+    if (!id || !this.has(id)) return false;
+    const pick = (c: ChatEntry): ChatEntry => {
+      const { agent: _was, ...rest } = c;
+      return agent ? { ...rest, agent } : rest;
+    };
+    this.save({ ...this.list, chats: this.list.chats.map((c) => (c.id === id ? pick(c) : c)) });
+    return true;
+  }
+
+  /** Pick a chat's model ('' its agent's default), on the agent it runs on now. */
+  setModel(channel: string, model: string): boolean {
+    const id = assistantChatOf(channel);
+    if (!id || !this.has(id)) return false;
+    const { model: _was, ...agent } = this.agent(id);
+    return this.setAgent(channel, model ? { ...agent, model } : agent);
   }
 
   private save(list: ChatsFile): void {

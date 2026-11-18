@@ -17,6 +17,8 @@ export interface PickerState {
   readonly models: readonly RuntimeModel[];
   readonly prefs: { readonly model?: string };
   readonly projects: ReadonlyArray<{ readonly workspaces: ReadonlyArray<{ readonly id: string; readonly agent?: AgentRef; readonly model?: string }> }>;
+  /** Your Mac's chats, each with its own agent when it picked one. */
+  readonly assistant?: { readonly chats: ReadonlyArray<{ readonly channel: string; readonly agent?: AgentRef }> };
 }
 
 export interface PickerModel extends RuntimeModel {
@@ -59,7 +61,9 @@ export type PickAction = { readonly kind: 'model'; readonly value: string } | { 
 
 const DEFAULT_RUNTIME = 'claude';
 
-const workspaceOf = (state: PickerState, channel: string) => {
+const workspaceOf = (state: PickerState, channel: string): { readonly agent?: AgentRef; readonly model?: string } | undefined => {
+  const chat = state.assistant?.chats.find((c) => c.channel === channel);
+  if (chat) return chat.agent ? { agent: chat.agent, ...(chat.agent.model ? { model: chat.agent.model } : {}) } : {};
   const id = channel.startsWith('ws:') ? channel.slice(3) : undefined;
   return id ? state.projects.flatMap((p) => p.workspaces).find((w) => w.id === id) : undefined;
 };
