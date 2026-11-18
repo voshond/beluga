@@ -4,8 +4,10 @@ import { realpath, stat } from 'node:fs/promises';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
+import type { Duplex } from 'node:stream';
 import { isSecretPath } from '../core/shares.js';
 import { hostName } from '../daemon/web.js';
+import { DEV_COOKIE, type DevTarget, forwardDev, forwardDevUpgrade } from './dev-proxy.js';
 import { type PreviewPublic, previewPublic } from './public.js';
 
 /**
@@ -127,11 +129,21 @@ export function sendFile(res: ServerResponse, file: string, csp: string): void {
   createReadStream(file).on('error', () => res.destroy()).pipe(res);
 }
 
+/** A dev server on this computer, carried to the public origin (dev-proxy.ts). */
+export interface DevSite {
+  readonly target: DevTarget;
+  touch(): void;
+  sockets(delta: 1 | -1): void;
+}
+
+const DEV_ENTRY = /^\/d\/([0-9a-f]{32})\/(.*)$/;
+
 export class PreviewServer {
   private server?: Server;
   private port?: number;
   private starting?: Promise<number>;
   private readonly sites = new Map<string, PreviewSite>();
+  private readonly devs = new Map<string, DevSite>();
   /** At the public origin: each preview's pass (its cookie), and the one-time tickets that hand it out. */
   private readonly passes = new Map<string, string>();
   private readonly tickets = new Map<string, { readonly id: string; readonly until: number }>();
@@ -157,12 +169,22 @@ export class PreviewServer {
     return `http://${PREVIEW_HOST}:${await this.start()}`;
   }
 
+  /** Whether frames load from a public origin too (public.ts). */
+  get isPublic(): boolean {
+    return Boolean(this.pub);
+  }
+
   add(id: string, site: PreviewSite): void {
     this.sites.set(id, site);
   }
 
+  addDev(id: string, site: DevSite): void {
+    this.devs.set(id, site);
+  }
+
   remove(id: string): void {
     this.sites.delete(id);
+    this.devs.delete(id);
     this.passes.delete(id);
     for (const [t, v] of this.tickets) if (v.id === id) this.tickets.delete(t);
   }
@@ -205,6 +227,42 @@ export class PreviewServer {
     return false;
   }
 
+  /** At the public origin, a dev page's entry (/d/<id>/<path>): its ticket traded for the cookie that carries every later request there. */
+  private enterDev(id: string, rest: string, url: URL, req: IncomingMessage, res: ServerResponse): void {
+    const pass = this.passes.get(id);
+    const ticket = url.searchParams.get(TICKET_PARAM);
+    const held = ticket ? this.tickets.get(ticket) : undefined;
+    const already = pass && this.devCookie(req) === id;
+    if (!already && (!pass || !ticket || !held || held.id !== id || held.until < Date.now())) return send(res, 401, 'text/plain', 'Open this preview from Beluga');
+    if (ticket) this.tickets.delete(ticket);
+    url.searchParams.delete(TICKET_PARAM);
+    const secure = this.pub?.origin.startsWith('https:') ? '; Secure' : '';
+    res.writeHead(303, {
+      location: `/${rest}${url.search}`,
+      'set-cookie': `${DEV_COOKIE}=${id}.${pass}; Path=/; HttpOnly; SameSite=Lax${secure}`,
+      'cache-control': 'no-store',
+      'referrer-policy': 'no-referrer',
+    });
+    res.end();
+  }
+
+  /** The dev page this request's cookie lets in, if any. */
+  private devCookie(req: IncomingMessage): string | undefined {
+    const [id, pass] = (cookieOf(req, DEV_COOKIE) ?? '').split('.');
+    return id && pass && this.devs.has(id) && this.passes.get(id) === pass ? id : undefined;
+  }
+
+  private upgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
+    const refuse = (): void => void socket.end('HTTP/1.1 401 Unauthorized\r\nconnection: close\r\n\r\n');
+    if (!this.pub || hostName(req.headers.host) !== this.pub.host) return refuse();
+    const id = this.devCookie(req);
+    const dev = id ? this.devs.get(id) : undefined;
+    if (!dev) return refuse();
+    dev.touch();
+    dev.sockets(1);
+    forwardDevUpgrade(dev.target, req, socket, head, () => dev.sockets(-1));
+  }
+
   private start(): Promise<number> {
     if (this.port) return Promise.resolve(this.port);
     this.starting ??= this.listen(this.wanted)
@@ -217,6 +275,7 @@ export class PreviewServer {
     return new Promise<number>((resolve, reject) => {
       const server = createServer((req, res) => void this.request(req, res).catch(() => res.destroy()));
       server.on('clientError', (_err, socket) => socket.destroy());
+      server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => this.upgrade(req, socket, head));
       server.once('error', reject);
       server.listen(port, this.pub?.listen ?? PREVIEW_HOST, () => {
         this.server = server;
@@ -230,7 +289,6 @@ export class PreviewServer {
 
   private async request(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const host = hostName(req.headers.host);
-    if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'text/plain', 'GET only');
     if (host !== PREVIEW_HOST && host !== 'localhost' && host !== this.pub?.host) return send(res, 421, 'text/plain', 'Not here');
     let url: URL;
     try {
@@ -239,6 +297,18 @@ export class PreviewServer {
       return send(res, 400, 'text/plain', 'Not an address');
     }
     const m = /^\/p\/([0-9a-f]{32})\/(.*)$/.exec(url.pathname);
+    const publicHost = Boolean(this.pub && host === this.pub.host);
+    if (publicHost && !m) {
+      const entry = DEV_ENTRY.exec(url.pathname);
+      if (entry && this.devs.has(entry[1]!)) return this.enterDev(entry[1]!, entry[2]!, url, req, res);
+      const id = this.devCookie(req);
+      const dev = id ? this.devs.get(id) : undefined;
+      if (dev) {
+        dev.touch();
+        return forwardDev(dev.target, frameAncestors(this.pub), req, res);
+      }
+    }
+    if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'text/plain', 'GET only');
     const site = m ? this.sites.get(m[1]!) : undefined;
     if (!site) return send(res, 404, 'text/plain', 'This preview has closed');
     if (this.pub && host === this.pub.host && !this.admit(m![1]!, url, req, res)) return;
@@ -255,5 +325,6 @@ export class PreviewServer {
     this.server = undefined;
     this.port = undefined;
     this.sites.clear();
+    this.devs.clear();
   }
 }

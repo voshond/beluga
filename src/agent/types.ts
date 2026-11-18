@@ -161,6 +161,8 @@ export interface AgentRunInput {
   readonly chatVars?: readonly string[];
   /** Live previews are on (Settings › Experimental): what Claude is told about showing them. */
   readonly previewBrief?: string;
+  /** Beluga's web port serves the network: the name or address other computers reach this one at. */
+  readonly servedTo?: string;
   /** Your own runs: sentinels (core/sentinel), and what Claude is told (a sentinel run's brief, or a short note). */
   readonly sentinelTools?: SentinelTools;
   readonly sentinelBrief?: string;

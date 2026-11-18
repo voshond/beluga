@@ -179,6 +179,13 @@ export function keptBashInput(tool: string, input: Readonly<Record<string, unkno
   };
 }
 
+/** Whether anything a worktree's run kept on purpose is still running there (not the shell Claude ran it from). */
+export const keptAlive = (rows: readonly ProcRow[], dir: string): boolean => rows.some((r) => r.pid !== process.pid && carries(r.line, 'KEEP', '1') && carries(r.line, 'WORKTREE', dir) && !BASH_SHELL.test(r.line));
+
+export async function keptRunningIn(dir: string): Promise<boolean> {
+  return keptAlive(await processRows(), path.resolve(dir));
+}
+
 /** Whether the machine-wide e2e lock is held from this worktree (one small file read, no ps). */
 export function e2eLockedIn(dir: string): boolean {
   return lockedRun(path.resolve(dir)) !== undefined;

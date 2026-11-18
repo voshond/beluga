@@ -142,6 +142,23 @@ export function buildScratchAppend(dir: string): string {
 }
 
 /**
+ * Beluga here serves other computers on its network (its web port, docs/thin-client.md): the person
+ * is most likely at one of them, so what Claude starts for them must be reachable from there.
+ */
+export function buildServedAppend(host: string): string {
+  return [
+    '',
+    '',
+    'This computer serves Beluga to other computers on its network, and the user is most likely at one of them,',
+    'not at this screen. A server you start for them to look at (a dev server, a preview, a docs site) listens on all',
+    'interfaces (Vite: `--host 0.0.0.0`, Next: `-H 0.0.0.0`, others: their host option), and its address in your',
+    `answer is http://${host}:<port>, never localhost or 127.0.0.1. A \`\`\`beluga-preview block still names`,
+    'http://localhost:<port>: Beluga carries that page to them. Never open a browser or a window here for them to see:',
+    'show it with a preview, a screenshot in the scratch folder, or the address.',
+  ].join('\n');
+}
+
+/**
  * A worktree's run: what it leaves running is stopped when the turn ends, unless kept on purpose (see
  * workspaces/test-procs.ts). Claude Code's Bash call is rewritten to detach a kept one (keptBashInput);
  * Codex's, OpenCode's and Copilot's commands can't be, so they're told to detach it themselves (nohup, output to a file, `&`).

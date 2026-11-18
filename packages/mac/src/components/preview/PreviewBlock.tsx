@@ -4,6 +4,7 @@ import { quoteInBox } from '../../chat/message-menu.js';
 import { copyText } from '../../lib/copy.js';
 import { toast, useApi, useApp, useBeluga } from '../../lib/beluga.js';
 import { openExternal } from '../../lib/system.js';
+import { webServed } from '../../lib/boot.js';
 import { useWindowActive } from '../../lib/window-active.js';
 import { Icon } from '../Icon.js';
 import { ActionsContext, ActionsDropdown, type ActionItem } from '../SpecMenu.js';
@@ -11,7 +12,7 @@ import { Button, IconButton, Segmented, Tip, cx } from '../ui.js';
 import { PropControls } from './PropControls.js';
 import { PreviewNotice, usePreviewHere } from './PreviewNotice.js';
 import { AuditPanel, EventsStrip, ProblemCard } from './PreviewParts.js';
-import { type ComponentWidth, COMPONENT_WIDTHS, askToFix, floatsOverFrame, frameHeight, pageScale, propsForAgent, variantField } from './preview-model.js';
+import { type ComponentWidth, COMPONENT_WIDTHS, askToFix, askToOpenUp, browserUrl, floatsOverFrame, frameHeight, pageScale, propsForAgent, variantField } from './preview-model.js';
 import { PIN_STATES, type PinState, usePreview } from './use-preview.js';
 import s from './preview.module.css';
 
@@ -133,6 +134,9 @@ export function PreviewView({ ref_: ref, wsId, embedded = false }: { ref_: Previ
   const exports = p.ok?.component?.exports ?? [];
   const variantOf = useMemo(() => variantField(fields), [fields]);
   const file = target.kind === 'url' ? undefined : target.file;
+  const remote = webServed();
+  const pageUrl = target.kind === 'url' ? browserUrl(target.url, p.result, remote) : undefined;
+  const closedToLan = remote && target.kind === 'url' && p.ok?.lanBlocked;
   const goTo = (): void => void (file && api.workbench.openCode(wsId, file));
   const say = (text: string, level: 'success' | 'warn' = 'success'): void => toast(client, text, level);
   const ask = (): void => void (p.problem && quoteInBox(ui, askToFix(title, p.problem, p.values)));
@@ -144,7 +148,7 @@ export function PreviewView({ ref_: ref, wsId, embedded = false }: { ref_: Previ
   // ••• and right-click: everything beyond the frame and its props.
   const items: ActionItem[] = [
     ...(file ? [{ label: 'Open in Editor', icon: 'external' as const, onSelect: goTo }] : []),
-    ...(target.kind === 'url' ? [{ label: 'Open in Browser', icon: 'globe' as const, onSelect: () => void openExternal(target.url) }] : []),
+    ...(pageUrl ? [{ label: 'Open in Browser', icon: 'globe' as const, onSelect: () => void openExternal(pageUrl) }] : []),
     { label: 'Draw Again', icon: 'refresh', onSelect: p.redraw },
     ...(!page && exports.length > 1
       ? [
@@ -232,6 +236,14 @@ export function PreviewView({ ref_: ref, wsId, embedded = false }: { ref_: Previ
           {!embedded ? <IconButton icon="expand" label={expanded ? 'Smaller' : 'Bigger'} active={expanded} onClick={() => setExpanded((v) => !v)} /> : null}
         </figcaption>
         {ref.note ? <div className={s.note}>{ref.note}</div> : null}
+        {closedToLan && target.kind === 'url' ? (
+          <div className={cx(s.note, s.noteRow)} role="status">
+            <span>{`${new URL(target.url).host} listens only on the computer Beluga runs on, so your browser can’t open it from here.`}</span>
+            <Button size="small" variant="quiet" onClick={() => quoteInBox(ui, askToOpenUp(target.url))}>
+              Ask Agent to Fix
+            </Button>
+          </div>
+        ) : null}
         <div ref={stage} className={cx(s.stage, page && s.pageStage, p.canvas === 'dark' && s.stageDark, blocked && s.stageBlocked)} style={{ height: blocked ? undefined : stageHeight }}>
           {p.src && p.ok && framed ? (
             <iframe
@@ -248,7 +260,7 @@ export function PreviewView({ ref_: ref, wsId, embedded = false }: { ref_: Previ
             />
           ) : null}
           {p.problem ? (
-            <ProblemCard problem={p.problem} touched={p.touched.size > 0} onReset={p.reset} onAsk={ask} onRetry={p.redraw} onTurnOn={() => ui.patch({ settings: 'experimental' })} url={target.kind === 'url' ? target.url : undefined} />
+            <ProblemCard problem={p.problem} touched={p.touched.size > 0} onReset={p.reset} onAsk={ask} onRetry={p.redraw} onTurnOn={() => ui.patch({ settings: 'experimental' })} url={pageUrl} />
           ) : !shown ? (
             <div className={s.skeleton}>
               <span className={s.skeletonPulse} />

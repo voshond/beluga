@@ -91,6 +91,18 @@ Commands and files that touch secrets (`.env` files, keys, `.ssh`, `.aws`, crede
 - **Windows**: not supported yet. The app offers commands and files only, and a screenshot request
   answers that.
 
+## Dev servers and previews
+
+The server's agents know you are at another computer while its web port listens beyond loopback
+(Settings › Agent shows the brief as *Serving other computers*): a server they start for you
+listens on all interfaces, and they give its address on your network (`http://<server>:<port>`),
+never localhost. The address is the server's LAN address; set `BELUGA_LAN_HOST` in the daemon's
+environment to give its name instead (`BELUGA_LAN_HOST=i9arch`).
+
+Live previews draw in the window when the server has a public preview origin
+([docs/previews.md](previews.md#from-another-computer-the-web-port)), dev server pages included;
+their **Open in Browser** goes to the page's address on your network.
+
 ## Also works
 
 - **Tailscale**: `beluga web --tailscale` gives a `https://<machine>.<tailnet>.ts.net` address;

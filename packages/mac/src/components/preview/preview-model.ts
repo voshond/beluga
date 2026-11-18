@@ -176,13 +176,24 @@ export function addEvent(events: readonly FiredEvent[], name: string, detail: st
 
 /**
  * What a page from the web port loads (src/preview/public.ts): the server's preview at its public
- * origin. A dev server's page is on that computer's localhost, which this one can't reach.
+ * origin. A dev server's page goes through it too (src/preview/dev-proxy.ts), entered at its `via`;
+ * from a server too old to carry it, it can't be reached from here.
  */
 export function atPreviewOrigin(opened: PreviewResult, origin: string): PreviewResult {
   if (!opened.ok) return opened;
-  if (opened.kind === 'url') return { ok: false, kind: 'elsewhere', title: 'Dev server pages show on the computer that runs them', detail: 'Open the page in a browser there, or ask for a preview of the component.' };
+  if (opened.kind === 'url' && !opened.via) return { ok: false, kind: 'elsewhere', title: 'This dev server runs on the computer Beluga runs on', detail: opened.lan ? 'Open it in your browser at its address on your network.' : 'Its page can’t be shown from here yet. Ask for a preview of the component instead.' };
   const u = new URL(opened.url);
-  const at = new URL(`${new URL(origin).origin}${u.pathname}${u.search}${u.hash}`);
+  const path = opened.kind === 'url' && opened.via ? `${opened.via}${u.pathname.replace(/^\//, '')}` : u.pathname;
+  const at = new URL(`${new URL(origin).origin}${path}${u.search}${u.hash}`);
   if (opened.ticket) at.searchParams.set('beluga_ticket', opened.ticket);
   return { ...opened, url: at.toString() };
+}
+
+/** Where Open in Browser goes: a dev page's address on the network when this page is served from elsewhere. */
+export const browserUrl = (url: string, opened: PreviewResult | undefined, remote: boolean): string => (remote && opened?.ok && opened.lan ? opened.lan : url);
+
+/** What your agent is asked when a dev server listens on its own computer only. */
+export function askToOpenUp(url: string): string {
+  const port = new URL(url).port;
+  return `The dev server at ${url} listens on this computer only, so I can't open it from mine. Restart it so it listens on all interfaces (for Vite: \`--host 0.0.0.0\`, keep port ${port}), kept running, and tell me its address on the network.`;
 }

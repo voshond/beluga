@@ -12638,5 +12638,9 @@
  "{0} does this part too": "这部分也由 {0} 来做",
  "Planned by": "规划：",
  "built by": "构建：",
- "and checked by": "检查："
+ "and checked by": "检查：",
+ "This dev server runs on the computer Beluga runs on": "这个开发服务器运行在运行 Beluga 的电脑上",
+ "Open it in your browser at its address on your network.": "在浏览器中用它在你网络中的地址打开。",
+ "Its page can’t be shown from here yet. Ask for a preview of the component instead.": "它的页面暂时无法在这里显示。可以改为请求组件的预览。",
+ "{0} listens only on the computer Beluga runs on, so your browser can’t open it from here.": "{0} 只在运行 Beluga 的电脑上监听，所以你的浏览器无法从这里打开它。"
 }

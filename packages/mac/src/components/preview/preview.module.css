@@ -84,6 +84,13 @@ button.title:hover {
   font-size: 12px;
 }
 
+.noteRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
 /* The frame: its height follows what the component needs, smoothly; it fades in once drawn. */
 .stage {
   position: relative;

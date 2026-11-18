@@ -21,5 +21,8 @@ export const PREVIEW_API = {
   'preview.open': { args: z.tuple([z.string().min(1).max(200), z.object({ target: PreviewTargetSchema, props: z.record(z.string().max(200), z.unknown()).optional(), css: file.optional(), wrap: file.optional() })]) },
   // A picture of a preview (a PNG data URL, drawn in its frame) saved in the worktree's scratch folder →
   // { ok, path } or a problem. `still`: the newest picture of that preview, kept for the phone (one per file).
+  // A preview that failed while drawing in the window (a render error, a missing provider): told to your agent
+  // with its next turn in that worktree, once.
+  'preview.failed': { args: z.tuple([z.string().min(1).max(200), z.object({ title: z.string().min(1).max(200), problem: z.string().min(1).max(300), details: z.string().max(4000).optional() })]) },
   'preview.snapshot': { args: z.tuple([z.string().min(1).max(200), z.object({ target: PreviewTargetSchema, name: z.string().max(200), png: z.string().max(MAX_PICTURE), still: z.boolean().optional() })]) },
 } as const;

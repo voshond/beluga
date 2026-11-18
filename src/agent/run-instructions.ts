@@ -5,7 +5,7 @@ import { type MemoryView, PROJECT_MEMORY_MAX, USER_MEMORY_MAX } from '../shared/
 import { buildGraphAppend } from './graph-prompt.js';
 import { buildHonchoAppend } from './honcho-prompt.js';
 import { buildMemoryAppend } from './memory-prompt.js';
-import { type ShellSetup, buildAskOnlyAppend, buildChatRecallAppend, buildChatSendAppend, buildChatVarsAppend, buildCommitAppend, buildKeepAppend, buildMachineAppend, buildScratchAppend, buildSetupAppend, buildShellAppend, buildShippedAppend, buildSystemAppend, loginShellSetup } from './prompt.js';
+import { type ShellSetup, buildAskOnlyAppend, buildChatRecallAppend, buildChatSendAppend, buildChatVarsAppend, buildCommitAppend, buildKeepAppend, buildMachineAppend, buildServedAppend, buildScratchAppend, buildSetupAppend, buildShellAppend, buildShippedAppend, buildSystemAppend, loginShellSetup } from './prompt.js';
 import { buildSkillProposeAppend } from './skill-tools.js';
 import { buildSyncMainAppend } from './sync-main.js';
 import { buildTerminalAppend } from './terminal-prompt.js';
@@ -74,6 +74,14 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
     sample: () => buildChatVarsAppend(['OPENAI_API_KEY']),
   },
   { id: 'shell', label: 'Your shell is zsh', when: 'Every run, when its commands run in zsh', source: 'src/agent/prompt.ts', text: (c) => buildShellAppend(c.shell), sample: () => buildShellAppend('zsh-compat') },
+  {
+    id: 'served',
+    label: 'Serving other computers',
+    when: 'Your own runs, while Beluga’s web port serves your network',
+    source: 'src/agent/prompt.ts',
+    text: (c) => (c.input.servedTo && !c.input.env?.BELUGA_REMOTE_CLIENT ? buildServedAppend(c.input.servedTo) : ''),
+    sample: () => buildServedAppend('i9arch'),
+  },
   { id: 'keep', label: 'Processes that keep running', when: 'Worktree runs', source: 'src/agent/prompt.ts', text: (c) => (c.worktree ? buildKeepAppend(c.agent) : ''), sample: () => buildKeepAppend() },
   { id: 'commit', label: 'Commit before ending', when: 'Worktree runs (not a plan’s, not in a main folder)', source: 'src/agent/prompt.ts', text: (c) => (c.worktree && !c.input.planBrief && !c.askOnly ? buildCommitAppend(c.input.place?.openPr, c.input.place?.landsOn) : ''), sample: () => buildCommitAppend() },
   {

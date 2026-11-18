@@ -177,6 +177,10 @@ beluga web --off         # close browser access, every way in
 
 Browser access stays on across restarts until `beluga web --off`.
 
+Listening beyond loopback (`--listen 0.0.0.0:7777`), the server's agents are told you are at
+another computer: servers they start for you listen on all interfaces and are given by their address
+on your network ([Dev servers and previews](thin-client.md#dev-servers-and-previews)).
+
 A browser has no menu bar, so the gear at the top left of the sidebar holds it: **Settings…**
 first, then Keys and Commands, Everything You Can Do… (⌘K), and the File, View and Go menus.
 Settings there change the Beluga on the server, as the Mac app's do; how it looks (appearance,

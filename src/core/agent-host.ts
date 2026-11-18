@@ -90,6 +90,8 @@ export interface AgentHostDeps {
   readonly dotenvAccess?: DotenvAccess;
   /** Stop the test runs a worktree's Claude started and left behind (see workspaces/test-procs.ts). */
   readonly stopTests?: (dir: string) => Promise<unknown>;
+  /** Whether what a worktree's run kept on purpose still runs (workspaces/test-procs.ts). */
+  readonly keptRunning?: (dir: string) => Promise<boolean>;
   /** A short worktree name for a task (a small model names it). */
   readonly nameTask?: (prompt: string) => Promise<string>;
   /** Where the details of Claude's steps are kept (default: in memory only). */
@@ -128,6 +130,8 @@ export interface AgentHostDeps {
   readonly openPage?: (url: string) => Promise<void>;
   /** The notes of calls you were in (core/calls, BLG-715), as tools for your own runs. */
   readonly callNotes?: () => import('../agent/types.js').CallNotesTools | undefined;
+  /** Beluga's web port serves the network: how other computers reach this one (src/net/lan.ts). */
+  readonly servedTo?: () => string | undefined;
   /** Your phone (core/phone, BLG-150), your own runs: tools to act on it, saving screenshots in `scratchDir`. `env` lets Bash use adb/scrcpy (BLG-174). */
   readonly phone?: (scratchDir?: string) => { readonly tools: import('../agent/types.js').PhoneTools; readonly brief: string; readonly env?: Record<string, string> } | undefined;
   /** How freely Claude may use the phone now (off · ask · use · full), for the owner-approval gate. */
@@ -462,6 +466,13 @@ export class AgentHost {
       lane.interruptedBy = undefined;
       if (!lane.current) this.wakeIdle(lane.channel);
     }
+  }
+
+  /** What a run kept running on purpose, said once: the last command that asked, and whether it still runs. */
+  private async noteKept(channel: string, worktree: string, command: string): Promise<void> {
+    const running = (await this.deps.keptRunning?.(worktree).catch(() => true)) ?? true;
+    const text = running ? `Left running on purpose: ${command}. Archiving the worktree stops it.` : `Asked to keep running, but it has stopped since: ${command}.`;
+    this.store.dispatch({ type: 'system', channel, level: running ? 'info' : 'warn', text });
   }
 
   /** Nothing runs in this conversation any more: let whoever waited for that go on. */
@@ -1590,6 +1601,7 @@ export class AgentHost {
       const chats = withRecall(this.links.toolsFor({ from, external: Boolean(external), channel: body.channel, chain: () => chain, signal: controller.signal }), learn);
       // Live previews (Settings › Experimental): your own runs in a project's folder learn to show what they build.
       const previewBrief = from === this.selfId && place && experimentOn(this.store.getState().prefs.experiments, 'previews') ? buildPreviewAppend() : undefined;
+      const servedTo = from === this.selfId && !remote ? this.deps.servedTo?.() : undefined;
       // A plan's home conversation (a main folder's chat, often): the plan's tools.
       const plans = from !== this.selfId || place?.syncMain ? undefined : this.deps.plans?.(body.channel, from, body.requestId.startsWith('compact-') ? undefined : body.prompt, () => ({ ...chain }));
       // Syncing main never gets them, so it never counts as missing them.
@@ -1667,6 +1679,7 @@ export class AgentHost {
         ...(mcpTools ? { mcpTools } : {}),
         ...(chats ? { chatTools: chats } : {}),
         ...(previewBrief ? { previewBrief } : {}),
+        ...(servedTo ? { servedTo } : {}),
         ...(sentinel ? { sentinelTools: sentinel.tools, sentinelBrief: sentinel.brief, ...(sentinel.dashboard ? { dashboardTools: sentinel.dashboard } : {}) } : {}),
         ...(toolboxTools ? { toolboxTools } : {}),
         ...(skillTools ? { skillTools } : {}),
@@ -1780,7 +1793,7 @@ export class AgentHost {
       // Except a server kept on purpose: a command marked KLAUD_KEEP=1 (stopTests spares it, never a test run).
       // Words in the message ("keep going") never spare anything: Claude marks what you asked to keep.
       if (worktree && !lane.current && (this.testRuns.delete(worktree) || e2eLockedIn(worktree))) void this.deps.stopTests?.(worktree).catch(() => undefined);
-      if (kept.size) this.store.dispatch({ type: 'system', channel: body.channel, level: 'info', text: `Left running on purpose: ${[...kept].join('; ')}. Archiving the worktree stops it.` });
+      if (kept.size && worktree) void this.noteKept(body.channel, worktree, [...kept].at(-1)!);
       if (!lane.current) this.wakeIdle(body.channel);
       void this.deps.refreshUsage();
       // Only this folder's git status: a run ending elsewhere changed nothing in the others.
