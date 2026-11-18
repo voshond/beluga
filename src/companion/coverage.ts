@@ -782,6 +782,10 @@ export const PHONE: Record<Method, Side> = {
   'memory.remove': 'mac',
   // BLG-102: Undo under an agent's answer; the phone shows the markers read-only
   'memory.undo': 'mac',
+  // BLG-96: Keep / Update or Discard on what the reflection pass proposed (a NeedsYou card); starting a pass is on the Mac
+  'memory.keepProposal': 'phone',
+  'memory.discardProposal': 'phone',
+  'memory.reflect': 'mac',
 
   // External agents: only the Mac app and `beluga mcp` manage who connects.
   'external.status': 'mac',

@@ -1,0 +1,296 @@
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { PHONE } from '../src/companion/coverage.js';
+import { waitingNeeds } from '../src/companion/needs-you.js';
+import { MAX_PENDING_MEMORY, REFLECTION_MIN_MESSAGES, Reflection, type ReflectionAsk, loadReflection, proposalsFrom, reflectionSource } from '../src/core/memory/reflection.js';
+import { MemoryStore } from '../src/core/memory/store.js';
+import { type Action, type MemoryProposal, Store, initialState } from '../src/core/store.js';
+import type { Project, Workspace } from '../src/workspaces/types.js';
+
+const SELF = 'me';
+const NOW = new Date(2026, 10, 18, 12).getTime();
+const ROOT = '/code/app';
+
+const ws = (id: string, more: Partial<Workspace> = {}): Workspace => ({ id, projectId: 'p1', projectRoot: ROOT, name: `task ${id}`, path: `/wt/${id}`, kind: 'worktree', branch: `beluga/${id}`, createdAt: NOW, external: false, ...more });
+const project = (workspaces: Workspace[]): Project => ({ id: 'p1', name: 'app', root: ROOT, base: 'origin/main', workspaces });
+
+const storeWith = (): Store => {
+  const store = new Store(initialState('test', 'ask'));
+  store.dispatch({ type: 'identity', selfId: SELF, isHost: true });
+  store.dispatch({ type: 'projects', projects: [project([ws('a'), ws('b'), ws('shared'), ws('t', { thread: { parent: 'a' } as Workspace['thread'] })])] });
+  return store;
+};
+
+let n = 0;
+const said = (channel: string, text: string, byAgent = false): Action => ({ type: 'chat', id: `m-${n++}`, from: SELF, text, ts: NOW + n, byAgent, channel });
+
+const talk = (store: Store, channel: string, turns: number): void => {
+  for (let i = 0; i < turns; i++) {
+    store.dispatch(said(channel, `Request ${i}: no, use pnpm here, not npm.`));
+    store.dispatch(said(channel, `Done ${i}.`, true));
+  }
+};
+
+const homeDir = (): string => mkdtempSync(path.join(os.tmpdir(), 'beluga-reflection-'));
+
+type Asked = { calls: Array<{ prompt: string; system: string; model: string }>; ask: ReflectionAsk };
+
+const answering = (answer: string | (() => string)): Asked => {
+  const calls: Asked['calls'] = [];
+  return {
+    calls,
+    ask: async (req) => {
+      calls.push(req);
+      return typeof answer === 'string' ? answer : answer();
+    },
+  };
+};
+
+const answer = (proposals: ReadonlyArray<Record<string, string>>): string => `Here you go:\n${JSON.stringify({ proposals })}`;
+
+const setup = (reply: string, file: string | null = null) => {
+  const home = homeDir();
+  const store = storeWith();
+  const memory = new MemoryStore(home);
+  const asked = answering(reply);
+  const reflection = new Reflection({ store, ask: asked.ask, sharedWith: (c) => c === 'ws:shared', memory, file, now: () => NOW });
+  return { store, memory, asked, reflection, home };
+};
+
+describe('which conversations it reads', () => {
+  it('reads your own conversation as messages, and refuses a shared one, a thread and the room', () => {
+    const store = storeWith();
+    talk(store, 'ws:a', 3);
+    const source = reflectionSource(store.getState(), 'ws:a', () => false);
+    expect(source).toMatchObject({ channel: 'ws:a', root: ROOT, project: 'app', messages: 6, yours: 3 });
+    expect(source?.lines[0]).toContain('User');
+    expect(reflectionSource(store.getState(), 'ws:shared', (c) => c === 'ws:shared')).toBeUndefined();
+    expect(reflectionSource(store.getState(), 'ws:t', () => false)).toBeUndefined();
+    expect(reflectionSource(store.getState(), 'room', () => false)).toBeUndefined();
+    expect(reflectionSource(store.getState(), 'ws:nowhere', () => false)).toBeUndefined();
+  });
+
+  it('redacts secrets before the model sees them', async () => {
+    const { store, asked, reflection } = setup(answer([]));
+    talk(store, 'ws:a', 3);
+    store.dispatch(said('ws:a', 'the key is ghp_0123456789abcdefghijABCDEFGHIJ012345'));
+    await reflection.reflect('ws:a', 'manual');
+    expect(asked.calls[0]?.prompt).not.toContain('ghp_0123456789abcdefghijABCDEFGHIJ012345');
+  });
+});
+
+describe('a pass', () => {
+  it('proposes what the model found, on a cheap model, with the memory it sees', async () => {
+    const { store, asked, reflection, memory } = setup(answer([{ scope: 'user', text: 'Prefers pnpm over npm.', why: 'Corrected npm twice.' }, { scope: 'project', text: 'Tests run with vitest.' }]));
+    memory.add({ kind: 'user' }, 'Writes in English.', 'you');
+    talk(store, 'ws:a', 3);
+    expect(await reflection.reflect('ws:a', 'manual')).toEqual({ proposed: 2 });
+    expect(asked.calls[0]?.model).toBe('haiku');
+    expect(asked.calls[0]?.prompt).toContain('Writes in English.');
+    const [user, proj] = store.getState().memoryProposals;
+    expect(user).toMatchObject({ kind: 'user', text: 'Prefers pnpm over npm.', reason: 'Corrected npm twice.', channel: 'ws:a', askedAt: NOW });
+    expect(proj).toMatchObject({ kind: 'project', root: ROOT, project: 'app', text: 'Tests run with vitest.' });
+  });
+
+  it('uses the model picked in Settings', async () => {
+    const { store, asked, reflection } = setup(answer([]));
+    store.dispatch({ type: 'prefs', prefs: { reflectionModel: 'gpt-5-mini' } });
+    talk(store, 'ws:a', 3);
+    await reflection.reflect('ws:a', 'manual');
+    expect(asked.calls[0]?.model).toBe('gpt-5-mini');
+  });
+
+  it('skips a short conversation without calling the model', async () => {
+    const { store, asked, reflection } = setup(answer([{ scope: 'user', text: 'x' }]));
+    talk(store, 'ws:a', REFLECTION_MIN_MESSAGES / 2 - 1);
+    expect(await reflection.reflect('ws:a', 'manual')).toMatchObject({ skipped: 'short' });
+    expect(asked.calls).toHaveLength(0);
+    expect(store.getState().memoryProposals).toHaveLength(0);
+  });
+
+  it('makes no card when there is nothing new', async () => {
+    const { store, reflection } = setup('{"proposals":[]}');
+    talk(store, 'ws:a', 3);
+    expect(await reflection.reflect('ws:a', 'manual')).toEqual({ proposed: 0 });
+    expect(waitingNeeds(store.getState()).filter((i) => i.id.startsWith('memory-propose:'))).toHaveLength(0);
+  });
+
+  it('is off when the setting is off', async () => {
+    const { store, asked, reflection } = setup(answer([]));
+    store.dispatch({ type: 'prefs', prefs: { reflection: false } });
+    talk(store, 'ws:a', 3);
+    expect(await reflection.reflect('ws:a', 'manual')).toMatchObject({ skipped: 'off' });
+    expect(asked.calls).toHaveLength(0);
+  });
+
+  it('runs once per conversation per trigger, and again after trouble', async () => {
+    const { store, reflection, asked } = setup(answer([]));
+    talk(store, 'ws:a', 3);
+    await reflection.reflect('ws:a', 'manual');
+    expect(await reflection.reflect('ws:a', 'manual')).toMatchObject({ skipped: 'done' });
+    await reflection.reflect('ws:a', 'merge');
+    expect(asked.calls).toHaveLength(2);
+
+    let fail = true;
+    const flaky = new Reflection({ store, ask: async () => (fail ? Promise.reject(new Error('it took too long')) : answer([])), sharedWith: () => false, memory: new MemoryStore(homeDir()), file: null });
+    talk(store, 'ws:b', 3);
+    expect(await flaky.reflect('ws:b', 'manual')).toMatchObject({ skipped: 'trouble' });
+    fail = false;
+    expect(await flaky.reflect('ws:b', 'manual')).toEqual({ proposed: 0 });
+  });
+
+  it('refuses a shared conversation', async () => {
+    const { store, reflection, asked } = setup(answer([]));
+    talk(store, 'ws:shared', 3);
+    expect(await reflection.reflect('ws:shared', 'manual')).toMatchObject({ skipped: 'not_yours' });
+    expect(asked.calls).toHaveLength(0);
+  });
+});
+
+describe('the merge trigger', () => {
+  it('looks back when a worktree merges, once', async () => {
+    const { store, reflection, asked } = setup(answer([{ scope: 'user', text: 'Prefers pnpm over npm.' }]));
+    talk(store, 'ws:a', 3);
+    const stop = reflection.start();
+    store.dispatch({ type: 'system', text: 'merged', channel: 'ws:a', id: 'merge-1', merged: { into: 'main' } });
+    await new Promise((r) => setTimeout(r, 0));
+    store.dispatch({ type: 'system', text: 'merged again', channel: 'ws:a', id: 'merge-2', merged: { into: 'main' } });
+    await new Promise((r) => setTimeout(r, 0));
+    stop();
+    expect(asked.calls).toHaveLength(1);
+    expect(store.getState().memoryProposals).toHaveLength(1);
+  });
+
+  it('does not look back at merges from before it started', () => {
+    const { store, reflection, asked } = setup(answer([]));
+    talk(store, 'ws:a', 3);
+    store.dispatch({ type: 'system', text: 'merged', channel: 'ws:a', id: 'old', merged: { into: 'main' } });
+    const stop = reflection.start();
+    store.dispatch(said('ws:a', 'hello'));
+    stop();
+    expect(asked.calls).toHaveLength(0);
+  });
+});
+
+const ctx = (more: Partial<Parameters<typeof proposalsFrom>[1]> = {}): Parameters<typeof proposalsFrom>[1] => ({
+  source: { channel: 'ws:a', root: ROOT, project: 'app', lines: [], messages: 6, yours: 3 },
+  user: { scope: { kind: 'user' }, label: 'About you', entries: [{ id: 'u1', text: 'Writes in English.', at: 0, by: 'you' }], used: 18, cap: 1375 },
+  project: { scope: { kind: 'project', root: ROOT }, label: 'app', entries: [], used: 0, cap: 2200 },
+  discarded: [],
+  pending: [],
+  now: NOW,
+  ...more,
+});
+
+describe('reading the answer', () => {
+  it('never proposes a secret, a duplicate, a discarded one, or one over the limit', () => {
+    const raw = answer([
+      { scope: 'user', text: 'Their token: ghp_0123456789abcdefghijABCDEFGHIJ012345' },
+      { scope: 'user', text: 'password = hunter22' },
+      { scope: 'user', text: 'writes in english' },
+      { scope: 'user', text: 'Likes tabs.' },
+      { scope: 'user', text: 'x'.repeat(301) },
+      { scope: 'project', text: 'Deploys go through Watchtower.' },
+    ]);
+    const out = proposalsFrom(raw, ctx({ discarded: ['Likes tabs'] }));
+    expect(out.map((p) => p.text)).toEqual(['Deploys go through Watchtower.']);
+  });
+
+  it('turns a replace into an Update with the entry as it is now', () => {
+    const [p] = proposalsFrom(answer([{ scope: 'user', text: 'Writes in English, answers in German.', replaces: 'u1' }]), ctx());
+    expect(p).toMatchObject({ entry: 'u1', previous: 'Writes in English.' });
+  });
+
+  it('keeps project proposals out of a conversation with no project, and garbage gives nothing', () => {
+    expect(proposalsFrom(answer([{ scope: 'project', text: 'A fact.' }]), ctx({ project: undefined }))).toEqual([]);
+    expect(proposalsFrom('not json at all', ctx())).toEqual([]);
+  });
+
+  it('proposes at most 3, and none past the waiting limit', () => {
+    const many = answer(['a', 'b', 'c', 'd'].map((t) => ({ scope: 'user', text: `Fact ${t}.` })));
+    expect(proposalsFrom(many, ctx())).toHaveLength(3);
+    const waiting = Array.from({ length: MAX_PENDING_MEMORY }, (_, i): MemoryProposal => ({ id: `w${i}`, kind: 'user', text: `Waiting ${i}.`, channel: 'ws:a', askedAt: NOW }));
+    expect(proposalsFrom(many, ctx({ pending: waiting }))).toEqual([]);
+  });
+});
+
+describe('Keep, Update and Discard', () => {
+  it('Keep writes the entry and drops the card', async () => {
+    const { store, memory, reflection } = setup(answer([{ scope: 'project', text: 'Tests run with vitest.' }]));
+    talk(store, 'ws:a', 3);
+    await reflection.reflect('ws:a', 'manual');
+    const [p] = store.getState().memoryProposals;
+    const card = waitingNeeds(store.getState()).find((i) => i.id === `memory-propose:${p!.id}`);
+    expect(card).toMatchObject({ kind: 'decision', title: 'Remember this for app?' });
+    expect(card?.actions).toEqual([
+      { label: 'Keep', tone: 'main', method: 'memory.keepProposal', args: [p!.id] },
+      { label: 'Discard', tone: 'danger', method: 'memory.discardProposal', args: [p!.id] },
+    ]);
+    reflection.keep(p!.id);
+    expect(memory.read({ kind: 'project', root: ROOT }).entries.map((e) => e.text)).toEqual(['Tests run with vitest.']);
+    expect(store.getState().memoryProposals).toHaveLength(0);
+    expect(() => reflection.keep(p!.id)).toThrow('already answered');
+  });
+
+  it('Update changes the entry, and is refused when the entry changed since', () => {
+    const { store, memory, reflection } = setup('');
+    const id = memory.add({ kind: 'user' }, 'Writes in English.', 'you').entries[0]!.id;
+    const update = (pid: string): MemoryProposal => ({ id: pid, kind: 'user', text: 'Writes in English, answers in German.', entry: id, previous: 'Writes in English.', channel: 'ws:a', askedAt: NOW });
+    store.dispatch({ type: 'memory_proposal_add', proposal: update('p1') });
+    expect(waitingNeeds(store.getState()).find((i) => i.id === 'memory-propose:p1')?.actions[0]?.label).toBe('Update');
+    reflection.keep('p1');
+    expect(memory.read({ kind: 'user' }).entries.map((e) => e.text)).toEqual(['Writes in English, answers in German.']);
+
+    store.dispatch({ type: 'memory_proposal_add', proposal: update('p2') });
+    expect(() => reflection.keep('p2')).toThrow('changed since');
+    expect(store.getState().memoryProposals).toHaveLength(1);
+  });
+
+  it('Discard writes nothing and the same thing is not proposed again', async () => {
+    const { store, memory, reflection, asked } = setup(answer([{ scope: 'user', text: 'Prefers pnpm over npm.' }]));
+    talk(store, 'ws:a', 3);
+    await reflection.reflect('ws:a', 'manual');
+    reflection.discard(store.getState().memoryProposals[0]!.id);
+    expect(memory.read({ kind: 'user' }).entries).toHaveLength(0);
+    expect(await reflection.reflect('ws:a', 'merge')).toEqual({ proposed: 0 });
+    expect(asked.calls[1]?.prompt).toContain('- Prefers pnpm over npm.');
+  });
+
+  it('the phone answers the cards', () => {
+    expect(PHONE['memory.keepProposal']).toBe('phone');
+    expect(PHONE['memory.discardProposal']).toBe('phone');
+    expect(PHONE['memory.reflect']).toBe('mac');
+  });
+});
+
+describe('a restart', () => {
+  it('keeps what waits, what was discarded and what was looked back at, 0600', async () => {
+    const file = path.join(homeDir(), 'memory-reflection.json');
+    const first = setup(answer([{ scope: 'user', text: 'Prefers pnpm over npm.' }, { scope: 'user', text: 'Likes short answers.' }]), file);
+    talk(first.store, 'ws:a', 3);
+    const stop = first.reflection.start();
+    await first.reflection.reflect('ws:a', 'manual');
+    first.reflection.discard(first.store.getState().memoryProposals[1]!.id);
+    stop();
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    expect(loadReflection(file)).toMatchObject({ discarded: ['Likes short answers.'], ran: ['ws:a:manual'] });
+
+    const store = storeWith();
+    talk(store, 'ws:a', 3);
+    const again = new Reflection({ store, ask: answering(answer([])).ask, sharedWith: () => false, memory: first.memory, file });
+    expect(store.getState().memoryProposals.map((p) => p.text)).toEqual(['Prefers pnpm over npm.']);
+    expect(await again.reflect('ws:a', 'manual')).toMatchObject({ skipped: 'done' });
+  });
+
+  it('never loads a proposal that holds a secret', () => {
+    const file = path.join(homeDir(), 'memory-reflection.json');
+    const bad: MemoryProposal = { id: 'x', kind: 'user', text: 'password = hunter22', channel: 'ws:a', askedAt: NOW };
+    const good: MemoryProposal = { id: 'y', kind: 'user', text: 'Likes tabs.', channel: 'ws:a', askedAt: NOW };
+    const raw = JSON.stringify({ proposals: [bad, good], discarded: [], ran: [] });
+    writeFileSync(file, raw);
+    expect(loadReflection(file).proposals.map((p) => p.id)).toEqual(['y']);
+    expect(readFileSync(file, 'utf8')).toBe(raw);
+  });
+});

@@ -54,6 +54,8 @@ export function workspaceItems(state: AppState, ws: Workspace, run: ReturnType<t
     ...(color ? [color] : []),
     // Variables for this worktree alone, over its project's (BLG-924).
     ...(ws.kind === 'worktree' && !ws.archived && !isAgentWorktree(ws) ? [{ label: 'Environment…', icon: 'lock' as const, onSelect: () => openSheet({ kind: 'worktree_env', workspaceId: ws.id }) }] : []),
+    // Propose what to remember from this conversation (BLG-96).
+    ...(ws.kind !== 'main' && !isAgentWorktree(ws) && state.prefs.reflection ? [{ label: 'Look Back', icon: 'sparkles' as const, onSelect: () => lookBack(client, ws) }] : []),
     // Its link, to mention it in another chat (BLG-878).
     ...copyLinkItems(ws, client).map((item) => ({ ...item, separate: false })),
     ...sections.flatMap((section) =>
@@ -68,6 +70,17 @@ export function workspaceItems(state: AppState, ws: Workspace, run: ReturnType<t
       })),
     ),
   ];
+}
+
+/** Look back at a conversation now, and say what came of it. */
+function lookBack(client: ReturnType<typeof useBeluga>['client'], ws: Workspace): void {
+  client.api.memory.reflect(`ws:${ws.id}`).then(
+    (outcome) => {
+      if ('skipped' in outcome) return toast(client, outcome.why, 'info');
+      toast(client, outcome.proposed ? `${outcome.proposed} thing${outcome.proposed === 1 ? '' : 's'} to remember: see Needs You.` : 'Nothing new to remember from this conversation.', 'info');
+    },
+    (err: unknown) => toast(client, err instanceof Error ? err.message : 'Cannot look back at this conversation', 'error'),
+  );
 }
 
 /** Chats, and worktrees of yours (a sub-agent's is Claude's): a worktree's branch takes the new name too. */

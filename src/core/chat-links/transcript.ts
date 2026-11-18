@@ -267,6 +267,9 @@ export function chatSnapshot(state: DomainState, text: string, now = Date.now())
   return { ref, title, name: `chat-copy-${slug}.txt`, text: head(lines.length) + lines.join(''), messages: lines.length, total: all.length };
 }
 
+/** A conversation's messages view (no tool output), secrets redacted: what the reflection pass reads (BLG-96). */
+export const redactedMessages = (log: readonly LogItem[], channel: string): ReadonlyArray<Pick<ChatItem, 'author' | 'provenance' | 'text'>> => itemsOf(log, channel, 'messages', redactSecrets);
+
 /** A ref as text from a ref, a chip's token or a link. Anything else stays as it is, and the access rules refuse it. */
 export function refOf(text: string): string {
   const link = chatLinkOf(text.trim());

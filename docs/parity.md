@@ -744,6 +744,9 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `memory.replace` | ✓ Memory: an entry's text, changed in place (saved when you leave the field) · Mac only |
 | `memory.remove` | ✓ Memory › an entry's trash button · Mac only |
 | `memory.undo` | ✓ Under an agent's answer, a memory chip's Undo (BLG-102): an add is removed, a change restored, a forgotten entry put back where it stood; refused when undone already, when the entry changed since, or over the cap. The phone shows the chips read-only (`TurnView.learned`, 1.63) · Mac only |
+| `memory.keepProposal` | ✓ NeedsYou card for what the reflection pass proposed to remember (BLG-96): Keep writes the entry to memory as yours; Update changes the entry it names, refused when that entry changed since. Review shows why, and the entry (or now and after) · Mac + Phone |
+| `memory.discardProposal` | ✓ the same card's Discard: nothing is written, and the text is remembered so it isn't proposed again. Waiting proposals survive a restart (`~/.beluga/memory-reflection.json`, 0600) · Mac + Phone |
+| `memory.reflect` | ✓ Look Back in a chat's or worktree's sidebar menu (BLG-96): looks back at that conversation now and proposes what to remember; also runs on its own when a worktree merges. Settings › Skills & instructions › Learn from your conversations turns it off and picks its model (`reflection`, `reflectionModel`) · Mac only |
 | `agentSetup.skills` | ✓ Settings › Skills & instructions › Shared skills: the skills in `~/.agents/skills`, each with whether Claude (a link in its skills folder) and Codex (reads the folder itself) see it, and a too-deep link to the whole folder |
 | `agentSetup.readSkill` | ✓ Shared skills › Edit: a skill's SKILL.md |
 | `agentSetup.saveSkill` | ✓ Shared skills › New Skill (a name and a description) and Edit › Save; it links the skill for Claude |

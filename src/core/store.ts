@@ -4,7 +4,7 @@ import { isExternalRequester } from './trust.js';
 import { type AssistantChats, NO_ASSISTANT_CHATS, activeAssistantChannel, assistantChannel } from '../shared/assistant.js';
 import type { ConnectionStatus } from '../net/peer-client.js';
 import type { Effort, NotifySettings, Settings, ThemeName, TrustLevel } from './settings.js';
-import { ARCHIVE_SETTLED_DAYS_DEFAULT, BRANCH_PREFIX_DEFAULT, NotifySettings as NotifySchema, SETTLE_IDLE_DAYS_DEFAULT } from '../shared/settings-schema.js';
+import { ARCHIVE_SETTLED_DAYS_DEFAULT, BRANCH_PREFIX_DEFAULT, NotifySettings as NotifySchema, REFLECTION_MODEL_DEFAULT, SETTLE_IDLE_DAYS_DEFAULT } from '../shared/settings-schema.js';
 import { FETCH_EVERY_DEFAULT } from '../shared/background-fetch.js';
 import { AUTOPILOT_WAIT_DEFAULT } from '../shared/autopilot-wait.js';
 import type { Review } from '../workspaces/git.js';
@@ -290,6 +290,27 @@ export interface SkillProposal {
   readonly askedAt: number;
 }
 
+/**
+ * What the reflection pass (BLG-96) proposes to remember from one of your conversations: a new
+ * entry, or a change to one (`entry` is its id, `previous` its text now). Kept, it is written to
+ * Beluga's memory (core/memory/store.ts); nothing is written before you answer.
+ */
+export interface MemoryProposal {
+  readonly id: string;
+  readonly kind: 'user' | 'project';
+  /** The project's folder and name, for a project entry. */
+  readonly root?: string;
+  readonly project?: string;
+  readonly text: string;
+  readonly entry?: string;
+  readonly previous?: string;
+  /** Why it is worth keeping: what in the conversation showed it. */
+  readonly reason?: string;
+  /** The conversation it came from. */
+  readonly channel: string;
+  readonly askedAt: number;
+}
+
 export interface Location {
   readonly owner: string;
   readonly share: string;
@@ -419,6 +440,10 @@ export interface Prefs {
   readonly scratchFolder: boolean;
   readonly machineNote: string;
   readonly machineNoteOn: boolean;
+  /** When work ends, a cheap model looks back at the conversation and proposes what to remember (BLG-96). */
+  readonly reflection: boolean;
+  /** The model that pass runs on. */
+  readonly reflectionModel: string;
   /** Experimental features that are on (shared/experiments.ts), off until you turn each on. */
   readonly experiments: readonly string[];
   readonly subagents: Settings['subagents'];
@@ -665,6 +690,8 @@ export interface DomainState extends CollabState, WorkState, NetworkSlice, Suppo
   readonly toolboxSuggestions: readonly ToolboxSuggestion[];
   /** Shared skills your agents proposed, waiting for Keep / Update or Discard (BLG-98); a newer one for the same skill takes the older's place. */
   readonly skillProposals: readonly SkillProposal[];
+  /** What the reflection pass proposes to remember, waiting for Keep / Update or Discard (BLG-96). */
+  readonly memoryProposals: readonly MemoryProposal[];
   readonly browser: BrowserDomain;
   readonly viewer?: ViewerDomain;
   /** When each watched file was last written (fileKey), so a preview of it reads it again: a picture shows the new one. */
@@ -769,6 +796,8 @@ export type Action =
   | { type: 'toolbox_suggestion_remove'; id: string }
   | { type: 'skill_proposal_add'; proposal: SkillProposal }
   | { type: 'skill_proposal_remove'; id: string }
+  | { type: 'memory_proposal_add'; proposal: MemoryProposal }
+  | { type: 'memory_proposal_remove'; id: string }
   | { type: 'browser_root' }
   | { type: 'browser_loading'; at: Location }
   | { type: 'browser_entries'; at: Location; entries: readonly FsEntry[] }
@@ -869,6 +898,8 @@ export const DEFAULT_PREFS: Prefs = {
   scratchFolder: true,
   machineNote: '',
   machineNoteOn: false,
+  reflection: true,
+  reflectionModel: REFLECTION_MODEL_DEFAULT,
   experiments: [],
   subagents: 'full',
   hiddenButtons: [],
@@ -914,6 +945,7 @@ export function initialState(room: string, policy: Policy = 'ask', prefs: Partia
     approvals: [],
     toolboxSuggestions: [],
     skillProposals: [],
+    memoryProposals: [],
     browser: { rows: [], loading: false },
     written: {},
     focus: {},
@@ -1345,6 +1377,10 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
       return { ...state, skillProposals: [...state.skillProposals.filter((p) => p.id !== action.proposal.id && p.name !== action.proposal.name), action.proposal] };
     case 'skill_proposal_remove':
       return { ...state, skillProposals: state.skillProposals.filter((p) => p.id !== action.id) };
+    case 'memory_proposal_add':
+      return { ...state, memoryProposals: [...state.memoryProposals.filter((p) => p.id !== action.proposal.id), action.proposal] };
+    case 'memory_proposal_remove':
+      return { ...state, memoryProposals: state.memoryProposals.filter((p) => p.id !== action.id) };
     case 'browser_root':
       return { ...state, browser: { rows: rootRows(state), loading: false } };
     case 'browser_loading':
