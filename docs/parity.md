@@ -748,6 +748,8 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `agentSetup.saveAgentsDoc` | ✓ Global AGENTS.md › Save |
 | `agentSetup.linkAgentsDoc` | ✓ Global AGENTS.md › Link beside Claude or Codex: a file of its own is kept as a backup (or becomes the shared file when there is none yet) |
 | `agentSetup.instructions` | ✓ Settings › Skills & instructions › Built-in instructions: each piece Beluga adds to a run's instructions, in order, when it's added, its source, and its text where it's fixed |
+| `agentSetup.keepProposal` | ✓ NeedsYou card for a skill your agent proposed (`skill_propose`, BLG-98): Keep writes the new skill to `~/.agents/skills` and links it for Claude; Update (`skill_propose_change`) changes its SKILL.md in place. The bell's Review button shows the SKILL.md, or for a change only the lines that change · Mac + Phone |
+| `agentSetup.discardProposal` | ✓ the same card's Discard: drops the proposal, nothing is written · Mac + Phone |
 | `agent.steps` | ✓ an agent card's steps as disclosure rows (an icon per tool, ✓/✗, how long it took), thinking as “Thought for 12s”, sub-agents' steps |
 | `agent.step` | ✓ opening a step on an agent card: Bash's command and output (colours kept), the file read, an edit's diff, a search's matches, a page fetched, an MCP tool's input and output as JSON, the thinking |
 | `view.fetch` | ✓ a live table, chart, stats or code view in a conversation fetching its next page, sorted or searched, or refreshing it (docs/views.md) |

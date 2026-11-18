@@ -675,6 +675,8 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'agentSetup.saveAgentsDoc': { refused: NO_TOOL },
   'agentSetup.linkAgentsDoc': { refused: NO_TOOL },
   'agentSetup.instructions': { refused: NO_TOOL },
+  'agentSetup.keepProposal': { refused: APPROVALS },
+  'agentSetup.discardProposal': { refused: APPROVALS },
   'toolbox.list': { refused: NO_TOOL },
   'toolbox.create': { refused: NO_TOOL },
   'toolbox.update': { refused: NO_TOOL },

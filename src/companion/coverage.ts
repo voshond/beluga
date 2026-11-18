@@ -400,6 +400,9 @@ export const PHONE: Record<Method, Side> = {
   'agentSetup.saveAgentsDoc': 'mac',
   'agentSetup.linkAgentsDoc': 'mac',
   'agentSetup.instructions': 'mac',
+  // A skill your agent proposed (BLG-98): answering its card, like a plan decision.
+  'agentSetup.keepProposal': 'phone',
+  'agentSetup.discardProposal': 'phone',
   // A step's details are code (commands, diffs); the phone gets steps in words in its views.
   'agent.steps': 'mac',
   'agent.step': 'mac',

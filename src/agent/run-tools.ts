@@ -7,6 +7,7 @@ import { createMcpTools } from './mcp-tools.js';
 import { createPhoneTools } from './phone-tools.js';
 import { createPlanTools } from './plan-tools.js';
 import { createSentinelTools } from './sentinel-tools.js';
+import { createSkillTools } from './skill-tools.js';
 import { createTaskTools } from './task-tools.js';
 import { createThreadTools } from './thread-tools.js';
 import { createToolboxTools } from './toolbox-tools.js';
@@ -48,6 +49,8 @@ export function runToolSuites(input: AgentRunInput, bridge: RoomBridge, shelf: V
     ...(input.threadTools ? { beluga_threads: createThreadTools(input.threadTools) } : {}),
     // Your own runs: list, run and propose Toolbox tools without an agent (BLG-75).
     ...(input.toolboxTools ? { beluga_tools: createToolboxTools(input.toolboxTools) } : {}),
+    // Your own runs: read your shared skills and propose new ones or fixes, behind a card (BLG-98).
+    ...(input.skillTools ? { beluga_skills: createSkillTools(input.skillTools) } : {}),
     beluga_view: createViewTools(shelf, cwd),
   };
 }

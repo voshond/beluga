@@ -270,6 +270,23 @@ export interface ToolboxSuggestion {
   readonly askedAt: number;
 }
 
+/**
+ * A shared skill an agent proposed (BLG-98): a new one, or a change to one you have (`previous` is
+ * its SKILL.md now). Kept, it is written to ~/.agents/skills through core/agent-setup.ts.
+ */
+export interface SkillProposal {
+  readonly id: string;
+  readonly name: string;
+  /** The whole SKILL.md it would write, frontmatter included. */
+  readonly text: string;
+  readonly previous?: string;
+  /** Why the agent proposes it: what it did, or what the skill got wrong. */
+  readonly reason?: string;
+  /** The agent that proposed it ("Claude", "Codex"). */
+  readonly from: string;
+  readonly askedAt: number;
+}
+
 export interface Location {
   readonly owner: string;
   readonly share: string;
@@ -643,6 +660,8 @@ export interface DomainState extends CollabState, WorkState, NetworkSlice, Suppo
   readonly approvals: readonly Approval[];
   /** Pending Toolbox suggestions: agent proposals (kind 'propose') and auto-detected repeated commands (kind 'detection'). */
   readonly toolboxSuggestions: readonly ToolboxSuggestion[];
+  /** Shared skills your agents proposed, waiting for Keep / Update or Discard (BLG-98); a newer one for the same skill takes the older's place. */
+  readonly skillProposals: readonly SkillProposal[];
   readonly browser: BrowserDomain;
   readonly viewer?: ViewerDomain;
   /** When each watched file was last written (fileKey), so a preview of it reads it again: a picture shows the new one. */
@@ -743,6 +762,8 @@ export type Action =
   | { type: 'approval_remove'; id: string }
   | { type: 'toolbox_suggestion_add'; suggestion: ToolboxSuggestion }
   | { type: 'toolbox_suggestion_remove'; id: string }
+  | { type: 'skill_proposal_add'; proposal: SkillProposal }
+  | { type: 'skill_proposal_remove'; id: string }
   | { type: 'browser_root' }
   | { type: 'browser_loading'; at: Location }
   | { type: 'browser_entries'; at: Location; entries: readonly FsEntry[] }
@@ -887,6 +908,7 @@ export function initialState(room: string, policy: Policy = 'ask', prefs: Partia
     log: [],
     approvals: [],
     toolboxSuggestions: [],
+    skillProposals: [],
     browser: { rows: [], loading: false },
     written: {},
     focus: {},
@@ -1299,6 +1321,10 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
       return { ...state, toolboxSuggestions: [...state.toolboxSuggestions.filter((s) => s.id !== action.suggestion.id), action.suggestion] };
     case 'toolbox_suggestion_remove':
       return { ...state, toolboxSuggestions: state.toolboxSuggestions.filter((s) => s.id !== action.id) };
+    case 'skill_proposal_add':
+      return { ...state, skillProposals: [...state.skillProposals.filter((p) => p.id !== action.proposal.id && p.name !== action.proposal.name), action.proposal] };
+    case 'skill_proposal_remove':
+      return { ...state, skillProposals: state.skillProposals.filter((p) => p.id !== action.id) };
     case 'browser_root':
       return { ...state, browser: { rows: rootRows(state), loading: false } };
     case 'browser_loading':

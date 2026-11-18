@@ -407,6 +407,19 @@ function toolboxNews(prev: DomainState, next: DomainState): NoticeEvent[] {
   });
 }
 
+/** A shared skill your agent just proposed (BLG-98): noted in the bell, so it stays in your history once answered. */
+function skillNews(prev: DomainState, next: DomainState): NoticeEvent[] {
+  if (prev.skillProposals === next.skillProposals) return [];
+  const seen = new Set(prev.skillProposals.map((p) => p.id));
+  const needs = allNeeds(next);
+  return next.skillProposals.flatMap((p): NoticeEvent[] => {
+    if (seen.has(p.id)) return [];
+    const item = needs.find((n) => n.id === `skill-propose:${p.id}`);
+    if (!item) return [];
+    return [{ kind: 'needsYou', tag: 'question', title: item.title, body: firstLine(p.reason ?? p.name), need: item.id, key: `skill:${p.id}` }];
+  });
+}
+
 /** A dialogue between your agents that just paused at its cap: it waits for your Continue. */
 function dialogueNews(prev: DomainState, next: DomainState): NoticeEvent[] {
   if (prev.dialogues === next.dialogues) return [];
@@ -424,7 +437,7 @@ function dialogueNews(prev: DomainState, next: DomainState): NoticeEvent[] {
  * stopped, needs an answer or approval, a merge conflict, someone joined or invited you.
  */
 export function detectNotices(prev: DomainState, next: DomainState, now = Date.now()): NoticeEvent[] {
-  const out = [...finishedRuns(prev, next), ...finishedSetups(prev, next), ...messagesForYou(prev, next), ...taskMentions(prev, next, now), ...networkMessages(prev, next, now), ...planNews(prev, next), ...dialogueNews(prev, next), ...toolboxNews(prev, next)];
+  const out = [...finishedRuns(prev, next), ...finishedSetups(prev, next), ...messagesForYou(prev, next), ...taskMentions(prev, next, now), ...networkMessages(prev, next, now), ...planNews(prev, next), ...dialogueNews(prev, next), ...toolboxNews(prev, next), ...skillNews(prev, next)];
   if (prev.approvals !== next.approvals) {
     const seen = new Set(prev.approvals.map((a) => a.id));
     // Someone else's request waits for you either way; on Do Not Disturb it just doesn't make a sound.

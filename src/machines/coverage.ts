@@ -359,6 +359,8 @@ export const MACHINE: Record<Method, MachineSide> = {
   'agentSetup.saveAgentsDoc': 'drive',
   'agentSetup.linkAgentsDoc': 'drive',
   'agentSetup.instructions': 'drive',
+  'agentSetup.keepProposal': 'drive',
+  'agentSetup.discardProposal': 'drive',
   // ---- claudeCode
   'claudeCode.steps': 'drive',
   'claudeCode.step': 'drive',

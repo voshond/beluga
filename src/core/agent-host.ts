@@ -104,6 +104,8 @@ export interface AgentHostDeps {
   readonly sentinel?: (channel: string, from: string) => { readonly tools: import('../agent/types.js').SentinelTools; readonly dashboard?: import('../agent/types.js').DashboardTools; readonly brief: string; readonly inRun: boolean } | undefined;
   /** Project Toolbox (your own runs): the agent's list/run/propose tools for the project in `channel` (BLG-75). */
   readonly toolbox?: (channel: string) => import('../agent/types.js').ToolboxTools | undefined;
+  /** Your shared skills (your own runs): read them and propose new ones or fixes behind a card (BLG-98); `agent` is who proposes ("Claude"). */
+  readonly skills?: (agent: string) => import('../agent/types.js').SkillTools | undefined;
   /** Called when Claude runs a Bash command in a worktree: records it for Toolbox detection (BLG-75). */
   readonly onBashCommand?: (worktree: string, command: string) => void;
   /** A plan's home conversation (your own runs): its plan tools and what Claude is told about the plan (core/plans); `said` is what this run was asked, `chain` the chat chain it is in. */
@@ -1592,6 +1594,8 @@ export class AgentHost {
       // Sentinels (your own runs): a sentinel run's Claude step gets its brief, and the task tools (it makes tasks).
       const sentinel = from === this.selfId && !place?.syncMain ? this.deps.sentinel?.(body.channel, from) : undefined;
       const toolboxTools = from === this.selfId ? this.deps.toolbox?.(body.channel) : undefined;
+      // Your shared skills (BLG-98): runs you asked for, never a friend's, a guest's or an external agent's, nor syncing main.
+      const skillTools = from === this.selfId && !external && !place?.syncMain ? this.deps.skills?.((named ?? this.deps.agentRef?.(body.channel) ?? CLAUDE_AGENT).label) : undefined;
       const noBoard = place?.syncMain || (place?.askOnly && plans?.checker && !sentinel?.inRun);
       // A friend's run gets its repo's board too, as their trust allows (BLG-701; see boardAccess).
       const friendBoard = from === this.selfId ? undefined : this.boardAccess(from);
@@ -1655,6 +1659,7 @@ export class AgentHost {
         ...(previewBrief ? { previewBrief } : {}),
         ...(sentinel ? { sentinelTools: sentinel.tools, sentinelBrief: sentinel.brief, ...(sentinel.dashboard ? { dashboardTools: sentinel.dashboard } : {}) } : {}),
         ...(toolboxTools ? { toolboxTools } : {}),
+        ...(skillTools ? { skillTools } : {}),
         // What MCP Apps here said for the model: your own runs only, wrapped as data (apps are third-party).
         prompt: withAppContext(this.promptOf(body, from, lane.sent), from === this.selfId ? (this.deps.appContext?.(body.channel) ?? []) : []),
         ...this.promptIdOf(body),
