@@ -56,6 +56,15 @@ describe('agentPicker', () => {
     expect(agentPicker(state(), 'draft', 'claude', { runtime: 'codex', label: 'Codex', model: 'gpt-5-codex' })).toMatchObject({ runtime: 'codex', label: 'Codex · GPT-5 Codex' });
   });
 
+  it("a Your Mac chat shows its own agent, else your default's model", () => {
+    const st: PickerState = { ...state([], true, 'haiku'), assistant: { chats: [{ channel: 'mac:assistant' }, { channel: 'mac:assistant:ab12', agent: { runtime: 'codex', label: 'Codex', model: 'gpt-5-codex' } }] } };
+    expect(agentPicker(st, 'mac:assistant')).toMatchObject({ conversation: 'mac:assistant', runtime: 'claude', model: 'haiku', label: 'Haiku' });
+    const b = agentPicker(st, 'mac:assistant:ab12');
+    expect(b).toMatchObject({ runtime: 'codex', model: 'gpt-5-codex', label: 'Codex · GPT-5 Codex' });
+    expect(b.groups.find((g) => g.current)?.models.find((m) => m.on)?.value).toBe('gpt-5-codex');
+    expect(pickAction(b, { runtime: 'claude', label: 'Claude', isDefault: true }, '')).toEqual({ kind: 'agent', agent: null });
+  });
+
   it('a same-runtime pick changes the model; another runtime changes the agent', () => {
     const st = state([{ id: 'a' }, { id: 'b', agent: { runtime: 'codex', label: 'Codex' } }]);
     const a = agentPicker(st, 'ws:a');

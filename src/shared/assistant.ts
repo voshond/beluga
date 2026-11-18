@@ -4,6 +4,7 @@
  * Mac: each its own conversation (channel) and Claude session, deletable for good. Browser-safe:
  * the screens, the phone's views and the daemon all name them by these channels.
  */
+import type { AgentRef } from '../protocol.js';
 import { chatMentionsAsTitles } from './chat-ref.js';
 export const ASSISTANT_CHANNEL = 'mac:assistant';
 
@@ -77,6 +78,8 @@ export interface AssistantChat {
   readonly createdAt: number;
   /** Beluga's own (BLG-568: a sentinel's run or ask): found from its run, not a tab of yours (BLG-566), not counted in Open chats. */
   readonly auto?: true;
+  /** Its own agent (picked in the composer, or by a sentinel step); unset: your default. */
+  readonly agent?: AgentRef;
 }
 
 /** Your own chats, the tabs: Beluga's own are shown only while open (Open Chat on a sentinel's run). */

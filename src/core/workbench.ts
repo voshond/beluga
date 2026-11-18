@@ -62,6 +62,9 @@ export interface WorkbenchDeps {
   readonly savedChats?: (loaded: ReadonlySet<string>) => ReadonlyArray<{ readonly channel: string; readonly items: readonly LogItem[] }>;
   /** Bring a Your Mac chat with nothing in the log back from disk, before opening it. */
   readonly loadSavedChat?: (id: string) => void;
+  /** Pick a Your Mac chat's own agent, or its model on the agent it runs on (false: no such chat). */
+  readonly setChatAgent?: (channel: string, agent: AgentRef | undefined) => boolean;
+  readonly setChatModel?: (channel: string, model: string) => boolean;
   readonly setPrefs: (prefs: Partial<Prefs>) => void;
   /** Ask you before something runs by itself the first time (e.g. a repo's own setup command). */
   readonly confirm?: (title: string, detail: string) => Promise<'yes' | 'no' | 'always'>;
@@ -420,6 +423,10 @@ export class Workbench {
   /** Pick the model for a conversation; `channel` undefined sets the default for new ones. */
   setModel(channel: string | undefined, value: string): void {
     const label = this.deps.store.getState().models.find((m) => m.value === value)?.label ?? (value || 'Default');
+    if (channel && isAssistant(channel)) {
+      if (this.deps.setChatModel?.(channel, value)) this.deps.toast(`${label} in this chat from the next message`, 'success');
+      return;
+    }
     const id = channel?.startsWith('ws:') ? channel.slice(3) : undefined;
     if (id && this.manager.find(id)) {
       this.manager.setModel(id, value || undefined);
@@ -436,6 +443,11 @@ export class Workbench {
    * `mode`: when the new agent can't read the session, switch quietly or have the old one write a note (BLG-592).
    */
   setAgent(channel: string, agent: AgentRef | undefined, mode?: HandoffMode): boolean {
+    if (isAssistant(channel)) {
+      const set = this.deps.setChatAgent?.(channel, agent) ?? false;
+      if (set) this.deps.toast(`${agent ? agentName(agent) : 'Your agent'} in this chat from the next message`, 'success');
+      return set;
+    }
     const id = channel.startsWith('ws:') ? channel.slice(3) : undefined;
     if (!id || !this.manager.find(id)) return false;
     // Another runtime on a live conversation is a handoff (a note, or the recent conversation with your next message), never a silent swap.

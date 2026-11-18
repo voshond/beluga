@@ -138,6 +138,8 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
         askClaude: (prompt, channel) => session.askOwnClaude(prompt, channel),
         savedChats: (loaded) => assistantOf(session)?.savedChats(loaded) ?? [],
         loadSavedChat: (id) => assistantOf(session)?.loadSaved(id),
+        setChatAgent: (channel, agent) => assistantOf(session)?.setAgent(channel, agent) ?? false,
+        setChatModel: (channel, model) => assistantOf(session)?.setModel(channel, model) ?? false,
         setPrefs: (prefs) => session.setPrefs(prefs),
         confirm: (title, detail) => session.ask('request', title, detail),
         open: opts.open,
