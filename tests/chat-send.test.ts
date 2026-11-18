@@ -515,7 +515,7 @@ describe('the tools', () => {
     await t.end('room', 'dm:friend');
   });
 
-  const chats: ChatTools = { chain: () => ({ chainId: 'c', hop: 0 }), list: () => '', read: () => '', send: async (ref, text, opts) => JSON.stringify({ ref, text, opts }), wait: async (id, sec) => JSON.stringify({ id, sec }) };
+  const chats: ChatTools = { chain: () => ({ chainId: 'c', hop: 0 }), list: () => '', read: () => '', search: () => '', send: async (ref, text, opts) => JSON.stringify({ ref, text, opts }), wait: async (id, sec) => JSON.stringify({ id, sec }) };
 
   it('have no way to set the chain or the source', () => {
     const suite = createChatTools(chats);

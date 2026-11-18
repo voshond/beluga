@@ -232,6 +232,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       agent: () => session.backend,
       ...(opts.openPage ? { openPage: opts.openPage } : opts.open ? { openPage: async (url: string) => opts.open?.(url) } : {}),
       agentRef: (channel) => (channel ? workspaces?.agentOf(channel, session.agentRef) : undefined) ?? session.agentRef,
+      ...(workbench ? { searchSources: () => workbench?.searchSources() ?? [] } : {}),
       // A room ask that names one of your agents (BLG-520): the ones your card lists, and whether each runs here.
       agents: () => opts.client.currentProfile.agents ?? [],
       runsAgent: (agent) => session.runsAgent(agent),

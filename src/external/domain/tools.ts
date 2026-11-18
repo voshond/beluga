@@ -1037,6 +1037,7 @@ export const NOT_EXPOSED: Readonly<Record<string, 'chat_only' | 'checker_only'>>
   // The chat tools act on your own chats (chat links). External agents are refused them.
   list_chats: 'chat_only',
   read_chat: 'chat_only',
+  search_chats: 'chat_only',
   send_to_chat: 'chat_only',
   wait_for_chat: 'chat_only',
   // Your own MCP servers, and a sign-in to one opened in your browser (BLG-353): for your own agent's runs only.
