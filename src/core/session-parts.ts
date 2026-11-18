@@ -36,6 +36,8 @@ import { AgentTerminals } from './agent-term.js';
 import { claudeHome } from './claude-code/launch.js';
 import { callNotesToolsOf } from './calls/launch.js';
 import { toolboxOf } from './toolbox/registry.js';
+import { memoryForRun } from './memory/run.js';
+import { MemoryStore } from './memory/store.js';
 import type { ToolboxTools } from '../agent/types.js';
 import { guestPlace, sharedWorktreeBrief } from './shared-guest.js';
 import { belugaHome } from './home.js';
@@ -305,6 +307,11 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
               : `Proposed tool "${draft.name}". It will appear as a "Keep / Discard" card.`;
           },
         } satisfies ToolboxTools;
+      },
+      memory: (channel, cwd) => {
+        const wsId = channel.startsWith('ws:') ? channel.slice(3) : undefined;
+        const project = opts.store.getState().projects.find((p) => p.root && ((wsId && (p.id === wsId || p.workspaces?.some((w) => w.id === wsId))) || (cwd && (p.root === cwd || p.workspaces?.some((w) => w.path === cwd)))));
+        return memoryForRun(new MemoryStore(), project ? { root: project.root, name: project.name } : undefined);
       },
       onBashCommand: (cwd, command) => {
         const service = toolboxOf(session);

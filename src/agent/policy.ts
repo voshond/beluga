@@ -66,6 +66,8 @@ const ALWAYS_OK = new Set([
   ...['plan_get', 'plan_write', 'plan_update', 'plan_gate', 'plan_review', 'plan_start_task', 'plan_message_task', 'plan_stop_task', 'plan_pause', 'plan_ask', 'plan_handback'].map((n) => `mcp__beluga_plan__${n}`),
   // Toolbox (core/toolbox, BLG-75): only your own runs have them. tool_run opens a Terminal tab you see live; tool_propose creates a pending card you must keep or discard.
   ...['tool_list', 'tool_run', 'tool_propose'].map((n) => `mcp__beluga_tools__${n}`),
+  // Beluga's memory (core/memory, BLG-95): only your own runs have it. Each write is capped, refuses secrets, and you see and edit it all in Settings.
+  ...['memory_list', 'memory_add', 'memory_replace', 'memory_remove'].map((n) => `mcp__beluga_memory__${n}`),
   // Child threads (core/threads): only your own runs have them, with the flag on. They start and follow your own chats, under limits; no tool archives or deletes one.
   ...['thread_start', 'thread_status', 'thread_message', 'thread_stop'].map((n) => `mcp__beluga_threads__${n}`),
   // A friend's task only has these when its owner allowed them for that request (core/gateway/serve.ts).

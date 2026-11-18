@@ -667,6 +667,8 @@ Advanced at the bottom. Learn it once and it works everywhere.
   the Mac. A phone model comes once, the first time it's needed. With the Mac away, too old or still
   getting its model, the phone writes the rest down itself and says so. The web build speaks
   through the Mac only (the browser's microphone; the demo Mac answers with sample lines).
+- **Settings › Memory** (BLG-95, 1.62): what your agents remember about you and each project
+  (`memory.list`), read-only; you change it on the Mac. See [memory.md](memory.md).
 - **Plans** (in Work and on Home when one runs): milestones as a vertical timeline (each says what it
   runs after), tasks as rows with their state and what they wait on (tap one for its goal and what
   done means), decisions as cards with their buttons (Approve or Discard a draft, pass a milestone's

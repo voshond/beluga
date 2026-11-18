@@ -37,6 +37,10 @@ export const SentinelRunResult = z.object({ id: z.string(), sentinelId: z.string
 export const DeviceResult = z.object({ id: z.string(), name: z.string(), os: z.enum(DEVICE_OS), caps: z.array(z.enum(DEVICE_CAPS)), lastSeen: z.number() });
 /** One of a chat's schedules (BLG-399): the phone's conversation sheet lists them (BLG-401). */
 export const ChatScheduleResult = z.object({ id: z.string(), name: z.string(), paused: z.boolean(), prompt: z.string(), running: z.boolean(), nextAt: z.number().optional() }).passthrough();
+const MemoryViewResult = z.object({ label: z.string(), entries: z.array(z.object({ id: z.string(), text: z.string(), at: z.number(), by: z.string() }).passthrough()), used: z.number(), cap: z.number() }).passthrough();
+/** Beluga's memory (BLG-95, src/shared/memory.ts MemoryOverview): about you, and each project's. */
+export const MemoryOverviewResult = z.object({ user: MemoryViewResult, projects: z.array(MemoryViewResult) });
+export type MemoryOverviewResult = z.infer<typeof MemoryOverviewResult>;
 export const PutResult =z.union([z.object({ received: z.number().int().min(0) }), z.object({ ref: z.string() })]);
 
 export const PhoneCalls = {
@@ -222,6 +226,8 @@ export const PhoneCalls = {
   // BLG-75: Toolbox — list and run named commands without an agent.
   'toolbox.list': entry('toolbox.list', z.array(ToolSchema)),
   'toolbox.run': entry('toolbox.run', z.string()),
+  // 1.62 (BLG-95): Beluga's memory, read-only (SINCE.memory).
+  'memory.list': entry('memory.list', MemoryOverviewResult),
 } as const;
 
 export type PhoneMethod = keyof typeof PhoneCalls;

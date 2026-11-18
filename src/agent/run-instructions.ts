@@ -1,7 +1,9 @@
 import os from 'node:os';
 import type { AgentRef } from '../protocol.js';
 import type { InstructionPieceView } from '../shared/agent-setup.js';
+import { type MemoryView, PROJECT_MEMORY_MAX, USER_MEMORY_MAX } from '../shared/memory.js';
 import { buildGraphAppend } from './graph-prompt.js';
+import { buildMemoryAppend } from './memory-prompt.js';
 import { type ShellSetup, buildAskOnlyAppend, buildChatSendAppend, buildChatVarsAppend, buildCommitAppend, buildKeepAppend, buildMachineAppend, buildScratchAppend, buildSetupAppend, buildShellAppend, buildShippedAppend, buildSystemAppend, loginShellSetup } from './prompt.js';
 import { buildSyncMainAppend } from './sync-main.js';
 import { buildTerminalAppend } from './terminal-prompt.js';
@@ -28,9 +30,14 @@ type InstructionPiece = {
 
 const SAMPLE_PROJECT = 'your-project';
 
+const SAMPLE_USER_MEMORY: MemoryView = { scope: { kind: 'user' }, label: 'About you', entries: [{ id: 'a1b2c3', text: 'Prefers short answers and plain words.', at: 0, by: 'agent' }], used: 38, cap: USER_MEMORY_MAX };
+
+const SAMPLE_PROJECT_MEMORY: MemoryView = { scope: { kind: 'project', root: SAMPLE_PROJECT }, label: SAMPLE_PROJECT, entries: [], used: 0, cap: PROJECT_MEMORY_MAX };
+
 export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
   { id: 'room', label: 'Who you are in the room', when: 'Every run', source: 'src/agent/prompt.ts', text: (c) => buildSystemAppend(c.ownerName, c.agent), sample: (owner) => buildSystemAppend(owner) },
   { id: 'machine', label: 'About this machine', when: 'Your own runs, when About this machine is on', source: 'Settings › Skills', text: (c) => c.input.machineBrief ?? '' },
+  { id: 'memory', label: 'Beluga’s memory', when: 'Your own runs, on every runtime (never a friend’s)', source: 'Settings › Skills & instructions › Memory', text: (c) => c.input.memoryBrief ?? '', sample: () => buildMemoryAppend(SAMPLE_USER_MEMORY, SAMPLE_PROJECT_MEMORY) },
   { id: 'graphs', label: 'Graphs', when: 'Every run', source: 'src/agent/graph-prompt.ts', text: (c) => buildGraphAppend(Boolean(c.input.terminal)), sample: () => buildGraphAppend() },
   { id: 'views', label: 'Views', when: 'Every run', source: 'src/agent/view-prompt.ts', text: (c) => buildViewAppend(Boolean(c.input.terminal)), sample: () => buildViewAppend() },
   { id: 'chat-link', label: 'This chat’s address', when: 'Runs in a chat, with chat links on', source: 'src/agent/view-prompt.ts', text: (c) => (c.input.chatLink ? buildChatLinkAppend(c.input.chatLink) : '') },

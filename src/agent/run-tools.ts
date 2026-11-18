@@ -4,6 +4,7 @@ import { createChatTools } from './chat-tools.js';
 import { createDashboardTools } from './dashboard-tools.js';
 import { createMacTools } from './mac-tools.js';
 import { createMcpTools } from './mcp-tools.js';
+import { createMemoryTools } from './memory-tools.js';
 import { createPhoneTools } from './phone-tools.js';
 import { createPlanTools } from './plan-tools.js';
 import { createSentinelTools } from './sentinel-tools.js';
@@ -48,6 +49,8 @@ export function runToolSuites(input: AgentRunInput, bridge: RoomBridge, shelf: V
     ...(input.threadTools ? { beluga_threads: createThreadTools(input.threadTools) } : {}),
     // Your own runs: list, run and propose Toolbox tools without an agent (BLG-75).
     ...(input.toolboxTools ? { beluga_tools: createToolboxTools(input.toolboxTools) } : {}),
+    // Your own runs keep Beluga's memory, about you and the project (core/memory, BLG-95).
+    ...(input.memoryTools ? { beluga_memory: createMemoryTools(input.memoryTools) } : {}),
     beluga_view: createViewTools(shelf, cwd),
   };
 }
