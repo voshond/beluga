@@ -1034,6 +1034,10 @@ export const NOT_EXPOSED: Readonly<Record<string, 'chat_only' | 'checker_only'>>
   tool_list: 'chat_only',
   tool_propose: 'chat_only',
   tool_run: 'chat_only',
+  // Your shared skills (BLG-98): your own runs propose them behind a card; external agents are refused them.
+  skill_read: 'chat_only',
+  skill_propose: 'chat_only',
+  skill_propose_change: 'chat_only',
   // The chat tools act on your own chats (chat links). External agents are refused them.
   list_chats: 'chat_only',
   read_chat: 'chat_only',

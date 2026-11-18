@@ -153,6 +153,8 @@ const KNOWN = {
   shared_remove: true,
   shell: true,
   shell_choices: true,
+  skill_proposal_add: true,
+  skill_proposal_remove: true,
   status: true,
   support: true,
   system: true,

@@ -204,6 +204,9 @@ export const PhoneCalls = {
   'sentinel.runs': entry('sentinel.runs', z.array(SentinelRunResult)),
   'sentinel.runGet': entry('sentinel.runGet', z.object({ run: SentinelRunResult, sentinel: z.object({ id: z.string(), name: z.string() }).optional(), report: z.string().optional() }).passthrough()),
   'sentinel.decide': entry('sentinel.decide', SentinelRunResult),
+  // BLG-98: Keep / Update or Discard on a skill your agent proposed.
+  'agentSetup.keepProposal': entry('agentSetup.keepProposal', done),
+  'agentSetup.discardProposal': entry('agentSetup.discardProposal', done),
   // 1.22 (BLG-244): a number over time (its points, oldest first), and pull to refresh a dashboard.
   'sentinel.metricRead': entry('sentinel.metricRead', z.object({ metric: z.object({ name: z.string(), label: z.string(), unit: z.string() }).passthrough(), lines: z.array(z.object({ at: z.number(), runId: z.string(), value: z.number().optional() }).passthrough()) })),
   'dashboard.refresh': entry('dashboard.refresh', z.object({ total: z.number() })),

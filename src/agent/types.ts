@@ -164,6 +164,8 @@ export interface AgentRunInput {
   readonly sentinelBrief?: string;
   /** Your own runs: project Toolbox tools (BLG-75): list, run and propose named commands. */
   readonly toolboxTools?: ToolboxTools;
+  /** Your own runs: your shared skills (BLG-98): read them, and propose a new one or a fix behind a card. */
+  readonly skillTools?: SkillTools;
   /** Your own runs: dashboards and the numbers sentinels keep (server `beluga_dashboard`; sentinel_measure inside a run). */
   readonly dashboardTools?: DashboardTools;
   /** Your own runs: the notes of calls you were in (core/calls, BLG-715), to look up, never pasted in. */
@@ -723,6 +725,14 @@ export interface ToolboxTools {
   list(projectRoot?: string): string;
   run(nameOrId: string, params?: Readonly<Record<string, string>>, projectRoot?: string): string | Promise<string>;
   propose(draft: { name: string; command: string; params?: Array<{ name: string; kind: 'host' | 'text' }>; projectRoot?: string }): string | Promise<string>;
+}
+
+/** Your shared skills as agent tools (agent/skill-tools.ts, server `beluga_skills`, BLG-98). A refusal throws with its reason. */
+export interface SkillTools {
+  /** Every skill (name and description), or one skill's SKILL.md. */
+  read(name?: string): string;
+  propose(draft: { readonly name: string; readonly description: string; readonly body: string; readonly reason?: string }): string;
+  proposeChange(draft: { readonly name: string; readonly text: string; readonly reason: string }): string;
 }
 
 /** Other chats, as a run finds and reads them (core/chat-links/transcript.ts). A refusal throws, and its message starts with the refusal code. */

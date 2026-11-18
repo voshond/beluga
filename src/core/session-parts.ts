@@ -37,6 +37,8 @@ import { claudeHome } from './claude-code/launch.js';
 import { callNotesToolsOf } from './calls/launch.js';
 import { toolboxOf } from './toolbox/registry.js';
 import type { ToolboxTools } from '../agent/types.js';
+import { listSharedSkills, readSharedSkill } from './agent-setup.js';
+import { proposeNewSkill, proposeSkillChange } from './skill-proposals.js';
 import { guestPlace, sharedWorktreeBrief } from './shared-guest.js';
 import { belugaHome } from './home.js';
 import { peerName } from './store.js';
@@ -306,6 +308,25 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
           },
         } satisfies ToolboxTools;
       },
+      skills: (agent) => ({
+        read: (name?: string) => {
+          if (name) return readSharedSkill(name) ?? `There is no skill called ${name}. Call skill_read without a name to list them.`;
+          const { root, skills } = listSharedSkills();
+          return skills.length ? skills.map((sk) => `${sk.name}: ${sk.description}`).join('\n') : `No shared skills yet in ${root}.`;
+        },
+        propose: (draft) => {
+          const result = proposeNewSkill(draft, agent, opts.store.getState().skillProposals);
+          if ('error' in result) throw new Error(result.error);
+          opts.store.dispatch({ type: 'skill_proposal_add', proposal: result.proposal });
+          return `Proposed skill "${draft.name}". It appears as a "Keep / Discard" card; it is written only when the user keeps it.`;
+        },
+        proposeChange: (draft) => {
+          const result = proposeSkillChange(draft, agent, opts.store.getState().skillProposals);
+          if ('error' in result) throw new Error(result.error);
+          opts.store.dispatch({ type: 'skill_proposal_add', proposal: result.proposal });
+          return `Proposed a change to "${draft.name}". It appears as an "Update / Discard" card; the file changes only when the user updates it.`;
+        },
+      }),
       onBashCommand: (cwd, command) => {
         const service = toolboxOf(session);
         if (!service) return;

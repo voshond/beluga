@@ -49,3 +49,22 @@ export const SKILL_TEXT_MAX = 100_000;
 export const AGENTS_DOC_MAX = 200_000;
 
 export const skillTemplate = (name: string, description: string): string => `---\nname: ${name}\ndescription: ${description}\n---\n\n# ${name}\n\n`;
+
+const CHANGE_CONTEXT = 2;
+
+/**
+ * A change in words: only the lines that differ, with a little around them. The same lines at the
+ * start and the end are left out, so a one-line fix in a long skill reads as one line.
+ */
+export const skillChangeDetail = (previous: string, next: string): string => {
+  const before = previous.replace(/\n$/, '').split('\n');
+  const after = next.replace(/\n$/, '').split('\n');
+  let head = 0;
+  while (head < before.length && head < after.length && before[head] === after[head]) head += 1;
+  let tail = 0;
+  while (tail < before.length - head && tail < after.length - head && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail += 1;
+  const from = Math.max(0, head - CHANGE_CONTEXT);
+  const lines = (all: readonly string[]): string => all.slice(from, Math.min(all.length, all.length - tail + CHANGE_CONTEXT)).join('\n') || '(nothing)';
+  const where = from > 0 ? ` (from line ${from + 1})` : '';
+  return `Before${where}:\n${lines(before)}\n\nAfter:\n${lines(after)}`;
+};
