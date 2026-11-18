@@ -338,6 +338,9 @@ export const MACHINE: Record<Method, MachineSide> = {
   // ---- support
   'support.answer': 'drive',
   // ---- stats
+  'honcho.status': 'drive',
+  'honcho.configure': 'drive',
+  'honcho.test': 'drive',
   'stats.get': 'drive',
   'stats.leaderboard': 'drive',
   'stats.note': 'drive',

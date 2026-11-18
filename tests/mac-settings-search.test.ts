@@ -157,7 +157,7 @@ const PANE_SOURCES: Record<string, string> = {
   computers: read('dialogs/MachinesSettings.tsx'),
   voice: read('dialogs/VoiceSettings.tsx'),
   keyboard: read('dialogs/KeyboardSettings.tsx'),
-  advanced: [read('dialogs/WebAccessSettings.tsx'), fn(read('dialogs/AgentThreadsSettings.tsx'), 'AgentThreadsSettings')].join('\n'),
+  advanced: [read('dialogs/WebAccessSettings.tsx'), fn(read('dialogs/AgentThreadsSettings.tsx'), 'AgentThreadsSettings'), read('dialogs/HonchoSettings.tsx')].join('\n'),
   // Its rows are made from shared/experiments.ts, and so are their entries.
   experimental: [read('dialogs/ExperimentalSettings.tsx'), ...EXPERIMENTS.map((id) => `'${EXPERIMENT_INFO[id].title}'`)].join('\n'),
   about: [s('About'), fn(read('dialogs/UpdateSettings.tsx'), 'UpdateAboutRow'), read('dialogs/ReportProblemRow.tsx')].join('\n'),

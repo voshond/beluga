@@ -41,6 +41,7 @@ import { ASSISTANT_API } from './assistant-api.js';
 import { AGENT_SETUP_API } from './agent-setup-api.js';
 import { CHATS_API } from './chats-api.js';
 import { VOICE_API } from './voice-api.js';
+import { HONCHO_API } from './honcho-api.js';
 import { CALLS_API } from './calls-api.js';
 import { TERMINAL_IMPORT_API } from './terminal-import-api.js';
 import { AGENT_TERM_API } from './agent-term-api.js';
@@ -630,6 +631,7 @@ export const API = {
   ...AGENT_SETUP_API,
   // ---- project Toolbox: named, parameterized commands that run without an agent (toolbox-api.ts, BLG-75)
   ...TOOLBOX_API,
+  ...HONCHO_API,
 } as const;
 
 export type Api = typeof API;

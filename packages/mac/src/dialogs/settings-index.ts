@@ -24,7 +24,7 @@ export const PANES: ReadonlyArray<PaneInfo<SettingsPane> & { icon: IconName; key
   { id: 'computers', label: 'Your Computers', icon: 'server', keywords: 'machines servers mac mini aws cloud ssh remote linux pair' },
   { id: 'voice', label: 'Voice', icon: 'mic', keywords: 'dictation speech microphone talk transcribe' },
   { id: 'keyboard', label: 'Keyboard', icon: 'command', keywords: 'shortcuts keys hotkeys bindings' },
-  { id: 'advanced', label: 'Advanced', icon: 'wrench', keywords: 'web access browser agent threads' },
+  { id: 'advanced', label: 'Advanced', icon: 'wrench', keywords: 'web access browser agent threads honcho memory user model' },
   { id: 'experimental', label: 'Experimental', icon: 'flask', keywords: 'labs beta early preview features try' },
   { id: 'about', label: 'About', icon: 'globe', keywords: 'version logs support' },
 ];
@@ -336,6 +336,15 @@ export const SETTINGS: readonly Entry[] = [
     ['Let a browser in', 'A link that works once, for 10 minutes.', 'link browser login'],
   ]),
   ...rows('advanced', 'Agent threads', [['Let your agents start threads', 'Child chats, each with its own agent.', 'threads child sub-agent family orchestrate']]),
+  ...rows('advanced', 'Honcho', [
+    ['Send conversations to Honcho', 'Your messages and your agents’ answers, so Honcho learns how you work.', 'honcho memory user model learn plastic labs'],
+    ['Server', 'Honcho’s cloud or your own server.', 'honcho url address self-hosted cloud'],
+    ['API key', 'Kept on this computer, readable only by you.', 'honcho key token secret jwt'],
+    ['Workspace', 'Where Honcho keeps Beluga’s conversations.', 'honcho workspace'],
+    ['Test connection', 'Checks the server and key.', 'honcho test check connect'],
+    ['Sent', 'How many messages went, and when the last did.', 'honcho sent count last'],
+  ]),
+  group('advanced', 'Projects sent to Honcho', 'Leave a project out.', 'honcho exclude project leave out'),
 
   // Experimental: one group per experiment, its switch the row (made from shared/experiments.ts).
   ...EXPERIMENTS.flatMap((id) => rows('experimental', EXPERIMENT_INFO[id].title, [[EXPERIMENT_INFO[id].title, EXPERIMENT_INFO[id].summary, `${id} experimental early ${EXPERIMENT_INFO[id].keywords}`]])),
