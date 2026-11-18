@@ -1,8 +1,11 @@
 import os from 'node:os';
 import type { AgentRef } from '../protocol.js';
 import type { InstructionPieceView } from '../shared/agent-setup.js';
+import { type MemoryView, PROJECT_MEMORY_MAX, USER_MEMORY_MAX } from '../shared/memory.js';
 import { buildGraphAppend } from './graph-prompt.js';
-import { type ShellSetup, buildAskOnlyAppend, buildChatSendAppend, buildChatVarsAppend, buildCommitAppend, buildKeepAppend, buildMachineAppend, buildScratchAppend, buildSetupAppend, buildShellAppend, buildShippedAppend, buildSystemAppend, loginShellSetup } from './prompt.js';
+import { buildMemoryAppend } from './memory-prompt.js';
+import { type ShellSetup, buildAskOnlyAppend, buildChatRecallAppend, buildChatSendAppend, buildChatVarsAppend, buildCommitAppend, buildKeepAppend, buildMachineAppend, buildScratchAppend, buildSetupAppend, buildShellAppend, buildShippedAppend, buildSystemAppend, loginShellSetup } from './prompt.js';
+import { buildSkillProposeAppend } from './skill-tools.js';
 import { buildSyncMainAppend } from './sync-main.js';
 import { buildTerminalAppend } from './terminal-prompt.js';
 import type { AgentRunInput } from './types.js';
@@ -28,13 +31,19 @@ type InstructionPiece = {
 
 const SAMPLE_PROJECT = 'your-project';
 
+const SAMPLE_USER_MEMORY: MemoryView = { scope: { kind: 'user' }, label: 'About you', entries: [{ id: 'a1b2c3', text: 'Prefers short answers and plain words.', at: 0, by: 'agent' }], used: 38, cap: USER_MEMORY_MAX };
+
+const SAMPLE_PROJECT_MEMORY: MemoryView = { scope: { kind: 'project', root: SAMPLE_PROJECT }, label: SAMPLE_PROJECT, entries: [], used: 0, cap: PROJECT_MEMORY_MAX };
+
 export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
   { id: 'room', label: 'Who you are in the room', when: 'Every run', source: 'src/agent/prompt.ts', text: (c) => buildSystemAppend(c.ownerName, c.agent), sample: (owner) => buildSystemAppend(owner) },
   { id: 'machine', label: 'About this machine', when: 'Your own runs, when About this machine is on', source: 'Settings › Skills', text: (c) => c.input.machineBrief ?? '' },
+  { id: 'memory', label: 'Beluga’s memory', when: 'Your own runs, on every runtime (never a friend’s)', source: 'Settings › Skills & instructions › Memory', text: (c) => c.input.memoryBrief ?? '', sample: () => buildMemoryAppend(SAMPLE_USER_MEMORY, SAMPLE_PROJECT_MEMORY) },
   { id: 'graphs', label: 'Graphs', when: 'Every run', source: 'src/agent/graph-prompt.ts', text: (c) => buildGraphAppend(Boolean(c.input.terminal)), sample: () => buildGraphAppend() },
   { id: 'views', label: 'Views', when: 'Every run', source: 'src/agent/view-prompt.ts', text: (c) => buildViewAppend(Boolean(c.input.terminal)), sample: () => buildViewAppend() },
   { id: 'chat-link', label: 'This chat’s address', when: 'Runs in a chat, with chat links on', source: 'src/agent/view-prompt.ts', text: (c) => (c.input.chatLink ? buildChatLinkAppend(c.input.chatLink) : '') },
   { id: 'chat-send', label: 'Messages to other chats', when: 'Your own runs, with chat links on', source: 'src/agent/prompt.ts', text: (c) => (c.input.chatTools ? buildChatSendAppend() : ''), sample: () => buildChatSendAppend() },
+  { id: 'chat-recall', label: 'Past conversations', when: 'Your own runs, with chat links on', source: 'src/agent/prompt.ts', text: (c) => (c.input.chatTools ? buildChatRecallAppend() : ''), sample: () => buildChatRecallAppend() },
   { id: 'task', label: 'Task brief', when: 'Runs with the task board (a worktree doing a task, a main folder)', source: 'src/core/board/prompt.ts', text: (c) => c.input.taskBrief ?? '' },
   { id: 'routing', label: 'Routed task run', when: 'A worktree doing a task, with Routed task runs on (Settings › Experimental)', source: 'src/core/board/routing.ts', text: (c) => c.input.routing?.brief ?? '' },
   { id: 'plan', label: 'Plan brief', when: 'A plan’s conversations', source: 'src/core/plans/prompt.ts', text: (c) => c.input.planBrief ?? '' },
@@ -43,6 +52,7 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
   { id: 'phone', label: 'Your phone', when: 'Your own runs, with a phone set up', source: 'src/core/phone', text: (c) => c.input.phoneBrief ?? '' },
   { id: 'preview', label: 'Live previews', when: 'Your own runs, with Live previews on (Settings › Experimental)', source: 'src/core/previews', text: (c) => (c.input.terminal ? '' : (c.input.previewBrief ?? '')) },
   { id: 'sentinel', label: 'Sentinel', when: 'Your own runs (a sentinel run gets its brief)', source: 'src/core/sentinel/prompt.ts', text: (c) => c.input.sentinelBrief ?? '' },
+  { id: 'skills', label: 'Skills you propose', when: 'Your own runs', source: 'src/agent/skill-tools.ts', text: (c) => (c.input.skillTools ? buildSkillProposeAppend() : ''), sample: () => buildSkillProposeAppend() },
   { id: 'dialogue', label: 'Dialogue turn', when: 'A turn of a chaired dialogue', source: 'src/core/dialogues/prompt.ts', text: (c) => c.input.dialogue?.brief ?? '' },
   {
     id: 'setup',

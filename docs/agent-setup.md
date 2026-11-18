@@ -1,12 +1,16 @@
 # Skills & instructions
 
-Settings › Skills & instructions controls what your own agents know beyond the request in front of them. It has four parts. Everything on this page applies to runs you start on this computer. A friend's or a guest's run never gets any of it.
+Settings › Skills & instructions controls what your own agents know beyond the request in front of them. It has five parts. Everything on this page applies to runs you start on this computer. A friend's or a guest's run never gets any of it.
 
 ## About this machine
 
 A note about this computer, with one switch for all of it. When the switch is on, Beluga adds the note to every run you start: Claude gets it in its system prompt, Codex in its developer instructions, and OpenCode in its instructions file. It sits right after the room instructions, inside `<machine_context>`.
 
 Use it for what is true of the machine rather than of a project. For example: the repos are checked out here, there are SSH keys to the NAS, and the agent may use them to check results or deploy. Say where access is, never what it is: the note is saved in `~/.beluga/settings.json` (`machineNote`, `machineNoteOn`), so don't put a password or a key in it.
+
+## Memory
+
+What your agents remember about you and about each project, kept by Beluga so every runtime reads the same. Pick About you or a project, change an entry in place, delete it, or add one. See [memory.md](memory.md).
 
 ## Shared skills
 
@@ -29,6 +33,36 @@ Each skill shows a badge per agent:
 A single link from `~/.claude/skills/<something>` to the whole `~/.agents/skills` folder puts every skill one level too deep, so Claude never sees them. The pane points it out, and Repair Links replaces it with one link per skill. Delete removes the skill's folder and its Claude link.
 
 On Windows, a folder link is a junction.
+
+## Skills your agents propose
+
+Your own runs get three tools in the `beluga_skills` MCP server, on every runtime (Claude, Codex, Copilot, OpenCode and local models):
+
+| Tool | What it does |
+|------|--------------|
+| `skill_read` | Lists your shared skills (name and description), or shows one skill's SKILL.md |
+| `skill_propose` | Proposes a new skill from a name, a description and a body. It shows as a "Keep / Discard" card |
+| `skill_propose_change` | Proposes a whole new SKILL.md for a skill you have, with what was wrong. It shows as an "Update / Discard" card |
+
+This works like the Toolbox's `tool_propose` (docs/toolbox.md). Nothing is written until you answer. The card is in Needs You on the Mac (the bell, where Review shows the text) and on the phone (Read all). A new skill's card shows the reason and the whole SKILL.md. A change's card shows the reason and only the lines that change, with two lines around them, as Before and After.
+
+- **Keep** writes `~/.agents/skills/<name>/SKILL.md` through the same code as New Skill, and links it for Claude. If a skill by that name appeared since, Keep refuses and the card stays.
+- **Update** writes the new SKILL.md in place.
+- **Discard** drops the proposal.
+
+A proposal is refused, with the reason going back to the agent, when:
+
+- the name is not lowercase letters, digits and dashes, or the frontmatter is missing its `name:` or `description:`;
+- a new skill's name is taken (the agent is told to propose a change instead);
+- a change would leave the skill as it is;
+- the text holds a secret, such as a provider's key format or a `SECRET_NAME=value` line (`src/shared/key-detect.ts`). Naming a variable (`$GITHUB_TOKEN`) is fine;
+- 10 proposals already wait for you.
+
+A newer proposal for the same skill replaces the older card. Proposals wait in memory: a restart of Beluga drops the ones you haven't answered.
+
+The run's instructions say when proposing is right: after multi-step work you'll likely want again, or when a skill it followed was wrong or incomplete. They also say when it isn't: a one-off, something the project's own docs already say, something that fits only one repo, or a preference, which belongs in memory. That piece is "Skills you propose" in Built-in instructions. A friend's, a guest's or an external agent's run never gets these tools.
+
+Only your own shared skills are covered. A project's skills that live in its repo and are shared with teammates are out of scope (BLG-98's open question). The code is in `src/core/skill-proposals.ts` and `src/agent/skill-tools.ts`.
 
 ## Global AGENTS.md
 
@@ -57,4 +91,4 @@ Agents write their commands for bash, and run them in zsh on most Macs. There so
 
 ## The phone
 
-None of this reaches the phone. All `agentSetup.*` methods are `mac` in `src/companion/coverage.ts`.
+None of this reaches the phone, except the cards for skills your agents propose. Their Keep / Update and Discard (`agentSetup.keepProposal`, `agentSetup.discardProposal`) are `phone` in `src/companion/coverage.ts`, because answering a card fits the phone. Every other `agentSetup.*` method is `mac`.

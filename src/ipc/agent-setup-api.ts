@@ -3,6 +3,7 @@ import { AGENTS_DOC_MAX, SKILL_NAME_RE, SKILL_TEXT_MAX } from '../shared/agent-s
 
 const skillName = z.string().regex(SKILL_NAME_RE);
 const docRuntime = z.enum(['claude', 'codex']);
+const proposalId = z.string().min(1).max(80);
 
 export const AGENT_SETUP_API = {
   'agentSetup.skills': { args: z.tuple([]) },
@@ -14,4 +15,7 @@ export const AGENT_SETUP_API = {
   'agentSetup.saveAgentsDoc': { args: z.tuple([z.string().max(AGENTS_DOC_MAX)]) },
   'agentSetup.linkAgentsDoc': { args: z.tuple([docRuntime]) },
   'agentSetup.instructions': { args: z.tuple([]) },
+  // A skill an agent proposed (BLG-98), from its Needs You card: Keep / Update writes it, Discard drops it.
+  'agentSetup.keepProposal': { args: z.tuple([proposalId]) },
+  'agentSetup.discardProposal': { args: z.tuple([proposalId]) },
 } as const;

@@ -35,6 +35,7 @@ import { launchFriendShares } from '../core/friend-share/launch.js';
 import { launchSupport } from '../core/merge-counter.js';
 import { launchAttachmentSweep } from '../core/attachment-sweep.js';
 import { launchStats } from '../core/stats/counter.js';
+import { launchHoncho } from '../core/honcho/feed.js';
 import { launchLeaderboard } from '../core/leaderboard/launch.js';
 import { claudeHome, launchClaudeCode } from '../core/claude-code/launch.js';
 import { launchCompanion } from '../companion/launch.js';
@@ -386,6 +387,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
   let stopSupport = (): void => undefined;
   let stopAttachmentSweep = (): void => undefined;
   let stopStats = (): void => undefined;
+  let stopHoncho = (): void => undefined;
   let stopLeaderboard = (): void => undefined;
   let stopClaudeCode = (): void => undefined;
   let stopGateway = (): void => undefined;
@@ -411,6 +413,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     // Your stats for the Usage tab: prompts, agent time, worktrees, pull requests, by project and agent.
     // BELUGA_DEMO_STATS=sparse: someone with only Claude, a plan without a 5-hour limit, no GitHub CLI, never dictating.
     if (opts.network) stopStats = launchStats({ session, store, demo: Boolean(demo), sparse: belugaEnv('DEMO_STATS') === 'sparse' });
+    if (opts.network && !demo) stopHoncho = launchHoncho({ session, store, sharedWith: (channel) => session.sharing.recipients(channel).length > 0 });
     // The leaderboard: friends swap three numbers a day (prompt characters, merged PRs, agent time) while the network is on.
     if (opts.network) stopLeaderboard = launchLeaderboard({ session, store, demo: Boolean(demo) });
     // Claude Code sessions running outside Beluga (Conductor, a terminal): the Mac app shows them live, read-only.
@@ -518,6 +521,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     stopAttachmentSweep();
     stopLeaderboard();
     stopStats();
+    stopHoncho();
     stopClaudeCode();
     await session.stop();
     terminals.closeAll();

@@ -360,7 +360,12 @@ describe('who gets the suite', () => {
     expect(got.prompt).toContain('read_chat');
   });
 
-  it.each(['friend', 'guest'])('a run from a %s has neither, at full trust too', async (from) => {
+  it('your own run can search past chats (search_chats)', async () => {
+    const got = await setup()('me');
+    expect(got.chatTools!.search('anything', {})).toContain('"hits":[]');
+  });
+
+  it.each(['friend', 'guest'])('a run from a %s has neither, at full trust too, and so no search_chats', async (from) => {
     const got = await setup()(from);
     expect(got.chatTools).toBeUndefined();
     expect(got.prompt).not.toContain('read_chat');
@@ -376,9 +381,11 @@ describe('who gets the suite', () => {
     const shared: string[] = [];
     const got = await setup(() => shared)('me');
     expect(() => got.chatTools!.list({})).not.toThrow();
+    expect(() => got.chatTools!.search('tunnel', {})).not.toThrow();
     shared.push('friend');
     expect(() => got.chatTools!.read(`${ME}/ws:wt-1`, {})).toThrow(/^chat_shared: this chat is shared with other people now/);
     expect(() => got.chatTools!.list({})).toThrow(/^chat_shared:/);
+    expect(() => got.chatTools!.search('tunnel', {})).toThrow(/^chat_shared:/);
     await expect(got.chatTools!.send(`${ME}/ws:wt-1`, 'hi', {})).rejects.toThrow(/^chat_shared:/);
     await expect(got.chatTools!.wait('m1')).rejects.toThrow(/^chat_shared:/);
   });

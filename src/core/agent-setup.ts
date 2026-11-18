@@ -93,7 +93,7 @@ export const readSharedSkill = (name: string, dirs: AgentDirs = agentDirs()): st
   }
 };
 
-const skillProblem = (name: string, text: string): string | undefined => {
+export const skillProblem = (name: string, text: string): string | undefined => {
   if (!SKILL_NAME_RE.test(name)) return 'A skill’s name is lowercase letters, digits and dashes.';
   if (text.length > SKILL_TEXT_MAX) return 'That skill is too long.';
   const { fields } = frontmatter(text);

@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import { router, useFocusEffect } from 'expo-router';
-import { ArrowDownToLine, AtSign, Bell, Cable, RefreshCw, Search, TriangleAlert, ChevronDown, ChevronUp, CircleCheck, Download, Hand, HardDrive, Info, LogOut, Mic, Monitor, MonitorSmartphone, Moon, MoonStar, Network, ShieldCheck, SlidersHorizontal, Smartphone, Sun } from 'lucide-react-native';
+import { ArrowDownToLine, AtSign, Bell, Brain, Cable, RefreshCw, Search, TriangleAlert, ChevronDown, ChevronUp, CircleCheck, Download, Hand, HardDrive, Info, LogOut, Mic, Monitor, MonitorSmartphone, Moon, MoonStar, Network, ShieldCheck, SlidersHorizontal, Smartphone, Sun } from 'lucide-react-native';
 import { Segments } from '../components/Segments';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, Platform, ScrollView, Switch, View } from 'react-native';
@@ -40,6 +40,7 @@ export default function Settings() {
   const insets = useSafeAreaInsets();
   const link = useLink();
   const supportsAgents = useSupports('externalAgents');
+  const supportsMemory = useSupports('memory');
   const [p, setP] = useState<NotifyPrefs>(prefs());
   const [perm, setPerm] = useState<string>('');
   const [asleep, setAsleep] = useState(store.demo?.sleeping ?? false);
@@ -210,6 +211,7 @@ export default function Settings() {
             {update.release && update.phase !== 'current' ? (
               <Row Icon={ArrowDownToLine} tone="mint" label={`Update to Beluga ${update.release.version}`} sub={update.phase === 'downloading' ? `Downloading ${Math.round((update.progress ?? 0) * 100)}%` : update.phase === 'ready' ? 'Ready to install' : 'See what’s new'} onPress={() => setUpdateOpen(true)} />
             ) : null}
+            {supportsMemory ? <Row Icon={Brain} tone="butter" label="Memory" sub="What your agents remember about you and your projects" onPress={() => router.push('/memory')} /> : null}
             {supportsAgents ? <Row Icon={Cable} tone="lavender" label="External agents" sub="What they did, and stopping them" onPress={() => router.push('/agents')} /> : null}
             <Row Icon={HardDrive} tone="sky" label="Storage" sub={saved.length ? `${saved.length} saved · ${sizeOf(totalBytes(saved))}` : 'What Beluga keeps on this phone'} onPress={() => router.push('/storage')} />
             <Row

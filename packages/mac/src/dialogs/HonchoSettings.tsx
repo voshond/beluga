@@ -1,0 +1,148 @@
+import { useEffect, useState } from 'react';
+import type { BelugaClient } from '@beluga/ipc/client.js';
+import { HONCHO_CLOUD_URL, HONCHO_LOCAL_URL } from '@beluga/shared/honcho.js';
+import { Button } from '../components/ui.js';
+import { useApp, useBeluga } from '../lib/beluga.js';
+import { computerTitle } from '../lib/os-words.js';
+import { useClock } from '../lib/window-active.js';
+import { ago } from '../phone/phone-model.js';
+import p from '../phone/phone.module.css';
+import { Group, Row, Switch } from './settings-controls.js';
+import s from './settings.module.css';
+
+type HonchoApi = BelugaClient['api']['honcho'];
+type Status = Awaited<ReturnType<HonchoApi['status']>>;
+type Patch = Parameters<HonchoApi['configure']>[0];
+type Check = { readonly ok: boolean; readonly text: string };
+
+const REFRESH_MS = 10_000;
+const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+const sentText = (status: Status, now: number): string => {
+  if (!status.sent) return status.enabled ? 'Nothing yet. Your next message in a chat or worktree goes.' : 'Nothing yet.';
+  const last = status.lastSentAt ? `, the last ${ago(status.lastSentAt, now)}` : '';
+  return `${status.sent} message${status.sent === 1 ? '' : 's'}${last}.`;
+};
+
+export function HonchoSettings() {
+  const { client } = useBeluga();
+  const projects = useApp((st) => st.projects);
+  const [status, setStatus] = useState<Status>();
+  const [urlDraft, setUrlDraft] = useState<string>();
+  const [workspaceDraft, setWorkspaceDraft] = useState<string>();
+  const [apiKey, setApiKey] = useState('');
+  const [check, setCheck] = useState<Check>();
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  const tick = useClock(true, REFRESH_MS);
+  useEffect(() => {
+    client.api.honcho.status().then(setStatus, (err: unknown) => setError(errorText(err)));
+  }, [client, tick]);
+
+  if (!status) return error ? <div className={p.error}>{error}</div> : null;
+
+  const url = urlDraft ?? status.url;
+  const workspace = workspaceDraft ?? status.workspace;
+
+  const save = (patch: Patch): void => {
+    setError(undefined);
+    client.api.honcho.configure(patch).then(
+      (next) => {
+        setStatus(next);
+        setUrlDraft(undefined);
+        setWorkspaceDraft(undefined);
+      },
+      (err: unknown) => setError(errorText(err)),
+    );
+  };
+
+  const handleToggle = (on: boolean): void => save({ enabled: on });
+  const handleSaveUrl = (): void => {
+    if (url.trim() && url.trim() !== status.url) save({ url: url.trim() });
+  };
+  const handleSaveWorkspace = (): void => {
+    if (workspace.trim() && workspace.trim() !== status.workspace) save({ workspace: workspace.trim() });
+  };
+  const handleSaveKey = (): void => {
+    if (!apiKey.trim()) return;
+    save({ apiKey: apiKey.trim() });
+    setApiKey('');
+  };
+  const handleForgetKey = (): void => save({ apiKey: null });
+  const handleTest = (): void => {
+    setBusy(true);
+    setCheck(undefined);
+    client.api.honcho
+      .test({ ...(url.trim() ? { url: url.trim() } : {}), ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) })
+      .then(
+        (r) => setCheck(r.ok ? { ok: true, text: 'Connected. Honcho answered and the workspace is ready.' } : { ok: false, text: r.error }),
+        (err: unknown) => setCheck({ ok: false, text: errorText(err) }),
+      )
+      .finally(() => setBusy(false));
+  };
+  const handleProject = (id: string, send: boolean): void => save({ excluded: send ? status.excluded.filter((x) => x !== id) : [...status.excluded, id] });
+
+  return (
+    <>
+      <Group title="Honcho">
+        <Row label="Send conversations to Honcho" detail={`Your own messages and your agents’ answers in your chats, worktrees and Your ${computerTitle()} go to Honcho, which learns how you work. Friends’ messages, runs for friends, tool output and anything that looks like a secret stay here. Only what you say from now on is sent.`}>
+          <Switch on={status.enabled} onChange={handleToggle} label="Send conversations to Honcho" />
+        </Row>
+        <Row label="Server" detail={`Your own server, on this computer or your network (http://<host>:8000), or Honcho’s cloud at ${HONCHO_CLOUD_URL}.`}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSaveUrl();
+            }}
+          >
+            <input aria-label="Honcho server" className={s.text} value={url} spellCheck={false} placeholder={HONCHO_LOCAL_URL} onChange={(e) => setUrlDraft(e.target.value)} onBlur={handleSaveUrl} />
+          </form>
+        </Row>
+        <Row label="API key" detail={status.hasKey ? 'A key is saved on this computer, readable only by you. Type a new one to replace it.' : 'Leave it empty for your own server without auth. For Honcho’s cloud, a key from app.honcho.dev.'}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSaveKey();
+            }}
+          >
+            <input aria-label="Honcho API key" type="password" autoComplete="off" className={s.text} value={apiKey} spellCheck={false} placeholder={status.hasKey ? '••••••••' : 'none'} onChange={(e) => setApiKey(e.target.value)} onBlur={handleSaveKey} />
+          </form>
+          {status.hasKey ? (
+            <Button size="small" variant="quiet" onClick={handleForgetKey}>
+              Forget
+            </Button>
+          ) : null}
+        </Row>
+        <Row label="Workspace" detail="Honcho keeps Beluga’s conversations together under this name.">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSaveWorkspace();
+            }}
+          >
+            <input aria-label="Honcho workspace" className={s.text} value={workspace} spellCheck={false} onChange={(e) => setWorkspaceDraft(e.target.value)} onBlur={handleSaveWorkspace} />
+          </form>
+        </Row>
+        <Row label="Test connection" detail={check?.text ?? 'Checks the server and key above, saved or not.'}>
+          <Button size="small" disabled={busy} onClick={handleTest}>
+            {busy ? 'Testing…' : 'Test'}
+          </Button>
+        </Row>
+        <Row label="Sent" detail={status.lastError && status.enabled ? `Last problem: ${status.lastError}. Beluga tries again later; runs are never held up.` : undefined}>
+          <span className={s.mono}>{sentText(status, Date.now())}</span>
+        </Row>
+      </Group>
+      {error ? <div className={p.error}>{error}</div> : null}
+      {status.enabled ? (
+        <Group title="Projects sent to Honcho">
+          {projects.map((project) => (
+            <Row key={project.id} label={project.name} detail={project.root || undefined}>
+              <Switch on={!status.excluded.includes(project.id)} onChange={(on) => handleProject(project.id, on)} label={`Send ${project.name} to Honcho`} />
+            </Row>
+          ))}
+        </Group>
+      ) : null}
+    </>
+  );
+}

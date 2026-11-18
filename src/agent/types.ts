@@ -7,6 +7,7 @@ import type { UsageUpdate } from './usage.js';
 import type { Effort } from '../shared/settings-schema.js';
 import type { StepRecord } from '../shared/steps.js';
 import type { ArgsRuntime } from '../shared/agent-args.js';
+import type { MemoryKind } from '../shared/memory.js';
 
 /** How far a request may reach on the owner's computer. */
 export type AccessScope = 'folder' | 'full';
@@ -164,6 +165,11 @@ export interface AgentRunInput {
   readonly sentinelBrief?: string;
   /** Your own runs: project Toolbox tools (BLG-75): list, run and propose named commands. */
   readonly toolboxTools?: ToolboxTools;
+  /** Your own runs: your shared skills (BLG-98): read them, and propose a new one or a fix behind a card. */
+  readonly skillTools?: SkillTools;
+  /** Your own runs: Beluga's memory (core/memory, BLG-95), what it holds and the tools to keep it. Never a friend's run. */
+  readonly memoryBrief?: string;
+  readonly memoryTools?: MemoryTools;
   /** Your own runs: dashboards and the numbers sentinels keep (server `beluga_dashboard`; sentinel_measure inside a run). */
   readonly dashboardTools?: DashboardTools;
   /** Your own runs: the notes of calls you were in (core/calls, BLG-715), to look up, never pasted in. */
@@ -725,6 +731,22 @@ export interface ToolboxTools {
   propose(draft: { name: string; command: string; params?: Array<{ name: string; kind: 'host' | 'text' }>; projectRoot?: string }): string | Promise<string>;
 }
 
+/** Your shared skills as agent tools (agent/skill-tools.ts, server `beluga_skills`, BLG-98). A refusal throws with its reason. */
+export interface SkillTools {
+  /** Every skill (name and description), or one skill's SKILL.md. */
+  read(name?: string): string;
+  propose(draft: { readonly name: string; readonly description: string; readonly body: string; readonly reason?: string }): string;
+  proposeChange(draft: { readonly name: string; readonly text: string; readonly reason: string }): string;
+}
+
+/** Beluga's memory as agent tools (agent/memory-tools.ts, server `beluga_memory`, BLG-95). Each answers the memory as it is now, or throws why not. */
+export interface MemoryTools {
+  list(): string;
+  add(scope: MemoryKind, text: string): string;
+  replace(scope: MemoryKind, entry: string, text: string): string;
+  remove(scope: MemoryKind, entry: string): string;
+}
+
 /** Other chats, as a run finds and reads them (core/chat-links/transcript.ts). A refusal throws, and its message starts with the refusal code. */
 /** The chain a run is in. Beluga sets it, and no tool argument can change it (core/agent-host.ts). */
 export interface ChatChain {
@@ -741,6 +763,8 @@ export interface ChatTools {
   wait(messageId: string, timeoutSec?: number): Promise<string>;
   /** The chats this run may read, newest activity first. */
   list(opts: { readonly query?: string; readonly state?: 'idle' | 'working' | 'archived'; readonly limit?: number }): string;
-  /** A page of one chat, oldest first. `after` is the `next` position of the page before. */
-  read(ref: string, opts: { readonly view?: 'messages' | 'activity'; readonly after?: string; readonly limit?: number }): string;
+  /** A page of one chat, oldest first. `after` is the `next` position of the page before; `around` centres the page on a position (a search hit). */
+  read(ref: string, opts: { readonly view?: 'messages' | 'activity'; readonly after?: string; readonly around?: string; readonly limit?: number }): string;
+  /** Past messages from the chats this run may read, the best one per chat (core/chat-links/recall.ts): each hit with its chat, when, and the lines around it. */
+  search(query: string, opts: { readonly limit?: number; readonly order?: 'relevance' | 'newest' | 'oldest'; readonly after?: string; readonly before?: string }): string;
 }

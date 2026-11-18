@@ -36,7 +36,11 @@ import { AgentTerminals } from './agent-term.js';
 import { claudeHome } from './claude-code/launch.js';
 import { callNotesToolsOf } from './calls/launch.js';
 import { toolboxOf } from './toolbox/registry.js';
+import { memoryForRun } from './memory/run.js';
+import { MemoryStore } from './memory/store.js';
 import type { ToolboxTools } from '../agent/types.js';
+import { listSharedSkills, readSharedSkill } from './agent-setup.js';
+import { proposeNewSkill, proposeSkillChange } from './skill-proposals.js';
 import { guestPlace, sharedWorktreeBrief } from './shared-guest.js';
 import { belugaHome } from './home.js';
 import { peerName } from './store.js';
@@ -232,6 +236,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       agent: () => session.backend,
       ...(opts.openPage ? { openPage: opts.openPage } : opts.open ? { openPage: async (url: string) => opts.open?.(url) } : {}),
       agentRef: (channel) => (channel ? workspaces?.agentOf(channel, session.agentRef) : undefined) ?? session.agentRef,
+      ...(workbench ? { searchSources: () => workbench?.searchSources() ?? [] } : {}),
       // A room ask that names one of your agents (BLG-520): the ones your card lists, and whether each runs here.
       agents: () => opts.client.currentProfile.agents ?? [],
       runsAgent: (agent) => session.runsAgent(agent),
@@ -305,6 +310,30 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
               : `Proposed tool "${draft.name}". It will appear as a "Keep / Discard" card.`;
           },
         } satisfies ToolboxTools;
+      },
+      skills: (agent) => ({
+        read: (name?: string) => {
+          if (name) return readSharedSkill(name) ?? `There is no skill called ${name}. Call skill_read without a name to list them.`;
+          const { root, skills } = listSharedSkills();
+          return skills.length ? skills.map((sk) => `${sk.name}: ${sk.description}`).join('\n') : `No shared skills yet in ${root}.`;
+        },
+        propose: (draft) => {
+          const result = proposeNewSkill(draft, agent, opts.store.getState().skillProposals);
+          if ('error' in result) throw new Error(result.error);
+          opts.store.dispatch({ type: 'skill_proposal_add', proposal: result.proposal });
+          return `Proposed skill "${draft.name}". It appears as a "Keep / Discard" card; it is written only when the user keeps it.`;
+        },
+        proposeChange: (draft) => {
+          const result = proposeSkillChange(draft, agent, opts.store.getState().skillProposals);
+          if ('error' in result) throw new Error(result.error);
+          opts.store.dispatch({ type: 'skill_proposal_add', proposal: result.proposal });
+          return `Proposed a change to "${draft.name}". It appears as an "Update / Discard" card; the file changes only when the user updates it.`;
+        },
+      }),
+      memory: (channel, cwd) => {
+        const wsId = channel.startsWith('ws:') ? channel.slice(3) : undefined;
+        const project = opts.store.getState().projects.find((p) => p.root && ((wsId && (p.id === wsId || p.workspaces?.some((w) => w.id === wsId))) || (cwd && (p.root === cwd || p.workspaces?.some((w) => w.path === cwd)))));
+        return memoryForRun(new MemoryStore(), project ? { root: project.root, name: project.name } : undefined);
       },
       onBashCommand: (cwd, command) => {
         const service = toolboxOf(session);

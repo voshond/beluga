@@ -4,6 +4,7 @@ import type { ChatTools } from '../../agent/types.js';
 import { type AgentRef, type BodyInput, type BodyOf, CLAUDE_AGENT, type ChatOrigin } from '../../protocol.js';
 import { type ChatRef, isAddressableChannel, parseChatRef } from '../../shared/chat-ref.js';
 import { oneLine } from '../gateway/model.js';
+import type { SearchSource } from '../search.js';
 import type { Store } from '../store.js';
 import { peerSendAccess } from './access.js';
 import { chatMessageAsker, chatMessagePrompt, withoutSkillMentions } from './message-prompt.js';
@@ -44,6 +45,8 @@ export interface HostChatLinksDeps {
   };
   readonly agentRef?: (channel?: string) => AgentRef;
   readonly terminalDriving?: (channel: string) => boolean;
+  /** Every conversation search_chats reads (unset: only what the log has loaded). */
+  readonly searchSources?: () => readonly SearchSource[];
   /** Where a chat of yours runs, for how far its run can act (see permission.ts). */
   readonly placeOf: (channel: string) => { readonly askOnly?: unknown; readonly autoEdit?: boolean } | undefined;
   /** Load a chat's saved conversation. */
@@ -123,7 +126,7 @@ export class HostChatLinks {
   toolsFor(run: { readonly from: string; readonly external: boolean; readonly channel: string; readonly chain: () => RunChain; readonly signal: AbortSignal }): ChatTools | undefined {
     if (!this.readsChats(run.from, run.external, run.channel)) return undefined;
     const chain = (): RunChain => ({ ...run.chain() });
-    const tools = chatToolsOf({ state: () => this.deps.store.getState(), requester: run.from, chain, load: this.deps.load, messages: this.sends.forRun({ channel: run.channel, requester: run.from, chain, signal: run.signal }) });
+    const tools = chatToolsOf({ state: () => this.deps.store.getState(), requester: run.from, chain, load: this.deps.load, own: run.channel, ...(this.deps.searchSources ? { sources: this.deps.searchSources } : {}), messages: this.sends.forRun({ channel: run.channel, requester: run.from, chain, signal: run.signal }) });
     // The rule at the run's start holds at each call: a chat shared since then reads and sends nothing.
     const still = (): void => {
       if (!this.readsChats(run.from, run.external, run.channel)) throw new Error(NOT_ANY_MORE);
@@ -134,6 +137,7 @@ export class HostChatLinks {
       wait: async (id, timeoutSec) => (still(), tools.wait(id, timeoutSec)),
       list: (opts) => (still(), tools.list(opts)),
       read: (ref, opts) => (still(), tools.read(ref, opts)),
+      search: (query, opts) => (still(), tools.search(query, opts)),
     };
   }
 

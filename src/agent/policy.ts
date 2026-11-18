@@ -60,12 +60,16 @@ const ALWAYS_OK = new Set([
   ...['sentinel_measure', 'dashboard_list', 'dashboard_create', 'dashboard_update', 'dashboard_add_tile', 'dashboard_update_tile', 'dashboard_move_tile', 'dashboard_remove_tile', 'metric_list', 'metric_read'].map((n) => `mcp__beluga_dashboard__${n}`),
   // Other chats (core/chat-links): only your own runs have them. core/chat-links/access.ts decides each read and send,
   // and guard.ts limits sends. A message approves nothing in the chat that reads it.
-  ...['list_chats', 'read_chat', 'send_to_chat', 'wait_for_chat'].map((n) => `mcp__beluga_chats__${n}`),
+  ...['list_chats', 'read_chat', 'search_chats', 'send_to_chat', 'wait_for_chat'].map((n) => `mcp__beluga_chats__${n}`),
   // A plan's tools: only its home conversation has them (core/plans); changes to an approved plan wait for you.
   // A milestone's Claude gets plan_ask (a question for you, BLG-6) and plan_handback (work outside its tasks, BLG-7): both only ask.
   ...['plan_get', 'plan_write', 'plan_update', 'plan_gate', 'plan_review', 'plan_start_task', 'plan_message_task', 'plan_stop_task', 'plan_pause', 'plan_ask', 'plan_handback'].map((n) => `mcp__beluga_plan__${n}`),
   // Toolbox (core/toolbox, BLG-75): only your own runs have them. tool_run opens a Terminal tab you see live; tool_propose creates a pending card you must keep or discard.
   ...['tool_list', 'tool_run', 'tool_propose'].map((n) => `mcp__beluga_tools__${n}`),
+  // Shared skills (core/skill-proposals, BLG-98): only your own runs have them. A proposal is a card you keep or discard; nothing is written before.
+  ...['skill_read', 'skill_propose', 'skill_propose_change'].map((n) => `mcp__beluga_skills__${n}`),
+  // Beluga's memory (core/memory, BLG-95): only your own runs have it. Each write is capped, refuses secrets, and you see and edit it all in Settings.
+  ...['memory_list', 'memory_add', 'memory_replace', 'memory_remove'].map((n) => `mcp__beluga_memory__${n}`),
   // Child threads (core/threads): only your own runs have them, with the flag on. They start and follow your own chats, under limits; no tool archives or deletes one.
   ...['thread_start', 'thread_status', 'thread_message', 'thread_stop'].map((n) => `mcp__beluga_threads__${n}`),
   // A friend's task only has these when its owner allowed them for that request (core/gateway/serve.ts).

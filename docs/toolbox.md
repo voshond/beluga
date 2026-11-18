@@ -57,6 +57,8 @@ Agents in your own runs get three tools in the `beluga_tools` MCP server:
 
 `tool_propose` creates a pending proposal in Needs You. You review it on the Mac or phone and choose Keep (saves the tool), Update (changes the existing tool's name, command and params in place; a team tool stays a team tool) or Discard.
 
+Skills work the same way: `skill_propose` and `skill_propose_change` leave a Keep / Discard or Update / Discard card for a shared skill (docs/agent-setup.md, "Skills your agents propose").
+
 ### Create or update a tool with an agent
 
 In the Toolbox sheet, **Create with Agent** asks what the tool should do; each tool's ✨ button asks what should change about it. Ask Agent starts a project chat whose agent reads the project, works out the command and calls `tool_propose` (with `replaces` for an update). Nothing is saved until you keep the card it leaves.

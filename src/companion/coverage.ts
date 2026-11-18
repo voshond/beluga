@@ -400,6 +400,9 @@ export const PHONE: Record<Method, Side> = {
   'agentSetup.saveAgentsDoc': 'mac',
   'agentSetup.linkAgentsDoc': 'mac',
   'agentSetup.instructions': 'mac',
+  // A skill your agent proposed (BLG-98): answering its card, like a plan decision.
+  'agentSetup.keepProposal': 'phone',
+  'agentSetup.discardProposal': 'phone',
   // A step's details are code (commands, diffs); the phone gets steps in words in its views.
   'agent.steps': 'mac',
   'agent.step': 'mac',
@@ -674,6 +677,9 @@ export const PHONE: Record<Method, Side> = {
   'voice.prepare': 'mac',
   'voice.transcribe': 'mac',
   'voice.load': 'mac',
+  'honcho.status': 'mac',
+  'honcho.configure': 'mac',
+  'honcho.test': 'mac',
   // Calls (BLG-706): the Mac's window makes the sound. The phone answers one on your Mac, declines
   // it, or hangs up; starting one, muting, sharing and the WebRTC setup are the Mac's.
   'calls.start': 'mac',
@@ -765,6 +771,12 @@ export const PHONE: Record<Method, Side> = {
   'toolbox.sshHosts': 'mac',
   'toolbox.dismissSuggestion': 'mac',
   'toolbox.acceptProposal': 'mac',
+
+  // ---- Beluga's memory (BLG-95): the phone reads it; adding, changing and deleting are Mac-only
+  'memory.list': 'phone',
+  'memory.add': 'mac',
+  'memory.replace': 'mac',
+  'memory.remove': 'mac',
 
   // External agents: only the Mac app and `beluga mcp` manage who connects.
   'external.status': 'mac',

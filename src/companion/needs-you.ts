@@ -1,5 +1,5 @@
 import { isExternalRequester } from '../core/trust.js';
-import type { Approval, DomainState, ToolboxSuggestion } from '../core/store.js';
+import type { Approval, DomainState, SkillProposal, ToolboxSuggestion } from '../core/store.js';
 import { OFFER_DETAIL, knockWords, offerWords } from '../core/team/model.js';
 import type { PendingQuestion } from '../core/collab-store.js';
 import type { TaskView as GwTask } from '../core/gateway/model.js';
@@ -11,6 +11,7 @@ import { type PlanView as PlanProgress, planView } from '../core/plans/progress.
 import { type NeedsYou, Topic } from './protocol.js';
 import { plainLine, stripCode } from './strip.js';
 import { agentLabel } from '../shared/agent-label.js';
+import { skillChangeDetail } from '../shared/agent-setup.js';
 import { type AgentRef, defaultAgentOf } from '../protocol.js';
 
 /**
@@ -663,6 +664,28 @@ function toolboxSuggestionItems(state: DomainState): NeedsYou[] {
   });
 }
 
+/** A skill card's words: why, then the SKILL.md it would write, or for a change only what changes in it. */
+const skillDetail = (p: SkillProposal): string => [p.reason ?? '', p.previous === undefined ? p.text : skillChangeDetail(p.previous, p.text)].filter(Boolean).join('\n\n');
+
+/** A shared skill your agent proposed (BLG-98): Keep / Discard, or Update / Discard for a change to one you have. */
+function skillProposalItems(state: DomainState): NeedsYou[] {
+  return (state.skillProposals ?? []).map((p): NeedsYou => {
+    const change = p.previous !== undefined;
+    return {
+      id: `skill-propose:${p.id}`,
+      kind: 'decision',
+      from: clip(p.from, 100),
+      title: change ? `Update skill "${clip(p.name, 64)}" for your agents?` : `Keep skill "${clip(p.name, 64)}" for your agents?`,
+      detail: clip(skillDetail(p), 64_000),
+      askedAt: p.askedAt,
+      actions: [
+        { label: change ? 'Update' : 'Keep', tone: 'main' as const, method: 'agentSetup.keepProposal', args: [p.id] },
+        { label: 'Discard', tone: 'danger' as const, method: 'agentSetup.discardProposal', args: [p.id] },
+      ],
+    };
+  });
+}
+
 /** Everything waiting for you, in no order and uncut (needsYou sorts and keeps 50), minus what you dismissed. */
 export function allNeeds(state: DomainState): NeedsYou[] {
   const dismissed = state.dismissedNeeds ?? [];
@@ -689,6 +712,7 @@ export function waitingNeeds(state: DomainState): NeedsYou[] {
     ...sentinelItems(state),
     ...dialogueItems(state),
     ...toolboxSuggestionItems(state),
+    ...skillProposalItems(state),
   ];
 }
 

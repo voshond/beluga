@@ -338,6 +338,9 @@ export const MACHINE: Record<Method, MachineSide> = {
   // ---- support
   'support.answer': 'drive',
   // ---- stats
+  'honcho.status': 'drive',
+  'honcho.configure': 'drive',
+  'honcho.test': 'drive',
   'stats.get': 'drive',
   'stats.leaderboard': 'drive',
   'stats.note': 'drive',
@@ -359,6 +362,8 @@ export const MACHINE: Record<Method, MachineSide> = {
   'agentSetup.saveAgentsDoc': 'drive',
   'agentSetup.linkAgentsDoc': 'drive',
   'agentSetup.instructions': 'drive',
+  'agentSetup.keepProposal': 'drive',
+  'agentSetup.discardProposal': 'drive',
   // ---- claudeCode
   'claudeCode.steps': 'drive',
   'claudeCode.step': 'drive',
@@ -721,6 +726,12 @@ export const MACHINE: Record<Method, MachineSide> = {
   'toolbox.sshHosts': 'drive',
   'toolbox.dismissSuggestion': 'drive',
   'toolbox.acceptProposal': 'drive',
+
+  // ---- Beluga's memory (BLG-95): drive all of them, as Settings does on that computer
+  'memory.list': 'drive',
+  'memory.add': 'drive',
+  'memory.replace': 'drive',
+  'memory.remove': 'drive',
 
   // ---- chats (chat links: a chat's chip, a chat's copy)
   'chats.resolve': 'drive',
