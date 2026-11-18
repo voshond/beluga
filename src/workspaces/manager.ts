@@ -26,7 +26,7 @@ import { addDay, dayKey } from './usage-days.js';
 import type { AgentRef } from '../protocol.js';
 import type { BranchList, DeletePlan, MergeWait, Project, ProjectGroup, PullHead, ProjectSync, ProjectsConfig, RenameResult, Workspace, WorkspaceRecord, WorkspaceUsage } from './types.js';
 import { type ForkOf, ghHosts, parseGitHubRemote } from './github.js';
-import type { Effort } from '../shared/settings-schema.js';
+import type { AgentPick, Effort } from '../shared/settings-schema.js';
 import { ArrangeError, type Item, type Layout, MAX_GROUP_NAME, arrangedOrder, groupKey, groupOfKey, isGroupKey, keyOf, move, settle } from './arrange.js';
 
 /** A project (by id) or a group (by name), for arranging the sidebar. */
@@ -106,10 +106,11 @@ const statusBase = (ws: Pick<WorkspaceRecord, 'kind' | 'base' | 'landOnBase'>): 
 
 const shippedOf = (ws: Pick<WorkspaceRecord, 'mergedHead' | 'prShipped'>): string[] => [...new Set([ws.mergedHead, ws.prShipped?.head].filter((h): h is string => Boolean(h)))];
 
-const agentFields = (agent: AgentRef | undefined): Pick<WorkspaceRecord, 'agent' | 'model'> => {
+// A pick's effort (a plan's builder, Build With ▸) is the conversation's own from the start.
+const agentFields = (agent: AgentPick | undefined): Pick<WorkspaceRecord, 'agent' | 'model' | 'effort'> => {
   if (!agent) return {};
-  const { model, ...ref } = agent;
-  return { agent: ref, ...(model ? { model } : {}) };
+  const { model, effort, ...ref } = agent;
+  return { agent: ref, ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
 };
 export const mainId = (root: string): string => `${projectId(root)}:main`;
 
@@ -933,7 +934,7 @@ export class WorkspaceManager {
   /** `opts.agent`: the agent it runs (unset: your default). */
   /** `opts.ticket`: the ticket it is for (RUN-117), so its branch is RUN-117/<name>. */
   /** `opts.landOnBase`: Straight to main (see WorkspaceRecord.landOnBase). */
-  async createWorktree(projectIdOrRoot: string, name: string, base?: string, opts: { readonly id?: string; readonly agent?: AgentRef; readonly thread?: ThreadRecord; readonly ticket?: string; readonly landOnBase?: boolean } = {}): Promise<Workspace> {
+  async createWorktree(projectIdOrRoot: string, name: string, base?: string, opts: { readonly id?: string; readonly agent?: AgentPick; readonly thread?: ThreadRecord; readonly ticket?: string; readonly landOnBase?: boolean } = {}): Promise<Workspace> {
     const project = this.projects.find((p) => p.id === projectIdOrRoot || p.root === projectIdOrRoot);
     if (!project) throw new WorkspaceError('Project not found');
     if (base !== undefined && !(await g.isCommit(project.root, base))) throw new WorkspaceError(`There's no branch called ${base}`);
@@ -1090,7 +1091,7 @@ export class WorkspaceManager {
   }
 
   /** `opts`: a thread's chat (core/threads): its record, and the folder it reads (a project chat's own: the main folder). */
-  async createChat(projectIdOrRoot: string, title: string, inDir?: string, opts: { readonly dir?: string; readonly thread?: ThreadRecord; readonly agent?: AgentRef } = {}): Promise<Workspace> {
+  async createChat(projectIdOrRoot: string, title: string, inDir?: string, opts: { readonly dir?: string; readonly thread?: ThreadRecord; readonly agent?: AgentPick } = {}): Promise<Workspace> {
     if (projectIdOrRoot === CHATS_PROJECT) return this.createStandaloneChat(title, opts.dir ?? inDir, opts.thread, opts.agent);
     const project = this.projects.find((p) => p.id === projectIdOrRoot || (p.root !== '' && p.root === projectIdOrRoot));
     if (!project) throw new WorkspaceError('Project not found');
@@ -1448,9 +1449,9 @@ export class WorkspaceManager {
    * the workspace's model. The stored session stays filed under its runtime: a different runtime
    * starts its own conversation (see session-carry.ts resumeFor).
    */
-  setAgent(id: string, agent: AgentRef | undefined): void {
+  setAgent(id: string, agent: AgentPick | undefined): void {
     this.require(id);
-    // Another agent's model may not take the effort picked for the last one: Settings' again.
+    // Another agent's model may not take the effort picked for the last one: Settings' again, unless the pick brings its own.
     this.patchRecord(id, { agent: undefined, model: undefined, effort: undefined, ...agentFields(agent) });
   }
 

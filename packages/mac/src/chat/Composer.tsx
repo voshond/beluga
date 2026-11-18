@@ -1,4 +1,5 @@
 import type { AgentRef } from '@beluga/protocol.js';
+import type { BuildWithPick } from '@beluga/shared/settings-schema.js';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { waitingNote } from '@beluga/core/friend-share-people.js';
 import { type AppState, type View, channelOf, peerName } from '@beluga/core/store.js';
@@ -82,6 +83,8 @@ const errorText = (err: unknown): string => (err instanceof Error ? err.message 
  * Whose unsent words the box holds: a chat's own channel; a new chat or a new worktree its
  * project's page (they all share the channel "draft", so each needs its own).
  */
+/** A new worktree's or chat's own Build With ▸ pick, sent with it when it plans first. */
+const draftBuilder = (state: Pick<AppState, 'buildWith'>, mode: { readonly plan?: boolean; readonly tasks?: boolean }): BuildWithPick | undefined => (mode.plan || mode.tasks ? state.buildWith.draft : undefined);
 const draftKeyOf = (view: View): string => (view.kind === 'draft' ? `new-chat:${view.projectId}` : view.kind === 'draft_worktree' ? `new-worktree:${view.projectId}` : channelOf(view));
 
 /** What you left unsent in each chat and on each new chat or new worktree page (kept while the app runs, like the network's chats). */
@@ -459,9 +462,11 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     const terminal = Boolean(text.trim()) && sendsToTerminal(client.store.getState(), getPrefs(), 'draft', worktreeAgent?.runtime);
     // Started in the mode the picker shows (Act, Plan First or Plan with Tasks).
     const mode = worktreeMode({ terminal, plan: client.store.getState().planMode.draft === true, tasks: armed });
+    // Build With ▸ picked here (BLG-982): who builds what its agent plans.
+    const builder = draftBuilder(client.store.getState(), mode);
     // Straight to main (BLG-973): picked here, else as last time in this project.
     const land = landsOnBase(worktree, projectId) ? { land: true } : {};
-    const opts = { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...mode, ...land };
+    const opts = { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...(builder ? { builder } : {}), ...mode, ...land };
     // Runs on one of your computers (BLG-788): made there, in the same project, and opened at once.
     // Held (the computer Runs on names can't take it now): nothing starts, the words stay in the box.
     const sent = sendToComputer(startDeps, projectId, worktreeAgent?.runtime ?? myRuntime(client.store.getState().prefs), { kind: 'worktree', text, opts });
@@ -477,7 +482,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     const ahead = makeAhead(client, projectId, name || text || 'worktree', { ...(worktree.base ? { base: worktree.base } : {}), asked: text });
     // Keys pasted into this message and kept (BLG-965) are the worktree's own before it starts (held until it's made).
     const vars = heldFor(boxKey, text);
-    void api.workspaces.startWorktree(projectId, text, { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...mode, ...land, ...(ahead ? { id: ahead.id } : {}), ...(vars.length ? { vars } : {}) }).then(() => forgetHeld(boxKey), (err: unknown) => {
+    void api.workspaces.startWorktree(projectId, text, { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...(builder ? { builder } : {}), ...mode, ...land, ...(ahead ? { id: ahead.id } : {}), ...(vars.length ? { vars } : {}) }).then(() => forgetHeld(boxKey), (err: unknown) => {
       ahead?.drop();
       keepWords(text);
       toast(client, `Couldn't create the worktree: ${errorText(err)}`, 'error');
@@ -508,10 +513,12 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
       if (sent === 'held') return keepWords(text);
       if (sent === 'sent') return;
       const plan = client.store.getState().planMode.draft === true;
+      const builder = draftBuilder(client.store.getState(), { plan });
       const terminal = Boolean(text.trim()) && sendsToTerminal(client.store.getState(), getPrefs(), 'draft', runtime);
       void api.workspaces.startChat(v.projectId, text, v.dir ?? null, {
         ...(terminal && !plan ? { terminal: true } : {}),
         ...(plan ? { plan: true } : {}),
+        ...(builder ? { builder } : {}),
         ...(newChatAgent ? { agent: newChatAgent } : {}),
       }).catch((err: unknown) => toast(client, `Couldn't start the chat: ${errorText(err)}`, 'error'));
       return;
@@ -860,7 +867,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
                 ...(['act', 'plan', 'tasks'] as const)
                   .filter((m) => m !== 'tasks' || canPlanTasks || tasksMode)
                   .map((m) => ({ label: MODE_INFO[m].label, hint: MODE_INFO[m].hint, checked: mode === m, onSelect: () => setMode(m) })),
-                ...(channel.startsWith('ws:') && mode !== 'act' ? [buildWith.item] : []),
+                ...((channel.startsWith('ws:') || channel === 'draft') && mode !== 'act' ? [buildWith.item] : []),
                 ...(channel.startsWith('ws:') ? [autopilot.item] : []),
               ]}
             >

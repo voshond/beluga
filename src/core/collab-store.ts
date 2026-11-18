@@ -1,5 +1,6 @@
 import type { AgentRef, ClaudeQuestion, GuestCan, WsRole } from '../protocol.js';
 import type { RunAskState } from './run-ask.js';
+import type { BuildWithPick } from '../shared/settings-schema.js';
 
 /** Claude (yours or a friend's) is waiting for an answer from you. */
 export interface PendingQuestion {
@@ -133,9 +134,10 @@ export interface CollabState {
   readonly autopilot: Readonly<Record<string, boolean>>;
   /**
    * Plan here, build with another (BLG-982): the agent that builds a plan made in this chat once you
-   * approve it (Plan First: it takes the conversation over; Plan with Tasks: the plan's builder). Not saved.
+   * approve it (Plan First: it takes the conversation over; Plan with Tasks: the plan's builder);
+   * 'here': the agent that plans it, over Settings' default (build-with.ts builderFor). Not saved.
    */
-  readonly buildWith: Readonly<Record<string, AgentRef>>;
+  readonly buildWith: Readonly<Record<string, BuildWithPick>>;
   /** New people you haven't picked a trust level for yet (shown as a one-click card). */
   readonly trustPrompts: readonly string[];
   /** How much each friend trusts you (as they told you; their side enforces it). */
@@ -154,7 +156,7 @@ export type CollabAction =
   | { type: 'roster'; id: string; members: readonly RosterEntry[] }
   | { type: 'plan_mode'; channel: string; on: boolean }
   | { type: 'autopilot'; channel: string; on: boolean }
-  | { type: 'build_with'; channel: string; agent?: AgentRef }
+  | { type: 'build_with'; channel: string; agent?: BuildWithPick }
   | { type: 'peer_gone'; peerIds: readonly string[] }
   /** You left the room: everything shared with you in it goes (what friends shared over the network stays). */
   | { type: 'shared_clear' }

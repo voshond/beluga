@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { AgentRef } from '../protocol.js';
+import { AgentPick } from '../shared/settings-schema.js';
 import { AUTONOMIES, MAX_PARALLEL, MAX_PLAN_REPOS, PLAN_ROLES, TESTS_AT } from '../core/plans/model.js';
 import { PRIORITIES } from '../core/board/model.js';
 
@@ -48,7 +49,7 @@ export const PLANS_API = {
   // A new plan with Claude: its own conversation (in the project's main folder) and its page → the plan.
   // `agent`: who works its milestones and tasks (BLG-497); none: your default. `planner` / `checker`: who plans it
   // and who checks it when not that agent (BLG-982). `fullAuto`: Full Autopilot, a stand-in answers for you (BLG-981).
-  'plans.create': { args: z.tuple([z.object({ projectId: z.string().min(1).max(200), projectIds: z.array(z.string().min(1).max(200)).max(MAX_PLAN_REPOS).optional(), goal: z.string().min(1), autonomy: autonomy.optional(), testsAt: z.enum(TESTS_AT).optional(), agent: AgentRef.optional(), planner: AgentRef.optional(), checker: AgentRef.optional(), fullAuto: z.boolean().optional() })]) },
+  'plans.create': { args: z.tuple([z.object({ projectId: z.string().min(1).max(200), projectIds: z.array(z.string().min(1).max(200)).max(MAX_PLAN_REPOS).optional(), goal: z.string().min(1), autonomy: autonomy.optional(), testsAt: z.enum(TESTS_AT).optional(), agent: AgentPick.optional(), planner: AgentRef.optional(), checker: AgentRef.optional(), fullAuto: z.boolean().optional() })]) },
   // Plan in this conversation (the composer's Plan with Tasks) → the plan.
   'plans.here': { args: z.tuple([z.string().min(1).max(200), autonomy.optional()]) },
   // The draft goes on the board (a new plan, or changes to one). Refused while it has open questions (BLG-8), unless `anyway`.
@@ -68,9 +69,9 @@ export const PLANS_API = {
   'plans.setTestsAt': { args: z.tuple([id, z.enum(TESTS_AT)]) },
   // Who works the plan's milestones and tasks from here on (BLG-498): an agent, or null for your default.
   // Milestones and tasks already at work keep theirs → what happened, in words.
-  'plans.setWorkAgent': { args: z.tuple([id, AgentRef.nullish()]) },
+  'plans.setWorkAgent': { args: z.tuple([id, AgentPick.nullish()]) },
   // Who plays a part of the plan (BLG-982): planner, builder (= setWorkAgent) or checker; null: back to the builder's → in words.
-  'plans.setRoleAgent': { args: z.tuple([id, z.enum(PLAN_ROLES), AgentRef.nullish()]) },
+  'plans.setRoleAgent': { args: z.tuple([id, z.enum(PLAN_ROLES), AgentPick.nullish()]) },
   // Full Autopilot on or off (BLG-981): on, Autopilot and a stand-in agent answers what would wait on you → the plan.
   'plans.setFullAuto': { args: z.tuple([id, z.boolean()]) },
   'plans.tidyUp': { args: z.tuple([id, z.boolean()]) },

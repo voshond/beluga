@@ -1,4 +1,5 @@
 import type { AgentRef } from '../../protocol.js';
+import type { AgentPick } from '../../shared/settings-schema.js';
 import type { Actor, IssuePr, Priority } from '../board/model.js';
 import { knownOr } from '../../shared/known-or.js';
 
@@ -476,8 +477,8 @@ export interface Plan {
   readonly maxParallel: number;
   /** When the e2e and full test suites run (tasks only run typecheck and the tests they touched). */
   readonly testsAt: TestsAt;
-  /** The agent (and model) its milestones and tasks are worked on by (BLG-497); none: your default. A task's own agent beats it. */
-  readonly agent?: AgentRef;
+  /** The agent (and model) its milestones and tasks are worked on by (BLG-497); none: your default. A task's own agent beats it; its effort goes with it. */
+  readonly agent?: AgentPick;
   /** Who plans it (its own conversation), when not the builder (BLG-982). */
   readonly planner?: AgentRef;
   /** Who checks its milestones and reviews its drafts, when not the builder (BLG-982). */

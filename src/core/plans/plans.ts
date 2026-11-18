@@ -3,6 +3,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { AgentRef } from '../../protocol.js';
+import { AgentPick } from '../../shared/settings-schema.js';
 import { agentName } from '../../shared/agent-label.js';
 import { JsonFile, readJson, writeJson } from '../../net/mesh/files.js';
 import { type Actor, renamedActors } from '../board/model.js';
@@ -109,7 +110,7 @@ const SavedPlan = z
     maxParallel: z.number().int().min(1).max(MAX_PARALLEL).catch(DEFAULT_PARALLEL),
     testsAt: z.enum(TESTS_AT).catch('milestone'),
     // Who works it (BLG-497): one that doesn't read is let go (your default works it).
-    agent: AgentRef.optional().catch(undefined),
+    agent: AgentPick.optional().catch(undefined),
     request: z.string().optional().catch(undefined),
     // Its planner and checker when not the builder (BLG-982), and Full Autopilot (BLG-981).
     planner: AgentRef.optional().catch(undefined),
@@ -163,7 +164,7 @@ export class Plans {
   // ------------------------------------------------------------------ drafting
 
   /** A new plan: an empty draft in its conversation (Claude writes it there). Your goal is never its title: a quick model names it (autoTitle), and Claude's plan_write after that. */
-  create(input: { readonly projectId: string; readonly repos?: readonly string[]; readonly home: string; readonly title?: string; readonly goal?: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentRef; readonly planner?: AgentRef; readonly checker?: AgentRef; readonly fullAuto?: boolean }, by: Actor): Plan {
+  create(input: { readonly projectId: string; readonly repos?: readonly string[]; readonly home: string; readonly title?: string; readonly goal?: string; readonly autonomy?: Autonomy; readonly testsAt?: TestsAt; readonly agent?: AgentPick; readonly planner?: AgentRef; readonly checker?: AgentRef; readonly fullAuto?: boolean }, by: Actor): Plan {
     const at = this.now();
     const repos = planRepos(input);
     const title = (input.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 80) || UNTITLED;
@@ -336,12 +337,12 @@ export class Plans {
    * The agent (and model) its milestones and tasks are worked on by from here on (BLG-498);
    * undefined: your default. Milestones and tasks already at work keep the agent they opened with.
    */
-  setWorkAgent(id: string, agent: AgentRef | undefined, by: Actor): Plan {
+  setWorkAgent(id: string, agent: AgentPick | undefined, by: Actor): Plan {
     const plan = this.need(id);
     const was = plan.agent;
-    if (was?.runtime === agent?.runtime && was?.model === agent?.model && was?.label === agent?.label) return plan;
-    const text = agent ? `gave its work to ${agentName(agent, { model: true })} from here on` : 'gave its work to the default agent from here on';
-    return this.change(plan, { agent: agent ? { runtime: agent.runtime, label: agent.label, ...(agent.model ? { model: agent.model } : {}) } : undefined }, [event(by, 'note', text, this.now())]);
+    if (was?.runtime === agent?.runtime && was?.model === agent?.model && was?.label === agent?.label && was?.effort === agent?.effort) return plan;
+    const text = agent ? `gave its work to ${agentName(agent, { model: true })}${agent.effort ? ` (${agent.effort} effort)` : ''} from here on` : 'gave its work to the default agent from here on';
+    return this.change(plan, { agent: agent ? { runtime: agent.runtime, label: agent.label, ...(agent.model ? { model: agent.model } : {}), ...(agent.effort ? { effort: agent.effort } : {}) } : undefined }, [event(by, 'note', text, this.now())]);
   }
 
   /** The head Claude was asked to check a milestone (a new round of checking). */

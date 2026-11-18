@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import type { AgentRef } from '@beluga/protocol.js';
+import type { AgentPick } from '@beluga/shared/settings-schema.js';
 import { PLAN_ROLES, PLAN_ROLE_INFO, type Plan, type PlanRole, roleAgent } from '@beluga/core/plans/model.js';
 import { agentName } from '@beluga/shared/agent-label.js';
-import { agentForChoice } from '@beluga/ui/agent-choice.js';
+import { agentForChoice, choiceForAgent } from '@beluga/ui/agent-choice.js';
 import type { RuntimeChoice } from '@beluga/shared/agent-runtimes.js';
 import { Popup } from '../components/FormSheet.js';
 import { Icon } from '../components/Icon.js';
 import { ActionsDropdown, type ActionItem } from '../components/SpecMenu.js';
 import { Button } from '../components/ui.js';
-import { YOUR_AGENT, agentOnlyItems, useAgentEntries } from '../components/agent-options.js';
-import { useApp } from '../lib/beluga.js';
+import { YOUR_AGENT, useAgentEntries } from '../components/agent-options.js';
+import { usePickItems } from '../chat/BuildWith.js';
 import { useMyAgent } from '../lib/agent-words.js';
 import p from './plans.module.css';
 
@@ -25,14 +26,18 @@ export type RoleChoice = Readonly<Record<PlanRole, string>>;
 
 export const ONE_AGENT: RoleChoice = { planner: YOUR_AGENT, builder: YOUR_AGENT, checker: YOUR_AGENT };
 
+/** Where a new plan's picks start: Settings › Agent › Build plans with builds it, your agent plans and checks it. */
+export const startingRoles = (buildWith: AgentPick | undefined): RoleChoice => (buildWith ? { ...ONE_AGENT, builder: choiceForAgent(buildWith) } : ONE_AGENT);
+
 const mixed = (v: RoleChoice): boolean => v.planner !== v.builder || v.checker !== v.builder;
 
 /**
  * The picks as plans.create takes them: `agent` builds (none: your default); a planner or checker
- * only when it differs from the builder ("your agent" then means your default, named).
+ * only when it differs from the builder ("your agent" then means your default, named). The builder
+ * Settings names keeps its effort.
  */
-export function rolesInput(v: RoleChoice, runtimes: readonly RuntimeChoice[], mine: AgentRef): { agent?: AgentRef; planner?: AgentRef; checker?: AgentRef } {
-  const resolve = (value: string): AgentRef => (value === YOUR_AGENT ? mine : agentForChoice(value, runtimes));
+export function rolesInput(v: RoleChoice, runtimes: readonly RuntimeChoice[], mine: AgentRef, buildWith?: AgentPick): { agent?: AgentPick; planner?: AgentRef; checker?: AgentRef } {
+  const resolve = (value: string): AgentPick => (value === YOUR_AGENT ? mine : buildWith && value === choiceForAgent(buildWith) ? buildWith : agentForChoice(value, runtimes));
   return {
     ...(v.builder !== YOUR_AGENT ? { agent: resolve(v.builder) } : {}),
     ...(v.planner !== v.builder ? { planner: resolve(v.planner) } : {}),
@@ -87,12 +92,12 @@ function roleName(plan: Plan, role: PlanRole, mine: AgentRef): string {
 
 /**
  * A plan's agents in its header: one name when one agent plays every part, else how many; its menu
- * names who plans, builds and checks, each a short submenu of agents (no models: each runs its
- * default) to change it from here on. `pick` gets null for "your agent" (the builder) or "same as
- * the builder" (the planner, the checker).
+ * names who plans, builds and checks, each a submenu of agents and models (the builder's with how
+ * hard it thinks) to change it from here on. `pick` gets null for "your agent" (the builder) or
+ * "same as the builder" (the planner, the checker).
  */
-export function PlanAgentsButton({ plan, pick }: { plan: Plan; pick: (role: PlanRole, agent: AgentRef | null) => void }) {
-  const runtimes = useApp((s) => s.runtimes);
+export function PlanAgentsButton({ plan, pick }: { plan: Plan; pick: (role: PlanRole, agent: AgentPick | null) => void }) {
+  const pickItems = usePickItems();
   const mine = useMyAgent();
   const names = PLAN_ROLES.map((r) => roleName(plan, r, mine));
   const one = new Set(names).size === 1;
@@ -103,7 +108,7 @@ export function PlanAgentsButton({ plan, pick }: { plan: Plan; pick: (role: Plan
       role === 'builder'
         ? { label: `Your Agent (${agentName(mine)})`, hint: 'Whatever your default agent is', checked: !plan.agent, onSelect: () => pick(role, null) }
         : { label: 'Same as the Builder', hint: `${roleName(plan, 'builder', mine)} does this part too`, checked: !plan[role], onSelect: () => pick(role, null) },
-      ...agentOnlyItems(runtimes, role === 'builder' ? plan.agent : plan[role], (agent) => pick(role, agent)).map((row, j) => (j === 0 ? { ...row, separate: true } : row)),
+      ...pickItems(role === 'builder' ? plan.agent : plan[role], (agent) => pick(role, agent), { effort: role === 'builder' }),
     ],
     onSelect: () => undefined,
   }));

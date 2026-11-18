@@ -12,6 +12,7 @@ import { Board, type IssuePatch, type NewIssue } from './board.js';
 import type { IssuePr } from './model.js';
 import { agentLabel, agentName } from '../../shared/agent-label.js';
 import { type AgentRef, defaultAgentOf } from '../../protocol.js';
+import type { AgentPick } from '../../shared/settings-schema.js';
 import { projectAgent } from '../../shared/agent-picker.js';
 import { needsChecksText, unexplained } from './criteria.js';
 import { inSet, labelsFor } from './labels.js';
@@ -355,7 +356,7 @@ export class BoardWork {
    * with `claude`, your Claude starts on the task there with its brief. → the workspace's id.
    * The worktree runs `opts.agent`, else the task's own agent, else your default (BLG-497).
    */
-  async start(ref: string, opts: { /** Who started it from another screen: an external agent, with its own label. */ readonly by?: Actor; readonly claude?: boolean; readonly base?: string; readonly quiet?: boolean; readonly agent?: AgentRef; /** What your Claude is told instead of working the task through (it implies `claude`), and the line the conversation shows for it. */ readonly prompt?: (issue: Issue, ws: Workspace) => string; readonly shown?: string } = {}): Promise<string> {
+  async start(ref: string, opts: { /** Who started it from another screen: an external agent, with its own label. */ readonly by?: Actor; readonly claude?: boolean; readonly base?: string; readonly quiet?: boolean; readonly agent?: AgentPick; /** What your Claude is told instead of working the task through (it implies `claude`), and the line the conversation shows for it. */ readonly prompt?: (issue: Issue, ws: Workspace) => string; readonly shown?: string } = {}): Promise<string> {
     const controller = this.deps.controller;
     if (!controller) throw new Error('Worktrees need a project folder');
     // Claude still writing it: its worktree is named after, and Claude starts with, the real words.
@@ -464,7 +465,7 @@ export class BoardWork {
    * all are your Claude's). Nobody is asked anything: the caller sends the brief. → the workspace.
    * `agent`: the agent it runs (a plan's own, BLG-497); none: your default.
    */
-  async startShared(refs: readonly string[], name: string, opts: { readonly base?: string; readonly quiet?: boolean; readonly agent?: AgentRef } = {}): Promise<Workspace> {
+  async startShared(refs: readonly string[], name: string, opts: { readonly base?: string; readonly quiet?: boolean; readonly agent?: AgentPick } = {}): Promise<Workspace> {
     const controller = this.deps.controller;
     if (!controller) throw new Error('Worktrees need a project folder');
     if (!refs.length) throw new Error('No tasks to start');

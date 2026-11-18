@@ -7,6 +7,7 @@ import { isDecisionQid } from '@beluga/core/plans/decisions.js';
 import { isRunCard } from '@beluga/core/run-ask.js';
 import { TRUST_INFO } from '@beluga/core/trust.js';
 import { defaultAgentOf } from '@beluga/protocol.js';
+import { builderFor } from '@beluga/core/build-with.js';
 import { Icon } from '../components/Icon.js';
 import { Button, Dot, Tip, cx } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
@@ -154,9 +155,9 @@ function Question({ channel }: { channel?: string }) {
     const here = channel ?? channelOf(st.view);
     const q = st.questions.find((x) => x.channel === here);
     const peer = q ? st.peers.find((p) => p.peerId === q.owner) : undefined;
-    // Picked in the mode menu (BLG-982): another agent builds it once you approve.
-    const builder = q?.question.kind === 'plan' ? st.buildWith[q.channel] : undefined;
-    return { q, owner: peer?.name, agent: agentName(peer ? defaultAgentOf(peer) : defaultAgentOf(st.self)), selfId: st.selfId, builds: builder ? agentName(builder) : undefined };
+    // Picked in the mode menu (BLG-982), else Settings' default: another agent builds it once you approve.
+    const builder = q?.question.kind === 'plan' ? builderFor(st, q.channel) : undefined;
+    return { q, owner: peer?.name, agent: agentName(peer ? defaultAgentOf(peer) : defaultAgentOf(st.self)), selfId: st.selfId, builds: builder ? agentName(builder, { model: true }) : undefined };
   }, sameFields);
   // Read in full: the card grows up over the chat, the plan from its first line (no sheet on top of it).
   const full = useUi((u) => Boolean(q && u.planFull === q.qid));

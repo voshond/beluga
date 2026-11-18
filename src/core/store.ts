@@ -4,7 +4,7 @@ import { isExternalRequester } from './trust.js';
 import { type AssistantChats, NO_ASSISTANT_CHATS, activeAssistantChannel, assistantChannel } from '../shared/assistant.js';
 import type { ConnectionStatus } from '../net/peer-client.js';
 import type { Effort, NotifySettings, Settings, ThemeName, TrustLevel } from './settings.js';
-import { ARCHIVE_SETTLED_DAYS_DEFAULT, BRANCH_PREFIX_DEFAULT, NotifySettings as NotifySchema, REFLECTION_MODEL_DEFAULT, SETTLE_IDLE_DAYS_DEFAULT } from '../shared/settings-schema.js';
+import { ARCHIVE_SETTLED_DAYS_DEFAULT, type AgentPick, BRANCH_PREFIX_DEFAULT, NotifySettings as NotifySchema, REFLECTION_MODEL_DEFAULT, SETTLE_IDLE_DAYS_DEFAULT } from '../shared/settings-schema.js';
 import { FETCH_EVERY_DEFAULT } from '../shared/background-fetch.js';
 import { AUTOPILOT_WAIT_DEFAULT } from '../shared/autopilot-wait.js';
 import type { Review } from '../workspaces/git.js';
@@ -399,6 +399,8 @@ export interface Prefs {
   readonly defaultAgent?: AgentRef;
   /** Per-project defaults over `defaultAgent`, by project name. */
   readonly projectAgents?: Readonly<Record<string, AgentRef>>;
+  /** Who builds what you plan once you approve it (core/build-with.ts builderFor; undefined: the agent that planned it). */
+  readonly buildWith?: AgentPick;
   readonly autoSetup: boolean;
   /** What new worktrees' branches start with (`beluga/`; empty: none). */
   readonly branchPrefix: string;
@@ -915,7 +917,7 @@ export const DEFAULT_PREFS: Prefs = {
 
 /** The preference fields out of saved settings. */
 export function prefsFrom(settings: Partial<Settings>): Prefs {
-  const picked = Object.fromEntries(Object.keys(DEFAULT_PREFS).concat(['model', 'effort', 'defaultAgent', 'projectAgents', 'shell', 'projectsHome']).filter((k) => settings[k as keyof Settings] !== undefined).map((k) => [k, settings[k as keyof Settings]]));
+  const picked = Object.fromEntries(Object.keys(DEFAULT_PREFS).concat(['model', 'effort', 'defaultAgent', 'projectAgents', 'buildWith', 'shell', 'projectsHome']).filter((k) => settings[k as keyof Settings] !== undefined).map((k) => [k, settings[k as keyof Settings]]));
   return { ...DEFAULT_PREFS, ...picked };
 }
 

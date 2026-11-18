@@ -110,6 +110,19 @@ describe('a place and its agent', () => {
     expect(ctl.place(ch)).toMatchObject({ model: 'haiku', resume: 'claude-session', agent: { runtime: 'claude', model: 'haiku' } });
   });
 
+  it('a pick with an effort makes it the conversation’s own, never part of its agent (BLG-982)', async () => {
+    const sonnet = { runtime: 'claude', label: 'Claude', model: 'sonnet', effort: 'low' } as const;
+    const ws = (await ctl.newWorktree(projectId(), 'builder', { quiet: true, agent: sonnet }))!;
+    expect(manager.find(ws.id)).toMatchObject({ model: 'sonnet', effort: 'low' });
+    expect(manager.find(ws.id)?.agent).toEqual({ runtime: 'claude', label: 'Claude' });
+    manager.setEffort(ws.id, 'max');
+    manager.setAgent(ws.id, { ...sonnet, effort: 'medium' });
+    expect(manager.find(ws.id)).toMatchObject({ model: 'sonnet', effort: 'medium' });
+    // A pick without one goes back to Settings' effort.
+    manager.setAgent(ws.id, CODEX);
+    expect(manager.find(ws.id)?.effort).toBeUndefined();
+  });
+
   it('a fork keeps its agent, and its session under that runtime', async () => {
     const ws = (await ctl.newWorktree(projectId(), 'src', { quiet: true, agent: CODEX }))!;
     ctl.place(`ws:${ws.id}`)!.onSession('codex-thread');

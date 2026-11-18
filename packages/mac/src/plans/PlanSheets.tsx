@@ -7,7 +7,7 @@ import { useApp } from '../lib/beluga.js';
 import { RunsOnRow } from '../chat/RunsOn.js';
 import { myRuntime } from '../chat/ModelPicker.js';
 import { useMyAgent } from '../lib/agent-words.js';
-import { AgentRoles, ONE_AGENT, type RoleChoice, rolesInput } from './AgentRoles.js';
+import { AgentRoles, type RoleChoice, rolesInput, startingRoles } from './AgentRoles.js';
 import { sendToComputer, useStartDeps } from '../machines/start-there.js';
 import { useTasksPrefs } from '../tasks/use-tasks.js';
 import { firstRepos, modeChange, newPlanTitle, withPrimary, withRepo } from './plans-model.js';
@@ -44,7 +44,8 @@ export function NewPlanSheet({ projectId, projectIds, close }: { projectId?: str
   const [testsAt, setTestsAt] = useState<TestsAt>('milestone');
   const runtimes = useApp((s) => s.runtimes);
   const mine = useMyAgent();
-  const [roles, setRoles] = useState<RoleChoice>(ONE_AGENT);
+  const buildWith = useApp((s) => s.prefs.buildWith);
+  const [roles, setRoles] = useState<RoleChoice>(() => startingRoles(buildWith));
   if (!projects.length) {
     // The sidebar's own "Add a Project…", one click away (every OS has it; not every one has a File menu).
     const addProject = (): void => {
@@ -64,7 +65,7 @@ export function NewPlanSheet({ projectId, projectIds, close }: { projectId?: str
       canSubmit={Boolean(goal.trim() && project)}
       onCancel={close}
       onSubmit={async () => {
-        const agents = rolesInput(roles, runtimes, mine);
+        const agents = rolesInput(roles, runtimes, mine, buildWith);
         const input = { goal: goal.trim(), autonomy, testsAt, ...agents, ...(autonomy === 'autopilot' && full ? { fullAuto: true } : {}) };
         // Runs on one of your computers (BLG-788): the plan is made there and opens at once; held, the sheet stays.
         const sent = repos.length > 1 ? 'here' : sendToComputer(startDeps, project, (agents.planner ?? agents.agent)?.runtime ?? myRuntime(prefsNow()), { kind: 'plan', input });

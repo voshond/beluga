@@ -36,6 +36,8 @@ import { WorkspaceController } from './workspace-controller.js';
 import { QuestionBroker } from './questions.js';
 import type { RunAsks } from './run-asks.js';
 import { isPlanHome, planForHome } from './plans/model.js';
+import { builderFor, pickName } from './build-with.js';
+import type { BuildWithPick } from '../shared/settings-schema.js';
 import { plansOf } from './plans/registry.js';
 import type { StandInRequest } from '../agent/stand-in.js';
 import type { Conversation } from '../agent/transcript.js';
@@ -1064,34 +1066,38 @@ export class Session {
 
   /**
    * Plan here, build with another agent (BLG-982): who builds what's planned in this conversation
-   * once you approve it (null: the agent that planned it). Plan First hands the conversation over;
-   * Plan with Tasks makes it the plan's builder (a plan already here: its builder from now on).
+   * once you approve it ('here': the agent that planned it; null: Settings' default, build-with.ts).
+   * Plan First hands the conversation over; Plan with Tasks makes it the plan's builder (a plan
+   * already here: its builder from now on).
    */
-  setBuildWith(channel: string, agent: AgentRef | null): void {
+  setBuildWith(channel: string, agent: BuildWithPick | null): void {
     const plan = planForHome(this.store.getState().plans, channel);
     const plans = plansOf(this);
     if (plan && plan.status !== 'done' && plans) {
-      this.toast(plans.setRoleAgent(plan.id, 'builder', agent), 'success');
+      const builder = agent === 'here' ? (plan.planner ?? null) : (agent ?? this.store.getState().prefs.buildWith ?? null);
+      this.toast(plans.setRoleAgent(plan.id, 'builder', builder), 'success');
       return;
     }
     this.store.dispatch({ type: 'build_with', channel, ...(agent ? { agent } : {}) });
-    const who = agent ? agentName(agent, { model: true }) : undefined;
-    this.toast(who ? `${who} builds what’s planned here, once you approve it` : 'The agent that plans here builds it too', 'success');
+    const builder = builderFor(this.store.getState(), channel);
+    this.toast(builder ? `${pickName(builder)} builds what’s planned here, once you approve it` : 'The agent that plans here builds it too', 'success');
   }
 
   /**
    * You approved a plan your agent proposed in a chat that builds with another agent (QuestionBroker's
    * handOff): the planning agent is told to stop there, and once its turn ends the conversation moves
    * to the builder (a quiet handoff: it gets the recent conversation), which is asked to build the plan.
-   * → what the planning agent is told; undefined when the builder is the agent already here.
+   * The builder's effort goes with it. → what the planning agent is told; undefined when the builder
+   * is the agent already here, as it is.
    */
   handOffPlan(channel: string, plan: string): ClaudeAnswer | undefined {
-    const builder = this.store.getState().buildWith[channel];
+    const builder = builderFor(this.store.getState(), channel);
     if (!builder) return undefined;
     const here = this.workspaces?.agentOf(channel, this.agentRef);
     this.store.dispatch({ type: 'build_with', channel });
-    if (here && here.runtime === builder.runtime && (!builder.model || builder.model === here.model)) return undefined;
-    const who = agentName(builder, { model: true });
+    const sameEffort = !builder.effort || builder.effort === this.workspaces?.inChannel(channel)?.effort;
+    if (here && here.runtime === builder.runtime && (!builder.model || builder.model === here.model) && sameEffort) return undefined;
+    const who = pickName(builder);
     const planner = here ? agentName(here) : 'Your agent';
     void this.host.idle(channel).then(() => {
       if (!this.workbench?.setAgent(channel, builder, 'quiet')) return this.toast(`Couldn’t move this conversation to ${who}`, 'warn');
