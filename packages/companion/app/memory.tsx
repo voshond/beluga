@@ -2,10 +2,11 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { MemoryOverviewResult } from '../../../src/companion/calls';
+import type { HonchoPictureResult, MemoryOverviewResult } from '../../../src/companion/calls';
 import { Header, Screen, useScrolled } from '../components/Screen';
 import { Card, T } from '../components/ui';
 import { calls } from '../lib/link/calls';
+import { useSupports } from '../lib/hooks';
 import { store } from '../lib/store';
 
 type MemoryViewResult = MemoryOverviewResult['user'];
@@ -33,16 +34,34 @@ const MemoryCard = ({ view }: { readonly view: MemoryViewResult }) => (
   </View>
 );
 
+/** Honcho's picture of you (BLG-101): what it inferred, read-only. Shown only when Honcho is on. */
+const HonchoCard = ({ picture }: { readonly picture: HonchoPictureResult }) => (
+  <View style={{ gap: 8 }}>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 6 }}>
+      <T v="eyebrow">Honcho’s picture of you</T>
+      {picture.at ? <T v="caption">{new Date(picture.at).toLocaleTimeString()}</T> : null}
+    </View>
+    <Card style={{ padding: 14, gap: 8 }}>
+      <T selectable>{picture.text || 'Nothing yet: Honcho hasn’t learned enough about you.'}</T>
+      {picture.error ? <T v="caption">Couldn’t refresh it: {picture.error}</T> : null}
+    </Card>
+    <T v="caption">Inferred by Honcho from your conversations. Your agents get it as background; the memory above wins where they disagree.</T>
+  </View>
+);
+
 /** Settings › Memory (BLG-95): what your agents remember about you and each project. Read-only: you edit it on your Mac. */
 export default function Memory() {
   const { scrolled, onScroll } = useScrolled();
   const insets = useSafeAreaInsets();
   const [memory, setMemory] = useState<MemoryOverviewResult>();
+  const [picture, setPicture] = useState<HonchoPictureResult>();
+  const supportsHoncho = useSupports('honchoPicture');
 
   useFocusEffect(
     useCallback(() => {
       void store.call<MemoryOverviewResult>(calls.memory(), { queue: false }).then(setMemory, () => undefined);
-    }, []),
+      if (supportsHoncho) void store.call<HonchoPictureResult>(calls.honchoPicture(), { queue: false }).then(setPicture, () => undefined);
+    }, [supportsHoncho]),
   );
 
   const projects = memory?.projects.filter((p) => p.entries.length) ?? [];
@@ -58,6 +77,7 @@ export default function Memory() {
           <MemoryCard key={view.label} view={view} />
         ))}
         {memory && !memory.user.entries.length && !projects.length ? <T v="caption">Nothing remembered yet.</T> : null}
+        {picture?.enabled ? <HonchoCard picture={picture} /> : null}
       </ScrollView>
     </Screen>
   );

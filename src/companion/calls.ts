@@ -41,6 +41,9 @@ const MemoryViewResult = z.object({ label: z.string(), entries: z.array(z.object
 /** Beluga's memory (BLG-95, src/shared/memory.ts MemoryOverview): about you, and each project's. */
 export const MemoryOverviewResult = z.object({ user: MemoryViewResult, projects: z.array(MemoryViewResult) });
 export type MemoryOverviewResult = z.infer<typeof MemoryOverviewResult>;
+/** Honcho's picture of you (BLG-101, src/shared/honcho.ts HonchoPicture), read-only on the phone. */
+export const HonchoPictureResult = z.object({ enabled: z.boolean(), text: z.string(), at: z.number().optional(), error: z.string().optional() }).passthrough();
+export type HonchoPictureResult = z.infer<typeof HonchoPictureResult>;
 export const PutResult =z.union([z.object({ received: z.number().int().min(0) }), z.object({ ref: z.string() })]);
 
 export const PhoneCalls = {
@@ -231,6 +234,8 @@ export const PhoneCalls = {
   'toolbox.run': entry('toolbox.run', z.string()),
   // 1.62 (BLG-95): Beluga's memory, read-only (SINCE.memory).
   'memory.list': entry('memory.list', MemoryOverviewResult),
+  // 1.64 (BLG-101): Honcho's picture of you, read-only (SINCE.honchoPicture).
+  'honcho.picture': entry('honcho.picture', HonchoPictureResult),
 } as const;
 
 export type PhoneMethod = keyof typeof PhoneCalls;

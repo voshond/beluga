@@ -344,6 +344,8 @@ export const SETTINGS: readonly Entry[] = [
     ['Test connection', 'Checks the server and key.', 'honcho test check connect'],
     ['Sent', 'How many messages went, and when the last did.', 'honcho sent count last'],
   ]),
+  group('advanced', 'What Honcho knows about you', 'Honcho’s picture of you, as your agents get it.', 'honcho picture user model representation inferred'),
+  ...rows('advanced', 'What Honcho knows about you', [['Honcho’s picture of you', 'What Honcho inferred from your conversations.', 'honcho picture representation refresh']]),
   group('advanced', 'Projects sent to Honcho', 'Leave a project out.', 'honcho exclude project leave out'),
 
   // Experimental: one group per experiment, its switch the row (made from shared/experiments.ts).

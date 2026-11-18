@@ -82,6 +82,8 @@ export const calls = {
   externalRevoke: (agent: string, name: string): Call => make('external.revoke', [agent], `Revoke ${short(name)}`),
   /** 1.62 (BLG-95): Beluga's memory, about you and per project (read-only here). */
   memory: (): Call => make('memory.list', [], 'Memory'),
+  /** 1.64 (BLG-101): Honcho's picture of you (read-only here). */
+  honchoPicture: (): Call => make('honcho.picture', [], 'Honcho'),
   /** Give a conversation the Mac's terminal drives back to the chat (1.36, BLG-534). */
   takeOver: (topic: Topic): Call => make('agentTerm.takeOver', [channelOf(topic).replace(/^ws:/, '')], 'Take over'),
   /** A request you asked of a friend's Claude (a `conv:task:<id>`): stop it, or (1.27) remove it from your lists. */

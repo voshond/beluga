@@ -1043,6 +1043,8 @@ export const NOT_EXPOSED: Readonly<Record<string, 'chat_only' | 'checker_only'>>
   memory_add: 'chat_only',
   memory_replace: 'chat_only',
   memory_remove: 'chat_only',
+  // Honcho (BLG-101): your own runs ask it about you; external agents never get it.
+  honcho_ask: 'chat_only',
   // The chat tools act on your own chats (chat links). External agents are refused them.
   list_chats: 'chat_only',
   read_chat: 'chat_only',

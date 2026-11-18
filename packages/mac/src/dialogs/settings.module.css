@@ -153,6 +153,12 @@
   padding: 12px 14px;
   color: var(--text-3);
 }
+.picture {
+  padding: 12px 14px;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  user-select: text;
+}
 .switch {
   position: relative;
   width: 32px;

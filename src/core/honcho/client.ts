@@ -1,3 +1,4 @@
+import type { HonchoReasoning } from '../../shared/honcho.js';
 import { HONCHO_USER_PEER, type PeerRole, peerConfig } from './mapping.js';
 
 export type HonchoFetch = (url: string, init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal }) => Promise<{ readonly ok: boolean; readonly status: number; text(): Promise<string> }>;
@@ -54,32 +55,51 @@ export class HonchoClient {
     return this.opts.workspace;
   }
 
-  private async post(route: string, body: object): Promise<void> {
+  private async post(route: string, body: object, timeoutMs = this.opts.timeoutMs ?? TIMEOUT_MS): Promise<string> {
     const headers: Record<string, string> = { 'content-type': 'application/json', accept: 'application/json' };
     if (this.opts.apiKey) headers.authorization = `Bearer ${this.opts.apiKey}`;
     let res: Awaited<ReturnType<HonchoFetch>>;
     try {
-      res = await this.doFetch(`${this.base}${route}`, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(this.opts.timeoutMs ?? TIMEOUT_MS) });
+      res = await this.doFetch(`${this.base}${route}`, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs) });
     } catch (err) {
       const name = err instanceof Error ? err.name : '';
       throw new HonchoError(name === 'TimeoutError' || name === 'AbortError' ? 'Honcho didn’t answer in time' : 'Couldn’t reach Honcho at that address', true);
     }
-    if (res.ok) return;
+    if (res.ok) return res.text().catch(() => '');
     await res.text().catch(() => '');
     throw new HonchoError(describe(res.status), retryable(res.status));
   }
 
   private readonly ws = (): string => `/v3/workspaces/${encodeURIComponent(this.opts.workspace)}`;
 
-  ensureWorkspace = (): Promise<void> => this.post('/v3/workspaces', { id: this.opts.workspace, metadata: { app: 'beluga' } });
+  private readonly field = async (route: string, body: object, key: string, timeoutMs?: number): Promise<string> => {
+    const raw = await this.post(route, body, timeoutMs);
+    let parsed: Record<string, string | null | undefined>;
+    try {
+      parsed = JSON.parse(raw) as Record<string, string | null | undefined>;
+    } catch {
+      throw new HonchoError('Honcho answered something that isn’t JSON', false);
+    }
+    const value = parsed[key];
+    return typeof value === 'string' ? value : '';
+  };
 
-  ensurePeer = (id: string, role: PeerRole): Promise<void> => this.post(`${this.ws()}/peers`, { id, metadata: { app: 'beluga', role } });
+  ensureWorkspace = async (): Promise<void> => void (await this.post('/v3/workspaces', { id: this.opts.workspace, metadata: { app: 'beluga' } }));
 
-  ensureSession = (id: string, peers: readonly HonchoSessionPeer[], metadata: Readonly<Record<string, string>>): Promise<void> =>
-    this.post(`${this.ws()}/sessions`, { id, metadata: { app: 'beluga', ...metadata }, peers: Object.fromEntries(peers.map((p) => [p.id, peerConfig(p.role)])) });
+  ensurePeer = async (id: string, role: PeerRole): Promise<void> => void (await this.post(`${this.ws()}/peers`, { id, metadata: { app: 'beluga', role } }));
 
-  addPeers = (session: string, peers: readonly HonchoSessionPeer[]): Promise<void> =>
-    this.post(`${this.ws()}/sessions/${encodeURIComponent(session)}/peers`, Object.fromEntries(peers.map((p) => [p.id, peerConfig(p.role)])));
+  /** BLG-101: what Honcho holds about a peer now, as text (no model call; empty until it has processed conversations). */
+  representation = (peer: string, timeoutMs?: number): Promise<string> => this.field(`${this.ws()}/peers/${encodeURIComponent(peer)}/representation`, {}, 'representation', timeoutMs);
+
+  /** BLG-101: a question about a peer, answered by Honcho's own model (slow: seconds to a minute). */
+  chat = (peer: string, query: string, reasoningLevel: HonchoReasoning, timeoutMs?: number): Promise<string> =>
+    this.field(`${this.ws()}/peers/${encodeURIComponent(peer)}/chat`, { query, reasoning_level: reasoningLevel }, 'content', timeoutMs);
+
+  ensureSession = async (id: string, peers: readonly HonchoSessionPeer[], metadata: Readonly<Record<string, string>>): Promise<void> =>
+    void (await this.post(`${this.ws()}/sessions`, { id, metadata: { app: 'beluga', ...metadata }, peers: Object.fromEntries(peers.map((p) => [p.id, peerConfig(p.role)])) }));
+
+  addPeers = async (session: string, peers: readonly HonchoSessionPeer[]): Promise<void> =>
+    void (await this.post(`${this.ws()}/sessions/${encodeURIComponent(session)}/peers`, Object.fromEntries(peers.map((p) => [p.id, peerConfig(p.role)]))));
 
   addMessages = async (session: string, messages: readonly HonchoMessage[]): Promise<void> => {
     for (let i = 0; i < messages.length; i += MAX_BATCH) {

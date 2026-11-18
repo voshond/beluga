@@ -13,6 +13,7 @@ import s from './settings.module.css';
 type HonchoApi = BelugaClient['api']['honcho'];
 type Status = Awaited<ReturnType<HonchoApi['status']>>;
 type Patch = Parameters<HonchoApi['configure']>[0];
+type Picture = Awaited<ReturnType<HonchoApi['picture']>>;
 type Check = { readonly ok: boolean; readonly text: string };
 
 const REFRESH_MS = 10_000;
@@ -35,11 +36,26 @@ export function HonchoSettings() {
   const [keyNote, setKeyNote] = useState<string>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [picture, setPicture] = useState<Picture>();
+  const [pictureBusy, setPictureBusy] = useState(false);
 
   const tick = useClock(true, REFRESH_MS);
   useEffect(() => {
     client.api.honcho.status().then(setStatus, (err: unknown) => setError(errorText(err)));
   }, [client, tick]);
+
+  const enabled = status?.enabled ?? false;
+  const loadPicture = (): void => {
+    setPictureBusy(true);
+    client.api.honcho
+      .picture()
+      .then(setPicture, (err: unknown) => setPicture({ enabled: true, text: '', error: errorText(err) }))
+      .finally(() => setPictureBusy(false));
+  };
+  useEffect(() => {
+    if (enabled) loadPicture();
+    else setPicture(undefined);
+  }, [client, enabled]);
 
   if (!status) return error ? <div className={p.error}>{error}</div> : null;
 
@@ -149,6 +165,21 @@ export function HonchoSettings() {
         </Row>
       </Group>
       {error ? <div className={p.error}>{error}</div> : null}
+      {status.enabled ? (
+        <Group title="What Honcho knows about you">
+          <Row
+            label="Honcho’s picture of you"
+            detail={picture?.error ? `Couldn’t read it: ${picture.error}. Runs start without it.` : 'Inferred from your conversations. Your own runs get it as background (never a friend’s); Beluga’s memory wins where they disagree.'}
+          >
+            <Button size="small" variant="quiet" disabled={pictureBusy} onClick={loadPicture}>
+              {pictureBusy ? 'Reading…' : 'Refresh'}
+            </Button>
+          </Row>
+          <div className={s.picture}>
+            {picture ? picture.text || 'Nothing yet: Honcho hasn’t learned enough about you. It reasons over conversations in the background, so this lags a little.' : 'Reading…'}
+          </div>
+        </Group>
+      ) : null}
       {status.enabled ? (
         <Group title="Projects sent to Honcho">
           {projects.map((project) => (

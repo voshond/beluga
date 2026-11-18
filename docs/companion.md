@@ -673,6 +673,9 @@ Advanced at the bottom. Learn it once and it works everywhere.
   changed or forgot in Beluga's memory (the entry, whose memory, "Undone on your Mac" once it was),
   a skill it proposed (and whether its card waits in Needs You) and a search of past chats (the
   words). Read-only: Undo is on the Mac. An older Mac sends none.
+- **Honcho's picture of you** (BLG-101, 1.64, `honcho.picture`): under Settings › Memory, what Honcho
+  inferred about you as your agents get it, when Honcho is on. Read-only: its settings stay on the Mac.
+  An older Mac has no such call, and the phone leaves it out.
 - **Plans** (in Work and on Home when one runs): milestones as a vertical timeline (each says what it
   runs after), tasks as rows with their state and what they wait on (tap one for its goal and what
   done means), decisions as cards with their buttons (Approve or Discard a draft, pass a milestone's

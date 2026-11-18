@@ -1,6 +1,7 @@
 import { honchoOf, maybeHonchoOf } from '../core/honcho/feed.js';
 import { allowedConversation } from '../core/honcho/filter.js';
 import type { Session } from '../core/session.js';
+import type { HonchoPicture } from '../shared/honcho.js';
 import type { Args, Method } from './api.js';
 
 type HonchoMethod = Extract<Method, `honcho.${string}`>;
@@ -17,4 +18,5 @@ export const HONCHO_HANDLERS = {
   'honcho.sends': (s, channel) => honchoSends(s, channel),
   'honcho.configure': (s, patch) => honchoOf(s).configure(patch),
   'honcho.test': (s, draft) => honchoOf(s).test(draft),
+  'honcho.picture': (s): Promise<HonchoPicture> => maybeHonchoOf(s)?.pictureView() ?? Promise.resolve({ enabled: false, text: '' }),
 } satisfies HonchoHandlers;
