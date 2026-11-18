@@ -37,6 +37,7 @@ import { launchAttachmentSweep } from '../core/attachment-sweep.js';
 import { launchStats } from '../core/stats/counter.js';
 import { launchHoncho } from '../core/honcho/feed.js';
 import { launchReflection } from '../core/memory/reflection.js';
+import { runStepsFrom } from '../core/memory/reflection-skills.js';
 import { launchSkillProposals } from '../core/skill-proposal-file.js';
 import { launchLeaderboard } from '../core/leaderboard/launch.js';
 import { claudeHome, launchClaudeCode } from '../core/claude-code/launch.js';
@@ -419,12 +420,14 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     if (opts.network) stopStats = launchStats({ session, store, demo: Boolean(demo), sparse: belugaEnv('DEMO_STATS') === 'sparse' });
     // Skill proposals waiting for your answer, kept on disk so a restart doesn't drop them (BLG-103).
     if (opts.network && !demo) stopSkillProposals = launchSkillProposals({ store });
-    // When work merges, or when you ask, a cheap model proposes what to remember from your own conversation (BLG-96).
+    // When work merges, or when you ask, a cheap model proposes what to remember from your own conversation (BLG-96),
+    // and for multi-step work a stronger one proposes a skill, or a fix to one the run used (BLG-106).
     if (opts.network && !demo)
       stopReflection = launchReflection({
         session,
         store,
         ask: (req) => session.standIn(req),
+        runSteps: runStepsFrom(session.host),
         sharedWith: (channel) => session.sharing.recipients(channel).length > 0,
         load: (channel) => void (channel.startsWith('ws:') && session.workspaces?.ensureLoaded(channel.slice(3))),
       });

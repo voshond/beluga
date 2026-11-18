@@ -2,11 +2,13 @@ import path from 'node:path';
 import { z } from 'zod';
 import { JsonFile, readJson } from '../../net/mesh/files.js';
 import type { MemoryEntry, MemoryScope, MemoryView } from '../../shared/memory.js';
-import { REFLECTION_MODEL_DEFAULT } from '../../shared/settings-schema.js';
+import { REFLECTION_MODEL_DEFAULT, REFLECTION_SKILL_MODEL_DEFAULT } from '../../shared/settings-schema.js';
+import type { AgentDirs } from '../agent-setup.js';
 import { redactedMessages } from '../chat-links/transcript.js';
 import { conversationOf } from '../honcho/filter.js';
 import { belugaHome } from '../home.js';
-import type { DomainState, MemoryProposal, Store } from '../store.js';
+import type { DomainState, MemoryProposal, SkillProposal, Store } from '../store.js';
+import { type DiscardedSkill, type RunSteps, type SkillLook, SKILL_SYSTEM, addDiscardedSkill, discardedSkillOf, skillLookFor, skillPrompt, skillProposalFrom } from './reflection-skills.js';
 import { MemoryError, MemoryStore, secretInMemory } from './store.js';
 
 /**
@@ -15,13 +17,16 @@ import { MemoryError, MemoryStore, secretInMemory } from './store.js';
  * as it is, and proposes what is worth keeping. Each proposal waits in Needs You; nothing is written
  * before you Keep it. Discarded ones are remembered so they are not proposed again, and each
  * conversation is looked back at once per trigger. All of it lives in ~/.beluga/memory-reflection.json (0600).
+ *
+ * The same pass then asks whether the work should leave a shared skill behind, or fix one it used
+ * (BLG-106, reflection-skills.ts): a second call on a stronger model, only for multi-step work.
  */
 
 export type ReflectionTrigger = 'merge' | 'manual';
 
 export type ReflectionSkip = 'off' | 'not_yours' | 'short' | 'done' | 'running' | 'full' | 'trouble';
 
-export type ReflectionOutcome = { readonly proposed: number } | { readonly skipped: ReflectionSkip; readonly why: string };
+export type ReflectionOutcome = { readonly proposed: number; readonly skill?: 'new' | 'change' } | { readonly skipped: ReflectionSkip; readonly why: string };
 
 export type ReflectionAsk = (req: { readonly prompt: string; readonly system: string; readonly model: string }) => Promise<string>;
 
@@ -36,6 +41,7 @@ export const MAX_PENDING_MEMORY = 10;
 export const MAX_PROPOSAL_CHARS = 300;
 const MAX_REASON_CHARS = 400;
 const MAX_DISCARDED = 200;
+const MAX_DISCARDED_SKILLS = 100;
 const MAX_RAN = 1000;
 const SAVE_MS = 1000;
 
@@ -197,6 +203,7 @@ const Saved = z.object({
     .catch([]),
   discarded: z.array(z.string().max(MAX_PROPOSAL_CHARS)).catch([]),
   ran: z.array(z.string().max(500)).catch([]),
+  skills: z.array(z.object({ name: z.string().min(1).max(200), description: z.string().max(400), against: z.string().max(64).optional() })).catch([]),
 });
 
 type SavedReflection = z.infer<typeof Saved>;
@@ -205,11 +212,12 @@ const safeToKeep = (p: MemoryProposal): boolean => [p.text, p.previous ?? '', p.
 
 export const loadReflection = (file: string): SavedReflection => {
   const parsed = Saved.safeParse(readJson(file) ?? {});
-  if (!parsed.success) return { proposals: [], discarded: [], ran: [] };
+  if (!parsed.success) return { proposals: [], discarded: [], ran: [], skills: [] };
   return {
     proposals: parsed.data.proposals.filter(safeToKeep).sort((a, b) => a.askedAt - b.askedAt).slice(-MAX_PENDING_MEMORY),
     discarded: parsed.data.discarded.filter((d) => !secretInMemory(d)).slice(-MAX_DISCARDED),
     ran: parsed.data.ran.slice(-MAX_RAN),
+    skills: parsed.data.skills.filter((d) => !secretInMemory(d.description)).slice(-MAX_DISCARDED_SKILLS),
   };
 };
 
@@ -220,6 +228,10 @@ export type ReflectionDeps = {
   /** Load a conversation's saved history into the log when it isn't there yet. */
   readonly load?: (channel: string) => void;
   readonly memory?: MemoryStore;
+  /** Every step a run of yours took (the step book); unset: the few its card keeps. */
+  readonly runSteps?: RunSteps;
+  /** Where your shared skills live; unset: ~/.agents. */
+  readonly dirs?: AgentDirs;
   /** Where it is kept; null: nothing on disk. */
   readonly file?: string | null;
   readonly now?: () => number;
@@ -243,15 +255,17 @@ export class Reflection {
   private readonly memory: MemoryStore;
   private readonly ran: Set<string>;
   private discarded: string[];
+  private skillsDiscarded: DiscardedSkill[];
   private readonly running = new Set<string>();
   private readonly saved: JsonFile | undefined;
 
   constructor(private readonly deps: ReflectionDeps) {
     this.memory = deps.memory ?? new MemoryStore();
     const file = deps.file === undefined ? reflectionPath() : deps.file;
-    const kept = file ? loadReflection(file) : { proposals: [], discarded: [], ran: [] };
+    const kept = file ? loadReflection(file) : { proposals: [], discarded: [], ran: [], skills: [] };
     this.ran = new Set(kept.ran);
     this.discarded = kept.discarded;
+    this.skillsDiscarded = kept.skills;
     for (const proposal of kept.proposals) deps.store.dispatch({ type: 'memory_proposal_add', proposal });
     this.saved = file ? new JsonFile(file, () => this.snapshot(), SAVE_MS) : undefined;
   }
@@ -261,7 +275,7 @@ export class Reflection {
   }
 
   private snapshot(): SavedReflection {
-    return { proposals: this.deps.store.getState().memoryProposals.filter(safeToKeep), discarded: this.discarded, ran: [...this.ran].slice(-MAX_RAN) };
+    return { proposals: this.deps.store.getState().memoryProposals.filter(safeToKeep), discarded: this.discarded, ran: [...this.ran].slice(-MAX_RAN), skills: this.skillsDiscarded };
   }
 
   /** Watch for worktrees merging, and keep the waiting proposals on disk as they change. */
@@ -295,7 +309,7 @@ export class Reflection {
     return state.log.flatMap((l) => (l.type === 'system' && l.merged ? [l.id] : []));
   }
 
-  /** Look back at one conversation, once per trigger, and propose what to remember. */
+  /** Look back at one conversation, once per trigger, and propose what to remember, then a skill when the work was multi-step. */
   async reflect(channel: string, trigger: ReflectionTrigger): Promise<ReflectionOutcome> {
     const { prefs } = this.deps.store.getState();
     if (!prefs.reflection) return skip('off');
@@ -307,17 +321,17 @@ export class Reflection {
     const source = reflectionSource(state, channel, this.deps.sharedWith);
     if (!source) return skip('not_yours');
     if (source.messages < REFLECTION_MIN_MESSAGES || source.yours < REFLECTION_MIN_YOURS) return skip('short');
-    if (state.memoryProposals.length >= MAX_PENDING_MEMORY) return skip('full');
-    const user = this.memory.read({ kind: 'user' });
-    const project = source.root ? this.memory.read({ kind: 'project', root: source.root }, source.project) : undefined;
+    const room = state.memoryProposals.length < MAX_PENDING_MEMORY;
+    const look = prefs.reflectionSkills ? skillLookFor(state, channel, this.deps.runSteps, this.skillsDiscarded, this.deps.dirs) : undefined;
+    if (!room && !look) return skip('full');
     this.running.add(channel);
     this.ran.add(key);
     this.saved?.changed();
     try {
-      const raw = await this.deps.ask({ system: REFLECTION_SYSTEM, prompt: reflectionPrompt(source, user, project, this.discarded), model: prefs.reflectionModel || REFLECTION_MODEL_DEFAULT });
-      const proposals = proposalsFrom(raw, { source, user, ...(project ? { project } : {}), discarded: this.discarded, pending: this.deps.store.getState().memoryProposals, now: this.now() });
-      for (const proposal of proposals) this.deps.store.dispatch({ type: 'memory_proposal_add', proposal });
-      return { proposed: proposals.length };
+      const proposed = room ? await this.remember(source, prefs.reflectionModel || REFLECTION_MODEL_DEFAULT) : 0;
+      // A skill look that fails after the memory look worked is let go: the memory proposals stand.
+      const skill = look ? await this.skillFrom(look, prefs.reflectionSkillModel || REFLECTION_SKILL_MODEL_DEFAULT).catch((err: Error) => (room ? undefined : Promise.reject(err))) : undefined;
+      return { proposed: proposed + (skill ? 1 : 0), ...(skill ? { skill: skill.previous === undefined ? ('new' as const) : ('change' as const) } : {}) };
     } catch (err) {
       this.ran.delete(key);
       this.saved?.changed();
@@ -325,6 +339,30 @@ export class Reflection {
     } finally {
       this.running.delete(channel);
     }
+  }
+
+  /** The memory look: one call on the cheap model. */
+  private async remember(source: ReflectionSource, model: string): Promise<number> {
+    const user = this.memory.read({ kind: 'user' });
+    const project = source.root ? this.memory.read({ kind: 'project', root: source.root }, source.project) : undefined;
+    const raw = await this.deps.ask({ system: REFLECTION_SYSTEM, prompt: reflectionPrompt(source, user, project, this.discarded), model });
+    const proposals = proposalsFrom(raw, { source, user, ...(project ? { project } : {}), discarded: this.discarded, pending: this.deps.store.getState().memoryProposals, now: this.now() });
+    for (const proposal of proposals) this.deps.store.dispatch({ type: 'memory_proposal_add', proposal });
+    return proposals.length;
+  }
+
+  /** The skill look (BLG-106): one call on the stronger model, at most one proposal, as the card skills already use. */
+  private async skillFrom(look: SkillLook, model: string): Promise<SkillProposal | undefined> {
+    const raw = await this.deps.ask({ system: SKILL_SYSTEM, prompt: skillPrompt(look), model });
+    const proposal = skillProposalFrom(raw, { ...look, pending: this.deps.store.getState().skillProposals }, this.now());
+    if (proposal) this.deps.store.dispatch({ type: 'skill_proposal_add', proposal });
+    return proposal;
+  }
+
+  /** A skill proposal you discarded (an agent's or this pass's): the pass does not propose it again. */
+  skillDiscarded(proposal: SkillProposal): void {
+    this.skillsDiscarded = addDiscardedSkill(this.skillsDiscarded, discardedSkillOf(proposal), MAX_DISCARDED_SKILLS);
+    this.saved?.changed();
   }
 
   private proposal(id: string): MemoryProposal {
@@ -365,7 +403,10 @@ export const reflectionOf = (session: object): Reflection => {
   return reflection;
 };
 
-export const launchReflection = (host: Omit<ReflectionDeps, 'memory' | 'now'> & { readonly session: object }): (() => void) => {
+/** The reflection of a session that has one (the daemon's), or none. */
+export const maybeReflectionOf = (session: object): Reflection | undefined => reflections.get(session);
+
+export const launchReflection = (host: Omit<ReflectionDeps, 'memory' | 'now' | 'dirs'> & { readonly session: object }): (() => void) => {
   const reflection = new Reflection(host);
   reflections.set(host.session, reflection);
   const stop = reflection.start();

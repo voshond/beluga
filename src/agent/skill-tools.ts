@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SKILL_FIX_WHEN, SKILL_NEVER_FOR, SKILL_NEW_WHEN, SKILL_NO_SECRETS } from '../shared/skill-rules.js';
 import { tool, toolSuite } from './tool-kit.js';
 import type { SkillTools } from './types.js';
 
@@ -20,13 +21,13 @@ async function guarded(fn: () => string | Promise<string>): Promise<{ content: A
 
 const skillName = z.string().trim().min(1).max(64).describe('The skill’s folder name in ~/.agents/skills: lowercase letters, digits and dashes ("deploy-to-nas")');
 
-/** What a run is told about proposing skills (INSTRUCTION_PIECES, "Skills you propose"). */
+/** What a run is told about proposing skills (INSTRUCTION_PIECES, "Skills you propose"). When one is right comes from shared/skill-rules.ts, as the reflection pass's does. */
 export const buildSkillProposeAppend = (): string =>
   [
     'Shared skills (mcp__beluga_skills__*): the user’s skills live in ~/.agents/skills/<name>/SKILL.md, and every agent they run reads them. skill_read lists them or shows one.',
-    'Propose a new one with skill_propose when you just finished multi-step work the user is likely to want again (a deploy, a release, a setup that took several tries), and the steps you found would save the next run from finding them again. Propose a fix with skill_propose_change when a skill you followed was wrong, out of date or left out a step that mattered: give the whole new SKILL.md and say what was wrong.',
-    'Do not propose for a one-off, for something this project’s own docs or CLAUDE.md already say, for what only fits this one repo, or a skill about the user’s preferences (that is memory, not a skill). One proposal per piece of work at most, near its end, and say in your answer that you proposed it.',
-    'The user keeps or discards each one in Needs You; nothing is written until they do. Never put a secret in a skill: name the variable that holds it.',
+    `Propose a new one with skill_propose when you just finished ${SKILL_NEW_WHEN}. Propose a fix with skill_propose_change when ${SKILL_FIX_WHEN}: give the whole new SKILL.md and say what was wrong.`,
+    `Do not propose for ${SKILL_NEVER_FOR}. One proposal per piece of work at most, near its end, and say in your answer that you proposed it.`,
+    `The user keeps or discards each one in Needs You; nothing is written until they do. ${SKILL_NO_SECRETS}`,
   ].join(' ');
 
 export function createSkillToolDefs(skills: SkillTools) {

@@ -64,6 +64,8 @@ A newer proposal for the same skill replaces the older card. Proposals you haven
 
 The run's instructions say when proposing is right: after multi-step work you'll likely want again, or when a skill it followed was wrong or incomplete. They also say when it isn't: a one-off, something the project's own docs already say, something that fits only one repo, or a preference, which belongs in memory. That piece is "Skills you propose" in Built-in instructions. A friend's, a guest's or an external agent's run never gets these tools.
 
+Beluga also proposes skills itself when work ends (BLG-106): the reflection pass reads the steps the agent ran and proposes at most one new skill after multi-step work, or one fix to a skill the run used and that was shown wrong. Its cards are these same cards, from "Beluga", and it judges by the same rules: both texts are built from `src/shared/skill-rules.ts`. A skill the agent already proposed in that conversation is not proposed again, and a skill you discard (from an agent or from the pass) is remembered so the pass doesn't bring it back. Settings › Skills & instructions › Learn from your conversations has its switch (**Also propose skills**) and its model (`sonnet` unless you pick another). See docs/memory.md, "The skill look".
+
 Only your own shared skills are covered. A project's skills that live in its repo and are shared with teammates are out of scope (BLG-98's open question). The code is in `src/core/skill-proposals.ts` and `src/agent/skill-tools.ts`.
 
 ## Global AGENTS.md
