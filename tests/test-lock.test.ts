@@ -143,7 +143,8 @@ describe.skipIf(process.platform === 'win32')("a worktree's Claude Code runs at 
     // What it starts (a process of its own, started after the nice) prints its pid and waits, and
     // its niceness is read from here. Read from inside, macOS CI's runners sometimes say -10 for a
     // process niced to 10 (ps did too), so a process reading its own priority can't be trusted.
-    const own = `${JSON.stringify(process.execPath)} -e 'console.log(process.pid); setTimeout(() => {}, 5000)'`;
+    // Not a node process: CachyOS's ananicy-cpp renices every `node` to 16 when its scan lands.
+    const own = `sh -c 'echo $$; exec sleep 5'`;
     // The trailing `true` keeps sh from exec-ing it in place (bash as /bin/sh does), so it's its own process.
     const child = spawn('/bin/sh', ['-c', `sleep 0.3; ${own}; true`], { stdio: ['ignore', 'pipe', 'ignore'] });
     expect(niceForWorktree(child.pid!, { KLAUD_WORKTREE: '/w/kld-49' })).toBe(true);

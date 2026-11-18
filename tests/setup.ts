@@ -14,6 +14,19 @@ const rm = fs.rmSync;
 fs.rmSync = ((p, o) => rm(p, o?.recursive ? { maxRetries: 10, retryDelay: 100, ...o } : o)) as typeof fs.rmSync;
 syncBuiltinESMExports();
 
+// Nor the developer's own Beluga settings: a shell an agent of a running daemon opened carries the
+// daemon's environment (BELUGA_PREVIEW_ORIGIN and the like, from its service), and a test would see
+// this machine's setup instead of the defaults it asserts. Every test starts from none; one that
+// needs a variable sets it. KLAUD_TEST_SLOT is this run's own (scripts/test-lock.mjs), kept.
+const OWN_SETTING = /^(BELUGA|KLAUDE?)_/;
+for (const name of Object.keys(process.env)) {
+  if (OWN_SETTING.test(name) && name !== 'KLAUD_TEST_SLOT') delete process.env[name];
+}
+// Nor where the developer points Claude Code, Codex, Copilot, gh or XDG data: the test home's own.
+for (const name of ['CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_ENV_FILE', 'COPILOT_HOME', 'GH_CONFIG_DIR', 'XDG_DATA_HOME', 'XDG_CACHE_HOME']) {
+  delete process.env[name];
+}
+
 // Never read or write the developer's real ~/.beluga (or an old ~/.klaud) during tests.
 // Workspace discovery and other tools also use the OS home directly. Without this, a fresh
 // WorkspaceStore scans the developer's real Projects/Repos folders, and git uses their signing
@@ -39,8 +52,6 @@ process.env.GIT_CONFIG_GLOBAL = path.join(home, '.gitconfig');
 // checks every file out with CRLF. Harmless elsewhere, where it's already off.
 writeFileSync(process.env.GIT_CONFIG_GLOBAL, '[core]\n\tautocrlf = false\n');
 process.env.BELUGA_HOME = made('beluga-home');
-// Nor the old name, for a test that clears BELUGA_HOME (an inherited KLAUD_HOME is real data).
-delete process.env.KLAUD_HOME;
 // Nor the developer's Codex sessions (deleting a worktree forgets the ones that ran there).
 process.env.CODEX_HOME = made('codex-home');
 
