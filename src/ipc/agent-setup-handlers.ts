@@ -1,6 +1,7 @@
 import { instructionPieces } from '../agent/run-instructions.js';
 import { linkAgentsDoc, listSharedSkills, readAgentsDoc, readSharedSkill, removeSharedSkill, repairSkillLinks, saveAgentsDoc, saveSharedSkill } from '../core/agent-setup.js';
 import type { Session } from '../core/session.js';
+import { maybeReflectionOf } from '../core/memory/reflection.js';
 import { keepSkillProposal } from '../core/skill-proposals.js';
 import type { Args, Method } from './api.js';
 
@@ -29,6 +30,8 @@ export const AGENT_SETUP_HANDLERS = {
     return result;
   },
   'agentSetup.discardProposal': (s, id) => {
+    const proposal = s.store.getState().skillProposals.find((p) => p.id === id);
+    if (proposal) maybeReflectionOf(s)?.skillDiscarded(proposal);
     s.store.dispatch({ type: 'skill_proposal_remove', id });
   },
 } satisfies AgentSetupHandlers;

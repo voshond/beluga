@@ -77,7 +77,10 @@ function lookBack(client: ReturnType<typeof useBeluga>['client'], ws: Workspace)
   client.api.memory.reflect(`ws:${ws.id}`).then(
     (outcome) => {
       if ('skipped' in outcome) return toast(client, outcome.why, 'info');
-      toast(client, outcome.proposed ? `${outcome.proposed} thing${outcome.proposed === 1 ? '' : 's'} to remember: see Needs You.` : 'Nothing new to remember from this conversation.', 'info');
+      const memories = outcome.proposed - (outcome.skill ? 1 : 0);
+      const found = [...(memories ? [`${memories} thing${memories === 1 ? '' : 's'} to remember`] : []), ...(outcome.skill ? [outcome.skill === 'new' ? 'a skill to keep' : 'a fix to a skill'] : [])];
+      const words = found.join(' and ');
+      toast(client, words ? `${words.charAt(0).toUpperCase()}${words.slice(1)}: see Needs You.` : 'Nothing new to remember from this conversation.', 'info');
     },
     (err: unknown) => toast(client, err instanceof Error ? err.message : 'Cannot look back at this conversation', 'error'),
   );

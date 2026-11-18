@@ -4,7 +4,7 @@ import { isExternalRequester } from './trust.js';
 import { type AssistantChats, NO_ASSISTANT_CHATS, activeAssistantChannel, assistantChannel } from '../shared/assistant.js';
 import type { ConnectionStatus } from '../net/peer-client.js';
 import type { Effort, NotifySettings, Settings, ThemeName, TrustLevel } from './settings.js';
-import { ARCHIVE_SETTLED_DAYS_DEFAULT, type AgentPick, BRANCH_PREFIX_DEFAULT, NotifySettings as NotifySchema, REFLECTION_MODEL_DEFAULT, SETTLE_IDLE_DAYS_DEFAULT } from '../shared/settings-schema.js';
+import { ARCHIVE_SETTLED_DAYS_DEFAULT, type AgentPick, BRANCH_PREFIX_DEFAULT, NotifySettings as NotifySchema, REFLECTION_MODEL_DEFAULT, REFLECTION_SKILL_MODEL_DEFAULT, SETTLE_IDLE_DAYS_DEFAULT } from '../shared/settings-schema.js';
 import { FETCH_EVERY_DEFAULT } from '../shared/background-fetch.js';
 import { AUTOPILOT_WAIT_DEFAULT } from '../shared/autopilot-wait.js';
 import type { Review } from '../workspaces/git.js';
@@ -446,6 +446,10 @@ export interface Prefs {
   readonly reflection: boolean;
   /** The model that pass runs on. */
   readonly reflectionModel: string;
+  /** The pass also proposes a shared skill, or a fix to one it used, after multi-step work (BLG-106). */
+  readonly reflectionSkills: boolean;
+  /** The model that drafts the skill: a stronger one. */
+  readonly reflectionSkillModel: string;
   /** Experimental features that are on (shared/experiments.ts), off until you turn each on. */
   readonly experiments: readonly string[];
   readonly subagents: Settings['subagents'];
@@ -902,6 +906,8 @@ export const DEFAULT_PREFS: Prefs = {
   machineNoteOn: false,
   reflection: true,
   reflectionModel: REFLECTION_MODEL_DEFAULT,
+  reflectionSkills: true,
+  reflectionSkillModel: REFLECTION_SKILL_MODEL_DEFAULT,
   experiments: [],
   subagents: 'full',
   hiddenButtons: [],
