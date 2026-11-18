@@ -270,6 +270,19 @@ export function chatSnapshot(state: DomainState, text: string, now = Date.now())
 /** A conversation's messages view (no tool output), secrets redacted: what the reflection pass reads (BLG-96). */
 export const redactedMessages = (log: readonly LogItem[], channel: string): ReadonlyArray<Pick<ChatItem, 'author' | 'provenance' | 'text'>> => itemsOf(log, channel, 'messages', redactSecrets);
 
+/**
+ * A conversation's activity view (messages and each run's steps), secrets redacted: what the reflection
+ * pass's skill look reads (BLG-106). `fuller` gives a run all of its steps (the step book's), where
+ * its card keeps only the newest few.
+ */
+export const redactedActivity = (log: readonly LogItem[], channel: string, fuller?: (itemId: string) => readonly string[] | undefined): ReadonlyArray<Pick<ChatItem, 'author' | 'provenance' | 'kind' | 'text'>> =>
+  log
+    .filter((l) => l.channel === channel)
+    .flatMap((l) => {
+      const steps = l.type === 'agent' ? fuller?.(l.id) : undefined;
+      return itemsFrom(l.type === 'agent' && steps ? { ...l, steps } : l, 'activity', redactSecrets);
+    });
+
 /** A ref as text from a ref, a chip's token or a link. Anything else stays as it is, and the access rules refuse it. */
 export function refOf(text: string): string {
   const link = chatLinkOf(text.trim());

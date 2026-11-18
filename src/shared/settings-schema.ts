@@ -37,6 +37,8 @@ export const SETTLE_IDLE_DAYS_DEFAULT = 3;
 /** The reflection pass runs on a small, cheap model unless you pick another (BLG-96). */
 export const REFLECTION_MODEL_DEFAULT = 'haiku';
 export const REFLECTION_MODEL_MAX = 80;
+/** Its skill look writes a whole SKILL.md, where a weak model hurts: a stronger one unless you pick another (BLG-106). */
+export const REFLECTION_SKILL_MODEL_DEFAULT = 'sonnet';
 export const SETTLE_IDLE_DAYS_MAX = 365;
 export const ARCHIVE_SETTLED_DAYS_DEFAULT = 14;
 export const ARCHIVE_SETTLED_DAYS_MAX = 3650;
@@ -190,6 +192,10 @@ export const Settings = z.object({
   reflection: z.boolean().catch(true).default(true),
   /** The model the reflection pass runs on. */
   reflectionModel: z.string().min(1).max(REFLECTION_MODEL_MAX).catch(REFLECTION_MODEL_DEFAULT).default(REFLECTION_MODEL_DEFAULT),
+  /** The pass also proposes a shared skill, or a fix to one, after multi-step work (BLG-106). Off with `reflection`. */
+  reflectionSkills: z.boolean().catch(true).default(true),
+  /** The model that drafts the skill. */
+  reflectionSkillModel: z.string().min(1).max(REFLECTION_MODEL_MAX).catch(REFLECTION_SKILL_MODEL_DEFAULT).default(REFLECTION_SKILL_MODEL_DEFAULT),
   /** How much of Claude's sub-agent work the chat shows. */
   subagents: z.enum(['full', 'compact', 'hidden']).default('full'),
   /** Workspace buttons you chose to hide from the top bar. */
