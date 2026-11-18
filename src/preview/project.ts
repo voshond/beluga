@@ -179,7 +179,7 @@ export function findStorybookPreview(root: string): string | undefined {
 }
 
 /** Stylesheets apps keep their global styles in, by convention. */
-const GLOBAL_CSS = ['src/index.css', 'src/app/globals.css', 'app/globals.css', 'src/styles/globals.css', 'styles/globals.css', 'src/globals.css', 'src/main.css', 'src/styles.css', 'src/style.css', 'src/App.css', 'src/assets/main.css', 'src/app.css', 'app/app.css', 'assets/css/main.css'];
+const GLOBAL_CSS = ['src/index.css', 'src/app/globals.css', 'app/globals.css', 'src/styles/globals.css', 'styles/globals.css', 'src/styles/index.css', 'src/styles/main.css', 'src/styles/global.css', 'src/styles/tailwind.css', 'src/globals.css', 'src/main.css', 'src/styles.css', 'src/style.css', 'src/App.css', 'src/assets/main.css', 'src/app.css', 'app/app.css', 'assets/css/main.css'];
 
 /** Whether a stylesheet is where Tailwind is set up (v4's import, v3's directives). */
 export const isTailwindEntry = (css: string): boolean => /@import\s+["']tailwindcss(\/[\w-]+)?["']|@tailwind\s+(base|components|utilities)/.test(css);
@@ -190,11 +190,24 @@ export function tailwindEntry(root: string): string | undefined {
   for (const rel of GLOBAL_CSS) {
     const file = insideFile(root, path.join(root, rel));
     if (!file) continue;
-    try {
-      if (isTailwindEntry(readFileSync(file, 'utf8'))) return file;
-    } catch {
-      /* unreadable: the next one */
-    }
+    if (setsUpTailwind(root, file, 2)) return file;
   }
   return undefined;
+}
+
+const LOCAL_CSS_IMPORT = /@import\s+(?:url\()?["'](\.{1,2}\/[^"']+\.css)["']/g;
+
+function setsUpTailwind(root: string, file: string, depth: number): boolean {
+  let css: string;
+  try {
+    css = readFileSync(file, 'utf8');
+  } catch {
+    return false;
+  }
+  if (isTailwindEntry(css)) return true;
+  if (!depth) return false;
+  return [...css.matchAll(LOCAL_CSS_IMPORT)].some((m) => {
+    const next = insideFile(root, path.resolve(path.dirname(file), m[1]!));
+    return Boolean(next && setsUpTailwind(root, next, depth - 1));
+  });
 }

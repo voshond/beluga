@@ -592,6 +592,7 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'stats.saveImage': { refused: SAVE_PANEL },
   'preview.open': { refused: PREVIEW },
   'preview.snapshot': { refused: PREVIEW },
+  'preview.failed': { refused: PREVIEW },
   'apps.get': { refused: MCP_APP },
   'apps.call': { refused: MCP_APP },
   'apps.read': { refused: MCP_APP },

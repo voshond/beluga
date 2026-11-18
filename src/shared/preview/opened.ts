@@ -49,6 +49,12 @@ export interface PreviewOpened {
   readonly version: number;
   /** A one-time pass for its frame's first load at the public preview origin (src/preview/public.ts). */
   readonly ticket?: string;
+  /** A dev page at the public preview origin: the path its frame enters by (src/preview/dev-proxy.ts). */
+  readonly via?: string;
+  /** A dev page's address from another computer on the local network. */
+  readonly lan?: string;
+  /** The dev server listens on this computer only: other computers can't open it. */
+  readonly lanBlocked?: boolean;
   /** The component drawn, the others the file exports, and its props. */
   readonly component?: {
     readonly name: string;

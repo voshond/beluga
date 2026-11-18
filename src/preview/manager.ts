@@ -17,7 +17,9 @@ import { stopCompilers } from './compilers.js';
 import { RELOAD_JS, RUNTIME_CSS, RUNTIME_JS } from './runtime.js';
 import { TOOLS_JS } from './tools.js';
 import { previewsStarted } from './off.js';
-import { COMPONENT_CSP, PAGE_CSP, PreviewServer, pageFile, send, sendFile } from './server.js';
+import type { LanHost } from '../net/lan.js';
+import { type DevTarget, devTargetOf } from './dev-proxy.js';
+import { COMPONENT_CSP, type DevSite, PAGE_CSP, PreviewServer, pageFile, send, sendFile } from './server.js';
 
 /**
  * Live previews (Settings › Experimental): each component or page that's on screen somewhere is
@@ -35,7 +37,10 @@ export interface OpenSpec {
   readonly css?: string;
   /** A wrapper in the worktree that gives the component its providers (else the project's preview-wrapper file). */
   readonly wrap?: string;
+  /** This computer on the local network, when Beluga's web port serves other computers: a dev page's address from there. */
+  readonly lan?: LanHost;
 }
+
 
 const IDLE_MS = 2 * 60_000;
 const MAX_LIVE = 6;
@@ -247,6 +252,51 @@ class LivePage extends Live {
   }
 }
 
+/** A dev server on this computer, carried to the public preview origin (dev-proxy.ts) while a frame shows it. */
+class LiveDev extends Live implements DevSite {
+  private open = 0;
+
+  constructor(key: string, root: string, readonly target: DevTarget) {
+    super(key, root);
+  }
+
+  override get watched(): boolean {
+    return this.open > 0;
+  }
+
+  touch(): void {
+    this.lastUsed = Date.now();
+  }
+
+  sockets(delta: 1 | -1): void {
+    this.open = Math.max(0, this.open + delta);
+    this.lastUsed = Date.now();
+  }
+
+  protected changed(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  serve(): boolean {
+    return false;
+  }
+}
+
+/** The page's address from another computer, or that its server listens on this computer only. */
+export async function lanAddressOf(url: string, lan: LanHost, fetcher: typeof fetch = fetch): Promise<{ readonly lan: string } | { readonly lanBlocked: true }> {
+  const u = new URL(url);
+  const probe = new URL(u.toString());
+  probe.hostname = lan.ip;
+  try {
+    const res = await fetcher(probe.toString(), { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(PROBE_MS) });
+    void res.body?.cancel().catch(() => undefined);
+    u.hostname = lan.host;
+    return { lan: u.toString() };
+  } catch {
+    return { lanBlocked: true };
+  }
+}
+
 /** Whether a page on this computer answers, and lets itself be framed. */
 export async function probePage(url: string, fetcher: typeof fetch = fetch): Promise<PreviewProblem | undefined> {
   const where = new URL(url).host;
@@ -302,7 +352,17 @@ export class PreviewManager {
     const t = spec.target;
     if (t.kind === 'url') {
       const trouble = await probePage(t.url, this.opts.fetcher);
-      return trouble ?? { ok: true, id: t.url, url: t.url, kind: 'url', version: 1 };
+      if (trouble) return trouble;
+      const lan = spec.lan ? await lanAddressOf(t.url, spec.lan, this.opts.fetcher) : {};
+      if (!this.server.isPublic) return { ok: true, id: t.url, url: t.url, kind: 'url', version: 1, ...lan };
+      this.startTimers();
+      const target = devTargetOf(t.url);
+      const key = `dev\0${target.hostname}:${target.port}`;
+      const live = (this.byKey.get(key) as LiveDev | undefined) ?? this.keep(new LiveDev(key, root, target));
+      live.touch();
+      if (this.closed) return problem('off', 'Live previews are off', 'Turn them on in Settings › Experimental.');
+      await this.server.origin();
+      return { ok: true, id: live.id, url: t.url, kind: 'url', version: 1, via: `/d/${live.id}/`, ...this.ticketFor(live.id), ...lan };
     }
     const found = await worktreeFile(root, t.file);
     if (isProblem(found)) return found;
@@ -377,6 +437,7 @@ export class PreviewManager {
     this.lives.set(live.id, live);
     this.byKey.set(live.key, live);
     this.server.add(live.id, live);
+    if (live instanceof LiveDev) this.server.addDev(live.id, live);
     // Too many: the one looked at longest ago goes (never one a frame shows).
     const idle = [...this.lives.values()].filter((l) => !l.watched && l !== live).sort((a, b) => a.lastUsed - b.lastUsed);
     while (this.lives.size > (this.opts.maxLive ?? MAX_LIVE) && idle.length) void this.drop(idle.shift()!);

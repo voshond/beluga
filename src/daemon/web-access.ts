@@ -9,7 +9,7 @@ import { type JoinLink, JoinLimiter, type WebSessionInfo, WebSessions } from './
 import { WebFiles, sweepUploads } from './web-files.js';
 import { PublicReach, type PublicReachOptions, type PublicState } from './reach/public.js';
 import { TailscaleReach, type TailscaleReachOptions, type TailscaleState } from './reach/tailscale.js';
-import { type WebArgs, WEB_HOST, WEB_PORT, type WebSocketDoor, WebServer, checkBind, parseListen, webUrl } from './web.js';
+import { type WebArgs, WEB_HOST, WEB_PORT, type WebSocketDoor, WebServer, checkBind, isLoopbackAddress, parseListen, webUrl } from './web.js';
 
 /**
  * The daemon's web access: the web port (opened by `beluga web` or Settings, and again at every
@@ -111,6 +111,11 @@ export class WebAccess {
 
   get on(): boolean {
     return !!this.server;
+  }
+
+  /** Whether the web port is open to other computers on the local network (it listens beyond loopback). */
+  get servesLan(): boolean {
+    return Boolean(this.server && this.args && !isLoopbackAddress(this.args.host) && this.args.host !== 'localhost');
   }
 
   /** Open the web port (or keep the one that's open, unless it's asked elsewhere); its link. */

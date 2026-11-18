@@ -23,6 +23,7 @@ import { isDemoMachine } from '../machines/demo.js';
 import { demoLinkMs, withLatency } from '../machines/latency.js';
 import { type WebArgs, sshWords } from './web.js';
 import { WebAccess, attachWebAccess, readWebConfig } from './web-access.js';
+import { attachLanServing } from '../net/lan.js';
 import { uploadsDir } from './web-files.js';
 import { publicWords } from './reach/public.js';
 import { tailscaleWords } from './reach/tailscale.js';
@@ -148,6 +149,7 @@ export async function startDaemon(config: Config, opts: DaemonOptions): Promise<
   });
   web = new WebAccess({ door: server, log, ...(opts.web?.root ? { root: opts.web.root } : {}) });
   attachWebAccess(core.session, web);
+  attachLanServing(core.session, () => web.servesLan);
   let webAt: string | undefined;
   if (opts.web) {
     webAt = await web.start(opts.web).catch(async (err: unknown) => {

@@ -30,7 +30,7 @@ import { sentinelOf } from './sentinel/registry.js';
 import { needPlans, plansOf } from './plans/registry.js';
 import { assistantOf } from './assistant/registry.js';
 import { companionOf } from '../companion/registry.js';
-import { stopTestProcesses } from '../workspaces/test-procs.js';
+import { keptRunningIn, stopTestProcesses } from '../workspaces/test-procs.js';
 import { ghRepoEnv } from '../workspaces/github.js';
 import { AgentTerminals } from './agent-term.js';
 import { claudeHome } from './claude-code/launch.js';
@@ -48,6 +48,7 @@ import { guestPlace, sharedWorktreeBrief } from './shared-guest.js';
 import { belugaHome } from './home.js';
 import { peerName } from './store.js';
 import { autopilotWaitMs } from './autopilot/wait.js';
+import { servedLan } from '../net/lan.js';
 
 /** Everything a session is made of, wired to each other and to the session. */
 export interface SessionParts {
@@ -258,6 +259,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       envFor: (channel, dir) => ({ ...ghRepoEnv(dir), ...env.envFor(channel.startsWith('ws:') ? { workspaceId: channel.slice(3), dir } : { dir }, { claude: true }) }),
       dotenvAccess: env.dotenvAccess,
       stopTests: (dir) => stopTestProcesses(dir),
+      keptRunning: (dir) => keptRunningIn(dir),
       nameTask: (prompt) => session.nameTask(prompt),
       steps: new StepBook(opts.stepsDir),
       isGuest: (peerId) => invites.isRestricted(peerId),
@@ -277,6 +279,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       },
       phone: (scratchDir) => companionOf(session)?.control.toolsFor(scratchDir),
       callNotes: () => callNotesToolsOf(session),
+      servedTo: () => servedLan(session)?.host,
       phoneUse: () => companionOf(session)?.control.useLevel() ?? 'off',
       setup: (channel) => workbench?.setupForRun(channel.slice(3)),
       terminalDriving: (channel) => agentTerms?.driving(channel) ?? false,

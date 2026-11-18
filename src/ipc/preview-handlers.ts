@@ -6,6 +6,8 @@ import path from 'node:path';
 import { type PreviewProblem, type PreviewResult, problem } from '../shared/preview/opened.js';
 import { STILLS_DIR, loopbackUrl, stillName } from '../shared/preview/ref.js';
 import { ensureScratch } from '../workspaces/scratch.js';
+import { servedLan } from '../net/lan.js';
+import { appContextsOf } from '../mcp-apps/contexts.js';
 import type { Args, Method } from './api.js';
 
 /** What each `preview.*` method does (see preview-api.ts). */
@@ -26,7 +28,8 @@ async function open(s: Session, wsId: string, spec: Args<'preview.open'>[1]): Pr
   if (target.kind === 'url') {
     const url = loopbackUrl(target.url);
     if (!url) return problem('elsewhere', 'Only pages on this computer show here', 'Open that address in your browser.');
-    return previews().open(root, { target: { kind: 'url', url } });
+    const lan = servedLan(s);
+    return previews().open(root, { target: { kind: 'url', url }, ...(lan ? { lan } : {}) });
   }
   const t = target.kind === 'component' ? { kind: 'component' as const, file: target.file, ...(target.export ? { export: target.export } : {}) } : { kind: 'html' as const, file: target.file };
   return previews().open(root, { target: t, ...(spec.props ? { props: spec.props } : {}), ...(spec.css ? { css: spec.css } : {}), ...(spec.wrap ? { wrap: spec.wrap } : {}) });
@@ -71,7 +74,16 @@ async function snapshot(s: Session, wsId: string, shot: Args<'preview.snapshot'>
   return { ok: true, path: path.relative(root, file).split(path.sep).join('/') };
 }
 
+/** A preview that failed while drawing: your agent hears it with its next turn in that worktree. */
+function failed(s: Session, wsId: string, what: Args<'preview.failed'>[1]): { readonly ok: boolean } {
+  if (!experimentOn(s.store.getState().prefs.experiments, 'previews') || !s.workbench?.folderOf(wsId)) return { ok: false };
+  const text = [`The live preview of ${what.title} in your last answer didn't draw for the user: ${what.problem}.`, 'Fix it (or say why it can\'t draw) before showing it again.', ...(what.details ? ['', what.details] : [])].join('\n');
+  appContextsOf(s).set(`ws:${wsId}`, `preview:${what.title}`, `beluga-preview · ${what.title}`, text);
+  return { ok: true };
+}
+
 export const PREVIEW_HANDLERS = {
   'preview.open': (s, wsId, spec) => open(s, wsId, spec),
+  'preview.failed': (s, wsId, what) => failed(s, wsId, what),
   'preview.snapshot': (s, wsId, shot) => snapshot(s, wsId, shot),
 } satisfies PreviewHandlers;

@@ -1,4 +1,3 @@
-import os from 'node:os';
 import path from 'node:path';
 import type { Config } from '../config.js';
 import { runtimeFor } from '../agent/runtime/registry.js';
@@ -17,6 +16,7 @@ import { findConversation } from '../agent/runtime/claude/claude-sessions.js';
 import { otherTools } from '../agent/other-tools.js';
 import { copyNative, pasteText } from '../core/clipboard.js';
 import { DEFAULT_LINK } from '../core/project-invites.js';
+import { lanAddress } from '../net/lan.js';
 import { type SessionOptions, Session } from '../core/session.js';
 import { chosenAgent, loadSettings, publishedAgents, saveSettings } from '../core/settings.js';
 import { ShareService } from '../core/shares.js';
@@ -111,12 +111,6 @@ function withClaudeStatus(id?: RuntimeId): AgentRuntime | undefined {
   const rt = runtimeFor(id);
   if (!rt || rt.id !== 'claude' || rt.status) return rt;
   return (claudeWithStatus ??= { ...rt, status: () => claudeStatus() });
-}
-
-function lanAddress(): string | undefined {
-  return Object.values(os.networkInterfaces())
-    .flat()
-    .find((i) => i && i.family === 'IPv4' && !i.internal)?.address;
 }
 
 async function hostRoom(config: Config, identity: Identity): Promise<Room> {

@@ -82,7 +82,9 @@ milliseconds), through `src/preview/plugins.ts`:
   minute after its last job.
 - **Tailwind**: a stylesheet where Tailwind is set up (v4's `@import "tailwindcss"`, v3's
   `@tailwind`) is built with the project's own Tailwind (v4's compiler and scanner; v3 through
-  PostCSS with its config). A Tailwind project's global stylesheet comes with every preview.
+  PostCSS with its config). A Tailwind project's global stylesheet comes with every preview: the
+  first of the usual places (`src/index.css`, `src/styles/index.css`, `app/globals.css`…) that sets
+  Tailwind up itself or through a stylesheet it `@import`s.
 - **Next.js**: `next/image`, `next/link`, `next/font/*`, `next/navigation`, `next/router`,
   `next/head`, `next/script` and `next/dynamic` have small stand-ins, so a Next component draws on
   its own; following a link or a router push shows as an event.
@@ -91,6 +93,10 @@ milliseconds), through `src/preview/plugins.ts`:
   stand-ins for native-only names like `TurboModuleRegistry` and `codegenNativeComponent`. A
   package's `.web.js` file wins over its `.ios.js` and `.android.js` ones. React Native's own
   internals (`react-native/Libraries/…`, Flow source) are empty modules.
+- **Vite's `import.meta`** (`src/preview/vite.ts`): `import.meta.glob` (eager or lazy, `import:`,
+  arrays and `!` exclusions) is expanded into the imports it stands for, finding files inside the
+  worktree only; `import.meta.env` has Vite's built-in values (`MODE`, `DEV`, `PROD`, `SSR`,
+  `BASE_URL`), never a project's `VITE_` variables (they live in `.env` files).
 - **Browser stand-ins, for every preview**: a Node built-in a package imports (`events`, `crypto`)
   is the installed polyfill when there is one, otherwise a small stand-in (`events` is a working
   EventEmitter, the others are empty). A file in a build step's output (`dist/`, `build/`, `out/`,
@@ -143,8 +149,25 @@ It's an origin apart from the web port's on purpose: a component's code never sh
 session. With both set (`src/preview/public.ts`), the server answers to that host name besides
 loopback, lets those origins frame it, and the web port tells its pages where previews are
 (`/__beluga/endpoint`'s `previewOrigin`) and lets them frame it (`frame-src`); the page loads each
-preview from there. Pages on a dev server stay on their own computer and show a card. Listening
-beyond loopback, each preview is still only at its id nobody can guess.
+preview from there. Listening beyond loopback, each preview is still only at its id nobody can guess.
+
+**Dev servers** (`src/preview/dev-proxy.ts`): a page on the server's own dev server
+(`http://localhost:3000/…`) is carried to that origin too. `preview.open` answers its `via`
+(`/d/<id>/`) and a ticket; the frame enters there, trades the ticket for an HttpOnly `beluga_dev`
+cookie for the whole origin, and is sent on to the page's own path. From then on, every request and
+websocket (hot reload) at the preview origin that carries the cookie goes to that dev server as if
+the browser were on the server (`Host: localhost:<port>`, `Origin` alike), and its answers lose
+`x-frame-options` and get `frame-ancestors` for Beluga's pages only. Without the cookie, nothing
+there reaches a dev server; on a loopback host name, never. One dev server shows per browser at a
+time (the cookie is the origin's): the newest one framed. The proxy in front of the preview origin
+must pass websockets for hot reload (Nginx Proxy Manager: **Websockets Support**).
+
+When the web port listens beyond loopback, a dev page also gets its address on the network
+(`lan`): the server's LAN address (never a container's or a VPN's, `src/net/lan.ts`), or the name
+in `BELUGA_LAN_HOST`. **Open in Browser** opens that from a browser or the app as a client, never
+the client's own localhost. A dev server listening on loopback only says so above the frame, with
+**Ask Agent to Fix** (start it on all interfaces). A server too old to carry dev pages still shows a
+card.
 
 At the public origin a preview also needs your Beluga session. `preview.open` (only on a signed-in
 socket) hands out a one-time ticket that lasts 2 minutes. The frame's first load trades it for an
@@ -179,6 +202,9 @@ installed, a package or file is missing, the file doesn't read right around a li
 at the dev server's address, it needs a provider. The bundler's own words never show; **Ask Agent
 to Fix** puts them in your reply. Problems that may clear up by themselves (a save, a server
 starting, a wrapper written) are looked at again every few seconds while the preview is on screen.
+A preview that fails while drawing (a render error, a missing provider) is told to your agent with
+its next turn in that worktree, once (`preview.failed`, kept like an MCP App's context), so it fixes
+it instead of showing it again.
 
 In Files, a `.tsx`, `.jsx`, `.vue` or `.svelte` file of your own worktree that holds a component
 gets **Preview** beside **Source**.

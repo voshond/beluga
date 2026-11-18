@@ -6,6 +6,7 @@ import { isSecretPath } from '../core/shares.js';
 import type { PreviewProblem } from '../shared/preview/opened.js';
 import { OUTSIDE, buildProblem } from './problems.js';
 import { nextPlugin, sveltePlugin, tailwindPlugin, vuePlugin } from './plugins.js';
+import { VITE_ENV, vitePlugin } from './vite.js';
 import { REACT_NATIVE_DEFINE, WEB_FIRST_EXTENSIONS, browserPlugin, reactNativePlugin, reactNativeWebOf } from './react-native.js';
 import type { Framework } from '../shared/preview/components.js';
 
@@ -181,7 +182,7 @@ export async function makeBundler(root: string, file: string, rel: string, entry
       minifySyntax: true,
       outfile: path.join(os.tmpdir(), 'beluga-preview', 'bundle.js'),
       loader: { ...loader, '.js': 'jsx' },
-      define: { 'process.env.NODE_ENV': '"production"', global: 'globalThis', __VUE_OPTIONS_API__: 'true', __VUE_PROD_DEVTOOLS__: 'false', __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: 'false', ...(native ? REACT_NATIVE_DEFINE : {}) },
+      define: { 'process.env.NODE_ENV': '"production"', 'import.meta.env': JSON.stringify(VITE_ENV), global: 'globalThis', __VUE_OPTIONS_API__: 'true', __VUE_PROD_DEVTOOLS__: 'false', __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: 'false', ...(native ? REACT_NATIVE_DEFINE : {}) },
       ...(native ? { resolveExtensions: WEB_FIRST_EXTENSIONS } : {}),
       // Svelte libraries publish their components under the "svelte" condition.
       conditions: entry.framework === 'svelte' ? ['svelte', 'browser', 'module'] : ['browser', 'module'],
@@ -190,7 +191,7 @@ export async function makeBundler(root: string, file: string, rel: string, entry
       legalComments: 'none',
       charset: 'utf8',
       // The fence first: nothing outside the worktree is read by the others either.
-      plugins: [fencePlugin(root), browserPlugin(), ...(native ? [reactNativePlugin()] : []), tailwindPlugin(root), nextPlugin(), ...(entry.framework === 'vue' ? [vuePlugin(root)] : []), ...(entry.framework === 'svelte' ? [sveltePlugin(root, entry.svelte ?? 5)] : [])],
+      plugins: [fencePlugin(root), browserPlugin(), vitePlugin(root), ...(native ? [reactNativePlugin()] : []), tailwindPlugin(root), nextPlugin(), ...(entry.framework === 'vue' ? [vuePlugin(root)] : []), ...(entry.framework === 'svelte' ? [sveltePlugin(root, entry.svelte ?? 5)] : [])],
     }));
   return {
     async build(): Promise<BuildResult> {

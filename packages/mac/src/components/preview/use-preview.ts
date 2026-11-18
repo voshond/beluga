@@ -301,6 +301,16 @@ export function usePreview({ wsId, ref, pick, seen, framed }: { wsId: string; re
     }
   }, [shoot, api, wsId, spec, ok, title]);
 
+  // A drawing that failed is told to your agent once (its next turn there), so it doesn't show a broken preview again.
+  const toldFailure = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!failure || !src || !ok || (failure.kind !== 'render' && failure.kind !== 'provider')) return;
+    const which = `${src.id}:${ok.version}:${failure.title}`;
+    if (toldFailure.current === which) return;
+    toldFailure.current = which;
+    api.preview.failed(wsId, { title, problem: failure.title.slice(0, 300), ...(failure.forClaude ? { details: failure.forClaude.slice(0, 4000) } : {}) }).catch(() => undefined);
+  }, [failure, src, ok, api, wsId, title]);
+
   // With a phone paired, each drawing's newest picture is kept for it (once it rests, never while hidden).
   const stillFor = useRef<string | undefined>(undefined);
   useEffect(() => {
