@@ -769,6 +769,12 @@ export const PHONE: Record<Method, Side> = {
   'toolbox.dismissSuggestion': 'mac',
   'toolbox.acceptProposal': 'mac',
 
+  // ---- Beluga's memory (BLG-95): the phone reads it; adding, changing and deleting are Mac-only
+  'memory.list': 'phone',
+  'memory.add': 'mac',
+  'memory.replace': 'mac',
+  'memory.remove': 'mac',
+
   // External agents: only the Mac app and `beluga mcp` manage who connects.
   'external.status': 'mac',
   'external.setEnabled': 'mac',

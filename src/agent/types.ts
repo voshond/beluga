@@ -7,6 +7,7 @@ import type { UsageUpdate } from './usage.js';
 import type { Effort } from '../shared/settings-schema.js';
 import type { StepRecord } from '../shared/steps.js';
 import type { ArgsRuntime } from '../shared/agent-args.js';
+import type { MemoryKind } from '../shared/memory.js';
 
 /** How far a request may reach on the owner's computer. */
 export type AccessScope = 'folder' | 'full';
@@ -166,6 +167,9 @@ export interface AgentRunInput {
   readonly toolboxTools?: ToolboxTools;
   /** Your own runs: your shared skills (BLG-98): read them, and propose a new one or a fix behind a card. */
   readonly skillTools?: SkillTools;
+  /** Your own runs: Beluga's memory (core/memory, BLG-95), what it holds and the tools to keep it. Never a friend's run. */
+  readonly memoryBrief?: string;
+  readonly memoryTools?: MemoryTools;
   /** Your own runs: dashboards and the numbers sentinels keep (server `beluga_dashboard`; sentinel_measure inside a run). */
   readonly dashboardTools?: DashboardTools;
   /** Your own runs: the notes of calls you were in (core/calls, BLG-715), to look up, never pasted in. */
@@ -733,6 +737,14 @@ export interface SkillTools {
   read(name?: string): string;
   propose(draft: { readonly name: string; readonly description: string; readonly body: string; readonly reason?: string }): string;
   proposeChange(draft: { readonly name: string; readonly text: string; readonly reason: string }): string;
+}
+
+/** Beluga's memory as agent tools (agent/memory-tools.ts, server `beluga_memory`, BLG-95). Each answers the memory as it is now, or throws why not. */
+export interface MemoryTools {
+  list(): string;
+  add(scope: MemoryKind, text: string): string;
+  replace(scope: MemoryKind, entry: string, text: string): string;
+  remove(scope: MemoryKind, entry: string): string;
 }
 
 /** Other chats, as a run finds and reads them (core/chat-links/transcript.ts). A refusal throws, and its message starts with the refusal code. */

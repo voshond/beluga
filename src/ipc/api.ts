@@ -45,6 +45,7 @@ import { CALLS_API } from './calls-api.js';
 import { TERMINAL_IMPORT_API } from './terminal-import-api.js';
 import { AGENT_TERM_API } from './agent-term-api.js';
 import { TOOLBOX_API } from './toolbox-api.js';
+import { MEMORY_API } from './memory-api.js';
 import { HANDOFF_MODES } from '../shared/agent-handoff.js';
 import { FETCH_EVERY_MAX, FETCH_EVERY_MIN } from '../shared/background-fetch.js';
 import { AUTOPILOT_WAIT_MAX } from '../shared/autopilot-wait.js';
@@ -630,6 +631,8 @@ export const API = {
   ...AGENT_SETUP_API,
   // ---- project Toolbox: named, parameterized commands that run without an agent (toolbox-api.ts, BLG-75)
   ...TOOLBOX_API,
+  // ---- Beluga's memory: about you and per project, in every own run (memory-api.ts, BLG-95)
+  ...MEMORY_API,
 } as const;
 
 export type Api = typeof API;

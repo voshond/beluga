@@ -106,6 +106,8 @@ export interface AgentHostDeps {
   readonly toolbox?: (channel: string) => import('../agent/types.js').ToolboxTools | undefined;
   /** Your shared skills (your own runs): read them and propose new ones or fixes behind a card (BLG-98); `agent` is who proposes ("Claude"). */
   readonly skills?: (agent: string) => import('../agent/types.js').SkillTools | undefined;
+  /** Beluga's memory for one of your own runs (core/memory, BLG-95): the user's, and the project's when the run is in one. */
+  readonly memory?: (channel: string, cwd?: string) => import('./memory/run.js').MemoryRun | undefined;
   /** Called when Claude runs a Bash command in a worktree: records it for Toolbox detection (BLG-75). */
   readonly onBashCommand?: (worktree: string, command: string) => void;
   /** A plan's home conversation (your own runs): its plan tools and what Claude is told about the plan (core/plans); `said` is what this run was asked, `chain` the chat chain it is in. */
@@ -1725,6 +1727,8 @@ export class AgentHost {
         // Your own flags for `claude` and `codex` (Settings › Agents), never on a friend's run or an agent's below full.
         ...(yours ? this.launchArgs() : {}),
         ...(yours ? this.machineBrief() : {}),
+        // Beluga's memory (BLG-95): about you and this project. A friend's run never gets it.
+        ...(yours ? this.memoryFor(body.channel, place?.cwd) : {}),
         // Your variables can hold secrets: only runs you asked for get them, never a friend's.
         // Your own runs also get adb on PATH (and ANDROID_SERIAL) when a phone is set up, so Bash can drive it (BLG-174).
         // Keys pasted into this chat and kept out of it (BLG-965): Claude is told their names (the values are in env).
@@ -1822,6 +1826,7 @@ export class AgentHost {
         ownerMcp: true,
         ...this.launchArgs(),
         ...this.machineBrief(),
+        ...this.memoryFor(channel, place.cwd),
         env: { ...this.deps.envFor?.(channel, place.cwd), ...(phone?.env ?? {}), ...tag },
       },
       sink,
@@ -1844,6 +1849,7 @@ export class AgentHost {
       viaAgent: false,
       context: [],
       ...this.machineBrief(),
+      ...this.memoryFor(channel, opts.place?.cwd),
       ...input,
       scope: input.scope ?? 'full',
       channel,
@@ -1860,6 +1866,11 @@ export class AgentHost {
       ...this.chromeFor({ from: this.selfId, guest: false, automatic: true, channel, who: 'Your agent (in a dialogue)' }),
     });
     return { text, tokens };
+  }
+
+  private memoryFor(channel: string, cwd?: string): Pick<AgentRunInput, 'memoryBrief' | 'memoryTools'> {
+    const memory = this.deps.memory?.(channel, cwd);
+    return memory ? { memoryBrief: memory.brief, memoryTools: memory.tools } : {};
   }
 
   private machineBrief(): Pick<AgentRunInput, 'machineBrief'> {

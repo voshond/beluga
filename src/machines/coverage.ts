@@ -724,6 +724,12 @@ export const MACHINE: Record<Method, MachineSide> = {
   'toolbox.dismissSuggestion': 'drive',
   'toolbox.acceptProposal': 'drive',
 
+  // ---- Beluga's memory (BLG-95): drive all of them, as Settings does on that computer
+  'memory.list': 'drive',
+  'memory.add': 'drive',
+  'memory.replace': 'drive',
+  'memory.remove': 'drive',
+
   // ---- chats (chat links: a chat's chip, a chat's copy)
   'chats.resolve': 'drive',
   'chats.snapshot': 'drive',

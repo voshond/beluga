@@ -59,6 +59,7 @@ import { CALLS_HANDLERS } from './calls-handlers.js';
 import { TERMINAL_IMPORT_HANDLERS } from './terminal-import-handlers.js';
 import { AGENT_TERM_HANDLERS } from './agent-term-handlers.js';
 import { TOOLBOX_HANDLERS } from './toolbox-handlers.js';
+import { MEMORY_HANDLERS } from './memory-handlers.js';
 import { worktreePorts } from '../workspaces/ports.js';
 import { waitingNeeds } from '../companion/needs-you.js';
 import { saveDismissedNeeds, withDismissed } from '../core/dismissed-needs.js';
@@ -537,6 +538,7 @@ export const HANDLERS = {
   ...TERMINAL_IMPORT_HANDLERS,
   ...AGENT_TERM_HANDLERS,
   ...TOOLBOX_HANDLERS,
+  ...MEMORY_HANDLERS,
 } satisfies Handlers;
 
 export type Result<M extends Method> = Awaited<ReturnType<(typeof HANDLERS)[M]>>;

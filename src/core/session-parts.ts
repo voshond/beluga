@@ -36,6 +36,8 @@ import { AgentTerminals } from './agent-term.js';
 import { claudeHome } from './claude-code/launch.js';
 import { callNotesToolsOf } from './calls/launch.js';
 import { toolboxOf } from './toolbox/registry.js';
+import { memoryForRun } from './memory/run.js';
+import { MemoryStore } from './memory/store.js';
 import type { ToolboxTools } from '../agent/types.js';
 import { listSharedSkills, readSharedSkill } from './agent-setup.js';
 import { proposeNewSkill, proposeSkillChange } from './skill-proposals.js';
@@ -328,6 +330,11 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
           return `Proposed a change to "${draft.name}". It appears as an "Update / Discard" card; the file changes only when the user updates it.`;
         },
       }),
+      memory: (channel, cwd) => {
+        const wsId = channel.startsWith('ws:') ? channel.slice(3) : undefined;
+        const project = opts.store.getState().projects.find((p) => p.root && ((wsId && (p.id === wsId || p.workspaces?.some((w) => w.id === wsId))) || (cwd && (p.root === cwd || p.workspaces?.some((w) => w.path === cwd)))));
+        return memoryForRun(new MemoryStore(), project ? { root: project.root, name: project.name } : undefined);
+      },
       onBashCommand: (cwd, command) => {
         const service = toolboxOf(session);
         if (!service) return;

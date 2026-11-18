@@ -582,6 +582,12 @@ export class DemoTransport implements Transport {
         return ok(true);
       case 'external.stopAll':
         return ok(1);
+      // 1.62 (BLG-95): Beluga's memory, read-only on the phone.
+      case 'memory.list':
+        return ok({
+          user: { scope: { kind: 'user' }, label: 'About you', entries: [{ id: 'a1b2c3', text: 'Prefers short answers and plain words.', at: Date.now() - 86_400_000, by: 'agent' }], used: 38, cap: 1375 },
+          projects: [{ scope: { kind: 'project', root: '/demo/landing' }, label: 'landing', entries: [{ id: 'd4e5f6', text: 'Deploys go through the NAS; never push to main directly.', at: Date.now() - 3_600_000, by: 'you' }], used: 56, cap: 2200 }],
+        });
       case 'host.stopRun': {
         const c = w.convs.get(`conv:${str(0)}`);
         const last = c?.turns.at(-1);

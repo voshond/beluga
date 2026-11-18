@@ -1,12 +1,16 @@
 # Skills & instructions
 
-Settings › Skills & instructions controls what your own agents know beyond the request in front of them. It has four parts. Everything on this page applies to runs you start on this computer. A friend's or a guest's run never gets any of it.
+Settings › Skills & instructions controls what your own agents know beyond the request in front of them. It has five parts. Everything on this page applies to runs you start on this computer. A friend's or a guest's run never gets any of it.
 
 ## About this machine
 
 A note about this computer, with one switch for all of it. When the switch is on, Beluga adds the note to every run you start: Claude gets it in its system prompt, Codex in its developer instructions, and OpenCode in its instructions file. It sits right after the room instructions, inside `<machine_context>`.
 
 Use it for what is true of the machine rather than of a project. For example: the repos are checked out here, there are SSH keys to the NAS, and the agent may use them to check results or deploy. Say where access is, never what it is: the note is saved in `~/.beluga/settings.json` (`machineNote`, `machineNoteOn`), so don't put a password or a key in it.
+
+## Memory
+
+What your agents remember about you and about each project, kept by Beluga so every runtime reads the same. Pick About you or a project, change an entry in place, delete it, or add one. See [memory.md](memory.md).
 
 ## Shared skills
 
