@@ -340,7 +340,7 @@ export function FriendsSection() {
   const offers = incomingOffers(net.offers);
   const strangers = useApp((st) => notFriendsYet(st.peers, { selfId: st.self?.peerId, friends: st.network.friends, guests: st.guests }), sameDeep);
   return (
-    <Section id="friends" title="Friends" action={net.enabled ? <IconButton icon="plus" label="Add a friend" onClick={() => openNet({ kind: 'add_friend' })} /> : undefined}>
+    <Section id="friends" title="Friends" action={net.enabled ? <IconButton size="small" icon="plus" label="Add a friend" onClick={() => openNet({ kind: 'add_friend' })} /> : undefined}>
       <div className={s.sidebarList}>
         {offers.map((o) => (
           <OfferRow key={o.peerId} o={o} />
@@ -448,7 +448,7 @@ export function GroupsSection() {
   const groups = sortGroups(net.groups).filter((g) => g.id !== net.main);
   const main = net.main ? net.groups.find((g) => g.id === net.main) : undefined;
   return (
-    <Section id="net-groups" title="Channels" action={<IconButton icon="plus" label="New channel" onClick={() => openNet({ kind: 'new_group' })} />}>
+    <Section id="net-groups" title="Channels" action={<IconButton size="small" icon="plus" label="New channel" onClick={() => openNet({ kind: 'new_group' })} />}>
       <div className={s.sidebarList}>
         {roomChat ? <RoomChatRow /> : null}
         {main ? <GroupRow g={main} /> : <MainRow />}

@@ -96,7 +96,7 @@ function Preview({ viewer, wsId, local, changed }: { viewer: ViewerState; wsId: 
         <span className={s.flex} />
         <EditTools viewer={viewer} wsId={wsId} selfId={selfId} compact />
         {markdown ? (
-          <Segmented
+          <Segmented size="small"
             label="Show as"
             value={mode}
             onChange={setMode}
@@ -107,10 +107,10 @@ function Preview({ viewer, wsId, local, changed }: { viewer: ViewerState; wsId: 
           />
         ) : null}
         {component && !editing ? <PreviewToggle previewing={previewing} onChange={setPreviewing} /> : null}
-        {changed ? <IconButton icon="diff" label="Show Changes" onClick={() => showChange(client.store.getState(), viewer.path)} /> : null}
-        {local ? <IconButton icon="external" label={isPdfFile(viewer.path) ? 'Open in Preview' : 'Open in Editor'} onClick={() => void openWithDefaultApp(client, local)} /> : null}
-        <IconButton icon="expand" label="Open in full" keys={chordLabel('Cmd+Enter')} onClick={() => openFocus('file', wsId)} />
-        <IconButton icon="x" label="Close" keys="Esc" onClick={() => void api.files.closeViewer()} />
+        {changed ? <IconButton size="small" icon="diff" label="Show Changes" onClick={() => showChange(client.store.getState(), viewer.path)} /> : null}
+        {local ? <IconButton size="small" icon="external" label={isPdfFile(viewer.path) ? 'Open in Preview' : 'Open in Editor'} onClick={() => void openWithDefaultApp(client, local)} /> : null}
+        <IconButton size="small" icon="expand" label="Open in full" keys={chordLabel('Cmd+Enter')} onClick={() => openFocus('file', wsId)} />
+        <IconButton size="small" icon="x" label="Close" keys="Esc" onClick={() => void api.files.closeViewer()} />
       </div>
       <div ref={body} className={cx(s.previewBody, s.previewFile, 'selectable')} tabIndex={0} {...{ [SCROLL_ROOT]: '' }}>
         <ViewBoundary at={viewer.path}>
@@ -326,11 +326,11 @@ export function FilesTab({ wsId, project = false }: { wsId: string; project?: bo
             />
             <FlagToggles flags={flags} onChange={setFlags} />
           </label>
-          {contents ? null : <IconButton icon="chevronUp" label="Collapse all folders" onClick={() => expand(new Set())} disabled={!expanded.size} />}
-          <IconButton icon="folder" label={revealWords} onClick={() => void showWorktreeFolder(client, wsId)} />
+          {contents ? null : <IconButton size="small" icon="chevronUp" label="Collapse all folders" onClick={() => expand(new Set())} disabled={!expanded.size} />}
+          <IconButton size="small" icon="folder" label={revealWords} onClick={() => void showWorktreeFolder(client, wsId)} />
         </div>
         <div className={k.modeRow}>
-          <Segmented
+          <Segmented size="small"
             label="Search"
             radio
             value={searchIn}

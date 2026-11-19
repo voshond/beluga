@@ -280,10 +280,10 @@ const ProjectBlock = memo(function ProjectBlock({ p, depth, entries, arrange }: 
             <>
               <TeamBadge projectId={p.id} />
               <span className={side.hoverTools}>
-                <IconButton icon="branch" label={`New worktree in ${p.name}`} onClick={(e) => (e.stopPropagation(), actions.run({ type: 'new_worktree', projectId: p.id }))} />
-                <IconButton icon="plus" label={`New chat in ${p.name}`} onClick={(e) => (e.stopPropagation(), actions.run({ type: 'new_chat', projectId: p.id }))} />
+                <IconButton size="small" icon="branch" label={`New worktree in ${p.name}`} onClick={(e) => (e.stopPropagation(), actions.run({ type: 'new_worktree', projectId: p.id }))} />
+                <IconButton size="small" icon="plus" label={`New chat in ${p.name}`} onClick={(e) => (e.stopPropagation(), actions.run({ type: 'new_chat', projectId: p.id }))} />
                 <SpecDropdown menu={{ kind: 'project', id: p.id }} align="end" extra={extra} hide={ownWay}>
-                  <IconButton icon="more" label={`More for ${p.name}`} onClick={(e) => e.stopPropagation()} />
+                  <IconButton size="small" icon="more" label={`More for ${p.name}`} onClick={(e) => e.stopPropagation()} />
                 </SpecDropdown>
                 {/* Claude at work inside, beside what needs you or what's new (never hidden by them). */}
                 {busy ? (
@@ -392,7 +392,7 @@ export function ProjectsAddMenu() {
   ];
   return (
     <ActionsDropdown items={items}>
-      <IconButton icon="plus" label="Add a project, start one, clone one, or make a group" />
+      <IconButton size="small" icon="plus" label="Add a project, start one, clone one, or make a group" />
     </ActionsDropdown>
   );
 }

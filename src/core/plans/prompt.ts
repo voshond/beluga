@@ -3,6 +3,7 @@ import { type BoardState, STATUS_INFO, filterIssues } from '../board/model.js';
 import type { Project } from '../../workspaces/types.js';
 import { AUTONOMY_INFO, type MilestoneAgent, type Plan, type PlanBody, type PlanMilestone, type ReviewFinding, TESTS_AT_INFO, activeDecisions, decisionText, diffBodies, draftRepoPlan, isMultiRepo, milestoneDeps, milestoneRepos, planAutonomy, planBranchFor, planRepos, shownBody } from './model.js';
 import { coherenceWarnings } from './coherence.js';
+import { milestoneTimeFacts, planTimeLine, taskTimeFacts } from './times.js';
 import { type MilestoneView, type PlanView, type TaskView, agentTasks, overlaps } from './progress.js';
 
 /**
@@ -406,13 +407,17 @@ export function headBrief(view: PlanView): string {
     .join('\n');
 }
 
-/** A plan as plan_get shows it: milestones, tasks with ids and states, and what changed if a draft waits. */
-export function describePlan(view: PlanView): string {
+/**
+ * A plan as plan_get shows it: milestones, tasks with ids and states, and what changed if a draft
+ * waits; with when each thing happened (UTC, and how long ago from `now`), so a stuck task reads
+ * differently from one that just started and two read-backs can be put in order.
+ */
+export function describePlan(view: PlanView, now = Date.now()): string {
   const plan = view.plan;
   const body = shownBody(plan);
   if (!body) return 'The plan is empty.';
   const live = new Map(view.milestones.flatMap((m) => m.tasks.map((t) => [t.task.id, t] as const)));
-  const lines = [`# ${body.title}`, body.goal ? `\n${body.goal}` : '', `\nStatus: ${plan.status}${plan.paused ? ' (paused)' : ''} · autonomy ${plan.autonomy} · up to ${plan.maxParallel} milestones at work at once · tests ${plan.testsAt === 'end' ? 'only at the end' : 'each milestone'}`];
+  const lines = [`# ${body.title}`, body.goal ? `\n${body.goal}` : '', `\nStatus: ${plan.status}${plan.paused ? ' (paused)' : ''} · autonomy ${plan.autonomy} · up to ${plan.maxParallel} milestones at work at once · tests ${plan.testsAt === 'end' ? 'only at the end' : 'each milestone'}`, planTimeLine(plan, now)];
   if (plan.draft && plan.body) {
     const d = diffBodies(plan.body, plan.draft);
     lines.push(`Changes waiting for the user's approval: ${d.added.length} new, ${d.changed.length} changed, ${d.removed.length} removed (shown below as proposed).`);
@@ -427,6 +432,8 @@ export function describePlan(view: PlanView): string {
     const mv = view.milestones.find((x) => x.milestone.id === m.id);
     lines.push('', `## ${i + 1}. ${m.title} [id ${m.id}]${mv && plan.body ? ` — ${MILESTONE_WORDS[mv.state]}` : ''}${m.autonomy ? ` · ${m.autonomy}` : ''}`);
     lines.push(runsWith(body, m.id, titleOf));
+    const when = plan.body ? milestoneTimeFacts(mv?.run, now) : [];
+    if (when.length) lines.push(`Times: ${when.join(' · ')}`);
     if (m.goal) lines.push(m.goal);
     if (m.criteria.length) lines.push('Pass criteria:', ...m.criteria.map((c) => `- ${c}`));
     if (mv?.run.check) lines.push(`Last check (${mv.run.check.verdict}): ${mv.run.check.notes.slice(0, 600)}`);
@@ -435,6 +442,7 @@ export function describePlan(view: PlanView): string {
       const facts = [
         tv ? STATE_WORDS[tv.state] : undefined,
         tv?.issue?.key,
+        ...(tv ? taskTimeFacts(tv.issue, tv.pulse, now) : []),
         t.estimate ? `${t.estimate} pts` : undefined,
         t.blockedBy.length ? `waits on ${t.blockedBy.join(', ')}` : undefined,
         t.parent ? `sub-task of ${t.parent}` : undefined,

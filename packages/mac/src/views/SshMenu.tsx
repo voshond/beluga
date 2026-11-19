@@ -17,7 +17,7 @@ export function SshMenu({ onOpen, className }: { onOpen: (host: string) => void;
   const items = hosts.map((host) => ({ label: host, icon: 'globe' as const, onSelect: () => onOpen(host) }));
   return (
     <ActionsDropdown items={items} align="start">
-      <IconButton icon="globe" label="Shell on another machine (SSH)" {...(className ? { className } : {})} />
+      <IconButton size="small" icon="globe" label="Shell on another machine (SSH)" {...(className ? { className } : {})} />
     </ActionsDropdown>
   );
 }

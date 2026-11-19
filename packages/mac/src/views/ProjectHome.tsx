@@ -201,7 +201,7 @@ function Header({ model }: { model: HomeModel }) {
       </div>
       {/* Its settings (General, Environment, Worktrees), in one sheet (BLG-926). */}
       {project.root ? (
-        <IconButton
+        <IconButton size="small"
           icon="gear"
           label="Project Settings…"
           className={s.settingsButton}
@@ -472,7 +472,7 @@ function HomeComposer({ project }: { project: Project }) {
           <Icon name={agentMark(projectAgentRef)} size={10} />
           {agentFull}
         </span>
-        <Segmented<Mode>
+        <Segmented<Mode> size="small"
           label="How to start"
           value={mode}
           onChange={(m) => {

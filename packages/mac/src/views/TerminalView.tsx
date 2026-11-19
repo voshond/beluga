@@ -124,7 +124,7 @@ export function ShellTabs({ shells }: { shells: GlobalShells }) {
       {shells.tabs.map((t) => (
         <TerminalTab key={t.key} termKey={t.key} label={t.label} on={t.key === shells.key} className={s.tab} onClassName={s.tabOn} onPick={() => shells.pick(t.key)} onClose={() => shells.close(t.key)} before={<Dot tone={t.running ? 'ok' : 'muted'} />} />
       ))}
-      <IconButton icon="plus" label="New shell" onClick={shells.open} />
+      <IconButton size="small" icon="plus" label="New shell" onClick={shells.open} />
       <SshMenu onOpen={shells.openSsh} />
     </>
   );

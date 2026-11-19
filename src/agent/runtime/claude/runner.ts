@@ -29,7 +29,7 @@ import { ViewShelf } from '../../view-tools.js';
 import { runToolSuites } from '../../run-tools.js';
 import { sdkServers } from './sdk-mount.js';
 import { ownerMcpServers } from './owner-mcp.js';
-import { McpConnect, claudeMcpSession } from './mcp-connect.js';
+import { MCP_APPS_HOST_ENV, McpConnect, claudeMcpSession } from './mcp-connect.js';
 import type { AgentBackend, AgentRunInput, FollowUp, LiveStatus, RoomBridge, RunProcess, RunRouting, Steer } from '../../types.js';
 import { keepLines, trackedSpawn } from './claude-process.js';
 import { keptBashInput } from '../../../workspaces/test-procs.js';
@@ -151,6 +151,19 @@ export function ownerSettings(input: Pick<AgentRunInput, 'ownerMcp' | 'guest'>):
 /** MCP Apps follow your MCP servers: a run that loads them (yours, or Full trust; never a guest's) keeps apps on its steps. */
 export function tracksMcpApps(input: Pick<AgentRunInput, 'ownerMcp' | 'guest'>): boolean {
   return Boolean(input.ownerMcp && !input.guest);
+}
+
+/**
+ * A run whose apps you watch says so to its MCP servers: with CLAUDE_CODE_MCP_APPS_HOST, Claude Code
+ * declares the `io.modelcontextprotocol/ui` extension at `initialize`, so a server sends what it
+ * keeps for its views only (a result's `_meta`, which the model never reads; docs/mcp-apps.md). Such
+ * a server may also tell the model you already see the data, so a run whose answer is all anyone
+ * reads (a Sentinel run, an external agent's) goes without it (`appsShown`). Set over the launch
+ * environment, or over the daemon's own when the run inherits it.
+ */
+export function withAppsHost(launchEnv: Readonly<Record<string, string>> | undefined, input: Pick<AgentRunInput, 'ownerMcp' | 'guest' | 'appsShown'>, env: NodeJS.ProcessEnv = process.env): Readonly<Record<string, string>> | undefined {
+  if (!input.appsShown || !tracksMcpApps(input)) return launchEnv;
+  return { ...(launchEnv ?? env), ...MCP_APPS_HOST_ENV } as Record<string, string>;
 }
 
 export interface ClaudeBackendOptions {
@@ -340,7 +353,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
       // zsh-compat.sh makes Claude Code's zsh take the bash it writes (zsh-compat.ts); the prompt says what's left.
       const baseLaunchEnv = claudeLaunchEnv(input);
       const compat = zshCompatEnv(baseLaunchEnv ?? process.env);
-      const launchEnv = withZshCompat(baseLaunchEnv, compat);
+      const launchEnv = withAppsHost(withZshCompat(baseLaunchEnv, compat), input);
       const failure = (end: RunEnd): RunFailedError => new RunFailedError(withSignInHint(classifyRun(end), launchEnv, inheritsDaemonEnv(input)));
       const options: Options = {
         cwd,

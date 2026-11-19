@@ -9,7 +9,7 @@ import { z } from 'zod';
  * ignores what it doesn't know. A breaking change bumps the major, and the Mac keeps answering the
  * previous major for a release.
  */
-export const COMPANION_PROTO = { major: 1, minor: 64 } as const;
+export const COMPANION_PROTO = { major: 1, minor: 65 } as const;
 
 /**
  * What came in which minor, for a phone talking to an older Mac: it subscribes to a topic (and
@@ -170,6 +170,9 @@ export const COMPANION_PROTO = { major: 1, minor: 64 } as const;
  * read-only: Undo is on the Mac. An older Mac sends none; an older phone shows none.
  * 1.64 (BLG-101): Honcho's picture of you, read-only (`honcho.picture`, SINCE.honchoPicture), under Settings › Memory.
  * An older Mac has no such call: the phone leaves it out.
+ * 1.65 (upstream's 1.59): when a plan's task reached the state it's in and when it last changed
+ * (`PlanTaskView.since` / `updatedAt`), so every task says how fresh it is, not only those at work.
+ * An older Mac sends neither; an older phone shows neither.
  */
 export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36, reactions: 41, cancelSteer: 47, triage: 48, draftReview: 49, threads: 50, threadAgents: 50, seen: 51, computers: 52, externalAgents: 53, chatLinks: 55, chatOrigin: 56, queuedOrigin: 57, sharedMark: 58, chatSchedules: 60, autopilot: 61, planRoles: 61, memory: 62, learned: 63, honchoPicture: 64 } as const;
 
@@ -800,7 +803,11 @@ export const PlanTaskView = z.object({
   acceptance: z.array(z.string().max(400)).max(20).optional(),
   blockedBy: z.array(id).max(20).optional(),
   why: z.string().max(300).optional(),
+  /** 1.65: when it reached the state it's in, and when it last changed (ms); none until it's on the board. */
+  since: z.number().optional(),
+  updatedAt: z.number().optional(),
 });
+export type PlanTaskView = z.infer<typeof PlanTaskView>;
 /** How a plan runs (1.5): Step by Step (you start each task), Check-ins (waits at each milestone), Autopilot. */
 export const PlanAutonomy = z.union([z.enum(['step', 'gated', 'autopilot']), z.string().max(20)]);
 export const PlanView = z.object({

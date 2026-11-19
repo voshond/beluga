@@ -170,13 +170,13 @@ export function BranchControl({ wsId, branch, fold = 'none' }: BranchProps) {
   return (
     <span className={s.wrap} role="group" aria-label={`Branch: ${branch.label}`}>
       <Tip label={`${hidePill ? `${branch.detail} · ` : ''}${fold === 'all' ? `${labelOf(main)}: ` : ''}${main.claude ? `Agent · ${main.hint}` : main.hint}`}>
-        <Button variant={variant} icon={iconOf(main)} aria-label={fold === 'all' ? labelOf(main) : undefined} className={cx(s.main, items.length > 0 && s.mainSplit, branch.tone === 'error' && s.mainError, branch.tone === 'merged' && s.mainMerged)} disabled={busy} data-branch-step={main.id} data-tool-ws={wsId} onClick={() => run(main)}>
+        <Button size="large" variant={variant} icon={iconOf(main)} aria-label={fold === 'all' ? labelOf(main) : undefined} className={cx(s.main, items.length > 0 && s.mainSplit, branch.tone === 'error' && s.mainError, branch.tone === 'merged' && s.mainMerged)} disabled={busy} data-branch-step={main.id} data-tool-ws={wsId} onClick={() => run(main)}>
           {busy ? (fold === 'all' ? '…' : 'Working…') : fold === 'all' ? shortLabel(main) : labelOf(main)}
         </Button>
       </Tip>
       {items.length ? (
         <ActionsDropdown items={items} align="end">
-          <Button variant={variant} className={cx(s.more, branch.tone === 'error' && s.mainError, branch.tone === 'merged' && s.mainMerged)} disabled={busy} aria-label="Other steps for this branch" data-branch-more={wsId}>
+          <Button size="large" variant={variant} className={cx(s.more, branch.tone === 'error' && s.mainError, branch.tone === 'merged' && s.mainMerged)} disabled={busy} aria-label="Other steps for this branch" data-branch-more={wsId}>
             <Icon name="chevronDown" size={11} />
           </Button>
         </ActionsDropdown>

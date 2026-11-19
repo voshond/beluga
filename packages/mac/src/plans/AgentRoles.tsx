@@ -3,7 +3,7 @@ import type { AgentRef } from '@beluga/protocol.js';
 import type { AgentPick } from '@beluga/shared/settings-schema.js';
 import { PLAN_ROLES, PLAN_ROLE_INFO, type Plan, type PlanRole, roleAgent } from '@beluga/core/plans/model.js';
 import { agentName } from '@beluga/shared/agent-label.js';
-import { agentForChoice, choiceForAgent } from '@beluga/ui/agent-choice.js';
+import { agentChoiceLabel, agentForChoice, choiceForAgent } from '@beluga/ui/agent-choice.js';
 import type { RuntimeChoice } from '@beluga/shared/agent-runtimes.js';
 import { Popup } from '../components/FormSheet.js';
 import { Icon } from '../components/Icon.js';
@@ -11,6 +11,7 @@ import { ActionsDropdown, type ActionItem } from '../components/SpecMenu.js';
 import { Button } from '../components/ui.js';
 import { YOUR_AGENT, useAgentEntries } from '../components/agent-options.js';
 import { usePickItems } from '../chat/BuildWith.js';
+import { useApp } from '../lib/beluga.js';
 import { useMyAgent } from '../lib/agent-words.js';
 import p from './plans.module.css';
 
@@ -84,30 +85,28 @@ export function AgentRoles({ value, onChange }: { value: RoleChoice; onChange: (
   );
 }
 
-/** What each part's agent is called on a plan's page ("your agent" when it follows your default). */
-function roleName(plan: Plan, role: PlanRole, mine: AgentRef): string {
-  const ref = roleAgent(plan, role);
-  return ref ? agentName(ref) : agentName(mine);
-}
-
 /**
  * A plan's agents in its header: one name when one agent plays every part, else how many; its menu
- * names who plans, builds and checks, each a submenu of agents and models (the builder's with how
- * hard it thinks) to change it from here on. `pick` gets null for "your agent" (the builder) or
- * "same as the builder" (the planner, the checker).
+ * names who plans, builds and checks, each with its model as Plan Settings and New Plan say it
+ * ("Claude · Opus 5.5"), each a submenu of agents and models (the builder's with how hard it thinks)
+ * to change it from here on. `pick` gets null for "your agent" (the builder) or "same as the
+ * builder" (the planner, the checker).
  */
 export function PlanAgentsButton({ plan, pick }: { plan: Plan; pick: (role: PlanRole, agent: AgentPick | null) => void }) {
   const pickItems = usePickItems();
+  const runtimes = useApp((s) => s.runtimes);
+  const models = useApp((s) => s.models);
   const mine = useMyAgent();
-  const names = PLAN_ROLES.map((r) => roleName(plan, r, mine));
-  const one = new Set(names).size === 1;
+  const refs = PLAN_ROLES.map((r) => roleAgent(plan, r) ?? mine);
+  const names = refs.map((ref) => agentChoiceLabel(ref, runtimes, models));
+  const count = new Set(refs.map(choiceForAgent)).size;
   const items: ActionItem[] = PLAN_ROLES.map((role, i) => ({
     label: `${PLAN_ROLE_INFO[role].label}: ${names[i]}`,
     hint: PLAN_ROLE_INFO[role].hint,
     submenu: [
       role === 'builder'
         ? { label: `Your Agent (${agentName(mine)})`, hint: 'Whatever your default agent is', checked: !plan.agent, onSelect: () => pick(role, null) }
-        : { label: 'Same as the Builder', hint: `${roleName(plan, 'builder', mine)} does this part too`, checked: !plan[role], onSelect: () => pick(role, null) },
+        : { label: 'Same as the Builder', hint: `${names[PLAN_ROLES.indexOf('builder')]} does this part too`, checked: !plan[role], onSelect: () => pick(role, null) },
       ...pickItems(role === 'builder' ? plan.agent : plan[role], (agent) => pick(role, agent), { effort: role === 'builder' }),
     ],
     onSelect: () => undefined,
@@ -116,7 +115,7 @@ export function PlanAgentsButton({ plan, pick }: { plan: Plan; pick: (role: Plan
   return (
     <ActionsDropdown items={items}>
       <Button size="small" variant="quiet" icon="people" title={tip} aria-label={`Agents: ${tip}`}>
-        {one ? names[0] : `${new Set(names).size} Agents`}
+        {count === 1 ? names[0] : `${count} Agents`}
       </Button>
     </ActionsDropdown>
   );

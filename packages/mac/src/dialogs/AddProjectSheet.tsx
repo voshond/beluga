@@ -254,7 +254,7 @@ export function AddProjectSheet() {
                 }}
               >
                 <input className={s.path} value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Or type a path, like ~/code/app" aria-label="Folder path" spellCheck={false} />
-                <Button size="small" type="submit" disabled={!typed.trim()}>
+                <Button type="submit" disabled={!typed.trim()}>
                   Add
                 </Button>
                 <span className={s.flex} />
@@ -306,7 +306,7 @@ function Where({ parent, onChange, label }: { parent: string | undefined; onChan
             <span className={s.whereText}>
               <Icon name="folder" size={13} /> {parent ? short(parent) : 'Your code folder'}
             </span>
-            <Button size="small" onClick={() => void change()}>
+            <Button onClick={() => void change()}>
               Change…
             </Button>
           </>

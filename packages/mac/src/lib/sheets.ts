@@ -70,6 +70,7 @@ export type NativeSheet =
   | { readonly kind: 'plan_send_back'; readonly planId: string; readonly milestone: string }
   /** How a running plan runs (its mode), with what a change means from now on. */
   | { readonly kind: 'plan_mode'; readonly planId: string }
+  | { readonly kind: 'plan_settings'; readonly planId: string }
   /** A GitHub step couldn't reach GitHub: why, in plain words, and its fixes (see git-trouble.ts). */
   | { readonly kind: 'git_trouble'; readonly wsId: string; readonly trouble: import('../../../../src/shared/git-trouble.js').GitTrouble; readonly retry: import('./git-trouble.js').GitRetry };
 

@@ -322,9 +322,9 @@ function NothingHere({ search, filter, project, othersHere, onClearSearch, onAll
         detail={`Nothing${project ? ` in ${projectName(project)}` : ''} has that in its name, branch or last message${filter === 'all' ? '' : ' here'}.`}
         action={
           <EmptyActions>
-            <Button onClick={onClearSearch}>Clear Search</Button>
-            {filter !== 'all' && othersHere ? <Button variant="quiet" onClick={onShowAll}>Show All</Button> : null}
-            {project ? <Button variant="quiet" onClick={onAllProjects}>All Projects</Button> : null}
+            <Button size="small" onClick={onClearSearch}>Clear Search</Button>
+            {filter !== 'all' && othersHere ? <Button size="small" variant="quiet" onClick={onShowAll}>Show All</Button> : null}
+            {project ? <Button size="small" variant="quiet" onClick={onAllProjects}>All Projects</Button> : null}
           </EmptyActions>
         }
       />
@@ -337,7 +337,7 @@ function NothingHere({ search, filter, project, othersHere, onClearSearch, onAll
       icon={icon}
       title={text.title}
       detail={text.detail}
-      action={project ? <EmptyActions><Button onClick={onAllProjects}>Show All Projects</Button></EmptyActions> : undefined}
+      action={project ? <EmptyActions><Button size="small" onClick={onAllProjects}>Show All Projects</Button></EmptyActions> : undefined}
     />
   );
 }
@@ -354,15 +354,15 @@ function NothingYet() {
       action={
         <EmptyActions>
           {project ? (
-            <Button variant="primary" icon="branch" onClick={() => actions.run({ type: 'new_worktree', projectId: project.id })}>
+            <Button size="small" variant="primary" icon="branch" onClick={() => actions.run({ type: 'new_worktree', projectId: project.id })}>
               New Worktree
             </Button>
           ) : (
-            <Button variant="primary" icon="plus" onClick={() => actions.run({ type: 'add_project' })}>
+            <Button size="small" variant="primary" icon="plus" onClick={() => actions.run({ type: 'add_project' })}>
               Add Projects…
             </Button>
           )}
-          <Button icon="chat" onClick={() => actions.run({ type: 'new_chat', projectId: 'chats' })}>
+          <Button size="small" icon="chat" onClick={() => actions.run({ type: 'new_chat', projectId: 'chats' })}>
             New Chat
           </Button>
         </EmptyActions>

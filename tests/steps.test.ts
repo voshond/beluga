@@ -167,6 +167,14 @@ describe('StepBook (the details beside the chat)', () => {
     expect(ids[0]).toBe('s10');
   });
 
+  it('drops an app’s result (structuredContent and _meta) from the oldest steps when a run is too big, keeping where it is drawn from', () => {
+    const book = new StepBook();
+    const app = { server: 'ratel', tool: 'get_session', resourceUri: 'ui://ratel/replay', structuredContent: { ok: true }, resultMeta: { view: 'x'.repeat(200_000) } };
+    for (let i = 0; i < 20; i++) book.put('k', rec(`s${i}`, { input: undefined, output: undefined, app }));
+    expect(book.get('k', 's0')?.app).toEqual({ server: 'ratel', tool: 'get_session', resourceUri: 'ui://ratel/replay' });
+    expect(book.get('k', 's19')?.app?.resultMeta).toEqual(app.resultMeta);
+  });
+
   it('saves runs to disk and reads them back after a restart', () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'klaud-steps-'));
     const book = new StepBook(dir);

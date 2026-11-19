@@ -132,9 +132,10 @@
   border-radius: 0;
   background: none;
 }
+/* The dock's: Small. */
 .dockTabs .tab {
   flex: none;
-  height: 22px;
+  height: var(--control-h-small);
   padding: 0 7px;
   border-radius: 4px;
   font-size: 0.86rem;
@@ -206,13 +207,14 @@
   padding: 0 9px;
   font-size: 0.86rem;
 }
+/* The panel's views, in the window's title row: the toolbar's Large (docs/mac-controls.md). */
 .tabs {
   display: flex;
   gap: 1px;
   width: 100%;
   padding: 2px;
-  border-radius: 7px;
-  background: var(--bg-hover);
+  border-radius: var(--control-radius-large);
+  background: var(--segment-track);
 }
 .tab {
   flex: 1 1 0;
@@ -220,9 +222,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 24px;
+  height: calc(var(--control-h-large) - 4px);
   padding: 0 6px;
-  border-radius: 5px;
+  border-radius: var(--control-radius);
   color: var(--text-2);
   font-size: 0.92rem;
   font-weight: 500;
@@ -268,9 +270,9 @@
 }
 .tabOn,
 .tabOn:hover {
-  background: var(--bg-raised);
+  background: var(--segment-on);
   color: var(--text);
-  box-shadow: 0 0 0 var(--hair) var(--hairline), 0 1px 2px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--control-bezel);
 }
 .count {
   flex: none;
@@ -902,4 +904,15 @@
 }
 .rowOn .ago {
   color: inherit;
+}
+
+/* Liquid Glass: the panel is the same glass as the sidebar, on the right. */
+:global(:root[data-os='mac'][data-transparency='full']) .panel {
+  height: auto;
+  margin: var(--glass-inset) var(--glass-inset) var(--glass-inset) 0;
+  border-radius: var(--glass-radius);
+  box-shadow: var(--glass-ring), var(--glass-drop);
+}
+:global(:root[data-os='mac'][data-transparency='full']) .inner {
+  border-left: 0;
 }

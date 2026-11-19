@@ -96,20 +96,21 @@
 .pick {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 26px;
-  padding: 0 9px;
-  border: 1px solid var(--hairline);
-  border-radius: 7px;
-  background: var(--bg-raised);
+  gap: 5px;
+  height: var(--control-h-small);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--control-radius-small);
+  background: linear-gradient(var(--control-top), var(--control));
+  box-shadow: var(--control-bezel);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--control-text-small);
   color: var(--text);
   cursor: default;
 }
-.pick:hover,
-.pick[data-state='open'] {
-  background: var(--bg-hover);
+.pick[data-state='open'],
+.pick:active {
+  background: var(--control-press);
 }
 .count {
   color: var(--text-3);

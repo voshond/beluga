@@ -30,7 +30,8 @@ import { sentinelGraph } from '../core/sentinel/workflow.js';
 import { widgetSnapshot } from '../core/sentinel/widgets.js';
 import { COMPARE, changeText, deltaOf, formatMetric } from '../core/sentinel/metrics.js';
 import type { Workspace } from '../workspaces/types.js';
-import { type MilestoneView, type PlanView as PlanProgress, agentNowWords, liveFrom, planView } from '../core/plans/progress.js';
+import { type MilestoneView, type PlanView as PlanProgress, type TaskView, agentNowWords, liveFrom, planView } from '../core/plans/progress.js';
+import { taskTimes } from '../core/plans/times.js';
 import { triageFacts } from '../core/triage/facts.js';
 import { categoryOf, triageKey } from '../core/triage/model.js';
 import { shortVersion } from '../net/mesh/features.js';
@@ -60,6 +61,7 @@ import {
   type ProseView,
   type PeopleView,
   type PlansView,
+  type PlanTaskView,
   type PlanView,
   type SentinelPageView,
   type SentinelRunView,
@@ -1042,6 +1044,7 @@ export function planPageView(state: DomainState, id: string): PlanView | undefin
           ...(t.task.acceptance.length ? { acceptance: t.task.acceptance.slice(0, 20).map((a) => clip(plainLine(a, 400), 400)) } : {}),
           ...(waits.length ? { blockedBy: waits.slice(0, 20).map((b) => clip(b, 200)) } : {}),
           ...(t.why ? { why: clip(plainLine(t.why, 300), 300) } : {}),
+          ...timesOf(t),
         };
       }),
       ...(m.dependsOn.length ? { dependsOn: m.dependsOn.slice(0, 20).map((d) => clip(d, 200)) } : {}),
@@ -1071,6 +1074,13 @@ export function planPageView(state: DomainState, id: string): PlanView | undefin
     // 1.49 (BLG-772): its draft's review.
     ...reviewOf(state, plan),
   };
+}
+
+/** 1.65: a plan task's times (on the board only): since it reached its state, and its last change. */
+function timesOf(t: TaskView): Pick<PlanTaskView, 'since' | 'updatedAt'> {
+  const at = t.issue && taskTimes(t.issue, t.pulse);
+  if (!at) return {};
+  return { since: at.since, updatedAt: at.updated };
 }
 
 /** A verification under way, from its agent's run: so the phone shows it moving, never stuck. */

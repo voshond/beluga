@@ -273,7 +273,7 @@ export function NetComposer({ id, placeholder, people, me, send, addPeople, note
               </button>
             </Tip>
           ) : null}
-          <IconButton icon="clip" label="Send Files…" onClick={() => void pickFiles(client, id, picker.current)} />
+          <IconButton size="small" icon="clip" label="Send Files…" onClick={() => void pickFiles(client, id, picker.current)} />
           <input
             ref={picker}
             type="file"

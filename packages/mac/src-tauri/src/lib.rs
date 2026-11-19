@@ -13,6 +13,7 @@ mod focus;
 mod frame;
 mod i18n;
 mod menu;
+mod native_menu;
 mod call_float;
 mod call_overlay;
 mod shared_window;
@@ -358,6 +359,7 @@ pub fn run() {
             links_taken: AtomicBool::new(false),
         })
         .invoke_handler(tauri::generate_handler![
+            native_menu::native_menu,
             daemon_endpoint,
             restart_daemon,
             set_menu_state,

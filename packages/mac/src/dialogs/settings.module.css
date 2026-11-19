@@ -159,14 +159,19 @@
   white-space: pre-wrap;
   user-select: text;
 }
+/* NSSwitch: a recessed track, the accent once on, a raised knob. */
 .switch {
   position: relative;
   width: 32px;
   height: 19px;
   border-radius: 10px;
-  background: var(--bg-press);
+  background: var(--segment-track);
   box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong);
   transition: background var(--dur-fast);
+}
+.switch:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 0.5px var(--hairline-strong), var(--focus-ring);
 }
 .switch::after {
   content: '';
@@ -181,20 +186,25 @@
   transition: transform var(--dur) var(--ease-out);
 }
 .switchOn {
-  background: var(--accent);
+  background: linear-gradient(var(--control-accent-top), var(--control-accent));
 }
 .switchOn::after {
   transform: translateX(13px);
 }
+/* A Settings text field: form.module.css's field (NSTextField). */
 .text {
   width: 200px;
-  height: 24px;
-  padding: 0 8px;
+  height: var(--control-h);
+  padding: 0 6px;
   border: 0;
-  border-radius: 6px;
-  background: var(--bg-raised);
-  box-shadow: 0 0 0 var(--hair) var(--hairline-strong);
+  border-radius: var(--control-radius);
+  background: var(--text-bg);
+  box-shadow: inset 0 0 0 var(--hair) var(--hairline-strong), inset 0 0.5px 0 var(--hairline);
   user-select: text;
+}
+.text:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--accent) 70%, var(--hairline-strong)), var(--focus-ring);
 }
 .daysField {
   display: flex;

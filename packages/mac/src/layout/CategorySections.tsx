@@ -48,7 +48,7 @@ export function CategorySections() {
         const limited = c === 'settled' ? visibleRows(shown.map((x) => ({ ...x, channel: x.e.channel })), settledShown, list.here) : shown;
         return (
           <div key={c} role="region" aria-label={CATEGORY_TITLES[c]} className={m.section}>
-            <Section id={c === 'active' ? 'inbox' : c} title={CATEGORY_TITLES[c]} count={shown.length} keep={open.map(row)} action={inbox ? <><ChatsMenu /><IconButton icon="plus" label="New chat (not tied to a project)" onClick={newChat} /></> : undefined}>
+            <Section id={c === 'active' ? 'inbox' : c} title={CATEGORY_TITLES[c]} count={shown.length} keep={open.map(row)} action={inbox ? <><ChatsMenu /><IconButton size="small" icon="plus" label="New chat (not tied to a project)" onClick={newChat} /></> : undefined}>
               {limited.map(row)}
               {inbox && !shown.length ? <Row className={s.hintRow} icon={<Icon name="plus" size={13} />} label="Talk to your agent about anything" onClick={newChat} /> : null}
               {limited.length < shown.length ? <Row className={s.hintRow} label="Show more" onClick={() => setSettledShown(settledShown + SETTLED_PAGE)} /> : null}
