@@ -9,6 +9,7 @@ The same Beluga runs on Linux and Windows. Some things stay Mac only.
 | Main shortcut key | ⌘ | Ctrl | Ctrl |
 | Keys shown as | ⇧⌘F | Ctrl+Shift+F | Ctrl+Shift+F |
 | Copy and paste in the terminal | ⌘C / ⌘V | Ctrl+Shift+C / V | Ctrl+Shift+C / V |
+| Pasting a picture | the web view's file | the app reads the clipboard's picture from GTK as it is (WebKitGTK only hands over a PNG, so a JPEG, WebP or GIF would paste empty) | the web view's file |
 | Shell for setup and run commands | your shell | your shell | Git Bash (Git for Windows), the shell Claude Code uses too |
 | A friend's screenshot | screen or one app's window | whole screen (grim, gnome-screenshot, spectacle, scrot or ImageMagick) | screen or one app's window |
 | Device info | sw_vers, system_profiler, pmset | os-release, /sys | PowerShell (CIM) |
@@ -38,6 +39,11 @@ Archive has no key (it's in the menu and ⌘K).
 - The shortcut table (`packages/mac/src/lib/shortcuts-model.ts`) reads "Cmd" as the main
   modifier, as Tauri's CmdOrCtrl does. `keyPlatform()` says which keyboard it is.
 - The Tauri shell gates Mac-only code with `cfg(target_os = "macos")`.
+- A pasted picture (BLG-109): `src-tauri/src/clipboard.rs` reads GTK's clipboard on Linux
+  (`clipboard_image_types`, then `clipboard_image` for the type taken); elsewhere it offers nothing and the
+  web view's file goes. When the clipboard offers one picture several ways, one type goes, in this order
+  (`chat/paste-images-model.ts`): GIF (gdk-pixbuf can't write one, so it's always the original, animation
+  and all), PNG (lossless), WebP, JPEG. Files with their own names all go.
   `tauri.linux.conf.json` and `tauri.windows.conf.json` set the window and the bundles.
 - Windows and Linux give every window the app's menu bar. The small windows (the request card, the
   call card, the call overlay) take it off with `menu::without_menu_bar` and `menu::drop_menu_bar`:

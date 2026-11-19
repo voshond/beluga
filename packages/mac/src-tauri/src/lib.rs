@@ -5,6 +5,7 @@
 //! the menu bar, the tray, notifications, `beluga://` (and the older `klaud://`) links, and
 //! keeping Beluga's daemon running. Everything Beluga does happens in the daemon.
 
+mod clipboard;
 mod daemon;
 mod device;
 mod export;
@@ -338,7 +339,9 @@ pub fn run() {
             device::device_file,
             device::device_screenshot,
             frame::own_title_bar,
-            frame::window_control
+            frame::window_control,
+            clipboard::clipboard_image_types,
+            clipboard::clipboard_image
         ]))
         .manage(quit::Quitting::default())
         .manage(updater::Updates::default())
@@ -406,6 +409,8 @@ pub fn run() {
             updater::update_dismiss_news,
             frame::own_title_bar,
             frame::window_control,
+            clipboard::clipboard_image_types,
+            clipboard::clipboard_image,
             i18n::set_ui_language
         ])
         .menu(|app| {

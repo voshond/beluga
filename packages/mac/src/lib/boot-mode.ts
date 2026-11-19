@@ -101,6 +101,8 @@ export const CLIENT_COMMANDS = [
   'device_screenshot',
   'own_title_bar',
   'window_control',
+  'clipboard_image_types',
+  'clipboard_image',
 ] as const;
 
 export type ClientCommand = (typeof CLIENT_COMMANDS)[number];

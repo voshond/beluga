@@ -22,6 +22,7 @@ import { PendingTray } from './ChatFiles.js';
 import { addBlobs, addPaths, restorePending, takePending, usePending } from './attachments.js';
 import { type Ask, type ChannelSuggestion, askLabel, askTo, channelSuggestions, channelTasks, channelWorld, mentionedAsk, mergeAsk } from './chat-model.js';
 import type { TaskMention } from '@beluga/shared/task-refs.js';
+import { pastedImages } from '../lib/clipboard-image.js';
 
 /** The tasks this chat can name: those of repositories you're teamed up on with its people (BLG-263). */
 export function useChannelTasks(people: ReadonlyArray<{ readonly peerId: string; readonly name: string }>): readonly TaskMention[] {
@@ -234,7 +235,8 @@ export function NetComposer({ id, placeholder, people, me, send, addPeople, note
               const files = [...e.clipboardData.items].flatMap((it) => (it.kind === 'file' ? [it.getAsFile()].filter((f): f is File => Boolean(f)) : []));
               if (!files.length) return void pastePaths(e);
               e.preventDefault();
-              void addBlobs(client, id, files);
+              const others = files.filter((f) => !f.type.startsWith('image/'));
+              void pastedImages(files.filter((f) => f.type.startsWith('image/'))).then((images) => addBlobs(client, id, [...images, ...others]));
             }}
             onKeyDown={(e) => {
               if (e.nativeEvent.isComposing || e.keyCode === 229) return;

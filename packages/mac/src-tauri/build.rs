@@ -37,6 +37,8 @@ fn main() {
             "device_screenshot",
             "own_title_bar",
             "window_control",
+            "clipboard_image_types",
+            "clipboard_image",
         ])
         .default_permission(tauri_build::DefaultPermissionRule::AllowAllCommands);
     tauri_build::try_build(tauri_build::Attributes::new().plugin("beluga", client))

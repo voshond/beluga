@@ -17,6 +17,7 @@ import { type ImageInText, type PathInfo, insertText, usePastePaths } from './pa
 import s from './composer.module.css';
 import img from './images.module.css';
 import { thisComputer } from '../lib/os-words.js';
+import { pastedImages } from '../lib/clipboard-image.js';
 import { MAX_PASTE_CHARS, byteSize, isLongPaste, lineCount, pastedInline, pastedLabel, pastedWords, sizeWords } from './pasted-text.js';
 
 /**
@@ -692,7 +693,7 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
       }
       if (!pasted.length) return void pastePaths(e);
       e.preventDefault();
-      void attach(pasted);
+      void pastedImages(pasted).then(attach);
     },
     whenSaved,
     attach,

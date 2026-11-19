@@ -285,6 +285,7 @@ dependencies = [
  "ashpd",
  "block2",
  "dirs 6.0.0",
+ "gtk",
  "libc",
  "objc2",
  "objc2-user-notifications",
