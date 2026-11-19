@@ -10,7 +10,8 @@ import { currentMachines } from '../machines/use-machines.js';
 import { type Box, MAX_DROPPED, appDropScale, dropHits, droppedFiles, sameBox } from './drop-model.js';
 import { imageLinksIn } from '@beluga/shared/attachment-links.js';
 import { type RefKey, boxRef, plainRefs, refKey, referencedImages, withoutRef } from './image-refs.js';
-import { keepPreview, openLightbox, pendingImage, previewOf } from './images.js';
+import { keepPreview, openLightbox, pendingImage, previewCopy, previewOf } from './images.js';
+import { extOf, imageRoute, uploadName } from './paste-image.js';
 import { toBox, worktreeNamesOf } from './worktree-box.js';
 import { boxChats, plainWords } from './chat-box.js';
 import { type ImageInText, type PathInfo, insertText, usePastePaths } from './paste-paths.js';
@@ -103,13 +104,21 @@ let nextTemp = -1;
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
-/** A picture as the base64 Beluga's attachments.add takes. */
-async function base64Of(file: Blob): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin);
-}
+/** A picture as the base64 Beluga's attachments.add takes, read by the browser off the window's thread. */
+const base64Of = (file: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result);
+      resolve(url.slice(url.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('The image couldn’t be read'));
+    reader.readAsDataURL(file);
+  });
+
+/** An image Beluga saved, as the small copy its chip shows. */
+const previewOfSaved = (shown: { readonly data: string; readonly mime: string }): Promise<Blob | undefined> =>
+  previewCopy(new Blob([Uint8Array.from(atob(shown.data), (c) => c.charCodeAt(0))], { type: shown.mime }));
 
 /** Files that aren't images (a served page uploads them, web-files.ts). */
 const othersOf = (files: FileList | undefined): File[] => [...(files ?? [])].filter((f) => !f.type.startsWith('image/'));
@@ -175,7 +184,7 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
     waitingImages.set(memo, next);
     setImagesState(next);
   };
-  const pendingImages = images.filter((n) => previewOf(n) || saving.has(n));
+  const pendingImages = images.filter((n) => previewOf(n) || saving.has(n) || imageFiles.has(n));
   const [files, setFilesState] = useState<readonly WaitingFile[]>(() => waitingFiles.get(memo) ?? []);
   useEffect(() => setFilesState(waitingFiles.get(memo) ?? []), [memo]);
   const setFiles = (next: readonly WaitingFile[]): void => {
@@ -282,8 +291,8 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
   };
 
   /**
-   * An image waits at once, under a temporary number (its thumbnail too when there's a `preview`),
-   * while `save` has Beluga keep it. Saved: it takes Beluga's number where it waits (its "[image N]"
+   * An image waits at once, under a temporary number (its thumbnail once a small copy of `preview`
+   * is made, BLG-110), while `save` has Beluga keep it. Saved: it takes Beluga's number where it waits (its "[image N]"
    * stays as it is). Not saved: it leaves the box and its "[image N]" the words, and a toast says why.
    * → the temporary number (its "[image N]" is the caller's to place).
    */
@@ -291,19 +300,21 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
     const temp = nextTemp--;
     const key = memo;
     saving.add(temp);
-    if (preview) keepPreview(temp, preview);
+    const small = preview ? previewCopy(preview).catch(() => undefined) : undefined;
+    void small?.then((copy) => {
+      if (!copy || !saving.has(temp)) return;
+      keepPreview(temp, copy);
+      setImagesIn(key, [...(waitingImages.get(key) ?? [])]);
+    });
     if (name) imageNames.set(temp, name);
     addWaiting(temp);
     const done = save().then(
       async (added) => {
         imageNames.set(added.n, imageNames.get(temp) ?? added.name);
         imageFiles.set(added.n, added.file);
-        if (preview) keepPreview(added.n, preview);
-        else {
-          // From a path: its thumbnail comes from Beluga now that it has it (a placeholder until then).
-          const shown = await api.attachments.read(selfId, added.file).catch(() => undefined);
-          if (shown) keepPreview(added.n, new Blob([Uint8Array.from(atob(shown.data), (c) => c.charCodeAt(0))], { type: shown.mime }));
-        }
+        // From a path: its thumbnail comes from Beluga now that it has it (a placeholder until then).
+        const copy = small ? await small : await api.attachments.read(selfId, added.file).then(previewOfSaved, () => undefined);
+        if (copy) keepPreview(added.n, copy);
         const numbers = numbersOf(key);
         const shownAs = numbers.get(temp);
         if (shownAs !== undefined) numbers.set(added.n, shownAs);
@@ -332,14 +343,29 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
     return temp;
   };
 
-  /** Pictures pasted or dropped on the box: each waits at once, in order, its "[image N]" where the cursor is. */
+  /**
+   * Pictures pasted or dropped on the box: each waits at once, in order, its "[image N]" where the
+   * cursor is. The file goes as it is (BLG-110): uploaded in binary from a served page, its bytes
+   * from the app; one too big for that is refused with a toast.
+   */
   const attach = async (picked: readonly File[]): Promise<void> => {
-    const temps = picked.map((file) => {
-      const ext = (/image\/(png|jpe?g|gif|webp)/.exec(file.type)?.[1] ?? 'png') as 'png' | 'jpg' | 'jpeg' | 'gif' | 'webp';
+    const served = webServed();
+    const temps = picked.flatMap((file) => {
+      const route = imageRoute(file.size, served);
+      if (route.kind === 'refuse') {
+        toast(client, `Couldn't add ${file.name || 'the image'}: ${route.reason}`, 'error');
+        return [];
+      }
       // A pasted picture is just "image.png": the name Beluga saves it under tells them apart (on its chip once saved).
       const named = file.name && !/^image\.\w+$/i.test(file.name) ? file.name : undefined;
       const temp = waitAtOnce(file.name || 'the image', named, file, async () => {
-        const added = await api.attachments.add(ext, await base64Of(file));
+        if (route.kind === 'upload') {
+          const { uploadFile } = await import('../lib/web-files.js');
+          const sent = await uploadFile(new File([file], uploadName(file), { type: file.type }));
+          const added = await api.attachments.addFile(sent.path);
+          return { n: added.n, file: added.file, name: named ?? added.file };
+        }
+        const added = await api.attachments.add(extOf(file.type), await base64Of(file));
         return { n: added.n, file: added.file ?? '', name: named ?? added.file ?? '' };
       });
       placeRef(temp);
@@ -554,8 +580,8 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
         if (!imageNames.has(n)) imageNames.set(n, link.file);
         imageFiles.set(n, link.file);
         if (!previewOf(n)) {
-          const shown = await api.attachments.read(selfId, link.file);
-          keepPreview(n, new Blob([Uint8Array.from(atob(shown.data), (c) => c.charCodeAt(0))], { type: shown.mime }));
+          const copy = await previewOfSaved(await api.attachments.read(selfId, link.file));
+          if (copy) keepPreview(n, copy);
         }
         // Numbered against what's in the box and what this message has put back so far.
         numberIn(memo, n, text() + out);

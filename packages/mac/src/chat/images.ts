@@ -5,6 +5,7 @@ import type { Location } from '@beluga/core/store.js';
 import type { SocketClient } from '@beluga/ipc/socket-client.js';
 import { copyPng, pngOf } from '../lib/copy.js';
 import { sourceTag } from '../machines/pane-model.js';
+import type { ShrinkAnswer, ShrinkAsk } from './shrink.worker.js';
 
 /**
  * Images linked in chat messages, fetched through the core (yours from disk, a friend's through
@@ -54,9 +55,48 @@ function toBlob(data: string, mime: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
+let shrinker: Worker | undefined;
+let nextAsk = 0;
+const asked = new Map<number, (answer: ShrinkAnswer) => void>();
+
+/** No worker can draw here (an older WebKit without OffscreenCanvas): the window does it. */
+class NoWorker extends Error {}
+
+/** `blob` made smaller in the worker (BLG-110); undefined when it's already that small. */
+function shrinkOffThread(blob: Blob, px: number): Promise<Blob | undefined> {
+  if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return Promise.reject(new NoWorker());
+  if (!shrinker) {
+    try {
+      shrinker = new Worker(new URL('./shrink.worker.ts', import.meta.url), { type: 'module', name: 'beluga-image-shrink' });
+    } catch {
+      return Promise.reject(new NoWorker());
+    }
+    shrinker.addEventListener('message', (e: MessageEvent<ShrinkAnswer>) => {
+      asked.get(e.data.id)?.(e.data);
+      asked.delete(e.data.id);
+    });
+    shrinker.addEventListener('error', () => {
+      for (const answer of asked.values()) answer({ id: -1, error: 'The image worker stopped' });
+      asked.clear();
+      shrinker?.terminate();
+      shrinker = undefined;
+    });
+  }
+  const id = nextAsk++;
+  return new Promise((resolve, reject) => {
+    asked.set(id, (answer) => (answer.error === undefined ? resolve(answer.blob) : reject(new Error(answer.error))));
+    shrinker!.postMessage({ id, blob, px } satisfies ShrinkAsk);
+  });
+}
+
 /** The picture no bigger than THUMB_PX on its longest side (as it is, when it's already that small or can't be read). */
 export async function shrink(blob: Blob, px = THUMB_PX): Promise<Blob> {
   if (blob.type === 'image/svg+xml' || blob.type === 'image/gif') return blob;
+  try {
+    return (await shrinkOffThread(blob, px)) ?? blob;
+  } catch (err) {
+    if (!(err instanceof NoWorker)) return blob;
+  }
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(blob);
@@ -211,9 +251,20 @@ export function useImage(api: Api, image: ChatImage, size: ImageSize = 'thumb'):
 
 const pending = new Map<number, string>();
 
-/** Remember what a pasted image looks like (its chip may outlive the box that took it). */
-export function keepPreview(n: number, file: Blob): void {
-  pending.set(n, URL.createObjectURL(file));
+/** A pasted image's preview, chip and lightbox both: big enough to see well, small enough to decode at once (BLG-110). */
+export const PREVIEW_PX = 2048;
+/** Past this, a picture that couldn't be made smaller waits as an icon rather than be drawn full size. */
+const PREVIEW_AS_IS_BYTES = 4 * 1024 * 1024;
+
+/** The copy of a pasted image its chip and the lightbox show; undefined when there's none small enough (an icon then). */
+export async function previewCopy(file: Blob): Promise<Blob | undefined> {
+  const small = await shrink(file, PREVIEW_PX);
+  return small === file && file.size > PREVIEW_AS_IS_BYTES ? undefined : small;
+}
+
+/** Remember what a pasted image looks like (its chip may outlive the box that took it): `preview` is previewCopy's. */
+export function keepPreview(n: number, preview: Blob): void {
+  pending.set(n, URL.createObjectURL(preview));
 }
 
 export const previewOf = (n: number): string | undefined => pending.get(n);

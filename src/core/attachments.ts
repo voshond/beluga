@@ -14,8 +14,8 @@ import { ATTACHMENT_SHARE, ATTACHMENT_SCHEME } from './attachment-share.js';
  */
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i;
-/** Biggest image accepted (the Claude API takes up to 5 MB per image once base64-encoded, a third bigger). */
-export const MAX_ATTACHMENT_BYTES = Math.floor(3.7 * 1024 * 1024);
+export { MAX_ATTACHMENT_BYTES } from '../shared/uploads.js';
+import { MAX_ATTACHMENT_BYTES } from '../shared/uploads.js';
 
 export const attachmentsDir = (): string => path.join(belugaHome(), 'attachments');
 /** Copies of images sent to the room, the only ones friends can fetch. */
