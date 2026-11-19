@@ -54,10 +54,6 @@ export interface StepRecord extends StepSummary {
   readonly truncated?: boolean;
   /** Thinking: what Claude thought (bounded). */
   readonly text?: string;
-  /** A command's exit code, when the runtime gives it apart from the output (Codex). */
-  readonly exitCode?: number;
-  /** The runtime's own name for the tool, when Beluga shows it under Claude Code's ("commandExecution" for Bash). */
-  readonly native?: string;
   /** What its MCP App needs (only with Settings › Experimental › MCP Apps on). */
   readonly app?: StepApp;
 }

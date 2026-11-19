@@ -30,7 +30,7 @@ import { runToolSuites } from '../../run-tools.js';
 import { sdkServers } from './sdk-mount.js';
 import { ownerMcpServers } from './owner-mcp.js';
 import { McpConnect, claudeMcpSession } from './mcp-connect.js';
-import type { AgentBackend, AgentRunInput, FollowUp, HarnessFacts, LiveStatus, RoomBridge, RunProcess, RunRouting, Steer } from '../../types.js';
+import type { AgentBackend, AgentRunInput, FollowUp, LiveStatus, RoomBridge, RunProcess, RunRouting, Steer } from '../../types.js';
 import { keepLines, trackedSpawn } from './claude-process.js';
 import { keptBashInput } from '../../../workspaces/test-procs.js';
 import { SCRATCH_DIR } from '../../../shared/scratch-dir.js';
@@ -186,17 +186,10 @@ export function toQuestion(input: Record<string, unknown>): ClaudeQuestion | und
 }
 
 /** Tokens and cost of a run, summed over every model it used (sub-agents included). */
-export function usageOf(
-  modelUsage: Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number }>,
-  cost: number,
-  session: string,
-  /** The result's own usage: how many of its output tokens were thinking (usage statistics send the count, never the words). */
-  usage?: { readonly output_tokens_details?: { readonly thinking_tokens?: number } | null } | null,
-) {
+export function usageOf(modelUsage: Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number }>, cost: number, session: string) {
   const all = Object.values(modelUsage);
   const sum = (pick: (u: (typeof all)[number]) => number): number => all.reduce((n, u) => n + (pick(u) || 0), 0);
-  const thinking = usage?.output_tokens_details?.thinking_tokens;
-  return { input: sum((u) => u.inputTokens), output: sum((u) => u.outputTokens), cacheRead: sum((u) => u.cacheReadInputTokens), cacheWrite: sum((u) => u.cacheCreationInputTokens), cost, session, ...(typeof thinking === 'number' && thinking > 0 ? { thinking } : {}) };
+  return { input: sum((u) => u.inputTokens), output: sum((u) => u.outputTokens), cacheRead: sum((u) => u.cacheReadInputTokens), cacheWrite: sum((u) => u.cacheCreationInputTokens), cost, session };
 }
 
 export const sdkAgents = (routing: RunRouting): NonNullable<Options['agents']> =>
@@ -234,19 +227,6 @@ export function imageContent(text: string, files: readonly string[]): PromptCont
 }
 
 /** The text of the tool results in a message from Claude Code (what its commands printed). */
-/** Claude Code's first message of a run, as what it says about itself: names only (its tools, its MCP servers). */
-export function harnessFacts(init: { readonly claude_code_version?: unknown; readonly permissionMode?: unknown; readonly tools?: unknown; readonly mcp_servers?: unknown }): HarnessFacts {
-  const names = (list: unknown, of: (v: unknown) => unknown): string[] => (Array.isArray(list) ? list.map(of).filter((n): n is string => typeof n === 'string' && Boolean(n)).map((n) => n.slice(0, 128)) : []);
-  const tools = names(init.tools, (t) => t);
-  const servers = names(init.mcp_servers, (s) => (s as { name?: unknown } | null)?.name);
-  return {
-    ...(typeof init.claude_code_version === 'string' ? { version: init.claude_code_version.slice(0, 40) } : {}),
-    ...(typeof init.permissionMode === 'string' ? { permissionMode: init.permissionMode.slice(0, 40) } : {}),
-    ...(tools.length ? { tools } : {}),
-    ...(servers.length ? { mcpServers: servers } : {}),
-  };
-}
-
 function toolOutput(content: unknown): string {
   if (!Array.isArray(content)) return '';
   return content.map((b) => (b && typeof b === 'object' && 'type' in b && b.type === 'tool_result' && 'content' in b ? resultText(b.content) : '')).join('\n');
@@ -631,10 +611,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
           lastEventAt = Date.now();
           background.observe(msg as Parameters<BackgroundAgents['observe']>[0]);
           watchQuiet();
-          if (msg.type === 'system' && msg.subtype === 'init') {
-            remember(msg.session_id);
-            input.onHarness?.(harnessFacts(msg));
-          }
+          if (msg.type === 'system' && msg.subtype === 'init') remember(msg.session_id);
           // Claude Code retrying the API (busy, a limit, no network): said on the working line, not a silent "Starting" (BLG-403).
           if (msg.type === 'system' && msg.subtype === 'api_retry') input.onEvent('progress', retryWords(msg.error_status, msg.attempt, msg.max_retries, Boolean(msg.no_response)));
           if (msg.type === 'rate_limit_event') {
@@ -700,7 +677,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
             remember(msg.session_id);
             await report.result(msg.modelUsage, breakdownReader(q));
             const turn = turns.current();
-            turn.onEvent('usage', JSON.stringify(usageOf(msg.modelUsage ?? {}, msg.total_cost_usd ?? 0, msg.session_id, msg.usage as Parameters<typeof usageOf>[3])));
+            turn.onEvent('usage', JSON.stringify(usageOf(msg.modelUsage ?? {}, msg.total_cost_usd ?? 0, msg.session_id)));
             // A turn that ended on an API error (a usage limit, an outage) is a failure, whatever its subtype.
             const ok = msg.subtype === 'success' && !msg.is_error;
             if (!ok) failedResult = msg.subtype === 'success' ? msg.result : [`Agent stopped: ${msg.subtype.replace(/_/g, ' ')}`, ...(msg.errors ?? [])].join('\n');
