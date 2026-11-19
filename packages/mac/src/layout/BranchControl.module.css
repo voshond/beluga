@@ -60,21 +60,32 @@
 .pillButton:hover .pill {
   background: color-mix(in srgb, var(--pill) 22%, transparent);
 }
+/* In the window's toolbar: Large (docs/mac-controls.md). */
 .main {
-  height: 26px;
-  padding: 0 11px 0 9px;
+  height: var(--control-h-large);
+  padding: 0 14px 0 11px;
   font-weight: 600;
 }
 .mainSplit {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }
+/* The ▾ keeps its variant's bezel, so both halves are one height; a line inside parts them. */
 .more {
-  height: 26px;
+  position: relative;
+  height: var(--control-h-large);
   padding-inline: 7px;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
-  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.28);
+}
+.more::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--on-accent) 35%, transparent);
 }
 .mainError {
   background: var(--error);

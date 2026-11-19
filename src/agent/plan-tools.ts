@@ -206,7 +206,7 @@ function guarded(fn: () => string | Promise<string>): Promise<{ content: Array<{
 
 export function createPlanToolDefs(plan: PlanTools) {
   const defs = [
-    tool('plan_get', 'The plan: its decisions, milestones with their pass criteria, tasks with ids, what waits on what, warnings about the draft, and (once approved) each task’s state: who’s working, in review, done.', {}, () => guarded(() => plan.get())),
+    tool('plan_get', 'The plan: its decisions, milestones with their pass criteria, tasks with ids, what waits on what, warnings about the draft, and (once approved) each task’s state: who’s working, in review, done, and since when (UTC times, with how long ago).', {}, () => guarded(() => plan.get())),
     tool(
       'plan_write',
       'Write the whole plan (replaces the draft). Milestones in order, each with pass criteria and its tasks; milestones run side by side unless depends_on (or a task’s blocked_by) ties them to an earlier one. Keep ids you used before; two items with one id are refused. Nothing reaches the board until the user approves. The answer lists warnings to fix.',

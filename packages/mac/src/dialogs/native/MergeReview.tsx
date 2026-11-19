@@ -168,10 +168,10 @@ function Body({ ws, close, children }: { ws: Workspace; close: () => void; child
   );
   const buttons = (
     <div className={s.buttons}>
-      <Button size="small" onClick={close}>
+      <Button onClick={close}>
         Cancel
       </Button>
-      <Button size="small" variant="merge" icon="merge" disabled={!review?.canMerge} onClick={go} data-merge-confirm>
+      <Button variant="merge" icon="merge" disabled={!review?.canMerge} onClick={go} data-merge-confirm>
         {review?.confirm ?? 'Merge'}
       </Button>
     </div>

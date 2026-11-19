@@ -200,7 +200,7 @@ export function ArchivedRow(props: RowBase & { act: ArchivedActions }) {
               {busy ? 'Restoring…' : 'Restore'}
             </Button>
           </Tip>
-          <IconButton icon="eye" label="Read Conversation" keys="Space" onClick={() => act.read(item)} />
+          <IconButton size="small" icon="eye" label="Read Conversation" keys="Space" onClick={() => act.read(item)} />
           <ActionsDropdown items={items}>
             <button type="button" className={s.more} aria-label={`More for ${w.name}`}>
               <Icon name="more" size={14} />

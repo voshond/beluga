@@ -14,7 +14,7 @@ import { answer, NeedButtons, NeedFace } from '../../components/Needs';
 import { MilestoneMap, PlanChat, PlanDecisions, PlanDrafting, PlanRepos, PlanShip } from '../../components/PlanParts';
 import { Header, Screen, useScrolled } from '../../components/Screen';
 import { Card, More, Pill, Press, T, toneBg, toneInk, toneOf } from '../../components/ui';
-import { useSupports, useView, useVisibleNeeds } from '../../lib/hooks';
+import { ago, useSupports, useView, useVisibleNeeds } from '../../lib/hooks';
 import type { ConvView, PlanView, Topic } from '../../lib/link/protocol';
 import { color } from '../../lib/theme';
 import { calls } from '../../lib/link/calls';
@@ -378,6 +378,11 @@ function Milestone({ m, last, i, draft, titles, after, picked }: { m: PlanView['
                             </T>
                           ))}
                         </View>
+                      ) : null}
+                      {t.updatedAt && t.state !== 'later' ? (
+                        <T v="caption" c={color.text3} numberOfLines={1}>
+                          Updated {ago(t.updatedAt) === 'now' ? 'just now' : `${ago(t.updatedAt)} ago`}
+                        </T>
                       ) : null}
                       {shown && t.why ? (
                         <T v="caption" c={color.text3} style={{ marginTop: 4 }}>

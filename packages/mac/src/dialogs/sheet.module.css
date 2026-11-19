@@ -66,9 +66,9 @@
 .close {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 11px;
+  width: var(--control-h);
+  height: var(--control-h);
+  border-radius: 50%;
   color: var(--text-2);
 }
 .close:hover {

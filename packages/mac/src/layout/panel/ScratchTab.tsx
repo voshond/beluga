@@ -221,11 +221,11 @@ function Preview({ of, file, list, onClose }: { of: ScratchOf; file: ScratchEntr
         </span>
         <span className={s.previewDir}>{timeAgo(file.mtime, Math.max(now, Date.now()))}</span>
         <span className={s.flex} />
-        {isViewable(file.path) ? null : <IconButton icon="toEnd" label="Follow the End" active={follow} onClick={followEnd} />}
-        {owner ? null : <IconButton icon="external" label="Open With Its App" onClick={() => void openWithDefaultApp(client, local)} />}
-        {owner ? null : <IconButton icon="folder" label={revealFile} onClick={() => void revealInFinder(client, local)} />}
-        <IconButton icon="expand" label="Open in full" keys={chordLabel('Cmd+Enter')} onClick={openFull} />
-        <IconButton icon="x" label="Close" keys="Esc" onClick={onClose} />
+        {isViewable(file.path) ? null : <IconButton size="small" icon="toEnd" label="Follow the End" active={follow} onClick={followEnd} />}
+        {owner ? null : <IconButton size="small" icon="external" label="Open With Its App" onClick={() => void openWithDefaultApp(client, local)} />}
+        {owner ? null : <IconButton size="small" icon="folder" label={revealFile} onClick={() => void revealInFinder(client, local)} />}
+        <IconButton size="small" icon="expand" label="Open in full" keys={chordLabel('Cmd+Enter')} onClick={openFull} />
+        <IconButton size="small" icon="x" label="Close" keys="Esc" onClick={onClose} />
       </div>
       <div ref={body} className={cx(s.previewBody, s.previewFile, 'selectable')} tabIndex={0} onScroll={onScroll}>
         {/* Kept as it is while the file changes (its text updated in place), so following doesn't flicker. */}
@@ -313,7 +313,7 @@ export function ScratchTab({ of }: { of: ScratchOf }) {
       <div className={s.top} style={file ? { flex: `0 0 ${Math.round(share * 100)}%` } : undefined}>
         {split.sent.length ? (
           <div className={k.views}>
-            <Segmented
+            <Segmented size="small"
               label="Show"
               value={split.view}
               onChange={pickView}
@@ -336,9 +336,9 @@ export function ScratchTab({ of }: { of: ScratchOf }) {
                 { label: 'Viewable First', hint: 'Pictures, videos, PDFs and web pages on top', icon: 'eye', checked: sort === 'viewable', onSelect: () => setPrefs({ scratchSort: 'viewable' }) },
               ]}
             >
-              <IconButton icon={sort === 'viewable' ? 'eye' : 'clock'} label={sort === 'viewable' ? 'Sorted: viewable first' : 'Sorted: newest first'} />
+              <IconButton size="small" icon={sort === 'viewable' ? 'eye' : 'clock'} label={sort === 'viewable' ? 'Sorted: viewable first' : 'Sorted: newest first'} />
             </ActionsDropdown>
-            {owner ? null : <IconButton icon="folder" label={revealFolder} onClick={() => void revealInFinder(client, sentView ? joinPath(list.root, SENT_DIR) : list.dir)} />}
+            {owner ? null : <IconButton size="small" icon="folder" label={revealFolder} onClick={() => void revealInFinder(client, sentView ? joinPath(list.root, SENT_DIR) : list.dir)} />}
           </div>
         </div>
         {working && !sentView ? <NextFileRow /> : null}

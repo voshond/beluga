@@ -1,12 +1,13 @@
 import * as Context from '@radix-ui/react-context-menu';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
-import type { MouseEvent, ReactNode } from 'react';
+import { type ComponentPropsWithoutRef, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode, useLayoutEffect, useRef, useState } from 'react';
 import { type MenuKind, menuSpec } from '@beluga/ui/menus.js';
 import { useActions } from '../lib/actions.js';
 import { useBeluga } from '../lib/beluga.js';
 import { Icon, type IconName } from './Icon.js';
 import { guiHint } from '../lib/gui-copy.js';
 import { ContextRoot } from './ContextRoot.js';
+import { type NativeRow, nativeContext, nativeDropdown } from '../lib/native-menu.js';
 import s from './SpecMenu.module.css';
 
 /**
@@ -45,6 +46,23 @@ const hasIcons = (items: readonly ActionItem[]): boolean => items.some((it) => i
 
 const isDanger = (id: string): boolean => /delete|remove|leave|revoke|stop|hide/.test(id);
 
+/** A spec menu's rows as the web menu groups them: its own, this window's extras, the dangerous ones last. */
+function useSpecRows(menu: MenuKind, extra: readonly ActionItem[] = [], hide?: (id: string) => boolean): () => readonly NativeRow[] {
+  const actions = useActions();
+  const { client } = useBeluga();
+  return () => {
+    const spec = menuSpec(client.store.getState(), menu);
+    const items = (spec?.options ?? []).map((o, index) => ({ ...o, index })).filter((o) => o.id !== 'close' && !hide?.(o.id));
+    const row = (o: (typeof items)[number]): NativeRow => {
+      const hint = guiHint(o.hint);
+      // A hint that isn't a shortcut is the web menu's tooltip: a native menu has none, so it goes.
+      return { label: o.label, ...(isKeys(hint) ? { keys: hint } : {}), danger: isDanger(o.id), onSelect: () => actions.pick(menu, o.index) };
+    };
+    const groups = [items.filter((o) => !isDanger(o.id)).map(row), extra, items.filter((o) => isDanger(o.id)).map(row)].filter((g) => g.length);
+    return groups.flatMap((g, gi) => g.map((r, i) => (gi > 0 && i === 0 ? { ...r, separate: true } : r)));
+  };
+}
+
 function Items({ menu, Item, Separator, extra = [], hide, kit }: { menu: MenuKind; Item: typeof Dropdown.Item; Separator: typeof Dropdown.Separator; extra?: readonly ActionItem[]; hide?: (id: string) => boolean; kit: SubKit }) {
   const actions = useActions();
   const items = useItems(menu, hide);
@@ -73,15 +91,61 @@ function Items({ menu, Item, Separator, extra = [], hide, kit }: { menu: MenuKin
   );
 }
 
+type Side = 'top' | 'right' | 'bottom' | 'left';
+/** The room a menu keeps from its button and from the window's edge. */
+const OFFSET = 4;
+const EDGE = 8;
+
+/**
+ * Where a dropdown opens so it shows whole, never scrolled: below its button when it fits there,
+ * else above, else beside it (left or right, whichever has more room), where it slides up or down
+ * to fit the window.
+ */
+export function fitSide(button: Pick<DOMRect, 'top' | 'bottom' | 'left' | 'right'>, height: number, view: { readonly width: number; readonly height: number }): Side {
+  const room = OFFSET + EDGE;
+  if (height <= view.height - button.bottom - room) return 'bottom';
+  if (height <= button.top - room) return 'top';
+  return button.left >= view.width - button.right ? 'left' : 'right';
+}
+
+/** A dropdown's content that opens on the side it fits on (fitSide), measured as it opens. */
+export function FitContent({ children, ...props }: ComponentPropsWithoutRef<typeof Dropdown.Content>) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [side, setSide] = useState<Side>('bottom');
+  useLayoutEffect(() => {
+    // Radix ties the button to its menu by id once both are in the page: measured as it opens,
+    // and again on the next frames until they are (before the menu is placed, so it never jumps).
+    let frame = 0;
+    let tries = 0;
+    const measure = (): void => {
+      const el = ref.current;
+      const button = el?.id ? document.querySelector(`[aria-controls="${CSS.escape(el.id)}"]`) : null;
+      if (!el || !button) {
+        if (tries++ < 5) frame = requestAnimationFrame(measure);
+        return;
+      }
+      setSide(fitSide(button.getBoundingClientRect(), el.scrollHeight, { width: window.innerWidth, height: window.innerHeight }));
+    };
+    measure();
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  return (
+    <Dropdown.Content side={side} sideOffset={OFFSET} collisionPadding={EDGES} sticky="always" {...props} ref={ref}>
+      {children}
+    </Dropdown.Content>
+  );
+}
+
 /** A dropdown from a button (the ⋯ on a project). Built when opened, so it's always current. */
 export function SpecDropdown({ menu, children, align = 'start', extra, hide }: { menu: MenuKind; children: ReactNode; align?: 'start' | 'end'; extra?: readonly ActionItem[]; hide?: (id: string) => boolean }) {
+  const rows = useSpecRows(menu, extra, hide);
   return (
     <Dropdown.Root modal={false}>
-      <Dropdown.Trigger asChild>{children}</Dropdown.Trigger>
+      <Dropdown.Trigger asChild {...nativeDropdown(rows)}>{children}</Dropdown.Trigger>
       <Dropdown.Portal>
-        <Dropdown.Content className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} align={align} sideOffset={4} collisionPadding={EDGES}>
+        <FitContent className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} align={align}>
           <Items menu={menu} Item={Dropdown.Item} Separator={Dropdown.Separator} kit={DROPDOWN_SUB} {...(extra ? { extra } : {})} {...(hide ? { hide } : {})} />
-        </Dropdown.Content>
+        </FitContent>
       </Dropdown.Portal>
     </Dropdown.Root>
   );
@@ -90,11 +154,16 @@ export function SpecDropdown({ menu, children, align = 'start', extra, hide }: {
 /** A right-click menu on anything (a project row, a person). */
 export function SpecContext({ menu, children, extra, hide }: { menu: MenuKind | undefined; children: ReactNode; extra?: readonly ActionItem[]; hide?: (id: string) => boolean }) {
   if (!menu) return <>{children}</>;
+  return <SpecContextOf menu={menu} {...(extra ? { extra } : {})} {...(hide ? { hide } : {})}>{children}</SpecContextOf>;
+}
+
+function SpecContextOf({ menu, children, extra, hide }: { menu: MenuKind; children: ReactNode; extra?: readonly ActionItem[]; hide?: (id: string) => boolean }) {
+  const rows = useSpecRows(menu, extra, hide);
   return (
     <ContextRoot>
-      <Context.Trigger asChild>{children}</Context.Trigger>
+      <Context.Trigger asChild onContextMenu={nativeContext(rows)}>{children}</Context.Trigger>
       <Context.Portal>
-        <Context.Content className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} collisionPadding={EDGES}>
+        <Context.Content className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} collisionPadding={EDGES} sticky="always">
           <Items menu={menu} Item={Context.Item as unknown as typeof Dropdown.Item} Separator={Context.Separator as unknown as typeof Dropdown.Separator} kit={CONTEXT_SUB} {...(extra ? { extra } : {})} {...(hide ? { hide } : {})} />
         </Context.Content>
       </Context.Portal>
@@ -149,14 +218,16 @@ function ActionRows({ items, Item, Separator, kit = DROPDOWN_SUB }: { items: rea
             <kit.Sub>
               <kit.SubTrigger className={s.item} disabled={it.disabled}>
                 <span className={s.line}>
-                  {icons ? <span className={s.icon} aria-hidden="true">{it.mark ?? (it.icon ? <Icon name={it.icon} size={13} /> : null)}</span> : null}
+                  {icons ? <span className={s.icon} aria-hidden="true">{it.mark ?? (it.icon ? <Icon name={it.icon} size={13} /> : it.checked ? <Icon name="check" size={12} /> : null)}</span> : null}
                   <span className={s.label}>{it.label}</span>
+                  {/* The submenu that holds the pick (the agent whose model is in use) is checked too. */}
+                  {it.checked && (it.icon || it.mark) ? <Icon name="check" size={12} className={s.trailingCheck} /> : null}
                   <Icon name="chevronRight" size={10} className={s.subArrow} />
                 </span>
                 {it.hint ? <span className={`${s.hint} ${icons ? s.hintIndent : ''}`}>{it.hint}</span> : null}
               </kit.SubTrigger>
               <kit.Portal>
-                <kit.SubContent className={s.menu} sideOffset={2} alignOffset={-5} collisionPadding={EDGES}>
+                <kit.SubContent className={s.menu} sideOffset={2} alignOffset={-5} collisionPadding={EDGES} sticky="always">
                   <ActionRows items={it.submenu} Item={Item} Separator={Separator} kit={kit} />
                 </kit.SubContent>
               </kit.Portal>
@@ -187,9 +258,9 @@ function ActionRows({ items, Item, Separator, kit = DROPDOWN_SUB }: { items: rea
 export function ActionsContext({ items, children }: { items: readonly ActionItem[] | (() => readonly ActionItem[]); children: ReactNode }) {
   return (
     <ContextRoot>
-      <Context.Trigger asChild>{children}</Context.Trigger>
+      <Context.Trigger asChild onContextMenu={nativeContext(() => (typeof items === 'function' ? items() : items))}>{children}</Context.Trigger>
       <Context.Portal>
-        <Context.Content className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} collisionPadding={EDGES}>
+        <Context.Content className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} collisionPadding={EDGES} sticky="always">
           <LazyRows items={items} />
         </Context.Content>
       </Context.Portal>
@@ -206,11 +277,11 @@ function LazyRows({ items }: { items: readonly ActionItem[] | (() => readonly Ac
 export function ActionsDropdown({ items, children, align = 'end' }: { items: readonly ActionItem[]; children: ReactNode; align?: 'start' | 'end' }) {
   return (
     <Dropdown.Root modal={false}>
-      <Dropdown.Trigger asChild>{children}</Dropdown.Trigger>
+      <Dropdown.Trigger asChild {...nativeDropdown(() => items)}>{children}</Dropdown.Trigger>
       <Dropdown.Portal>
-        <Dropdown.Content className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} align={align} sideOffset={4} collisionPadding={EDGES}>
+        <FitContent className={s.menu} onClick={stayInMenu} onCloseAutoFocus={keepFocus} align={align}>
           <ActionRows items={items} Item={Dropdown.Item} Separator={Dropdown.Separator} />
-        </Dropdown.Content>
+        </FitContent>
       </Dropdown.Portal>
     </Dropdown.Root>
   );

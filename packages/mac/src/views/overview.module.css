@@ -119,9 +119,9 @@
 .more {
   display: inline-grid;
   place-items: center;
-  width: 26px;
-  height: 24px;
-  border-radius: var(--radius-s);
+  width: var(--control-h-small);
+  height: var(--control-h-small);
+  border-radius: var(--control-radius-small);
   color: var(--text-2);
 }
 .more:hover,

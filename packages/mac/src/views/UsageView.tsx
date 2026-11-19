@@ -88,7 +88,7 @@ export function UsageView() {
         detail="Add your projects: the disk their worktrees take and what your agent uses in them show up here."
         action={
           <EmptyActions>
-            <Button variant="primary" icon="plus" onClick={() => actions.run({ type: 'add_project' })}>
+            <Button size="small" variant="primary" icon="plus" onClick={() => actions.run({ type: 'add_project' })}>
               Add Projects…
             </Button>
           </EmptyActions>

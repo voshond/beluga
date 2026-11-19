@@ -69,7 +69,7 @@ function useToolbarWidth(): [React.RefObject<HTMLElement | null>, number] {
 function SearchButton() {
   const actions = useActions();
   const on = useApp((st) => st.view.kind === 'search');
-  return <IconButton icon="search" label="Search" keys={shortcutKeys('find')} active={on} onClick={() => actions.run({ type: 'view', view: { kind: 'search' } })} />;
+  return <IconButton size="large" icon="search" label="Search" keys={shortcutKeys('find')} active={on} onClick={() => actions.run({ type: 'view', view: { kind: 'search' } })} />;
 }
 
 /** Back and forward between pages, with what was open on each (⌘[ ⌘]; off with nowhere to go). */
@@ -77,8 +77,8 @@ function NavButtons() {
   const can = useNavAbility();
   return (
     <span className={s.nav} role="group" aria-label="Back and forward">
-      <IconButton icon="back" label="Go back" keys={shortcutKeys('nav-back')} disabled={!can.back} onClick={() => void navBack()} />
-      <IconButton icon="forward" label="Go forward" keys={shortcutKeys('nav-forward')} disabled={!can.forward} onClick={() => void navForward()} />
+      <IconButton size="large" icon="back" label="Go back" keys={shortcutKeys('nav-back')} disabled={!can.back} onClick={() => void navBack()} />
+      <IconButton size="large" icon="forward" label="Go forward" keys={shortcutKeys('nav-forward')} disabled={!can.forward} onClick={() => void navForward()} />
     </span>
   );
 }
@@ -99,7 +99,7 @@ function Shell({ title, subtitle, center, right, headerRef }: { title: ReactNode
           <WindowControls />
           <AppMenu />
           <WebBack />
-          <IconButton icon="sidebar" label="Show sidebar" keys={shortcutKeys('toggle-sidebar')} onClick={() => setPrefs({ sidebar: true })} />
+          <IconButton size="large" icon="sidebar" label="Show sidebar" keys={shortcutKeys('toggle-sidebar')} onClick={() => setPrefs({ sidebar: true })} />
         </span>
       )}
       <NavButtons />
@@ -123,7 +123,7 @@ function Shell({ title, subtitle, center, right, headerRef }: { title: ReactNode
         </AtHome>
         {/* No panel here, no button for it: a button that can only say so is nothing to click. */}
         {fits ? (
-          <IconButton
+          <IconButton size="large"
             icon="panelRight"
             label={prefs.inspector ? 'Hide the panel' : 'Show the panel: changes, files, terminal, info'}
             keys={shortcutKeys('toggle-inspector')}
@@ -285,7 +285,7 @@ export function Toolbar() {
             ) : primary ? (
               <Tip label={fold === 'all' ? `${primary.label}: ${primary.hint}` : primary.hint} keys={primary.keys}>
                 <span className={s.primaryWrap}>
-                  <Button variant={primary.action === 'merge' ? 'merge' : 'primary'} icon={primary.icon} aria-label={fold === 'all' ? primary.label : undefined} className={cx(s.primary, primary.tone === 'error' && s.primaryError)} aria-disabled={primary.disabled} data-tool={primary.action} data-tool-ws={ws.id} onClick={() => run(primary)}>
+                  <Button size="large" variant={primary.action === 'merge' ? 'merge' : 'primary'} icon={primary.icon} aria-label={fold === 'all' ? primary.label : undefined} className={cx(s.primary, primary.tone === 'error' && s.primaryError)} aria-disabled={primary.disabled} data-tool={primary.action} data-tool-ws={ws.id} onClick={() => run(primary)}>
                     {fold === 'all' ? shortOf(primary) : primary.label}
                   </Button>
                 </span>
@@ -293,11 +293,11 @@ export function Toolbar() {
             ) : null}
             <span className={s.tools} role="group" aria-label="Workspace actions">
               {icons.slice(0, fit).map((a) => (
-                <IconButton key={a.id} icon={a.icon} label={a.disabled ? `${a.label}: ${a.hint}` : (a.tip ?? `${a.label} · ${a.hint}`)} keys={a.keys} aria-disabled={a.disabled} data-tool={a.action} data-tool-ws={ws.id} className={cx(a.disabled && s.off, a.tone === 'error' && s.toolError)} onClick={() => run(a)} />
+                <IconButton size="large" key={a.id} icon={a.icon} label={a.disabled ? `${a.label}: ${a.hint}` : (a.tip ?? `${a.label} · ${a.hint}`)} keys={a.keys} aria-disabled={a.disabled} data-tool={a.action} data-tool-ws={ws.id} className={cx(a.disabled && s.off, a.tone === 'error' && s.toolError)} onClick={() => run(a)} />
               ))}
               {overflow.length || teamItems.length || continueItem || linkItems.length ? (
                 <ActionsDropdown items={[...menu.map(({ a, separate }) => ({ label: a.label, icon: a.icon, hint: a.disabled ? a.hint : undefined, keys: a.keys, disabled: a.disabled, danger: a.danger, separate, onSelect: () => requestAnimationFrame(() => run(a)) })), ...teamItems, ...(continueItem ? [continueItem] : []), ...linkItems]}>
-                  <IconButton icon="more" label="More for this workspace" data-tool="more" data-tool-ws={ws.id} />
+                  <IconButton size="large" icon="more" label="More for this workspace" data-tool="more" data-tool-ws={ws.id} />
                 </ActionsDropdown>
               ) : null}
             </span>
@@ -327,7 +327,7 @@ export function Toolbar() {
         // A friend's plain chat has no project folder: no Files, no Diff (its Scratch is in the panel).
         center={
           w?.chat ? undefined : (
-            <Segmented
+            <Segmented size="large"
               label="Views"
               value={view.tab === 'terminal' ? 'files' : view.tab}
               onChange={(tab) => actions.run({ type: 'open_shared', owner: view.owner, id: view.id, tab })}
@@ -343,7 +343,7 @@ export function Toolbar() {
           <>
             <ForkToMacButton owner={view.owner} wsId={view.id} />
             <PeopleHere wsId={view.id} />
-            <IconButton icon="people" label={`About ${w?.name ?? 'this workspace'}: who's here, leave`} onClick={() => ui.openMenu({ kind: 'shared', owner: view.owner, id: view.id })} />
+            <IconButton size="large" icon="people" label={`About ${w?.name ?? 'this workspace'}: who's here, leave`} onClick={() => ui.openMenu({ kind: 'shared', owner: view.owner, id: view.id })} />
           </>
         }
       />

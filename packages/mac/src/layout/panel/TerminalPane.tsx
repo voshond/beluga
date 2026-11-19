@@ -77,9 +77,9 @@ function WorkspaceScripts({ wsId }: { wsId: string }) {
   const runOn = useApp((st) => runId(wsId) in st.terminals && !(runId(wsId) in st.termExits));
   if (!project?.scripts?.run) return null;
   return runOn ? (
-    <IconButton icon="stop" label="Stop running" keys={chordLabel('Cmd+R')} onClick={() => actions.run({ type: 'ws', id: wsId, action: 'stop_run' })} />
+    <IconButton size="small" icon="stop" label="Stop running" keys={chordLabel('Cmd+R')} onClick={() => actions.run({ type: 'ws', id: wsId, action: 'stop_run' })} />
   ) : (
-    <IconButton icon="play" label={`Run · ${project.scripts.run.command}`} keys={chordLabel('Cmd+R')} onClick={() => actions.run({ type: 'ws', id: wsId, action: 'run' })} />
+    <IconButton size="small" icon="play" label={`Run · ${project.scripts.run.command}`} keys={chordLabel('Cmd+R')} onClick={() => actions.run({ type: 'ws', id: wsId, action: 'run' })} />
   );
 }
 
@@ -198,14 +198,14 @@ export function TerminalPane({ where, onClose }: { where: 'drawer' | 'panel'; on
               after={x.exit !== undefined && !x.key.startsWith('shell:') ? <span className={t.exit}>{x.exit === 0 ? 'done' : `exit ${x.exit ?? '?'}`}</span> : null}
             />
           ))}
-          <IconButton icon="plus" label="New shell" className={s.termAdd} onClick={tabbed.add} />
+          <IconButton size="small" icon="plus" label="New shell" className={s.termAdd} onClick={tabbed.add} />
           {tabbed.openSsh ? <SshMenu onOpen={tabbed.openSsh} className={s.termAdd} /> : null}
         </div>
         {wsId ? <WorkspaceScripts wsId={wsId} /> : null}
         <ActionsDropdown items={items}>
-          <IconButton icon="more" label="Terminal options" />
+          <IconButton size="small" icon="more" label="Terminal options" />
         </ActionsDropdown>
-        {onClose ? <IconButton icon="x" label="Close the drawer" keys={chordLabel('Cmd+J')} onClick={onClose} /> : null}
+        {onClose ? <IconButton size="small" icon="x" label="Close the drawer" keys={chordLabel('Cmd+J')} onClick={onClose} /> : null}
       </div>
       <div ref={body} className={s.termBody}>
         {elsewhere ? (

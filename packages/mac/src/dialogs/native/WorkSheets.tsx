@@ -12,6 +12,7 @@ import { DataSheet } from '../../sentinel/DataSheet.js';
 import { ShareProjectSheet } from './ShareProjectSheet.js';
 import { SyncSheet } from '../../tasks/SyncSheet.js';
 import { NewPlanSheet, PlanModeSheet, PlanStyleSheet, SendBackSheet } from '../../plans/PlanSheets.js';
+import { PlanSettingsSheet } from '../../plans/PlanSettingsSheet.js';
 import { useState } from 'react';
 import { channelOf } from '@beluga/core/store.js';
 import { canRunOn } from '@beluga/core/trust.js';
@@ -229,6 +230,8 @@ export function NativeSheets() {
       return <SendBackSheet planId={sheet.planId} milestone={sheet.milestone} close={close} />;
     case 'plan_mode':
       return <PlanModeSheet key={sheet.planId} planId={sheet.planId} close={close} />;
+    case 'plan_settings':
+      return <PlanSettingsSheet key={sheet.planId} planId={sheet.planId} close={close} />;
     case 'git_trouble':
       return <GitTroubleSheet key={`${sheet.wsId}:${sheet.trouble.kind}`} wsId={sheet.wsId} trouble={sheet.trouble} retry={sheet.retry} close={close} />;
     case 'share_copy':

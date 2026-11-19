@@ -92,7 +92,7 @@ function ProviderBox({ card, now }: { card: ProviderCard; now: number }) {
         <>
           {card.plan ? <span className={s.planBadge}>{card.plan}</span> : null}
           <DefaultChip card={card} />
-          <IconButton icon="more" label={details ? 'Hide details' : 'Details'} active={details} onClick={() => setDetails(!details)} />
+          <IconButton size="small" icon="more" label={details ? 'Hide details' : 'Details'} active={details} onClick={() => setDetails(!details)} />
         </>
       }
     >

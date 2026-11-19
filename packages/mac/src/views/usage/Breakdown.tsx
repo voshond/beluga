@@ -116,9 +116,9 @@ function Row({ r, state, scale, color, measured, now }: { r: WsRow; state: AppSt
           <Tokens tokens={r.tokens} cost={r.cost} max={scale.tokens} />
         </span>
         <Trailing when={r.lastActive ? ago(r.lastActive, now) : ''}>
-          {r.archivable ? <IconButton icon="archive" label={`Archive ${w.name}…`} onClick={() => actions.run({ type: 'ws', id: w.id, action: 'archive' })} /> : null}
-          <IconButton icon="folder" label={revealLabel()} onClick={() => actions.run({ type: 'ws', id: w.id, action: 'finder' })} />
-          <IconButton icon="forward" label={`Open ${w.name}`} onClick={open} />
+          {r.archivable ? <IconButton size="small" icon="archive" label={`Archive ${w.name}…`} onClick={() => actions.run({ type: 'ws', id: w.id, action: 'archive' })} /> : null}
+          <IconButton size="small" icon="folder" label={revealLabel()} onClick={() => actions.run({ type: 'ws', id: w.id, action: 'finder' })} />
+          <IconButton size="small" icon="forward" label={`Open ${w.name}`} onClick={open} />
         </Trailing>
       </div>
     </ActionsContext>
@@ -149,7 +149,7 @@ function AgentsRow({ p, scale, color }: { p: ProjectRow; scale: Scale; color: st
       </span>
       <span role="cell" />
       <Trailing when="">
-        <IconButton icon="archive" label="Clean Up Sub-agent Worktrees…" onClick={clean} />
+        <IconButton size="small" icon="archive" label="Clean Up Sub-agent Worktrees…" onClick={clean} />
       </Trailing>
     </div>
   );
@@ -186,7 +186,7 @@ function ProjectHead({ p, scale, color, now }: { p: ProjectRow; scale: Scale; co
         </span>
       </span>
       <Trailing when={p.lastActive ? ago(p.lastActive, now) : ''}>
-        {main ? <IconButton icon="folder" label={revealLabel(p.project.name)} onClick={() => actions.run({ type: 'ws', id: main.id, action: 'finder' })} /> : null}
+        {main ? <IconButton size="small" icon="folder" label={revealLabel(p.project.name)} onClick={() => actions.run({ type: 'ws', id: main.id, action: 'finder' })} /> : null}
       </Trailing>
     </div>
   );
@@ -205,7 +205,7 @@ export function Breakdown({ state, rows, sort, onSort, measured, now }: { state:
     <section className={s.breakdown} aria-label="By project">
       <header className={s.breakdownHead}>
         <h2 className={s.sectionTitle}>By project</h2>
-        <Segmented label="Sort by" value={sort} options={SORTS} onChange={onSort} />
+        <Segmented size="small" label="Sort by" value={sort} options={SORTS} onChange={onSort} />
       </header>
       <div role="table" aria-label="Disk and agent usage by workspace" className={s.table}>
         <div role="row" className={s.columnsHead}>

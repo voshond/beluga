@@ -3,6 +3,8 @@ import type { Actor } from '../../../../src/core/board/model.js';
 import { AUTONOMY_INFO, type Autonomy, MAX_PLAN_REPOS, type Plan, type PlanBody, type PlanEvent, type PlanMilestone, type PlanPr, type PlansState, diffBodies, draftRepoPlan, isMultiRepo, milestoneDeps, milestoneRepos, planBranchFor, planRepos, planTitle, prRef, reviewState, shownBody } from '../../../../src/core/plans/model.js';
 import { type MilestoneState, type MilestoneView, type NextStep, type PlanView, type ShipRepo, type TaskState, type TaskView, agentNowWords } from '../../../../src/core/plans/progress.js';
 import { pulseWords } from '../../../../src/core/plans/watchdog.js';
+import { taskTimes } from '../../../../src/core/plans/times.js';
+import { ago } from '../tasks/tasks-model.js';
 
 /**
  * The Plans screens' pure parts (no DOM): words and tones for states, what a plan waits for as a
@@ -93,7 +95,15 @@ export function planStatus(view: Pick<PlanView, 'plan' | 'next'>): { readonly la
  */
 export function taskWords(t: TaskView, now: number): { readonly label: string; readonly tone: Tone; readonly sub?: string } {
   const base = TASK_STATE[t.state];
-  if (!t.pulse || t.combining) return { ...base, ...(t.state === 'running' && t.step ? { sub: t.step } : t.state === 'blocked' || t.state === 'later' ? (t.why ? { sub: t.why } : {}) : {}) };
+  if (!t.pulse || t.combining) {
+    const said = t.state === 'running' && t.step ? t.step : t.state === 'blocked' || t.state === 'later' ? t.why : undefined;
+    // Every task on the board says when it last changed, not only the ones at work now.
+    // `now` 0: the caller has no clock (a label only): no time rather than a wrong "just now".
+    const at = t.issue && t.state !== 'later' && now > 0 ? taskTimes(t.issue) : undefined;
+    const when = at ? `Updated ${ago(at.updated, now)}` : undefined;
+    const sub = [said, when].filter(Boolean).join(' · ');
+    return { ...base, ...(sub ? { sub } : {}) };
+  }
   const w = pulseWords(t.pulse, now);
   // Woken: the card says so while it works again.
   const sub = t.watch && !t.watch.needsYou && t.pulse.kind !== 'stopped' && t.pulse.kind !== 'waiting' ? `${w.sub ?? ''}${w.sub ? ' · ' : ''}${t.watch.line}` : w.sub;

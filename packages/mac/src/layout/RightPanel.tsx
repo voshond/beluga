@@ -222,7 +222,7 @@ function ViewSwitch({ views, tab, pane }: { views: readonly PanelTab[]; tab: Pan
   if (views.length < 2) return null;
   return (
     <div className={s.views}>
-      <Segmented
+      <Segmented size="small"
         radio
         label={`${PANEL_LABELS[views[0]!]} views`}
         value={tab}
@@ -281,7 +281,7 @@ function Pane({ pane, lead, style, badges, settled }: { pane: PaneId; lead: bool
         {dock ? <Icon name="terminal" size={12} className={s.dockMark} /> : null}
         <TabStrip pane={pane} tabs={tabs} tab={tab} open={open} badges={badges} dock={dock} />
         {dock ? (
-          <IconButton icon={open ? 'chevronDown' : 'chevronUp'} label={open ? 'Hide the terminal dock' : 'Show the terminal dock'} className={s.paneToggle} onClick={() => setPrefs({ bottomOpen: !open })} />
+          <IconButton size="small" icon={open ? 'chevronDown' : 'chevronUp'} label={open ? 'Hide the terminal dock' : 'Show the terminal dock'} className={s.paneToggle} onClick={() => setPrefs({ bottomOpen: !open })} />
         ) : null}
       </header>
       {open ? (

@@ -64,6 +64,12 @@ export interface AgentRunInput {
   readonly env?: Readonly<Record<string, string>>;
   /** Your own runs: your own MCP servers from Claude Code (agent/owner-mcp.ts); never a friend's or a guest's. */
   readonly ownerMcp?: boolean;
+  /**
+   * You watch this run's chat (you sent it: not a Sentinel run, an external agent or another chat's
+   * agent), so Claude Code tells your MCP servers their apps are drawn (runner.ts withAppsHost). A
+   * server may then say less to the model, as the view shows the rest.
+   */
+  readonly appsShown?: boolean;
   /** Claude in Chrome (agent/chrome.ts): as usual on a run you typed, asking you on any other. Unset: no Chrome (a guest's run). */
   readonly chrome?: import('./chrome.js').ChromeAccess;
   /** Auto-compact threshold (percent) for Claude Code's own compaction; unset: auto-compact is off. */

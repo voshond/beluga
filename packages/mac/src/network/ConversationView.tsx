@@ -427,7 +427,7 @@ function Intro({ friend, group }: { friend?: FriendView; group?: GroupView }) {
       </div>
       {group.admin && group.active ? (
         <div className={s.introActions}>
-          <Button icon="plus" onClick={() => openNet({ kind: 'add_people', groupId: group.id })}>
+          <Button size="small" icon="plus" onClick={() => openNet({ kind: 'add_people', groupId: group.id })}>
             Add People…
           </Button>
         </div>
@@ -635,7 +635,7 @@ function Conversation({ id }: { id: string }) {
         title="Talking with friends is off"
         detail="Turn it on to see your friends and groups."
         action={
-          <Button variant="primary" onClick={() => void client.api.network.setEnabled(true)}>
+          <Button size="small" variant="primary" onClick={() => void client.api.network.setEnabled(true)}>
             Turn On
           </Button>
         }

@@ -3,7 +3,7 @@ import type { AppActResult, AppReadResult, AppStepRef, AppToolResult, McpAppView
 import type { DisplayMode } from '@beluga/mcp-apps/domain/app-requests.js';
 import { useApi, useApp } from '../../lib/beluga.js';
 import { openExternal } from '../../lib/system.js';
-import { AppBridge, type HostContext, MAX_APP_HEIGHT, toolInfoOf, type ToolResultParams } from './bridge.js';
+import { AppBridge, type HostContext, MAX_APP_HEIGHT, toolInfoOf, toolResultOf } from './bridge.js';
 import { liftForFullscreen } from './fullscreen.js';
 import s from './mcp-app.module.css';
 
@@ -43,7 +43,8 @@ function Frame({ view, at }: { view: OkView; at: AppStepRef }) {
   const [mode, setMode] = useState<DisplayMode>('inline');
   // An approval waiting in this chat is drawn under the app: fullscreen gives way to it.
   const asking = useApp((st) => st.approvals.some((a) => a.channel === at.channel));
-  const result = useMemo(() => resultOf(view), [view]);
+  // The same object while the view reads the same.
+  const result = useMemo(() => toolResultOf(view.result), [view]);
 
   // One bridge per frame address: it answers only the frame's own window.
   useEffect(() => {
@@ -132,13 +133,6 @@ function Frame({ view, at }: { view: OkView; at: AppStepRef }) {
       />
     </div>
   );
-}
-
-/** The result as MCP's CallToolResult, the same object while the view reads the same. */
-function resultOf(view: OkView): ToolResultParams | undefined {
-  const r = view.result;
-  if (!r) return undefined;
-  return { content: r.text !== undefined ? [{ type: 'text', text: r.text }] : [], ...(r.structuredContent !== undefined ? { structuredContent: r.structuredContent } : {}), ...(r.isError ? { isError: true } : {}) };
 }
 
 /** What the app sent, as the IPC's object (the bridge forwards only objects; anything else is an empty one, refused there). */

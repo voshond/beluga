@@ -174,6 +174,26 @@ export type IconName = keyof typeof PATHS | AgentMark;
 
 const isMark = (name: IconName): name is AgentMark => name in AGENT_MARKS;
 
+/** An icon's outline, for drawing it outside the page (a native menu's row: lib/native-menu.ts). */
+export interface IconShape {
+  readonly d: string;
+  /** The side of its square grid: 16, or an agent mark's own. */
+  readonly grid: number;
+  /** A filled mark (its own colour when it has one); otherwise a 1.5 stroke. */
+  readonly filled: boolean;
+  readonly color?: string;
+  readonly evenOdd?: boolean;
+}
+
+export function iconShape(name: IconName): IconShape {
+  if (isMark(name)) {
+    const mark = AGENT_MARKS[name];
+    const grid = Number(AGENT_MARK_VIEWBOX.split(' ')[2]) || 24;
+    return { d: mark.d, grid, filled: true, ...(mark.color ? { color: mark.color } : {}), ...(mark.evenOdd ? { evenOdd: true } : {}) };
+  }
+  return { d: PATHS[name], grid: 16, filled: false };
+}
+
 export function Icon({ name, size = 16, ...rest }: { name: IconName; size?: number } & SVGProps<SVGSVGElement>) {
   if (isMark(name)) {
     const mark = AGENT_MARKS[name];

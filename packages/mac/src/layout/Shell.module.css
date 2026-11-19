@@ -87,3 +87,8 @@
   border-radius: 4px;
   background: var(--code-bg);
 }
+
+/* Liquid Glass: the window behind the sidebar and the panel is the content's own colour; they float over it. */
+:global(:root[data-os='mac'][data-transparency='full']) .app {
+  background: var(--bg);
+}

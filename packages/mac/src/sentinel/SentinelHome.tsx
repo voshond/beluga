@@ -218,7 +218,7 @@ function Lived({ state, scope, setScope, board, setBoard }: { state: SentinelSta
         </label>
         <span className={s.grow} />
         <ActionsDropdown items={more}>
-          <IconButton icon="more" label="More for Sentinel" />
+          <IconButton size="small" icon="more" label="More for Sentinel" />
         </ActionsDropdown>
         {asking ? null : (
           <Tip label="Say what you want watched; your agent sets it up beside this page">
@@ -365,7 +365,7 @@ const WatchRow = memo(function WatchRow({ item, state, now, a }: { item: Sentine
         <span className={s.next}>{row.last && !item.paused ? (row.next ?? (item.trigger.kind === 'manual' ? 'by hand' : 'on its event')) : item.paused ? '' : (row.next ?? '')}</span>
         <span className={s.rowMore} onClick={(e) => e.stopPropagation()}>
           <ActionsDropdown items={menu()}>
-            <IconButton icon="more" label={`What to do with ${item.name}`} />
+            <IconButton size="small" icon="more" label={`What to do with ${item.name}`} />
           </ActionsDropdown>
         </span>
       </div>
@@ -499,7 +499,7 @@ function FirstVisit() {
         <div className={s.composerRow}>
           <span className={s.composerHint}>Your agent asks before anything new can run</span>
           <span className={s.grow} />
-          <IconButton icon="send" label="Ask Your Agent" className={s.send} disabled={!words.trim()} onClick={send} />
+          <IconButton size="small" icon="send" label="Ask Your Agent" className={s.send} disabled={!words.trim()} onClick={send} />
         </div>
       </div>
       <div className={s.ideas} role="list" aria-label="Ideas">

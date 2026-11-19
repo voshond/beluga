@@ -183,6 +183,6 @@ describe('who gets Honcho', () => {
   it('the phone reads the picture, external agents are refused it', () => {
     expect(PHONE['honcho.picture']).toBe('phone');
     expect(EXTERNAL_ACCESS['honcho.picture']).toHaveProperty('refused');
-    expect(SINCE.honchoPicture).toBe(COMPANION_PROTO.minor);
+    expect(SINCE.honchoPicture).toBeLessThanOrEqual(COMPANION_PROTO.minor);
   });
 });

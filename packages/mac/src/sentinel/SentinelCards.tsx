@@ -151,7 +151,7 @@ export function ScheduleControls({ t, set, note: heavy }: { t: ScheduleTrigger; 
   return (
     <>
       <div className={s.every}>
-        <Segmented label="How often" value={everySegment(t)} onChange={(every) => (every === everySegment(t) ? undefined : set(withEvery(t, every)))} options={EVERY_CHOICES} />
+        <Segmented size="small" label="How often" value={everySegment(t)} onChange={(every) => (every === everySegment(t) ? undefined : set(withEvery(t, every)))} options={EVERY_CHOICES} />
       </div>
       {often ? (
         <div className={s.controlRow}>
@@ -238,7 +238,7 @@ export function StepsCard({ item, save }: { item: Sentinel; save: Save }) {
         <h3 className={s.cardTitle}>Steps</h3>
         <span className={s.grow} />
         {steps.length ? (
-          <Segmented<'list' | 'graph'>
+          <Segmented<'list' | 'graph'> size="small"
             label="Show the steps as"
             value={look}
             onChange={setLook}
@@ -369,9 +369,9 @@ function StepItem({
           </span>
           {later ? <span className={s.stepLater}>{LATER}: a run stops here until then.</span> : null}
         </span>
-        {later ? null : <IconButton icon={open ? 'chevronUp' : 'chevronDown'} label={open ? 'Fold' : 'Show its fields'} onClick={toggle} aria-expanded={open} />}
+        {later ? null : <IconButton size="small" icon={open ? 'chevronUp' : 'chevronDown'} label={open ? 'Fold' : 'Show its fields'} onClick={toggle} aria-expanded={open} />}
         <ActionsDropdown items={menu}>
-          <IconButton icon="more" label={`More for “${step.name}”`} />
+          <IconButton size="small" icon="more" label={`More for “${step.name}”`} />
         </ActionsDropdown>
       </div>
       {open && !later ? (
@@ -472,7 +472,7 @@ function ScriptFields({ step, change }: { step: ScriptStep; change: (patch: Part
     <>
       <div className={s.controlRow}>
         <span className={s.controlLabel}>It runs</span>
-        <Segmented<'command' | 'script'>
+        <Segmented<'command' | 'script'> size="small"
           label="It runs"
           value={own ? 'script' : 'command'}
           onChange={setMode}
@@ -615,7 +615,7 @@ function Headers({ headers, change }: { headers: Readonly<Record<string, string>
             <TextInput value={r.key} onChange={(key) => set(i, { key })} onBlur={flush} mono placeholder="Authorization" aria-label={`Header ${i + 1}’s name`} />
             <TextInput value={r.value} onChange={(value) => set(i, { value })} onBlur={flush} mono placeholder="Bearer $API_KEY" aria-label={`Header ${i + 1}’s value`} />
             {r.key || r.value ? (
-              <IconButton
+              <IconButton size="small"
                 icon="x"
                 label={`Remove ${r.key || 'this header'}`}
                 onClick={() => {

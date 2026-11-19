@@ -46,7 +46,7 @@ function EnvSendRow({ ask }: { ask: EnvSendAsk }) {
         Don’t Send
       </Button>
       <ActionsDropdown items={[{ label: 'Always for This Project', hint: 'Settings › Your Computers takes it back', onSelect: () => decide('always') }]}>
-        <IconButton icon="more" label="More for sending env files" disabled={busy} />
+        <IconButton size="small" icon="more" label="More for sending env files" disabled={busy} />
       </ActionsDropdown>
     </div>
   );
@@ -90,7 +90,7 @@ function EnvAsk({ wsId, changes, name }: { wsId: string; changes: readonly EnvCh
         </Button>
       </Tip>
       <ActionsDropdown items={[{ label: 'Keep in This Worktree Only', hint: 'asked again if it changes', onSelect: () => act(() => api.workspaces.keepEnvHere(wsId)) }]}>
-        <IconButton icon="more" label="More for these env changes" disabled={busy} />
+        <IconButton size="small" icon="more" label="More for these env changes" disabled={busy} />
       </ActionsDropdown>
     </div>
   );

@@ -77,50 +77,50 @@ function Approvals({ channel }: { channel?: string }) {
       {first.kind === 'secret' ? (
         // A .env file: once, always for this project, or always (Settings › Environment takes it back).
         <div className={s.actions}>
-          <Button variant="primary" onClick={() => void api.host.answerApproval('yes', first.id)}>
+          <Button size="small" variant="primary" onClick={() => void api.host.answerApproval('yes', first.id)}>
             Allow once
           </Button>
           {first.project ? (
             <Tip label="Your agent reads this project’s .env files without asking. Change it in Settings › Environment.">
-              <Button onClick={() => void api.host.answerApproval('project', first.id)}>Always for {first.project}</Button>
+              <Button size="small" onClick={() => void api.host.answerApproval('project', first.id)}>Always for {first.project}</Button>
             </Tip>
           ) : null}
           <Tip label="In every project. Change it in Settings › Environment.">
-            <Button variant="quiet" onClick={() => void api.host.answerApproval('always', first.id)}>
+            <Button size="small" variant="quiet" onClick={() => void api.host.answerApproval('always', first.id)}>
               Always
             </Button>
           </Tip>
-          <Button variant="quiet" onClick={() => void api.host.answerApproval('no', first.id)}>
+          <Button size="small" variant="quiet" onClick={() => void api.host.answerApproval('no', first.id)}>
             Don’t allow
           </Button>
         </div>
       ) : first.kind === 'chain' ? (
         // Agents hit a limit on messages to each other: go on with a new budget, or stop the chain.
         <div className={s.actions}>
-          <Button variant="primary" onClick={() => void api.host.answerApproval('yes', first.id)}>
+          <Button size="small" variant="primary" onClick={() => void api.host.answerApproval('yes', first.id)}>
             Continue
           </Button>
-          <Button variant="quiet" onClick={() => void api.host.answerApproval('no', first.id)}>
+          <Button size="small" variant="quiet" onClick={() => void api.host.answerApproval('no', first.id)}>
             Stop
           </Button>
         </div>
       ) : first.once ? (
         // A friend's request for a secret: asked each time, so there's no Always.
         <div className={s.actions}>
-          <Button variant="primary" onClick={() => void api.host.answerApproval('yes', first.id)}>
+          <Button size="small" variant="primary" onClick={() => void api.host.answerApproval('yes', first.id)}>
             Allow once
           </Button>
-          <Button variant="quiet" onClick={() => void api.host.answerApproval('no', first.id)}>
+          <Button size="small" variant="quiet" onClick={() => void api.host.answerApproval('no', first.id)}>
             Decline
           </Button>
         </div>
       ) : (
         <div className={s.actions}>
-          <Button variant="primary" onClick={() => void api.host.answerApproval('yes', first.id)}>
+          <Button size="small" variant="primary" onClick={() => void api.host.answerApproval('yes', first.id)}>
             Allow
           </Button>
-          <Button onClick={() => void api.host.answerApproval('always', first.id)}>Always allow</Button>
-          <Button variant="quiet" onClick={() => void api.host.answerApproval('no', first.id)}>
+          <Button size="small" onClick={() => void api.host.answerApproval('always', first.id)}>Always allow</Button>
+          <Button size="small" variant="quiet" onClick={() => void api.host.answerApproval('no', first.id)}>
             Deny
           </Button>
         </div>
@@ -180,7 +180,7 @@ function Question({ channel }: { channel?: string }) {
           <Markdown text={q.question.plan} />
         </div>
         <div className={s.actions}>
-          <Button variant="primary" onClick={() => actions.run({ type: 'answer', qid: q.qid, pick: 'approve' })}>
+          <Button size="small" variant="primary" onClick={() => actions.run({ type: 'answer', qid: q.qid, pick: 'approve' })}>
             Approve plan
           </Button>
           <span className={s.hint}>{builds ? `then ${builds} builds it, or type what to change below` : 'or type what to change below'}</span>
@@ -246,7 +246,7 @@ function QuestionOptions({ q, current, chosen }: QuestionOptionsProps) {
       </div>
       {current.multiSelect ? (
         <div className={s.actions}>
-          <Button variant="primary" onClick={() => actions.run({ type: 'answer', qid: q.qid, pick: 'done', question: current.question })}>
+          <Button size="small" variant="primary" onClick={() => actions.run({ type: 'answer', qid: q.qid, pick: 'done', question: current.question })}>
             Done
           </Button>
         </div>
@@ -314,11 +314,11 @@ function Knock() {
         </span>
       </div>
       <div className={s.actions}>
-        <Button variant="primary" onClick={() => actions.run({ type: 'knock', peerId: knock.peerId, pick: 'in' })}>
+        <Button size="small" variant="primary" onClick={() => actions.run({ type: 'knock', peerId: knock.peerId, pick: 'in' })}>
           Let in
         </Button>
-        <Button onClick={() => actions.run({ type: 'knock', peerId: knock.peerId, pick: 'watch' })}>Let in to watch</Button>
-        <Button variant="quiet" onClick={() => actions.run({ type: 'knock', peerId: knock.peerId, pick: 'decline' })}>
+        <Button size="small" onClick={() => actions.run({ type: 'knock', peerId: knock.peerId, pick: 'watch' })}>Let in to watch</Button>
+        <Button size="small" variant="quiet" onClick={() => actions.run({ type: 'knock', peerId: knock.peerId, pick: 'decline' })}>
           Not now
         </Button>
       </div>
@@ -357,10 +357,10 @@ function BefriendHost() {
         <span className={s.title}>Add {host.name} as a friend?</span>
       </div>
       <div className={s.actions}>
-        <Button variant="primary" onClick={() => void befriend(client, host.peerId, host.name)}>
+        <Button size="small" variant="primary" onClick={() => void befriend(client, host.peerId, host.name)}>
           Add as Friend
         </Button>
-        <Button variant="quiet" onClick={later}>
+        <Button size="small" variant="quiet" onClick={later}>
           Not Now
         </Button>
       </div>

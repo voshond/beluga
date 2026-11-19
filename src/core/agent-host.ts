@@ -1743,6 +1743,9 @@ export class AgentHost {
         ...(routed ? { model: routed.model, effort: place?.effort ?? routed.effort, routing: routed.routing } : this.modelFor(place?.model, place?.agent ?? named, place?.effort)),
         // Your MCP servers (your logins: Figma, Linear…) are for runs you asked for, never a friend's.
         ...(yours ? { ownerMcp: true } : {}),
+        // Its MCP Apps are drawn for you to see (a server may tell the model so and say less): not for a
+        // Sentinel run's report, an external agent or another chat's agent, who read only the answer.
+        ...(yours && !external && !sentinel?.inRun && !body.viaAgent ? { appsShown: true } : {}),
         // Claude in Chrome: as usual on what you sent yourself, asking you on anything else (a Sentinel run included).
         ...this.chromeFor({ requestId: body.requestId, from, ...(external ? { external } : {}), guest: from !== this.selfId && Boolean(this.deps.isGuest?.(from)), automatic: Boolean(sentinel?.inRun), channel: body.channel, who: chromeAsker(from === this.selfId, external ? requesterName : undefined, requesterName, sentinel?.inRun) }),
         // Your own flags for `claude` and `codex` (Settings › Agents), never on a friend's run or an agent's below full.
