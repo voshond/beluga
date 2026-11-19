@@ -1473,8 +1473,8 @@ export class WorkspaceManager {
     this.patchRecord(id, { thread });
   }
 
-  /** Pick the thinking effort for one workspace's conversation (undefined: Settings'). */
-  setEffort(id: string, effort: Effort | undefined): void {
+  /** Pick the thinking effort for one workspace's conversation (null: Auto here; undefined: Settings'). */
+  setEffort(id: string, effort: Effort | null | undefined): void {
     this.require(id);
     this.patchRecord(id, { effort });
   }

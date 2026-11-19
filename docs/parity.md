@@ -413,6 +413,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `workbench.shareScripts` | ✓ |
 | `workbench.setPrInstructions` | Create PR with Instructions… › “Use these for every pull request in <project>” (yours, kept in Beluga; every agent-written PR in that project follows them, beside beluga.json's `prPrompt`) |
 | `workbench.setModel` | ✓ (the composer's agent picker: a model of the same runtime, for this conversation or new ones; the phone's picker since 1.32) |
+| `workbench.setEffort` | ✓ (the composer's agent picker: Thinking, Auto to Max, for this conversation or new ones) |
 | `workbench.setAgent` | ✓ (the agent picker's other runtimes, grouped Claude › Codex › Local model; a runtime this Mac doesn't run is greyed with why; the phone's picker since 1.32) |
 | `workbench.createPr` | ✓ |
 | `workbench.quickPr` | ✓ the toolbar's Create PR (and Create Draft PR under its chevron; in a fork, Create PR on the original too: pushed to the fork, opened on the repository it was forked from; on someone's fork's pull request that can't be pushed to, Open Your Own PR), the Changes panel's Create PR. Both lead with the way you last picked (Mac, `lib/pr-way.ts`) |

@@ -29,6 +29,7 @@ import { CONTINUE_PROMPT } from '../shared/run-failure.js';
 import type { NoticeEvent } from './notify.js';
 import { type SearchSource, searchConversations } from './search.js';
 import { type LogItem, type MergedMark, type Prefs, type Store, mergedText, shippedText } from './store.js';
+import type { Effort } from '../shared/settings-schema.js';
 import { lastLogAt } from './triage/facts.js';
 import { triageKey } from './triage/model.js';
 import { addTemplate, loadTemplates, removeTemplate } from './templates.js';
@@ -288,6 +289,8 @@ const samePr = (a: PullRequest | undefined, b: PullRequest | undefined): boolean
 const repoOfPr = (url: string): string => url.replace(/\/pull\/\d+.*$/, '').toLowerCase();
 
 /** All an error said (a push's whole output, not just its line). */
+/** GitHub's answer when the branch adds nothing to its base. */
+const NOTHING_TO_PR = /No commits between/i;
 const rawOf = (err: unknown): string => (err && typeof err === 'object' && 'raw' in err && typeof err.raw === 'string' ? err.raw : err instanceof Error ? err.message : String(err));
 /** An error's first line ("no reason given" when it has none). */
 const firstLine = (err: unknown): string => (err instanceof Error ? err.message : String(err)).split('\n').find((l) => l.trim())?.trim() ?? 'no reason given';
@@ -439,6 +442,21 @@ export class Workbench {
   }
 
   /**
+   * Pick how hard a conversation's agent thinks ('auto': it decides, whatever Settings says); a
+   * conversation keeps its own, so another chat's pick never changes it. `channel` undefined (or
+   * not a conversation) sets the default for new ones.
+   */
+  setEffort(channel: string | undefined, effort: Effort | 'auto'): void {
+    const id = channel?.startsWith('ws:') ? channel.slice(3) : undefined;
+    if (id && this.manager.find(id)) {
+      this.manager.setEffort(id, effort === 'auto' ? null : effort);
+      void this.deps.controller.refresh();
+      return;
+    }
+    this.deps.setPrefs({ effort: effort === 'auto' ? undefined : effort });
+  }
+
+  /**
    * Pick the agent for one conversation (undefined: your default); every run from there uses it.
    * `mode`: when the new agent can't read the session, switch quietly or have the old one write a note (BLG-592).
    */
@@ -545,6 +563,12 @@ export class Workbench {
       try {
         pr = await (this.deps.createPr ?? createPr)(ws.path, { base: fork?.branch ?? base, head: branch, ...text, ...(opts.draft ? { draft: true } : {}), ...(opts.https ? { https: true } : {}), ...(fork ? { to: fork } : {}) });
       } catch (err) {
+        // Its work is already on the base (merged or pushed there before): there's nothing to review, so no error.
+        if (NOTHING_TO_PR.test(rawOf(err))) {
+          const message = `Nothing to open a pull request for: everything on ${branch} is already on ${fork ? `${fork.owner}/${fork.repo}’s ` : ''}${fork?.branch ?? base}`;
+          this.deps.toast(message, 'info');
+          return { ok: false, message };
+        }
         return this.troubleOr(ws, err, 'GitHub didn’t open the pull request');
       }
       this.troubles.delete(id);

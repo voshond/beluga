@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { imageReadOf } from '../packages/mac/src/chat/steps/image-read.js';
-import { dropHits, droppedFiles, sameBox } from '../packages/mac/src/chat/drop-model.js';
+import { dropHits, dropScale, droppedFiles, sameBox } from '../packages/mac/src/chat/drop-model.js';
 
 /** A step reading a picture shows its name as a badge (BLG-19). */
 describe('image reads in steps', () => {
@@ -37,6 +37,18 @@ describe('Finder drops', () => {
     expect(dropHits(box, 50, 100)).toBe(false);
     expect(dropHits({ left: 0, top: 0, right: 0, bottom: 0 }, 0, 0)).toBe(false);
     expect(dropHits(undefined, 10, 10)).toBe(false);
+  });
+
+  // BLG-1000: the app says "physical", but on a Mac (and Linux) it gives the page's own pixels;
+  // dividing by a Retina screen's 2 put a drop on the home composer up in the header.
+  it('reads the drop where the pointer is, on a Retina Mac too', () => {
+    expect(dropScale('mac', 2)).toBe(1);
+    expect(dropScale('linux', 2)).toBe(1);
+    expect(dropScale('windows', 1.5)).toBe(1.5);
+    expect(dropScale('windows', 0)).toBe(1);
+    const composer = { left: 300, top: 260, right: 1100, bottom: 520 };
+    expect(dropHits(composer, 700, 400, dropScale('mac', 2))).toBe(true);
+    expect(dropHits(composer, 1050, 600, dropScale('windows', 1.5))).toBe(true);
   });
 
   it('knows the same place', () => {

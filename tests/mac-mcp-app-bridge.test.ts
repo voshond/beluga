@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AppBridge, LINK_GAP_MS, MAX_APP_HEIGHT, PROTOCOL_VERSION, type BridgeInit } from '../packages/mac/src/chat/mcp-app/bridge.js';
+import { AppBridge, LINK_GAP_MS, MAX_APP_HEIGHT, PROTOCOL_VERSION, toolInfoOf, type BridgeInit, type HostContext } from '../packages/mac/src/chat/mcp-app/bridge.js';
 
 const FRAME = { name: 'the app window' };
 const OTHER = { name: 'another window' };
@@ -30,6 +30,14 @@ describe('AppBridge', () => {
     const caps = (posted[0]!.result as { hostCapabilities: Record<string, unknown> }).hostCapabilities;
     expect(caps.serverTools).toBeUndefined();
     expect(caps.openLinks).toBeUndefined();
+  });
+
+  it('tells the app which tool it shows (hostContext.toolInfo), so a page shared by tools picks its view', () => {
+    const hostContext = { ...INIT.hostContext, toolInfo: toolInfoOf('create_doc') };
+    const { posted, send } = rig({ ...INIT, hostContext });
+    send(initialize);
+    const ctx = (posted[0]!.result as { hostContext: HostContext }).hostContext;
+    expect(ctx.toolInfo).toEqual({ tool: { name: 'create_doc', inputSchema: { type: 'object' } } });
   });
 
   it('sends the tool input, then its result, once the app said initialized', () => {

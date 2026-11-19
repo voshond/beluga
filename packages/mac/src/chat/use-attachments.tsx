@@ -7,7 +7,7 @@ import { cx } from '../components/ui.js';
 import { type DropVerdict, type Sending, envAsk, planDrop, sendFiles, sentShare } from './attachments.js';
 import { openSheet } from '../lib/sheets.js';
 import { currentMachines } from '../machines/use-machines.js';
-import { type Box, MAX_DROPPED, dropHits, droppedFiles, sameBox } from './drop-model.js';
+import { type Box, MAX_DROPPED, appDropScale, dropHits, droppedFiles, sameBox } from './drop-model.js';
 import { imageLinksIn } from '@beluga/shared/attachment-links.js';
 import { type RefKey, boxRef, plainRefs, refKey, referencedImages, withoutRef } from './image-refs.js';
 import { keepPreview, openLightbox, pendingImage, previewOf } from './images.js';
@@ -449,7 +449,7 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
       if (!el || el.disabled || el.readOnly) return undefined;
       const r = (el.closest('[data-drop-zone]') ?? el.parentElement)?.getBoundingClientRect();
       const at = r ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : undefined;
-      return dropHits(at, x, y, window.devicePixelRatio || 1) ? at : undefined;
+      return dropHits(at, x, y, appDropScale()) ? at : undefined;
     };
     void import('@tauri-apps/api/webview').then(async ({ getCurrentWebview }) => {
       const un = await getCurrentWebview().onDragDropEvent((e) => {

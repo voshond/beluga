@@ -545,8 +545,8 @@ export interface AgentPlace {
   readonly onSession: (sessionId: string) => void;
   /** The model picked for this conversation. */
   readonly model?: string;
-  /** The thinking effort picked for this conversation (unset: Settings'). */
-  readonly effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  /** The thinking effort picked for this conversation (null: Auto, picked here; unset: Settings'). */
+  readonly effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
   /** A project's main folder: questions only, nothing may change (see policy.ts). */
   /** `stays`: a read-only thread (core/threads) stays read-only: it cannot move itself into a worktree. */
   readonly askOnly?: { readonly project: string; readonly stays?: boolean };

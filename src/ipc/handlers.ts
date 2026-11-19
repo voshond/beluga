@@ -325,6 +325,7 @@ export const HANDLERS = {
   'workbench.setPrInstructions': (s, projectId, text) => bench(s)?.setPrInstructions(projectId, text),
   'workbench.setAgent': (s, channel, agent, mode) => s.workbench?.setAgent(channel, agent ?? undefined, mode) ?? false,
   'workbench.setModel': (s, channel, value) => (s.workbench ? s.workbench.setModel(channel, value) : s.setPrefs({ model: value || undefined })),
+  'workbench.setEffort': (s, channel, effort) => (s.workbench ? s.workbench.setEffort(channel, effort) : s.setPrefs({ effort: effort === 'auto' ? undefined : effort })),
   'workbench.createPr': (s, id, extra) => bench(s)?.createPr(id, extra),
   'workbench.quickPr': (s, id, opts) => bench(s)?.quickPr(id, opts),
   'workbench.mergeToBase': (s, id, opts) => bench(s)?.mergeToBase(id, opts),

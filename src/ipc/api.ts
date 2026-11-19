@@ -430,6 +430,8 @@ export const API = {
   // Your own instructions for every pull request your agent writes in a project ('' clears them); kept in Beluga, not committed.
   'workbench.setPrInstructions': args(id, z.string().max(8000)),
   'workbench.setModel': args(opt(channel), z.string().max(80)),
+  /** A conversation's thinking effort, its own ('auto': the agent decides); no conversation: the default for new ones. */
+  'workbench.setEffort': args(opt(channel), z.enum([...EFFORTS, 'auto'])),
   /**
    * A conversation's agent (BLG-446): its runtime and model; null goes back to your default agent (nullish: over the socket a null arrives as undefined, see daemon/dispatch.ts).
    * Then, when the new agent can't read the session (BLG-592): 'quiet' switches now and sends the recent conversation with your next message; 'note' (left out) has the old agent write a handoff note first.

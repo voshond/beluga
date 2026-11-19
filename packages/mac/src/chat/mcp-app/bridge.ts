@@ -28,6 +28,18 @@ export interface HostContext {
   readonly containerDimensions: { readonly maxHeight: number; readonly width?: number };
   readonly locale: string;
   readonly platform: 'desktop';
+  /** The tool this app shows. A page that draws several tools picks its view by it (without it: "No binding"). */
+  readonly toolInfo?: ToolInfo;
+}
+
+/** SEP-1865's toolInfo. No `id`: that is the tools/call's JSON-RPC id, and Claude Code made the call, not Beluga. */
+export interface ToolInfo {
+  readonly tool: { readonly name: string; readonly inputSchema: { readonly type: 'object' } };
+}
+
+/** The tool by its own name on its server. The catalog keeps no schema, so a bare object one (apps match on the name). */
+export function toolInfoOf(name: string): ToolInfo {
+  return { tool: { name, inputSchema: { type: 'object' } } };
 }
 
 /** MCP's CallToolResult, as `ui/notifications/tool-result` carries it. */

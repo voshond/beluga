@@ -4,6 +4,7 @@ import { macTabs } from '../lib/go.js';
 import { newShares } from '@beluga/core/store.js';
 import { usageFor } from '@beluga/agent/usage.js';
 import { windowsOf } from '@beluga/ui/usage-cards.js';
+import { appDropScale } from '../chat/drop-model.js';
 import { myRuntime } from '../chat/ModelPicker.js';
 import { Icon } from '../components/Icon.js';
 import { Badge, IconButton, cx } from '../components/ui.js';
@@ -75,7 +76,7 @@ function useFolderDrop(): { ref: React.RefObject<HTMLElement | null>; over: bool
     let alive = true;
     const inside = (x: number, y: number): boolean => {
       const r = ref.current?.getBoundingClientRect();
-      const scale = window.devicePixelRatio || 1;
+      const scale = appDropScale();
       return !!r && x / scale >= r.left && x / scale <= r.right && y / scale >= r.top && y / scale <= r.bottom;
     };
     void import('@tauri-apps/api/webview').then(async ({ getCurrentWebview }) => {

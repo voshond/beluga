@@ -180,6 +180,7 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'workbench.shareScripts': 'gated',
   'workbench.setPrInstructions': { refused: PR_INSTRUCTIONS },
   'workbench.setModel': 'covered',
+  'workbench.setEffort': 'covered',
   'workbench.setAgent': 'covered',
   'workbench.createPr': 'covered',
   'workbench.quickPr': 'covered',

@@ -5,7 +5,7 @@ import type { AppState } from '@beluga/core/store.js';
 import { type AgentRef, CLAUDE_AGENT } from '@beluga/protocol.js';
 import { type HandoffMode, limitHit, needsHandoff } from '@beluga/shared/agent-handoff.js';
 import { runtimeMark } from '@beluga/shared/agent-marks.js';
-import { type AgentPicker, type AutoChoice, type PickerGroup, type PickerState, agentPicker, pickAction } from '@beluga/shared/agent-picker.js';
+import { type AgentPicker, type AutoChoice, type PickerGroup, type PickerState, agentPicker, effortIn, pickAction } from '@beluga/shared/agent-picker.js';
 import { conversationRoute, draftSummary, routableRuntime, routeModelLabel, routeSummary } from '@beluga/core/board/routing.js';
 import type { RuntimeModel } from '@beluga/shared/agent-runtimes.js';
 import type { AgentOption } from '@beluga/ui/agent-choice.js';
@@ -58,6 +58,8 @@ export const draftAutoChoice = (st: AppState, draft: AgentRef | undefined): Auto
 };
 
 const routedEffort = (st: AppState, channel: string): Effort | undefined => {
+  const own = channel.startsWith('ws:') ? st.projects.flatMap((p) => p.workspaces).find((w) => w.id === channel.slice(3))?.effort : undefined;
+  if (own) return undefined;
   const found = conversationRoute(st, channel, myRuntime(st.prefs));
   return found && !found.picked ? found.route.orchestrator.effort : undefined;
 };
@@ -139,7 +141,8 @@ export function ModelPicker({ channel, draft, onDraft, forWorktree, projectAgent
   // Only what the picker shows (not the whole state): not drawn again on every streamed event (KLD-48).
   const picker = useApp((st) => agentPicker(pickerState(st), channel, myRuntime(st.prefs), shownDraft, forWorktree ? draftAutoChoice(st, shownDraft) : onDraft ? undefined : autoChoice(st, channel)), samePicker);
   const draftAuto = useApp((st) => (forWorktree ? draftAutoChoice(st, shownDraft)?.runtime : undefined));
-  const chosenEffort = useApp((st) => st.prefs.effort);
+  // This conversation's own effort (the default for new ones): picking here never changes another chat's.
+  const chosenEffort = useApp((st) => effortIn(st, channel));
   const routed = useApp((st) => (draft ? undefined : routedEffort(st, channel)));
   const effort = routed ?? chosenEffort;
   const carried = useApp((st) => carriedOf(st, channel), sameCarried);
@@ -262,11 +265,11 @@ export function ModelPicker({ channel, draft, onDraft, forWorktree, projectAgent
                 <div className={s.track} role="radiogroup" aria-label="Thinking effort" style={{ '--at': level + 1, '--heat': level < 0 ? 0 : (level + 1) / EFFORTS.length } as CSSProperties}>
                   <span className={s.fill} aria-hidden />
                   <span className={s.thumb} aria-hidden />
-                  <button type="button" role="radio" aria-checked={!chosenEffort} className={cx(s.level, !chosenEffort && s.levelOn)} title="Your agent decides how much to think, case by case" onClick={() => void api.session.setPrefs({ effort: null })}>
+                  <button type="button" role="radio" aria-checked={!chosenEffort} className={cx(s.level, !chosenEffort && s.levelOn)} title="Your agent decides how much to think, case by case" onClick={() => void api.workbench.setEffort(conversation, 'auto')}>
                     Auto
                   </button>
                   {EFFORTS.map((e) => (
-                    <button key={e} type="button" role="radio" aria-checked={chosenEffort === e} disabled={!allowed.has(e)} title={allowed.has(e) ? EFFORT_INFO[e].detail : 'This model doesn’t take this level'} className={cx(s.level, chosenEffort === e && s.levelOn)} onClick={() => void api.session.setPrefs({ effort: e })}>
+                    <button key={e} type="button" role="radio" aria-checked={chosenEffort === e} disabled={!allowed.has(e)} title={allowed.has(e) ? EFFORT_INFO[e].detail : 'This model doesn’t take this level'} className={cx(s.level, chosenEffort === e && s.levelOn)} onClick={() => void api.workbench.setEffort(conversation, e)}>
                       {EFFORT_INFO[e].label}
                     </button>
                   ))}

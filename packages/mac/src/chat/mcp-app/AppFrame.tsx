@@ -3,7 +3,7 @@ import type { AppActResult, AppReadResult, AppStepRef, AppToolResult, McpAppView
 import type { DisplayMode } from '@beluga/mcp-apps/domain/app-requests.js';
 import { useApi, useApp } from '../../lib/beluga.js';
 import { openExternal } from '../../lib/system.js';
-import { AppBridge, type HostContext, MAX_APP_HEIGHT, type ToolResultParams } from './bridge.js';
+import { AppBridge, type HostContext, MAX_APP_HEIGHT, toolInfoOf, type ToolResultParams } from './bridge.js';
 import { liftForFullscreen } from './fullscreen.js';
 import s from './mcp-app.module.css';
 
@@ -51,7 +51,7 @@ function Frame({ view, at }: { view: OkView; at: AppStepRef }) {
     if (!el) return;
     const origin = new URL(view.url).origin;
     const b = new AppBridge(
-      { hostContext: hostContext(el), input: view.input, result },
+      { hostContext: hostContext(el, view.tool), input: view.input, result },
       {
         post: (m) => el.contentWindow?.postMessage(m, origin),
         size: setHeight,
@@ -146,12 +146,13 @@ function asParams(params: unknown): Record<string, unknown> {
   return params && typeof params === 'object' && !Array.isArray(params) ? (params as Record<string, unknown>) : {};
 }
 
-function hostContext(el: HTMLElement): HostContext {
+function hostContext(el: HTMLElement, tool: string): HostContext {
   return {
     theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
     displayMode: 'inline',
     containerDimensions: { maxHeight: MAX_APP_HEIGHT, width: Math.round(el.getBoundingClientRect().width) },
     locale: navigator.language,
     platform: 'desktop',
+    toolInfo: toolInfoOf(tool),
   };
 }

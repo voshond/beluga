@@ -278,9 +278,23 @@ export class WorkspaceController {
    */
   private created(ws: Workspace, extra: { from?: string; about?: string } = {}): void {
     this.deleted.delete(`${WS_PREFIX}${ws.id}`);
+    if (!ws.external) this.keepDefaults(ws);
     if (!ws.external) this.syncExample(ws, false);
     this.deps.onWorktreeCreated?.(ws);
     this.emit({ kind: 'created', ws, ...extra });
+  }
+
+  /**
+   * A new conversation starts on the model and effort the composer showed, and keeps them: picking
+   * another default later (the home composer, Settings) changes new conversations, never this one.
+   * Claude's model only (another runtime's comes with its agent), and only when it picked none.
+   */
+  private keepDefaults(ws: Workspace): void {
+    const { model, effort } = this.deps.store.getState().prefs;
+    const agent = ws.agent ?? this.followedAgent(ws.id);
+    if (effort && ws.effort === undefined) this.deps.manager.setEffort(ws.id, effort);
+    const runtime = agent?.runtime ?? this.deps.defaultRuntime?.() ?? SESSION_RUNTIME_DEFAULT;
+    if (model && ws.model === undefined && !ws.agent && runtime === SESSION_RUNTIME_DEFAULT && !agent?.model) this.deps.manager.setModel(ws.id, model);
   }
 
   constructor(private readonly deps: ControllerDeps) {
@@ -760,7 +774,7 @@ export class WorkspaceController {
       onSession: (sessionId) => this.deps.manager.rememberSession(ws.id, sessionId, runtime),
       ...(agent ? { agent: ws.model ? { ...agent, model: ws.model } : agent } : {}),
       ...(ws.model ? { model: ws.model } : {}),
-      ...(ws.effort ? { effort: ws.effort } : {}),
+      ...(ws.effort !== undefined ? { effort: ws.effort } : {}),
       ...(ws.prShipped && ws.kind === 'worktree' ? { shipped: ws.prShipped } : {}),
       ...this.openPrOf(ws),
       ...this.landsOnOf(ws),
