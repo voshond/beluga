@@ -1947,12 +1947,12 @@ export class AgentHost {
   /**
    * The model and effort for a run: the conversation's own pick, else its agent's (a project's own
    * agent, or yours), else Settings' model, which is Claude's: another runtime then takes its default.
-   * The effort: the conversation's own (a Sentinel step's), else Settings'.
+   * The effort: the conversation's own (its composer's, a Sentinel step's; null is Auto there), else Settings'.
    */
   private modelFor(own: string | undefined, agent?: AgentRef, ownEffort?: AgentPlace['effort']): { model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' } {
     const prefs = this.store.getState().prefs;
     const model = own ?? agent?.model ?? (agent && agent.runtime !== CLAUDE_AGENT.runtime ? undefined : prefs.model);
-    const effort = ownEffort ?? prefs.effort;
+    const effort = ownEffort === null ? undefined : (ownEffort ?? prefs.effort);
     return { ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
   }
 

@@ -4,6 +4,8 @@
  * No DOM here, so it's tested on its own (use-attachments.tsx does the rest).
  */
 
+import { keyPlatform } from '../lib/shortcuts-model.js';
+
 export interface Box {
   readonly left: number;
   readonly top: number;
@@ -11,13 +13,23 @@ export interface Box {
   readonly bottom: number;
 }
 
-/** The drag at `x`, `y` (physical pixels, as the app gives them) is over `box` (CSS pixels). A box with no size (hidden) is never hit. */
+/** The drag at `x`, `y` (as the app gives them, `scale` of them to a CSS pixel: see dropScale) is over `box` (CSS pixels). A box with no size (hidden) is never hit. */
 export function dropHits(box: Box | undefined, x: number, y: number, scale = 1): boolean {
   if (!box || box.right <= box.left || box.bottom <= box.top) return false;
   const px = x / (scale || 1);
   const py = y / (scale || 1);
   return px >= box.left && px <= box.right && py >= box.top && py <= box.bottom;
 }
+
+/**
+ * How many of the app's drop units make one CSS pixel. The app calls them physical pixels, but on
+ * a Mac and on Linux they're points, the page's own pixels (BLG-1000); only Windows gives the
+ * screen's. Dividing by a Retina Mac's 2 found the drop up and to the left of the pointer.
+ */
+export const dropScale = (os: string, dpr: number): number => (os === 'windows' ? dpr || 1 : 1);
+
+/** dropScale for this window. */
+export const appDropScale = (): number => dropScale(keyPlatform(), globalThis.devicePixelRatio || 1);
 
 /** The same place on screen (so a drag moving over it doesn't draw it again). */
 export const sameBox = (a: Box | undefined, b: Box | undefined): boolean => a === b || (!!a && !!b && a.left === b.left && a.top === b.top && a.right === b.right && a.bottom === b.bottom);

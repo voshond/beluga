@@ -8,6 +8,7 @@ import { copyText } from '../lib/copy.js';
 import { useApp, useBeluga } from '../lib/beluga.js';
 import { TaskCard } from '../gateway/TaskCard.js';
 import { Attention } from '../chat/Attention.js';
+import { appDropScale } from '../chat/drop-model.js';
 import { type TaskView, isFinal, targetLabel } from '@beluga/core/gateway/model.js';
 import { type WaitingItem, offlineNote, waitingLabel } from '@beluga/core/chat-people.js';
 import { usePrefs } from '../lib/prefs.js';
@@ -524,7 +525,7 @@ function useFileDrop(id: string, enabled: boolean) {
     let alive = true;
     const inside = (x: number, y: number): boolean => {
       const r = ref.current?.getBoundingClientRect();
-      const scale = window.devicePixelRatio || 1;
+      const scale = appDropScale();
       return !!r && x / scale >= r.left && x / scale <= r.right && y / scale >= r.top && y / scale <= r.bottom;
     };
     void import('@tauri-apps/api/webview').then(async ({ getCurrentWebview }) => {

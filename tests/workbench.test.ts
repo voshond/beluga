@@ -485,6 +485,44 @@ describe('models, usage, space and search', () => {
     expect(kay.workspaces.find(ws!.id)?.model).toBe('opus');
   });
 
+  it('keeps each conversation’s own effort: another chat’s pick never changes it', async () => {
+    hub = await startHub({ keys });
+    const kay = await solo(repo());
+    const project = projectOf(kay.workspaces).id;
+    const a = (await kay.session.workspaces!.newWorktree(project, 'a'))!;
+    const b = (await kay.session.workspaces!.newWorktree(project, 'b'))!;
+    kay.bench.setEffort(`ws:${a.id}`, 'max');
+    kay.bench.setEffort(`ws:${b.id}`, 'low');
+    // The default for new conversations moves; the two chats keep theirs.
+    kay.bench.setEffort(undefined, 'high');
+    expect(kay.state().prefs.effort).toBe('high');
+    kay.session.askOwnClaude('hard', `ws:${a.id}`);
+    await waitFor(() => kay.runs.length === 1, 4000);
+    kay.session.askOwnClaude('quick', `ws:${b.id}`);
+    await waitFor(() => kay.runs.length === 2, 4000);
+    expect(kay.runs.map((r) => r.effort)).toEqual(['max', 'low']);
+    // Auto in one chat is Auto there, whatever the default says.
+    kay.bench.setEffort(`ws:${b.id}`, 'auto');
+    expect(kay.workspaces.find(b.id)?.effort).toBeNull();
+    kay.session.askOwnClaude('again', `ws:${b.id}`);
+    await waitFor(() => kay.runs.length === 3, 4000);
+    expect(kay.runs[2]?.effort).toBeUndefined();
+  });
+
+  it('starts a new conversation on the default model and effort, and keeps them when the default moves', async () => {
+    hub = await startHub({ keys });
+    const kay = await solo(repo());
+    kay.bench.setModel(undefined, 'opus');
+    kay.bench.setEffort(undefined, 'xhigh');
+    const ws = (await kay.session.workspaces!.newWorktree(projectOf(kay.workspaces).id, 'kept'))!;
+    expect(kay.workspaces.find(ws.id)).toMatchObject({ model: 'opus', effort: 'xhigh' });
+    kay.bench.setModel(undefined, 'haiku');
+    kay.bench.setEffort(undefined, 'auto');
+    kay.session.askOwnClaude('hi', `ws:${ws.id}`);
+    await waitFor(() => kay.runs.length === 1, 4000);
+    expect(kay.runs[0]).toMatchObject({ model: 'opus', effort: 'xhigh' });
+  });
+
   it('adds up tokens and cost per workspace and measures its folder', async () => {
     hub = await startHub({ keys });
     const kay = await solo(repo());

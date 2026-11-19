@@ -69,6 +69,7 @@ export const WORK_ROWS: readonly MethodRow[] = [
   { name: 'worktree_run_setup', method: 'workbench.runSetup', params: ['chat'], scope: chat, writes: true, description: 'Run a worktree\'s setup script.' },
   { name: 'project_set_script', method: 'workbench.setScript', params: ['project', 'kind', 'command', 'shared'], scope: project, description: 'Set a project\'s setup or run script. It runs code later, so below full each change asks once.' },
   { name: 'chat_set_model', method: 'workbench.setModel', params: ['channel', 'model'], scope: channel, writes: true, description: 'Choose the model of a chat.' },
+  { name: 'chat_set_effort', method: 'workbench.setEffort', params: ['channel', 'effort'], scope: channel, writes: true, description: 'Choose how hard the agent of a chat thinks (low, medium, high, xhigh, max, or auto).' },
   { name: 'chat_set_agent', method: 'workbench.setAgent', params: ['channel', 'agent', 'mode'], scope: channel, writes: true, description: 'Choose the agent of a chat.' },
   { name: 'worktree_excerpt', method: 'workbench.excerpt', params: ['chat', 'file', 'from', 'to'], scope: chat, description: 'Lines of a file in a chat\'s folder. A secret file is refused.' },
   { name: 'worktree_open_code', method: 'workbench.openCode', params: ['chat', 'file', 'line'], scope: chat, description: 'The lines around one line of a file in a chat\'s folder. A secret file is refused.' },

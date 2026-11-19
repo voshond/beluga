@@ -104,8 +104,11 @@ export interface WorkspaceRecord {
   readonly envKept?: Readonly<Record<string, string>>;
   /** Model picked for this conversation (unset: your default). */
   readonly model?: string;
-  /** Thinking effort picked for this conversation (a Sentinel step's, BLG-498; unset: Settings'). */
-  readonly effort?: Effort;
+  /**
+   * Thinking effort picked for this conversation (its composer, or a Sentinel step's, BLG-498):
+   * null is Auto picked here (the agent decides, whatever Settings says); unset: Settings'.
+   */
+  readonly effort?: Effort | null;
   readonly usage?: WorkspaceUsage;
   /** Handed off to a friend (their name), who continues it on their computer. */
   readonly handedTo?: string;

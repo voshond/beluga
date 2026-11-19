@@ -14,6 +14,7 @@ import { useSuggestions } from "../chat/Suggestions.js";
 import { suggest } from "@beluga/ui/suggest.js";
 import { MaxFire } from "../chat/MaxFire.js";
 import { effectsOn, fireVars } from "../chat/fire-look.js";
+import { effortIn } from "@beluga/shared/agent-picker.js";
 import m from "../chat/max.module.css";
 import { usePrefs } from "../lib/prefs.js";
 import { useAttachments } from "../chat/use-attachments.js";
@@ -98,7 +99,7 @@ export function PlanChat({
   // The box burns here as in every message box (Settings › Fire & Confetti).
   const form = useRef<HTMLFormElement>(null);
   const fire = usePrefs().maxFire;
-  const effort = useApp((st) => st.prefs.effort);
+  const effort = useApp((st) => effortIn(st, channel));
   const effects = effectsOn(fire, effort);
   const burning = effects && fire.show !== "off";
   const busy = useApp((st) => activityOf(st.log, channel).running);

@@ -566,6 +566,21 @@ test('clicking a notification goes where it happened', async ({ page }) => {
   await expect(composer(page)).toHaveAttribute('placeholder', /add-auth/);
 });
 
+test('each chat keeps its own effort: Max in one leaves another as it was', async ({ page }) => {
+  const chip = page.getByRole('button', { name: 'Agent, model and effort' });
+  await openWorkspace(page, 'webhook-retries');
+  await expect(chip).not.toHaveText(/Max/);
+  await openWorkspace(page);
+  await chip.click();
+  await page.getByRole('radio', { name: 'Max', exact: true }).click();
+  await expect(chip).toHaveText(/Max/);
+  await page.keyboard.press('Escape');
+  await openWorkspace(page, 'webhook-retries');
+  await expect(chip).not.toHaveText(/Max/);
+  await openWorkspace(page);
+  await expect(chip).toHaveText(/Max/);
+});
+
 test('effort goes back to Auto, and Shift-Tab switches plan mode on and off', async ({ page }) => {
   await openWorkspace(page);
   await page.getByRole('button', { name: 'Agent, model and effort' }).click();

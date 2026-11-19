@@ -51,13 +51,13 @@ export function toolCallOf(item: ThreadItem, cwd: string): { readonly name: stri
 }
 
 /** What a finished tool call gave back, as a tool_result's content, and whether it failed. */
-export function toolResultOf(item: ThreadItem): { readonly content: unknown; readonly isError: boolean } {
+export function toolResultOf(item: ThreadItem): { readonly content: unknown; readonly isError: boolean; readonly exitCode?: number } {
   switch (item.type) {
     case 'commandExecution': {
       const it = item as Extract<ThreadItem, { type: 'commandExecution' }>;
       const failed = it.status === 'failed' || it.status === 'declined' || (it.exitCode !== null && it.exitCode !== 0);
       const out = it.aggregatedOutput ?? '';
-      return { content: it.status === 'declined' ? out || 'Declined.' : it.exitCode && !out ? `Exited with code ${it.exitCode}` : out, isError: failed };
+      return { content: it.status === 'declined' ? out || 'Declined.' : it.exitCode && !out ? `Exited with code ${it.exitCode}` : out, isError: failed, ...(typeof it.exitCode === 'number' ? { exitCode: it.exitCode } : {}) };
     }
     case 'fileChange': {
       const it = item as Extract<ThreadItem, { type: 'fileChange' }>;
@@ -81,9 +81,22 @@ export function unwrapShell(command: string): string {
   return m ? m[2]! : command;
 }
 
-/** Tokens a turn used, in the shape Beluga's usage events carry (Claude's usageOf). */
-export function usageEvent(last: TokenUsageBreakdown, session: string): string {
-  return JSON.stringify({ input: Math.max(0, last.inputTokens - last.cachedInputTokens), output: last.outputTokens, cacheRead: last.cachedInputTokens, cacheWrite: 0, cost: 0, session });
+/**
+ * Tokens a turn used, in the shape Beluga's usage events carry (Claude's usageOf). Codex reports no
+ * cost (0: not known). For usage statistics only: the tokens it spent reasoning (part of `output`)
+ * and how many times the turn compacted the conversation.
+ */
+export function usageEvent(last: TokenUsageBreakdown, session: string, more: { readonly compactions?: number } = {}): string {
+  return JSON.stringify({
+    input: Math.max(0, last.inputTokens - last.cachedInputTokens),
+    output: last.outputTokens,
+    cacheRead: last.cachedInputTokens,
+    cacheWrite: 0,
+    cost: 0,
+    session,
+    ...(last.reasoningOutputTokens > 0 ? { thinking: last.reasoningOutputTokens } : {}),
+    ...(more.compactions ? { compactions: more.compactions } : {}),
+  });
 }
 
 /**
@@ -109,6 +122,8 @@ export class CodexEvents {
   /** The agent's messages this turn, in order: the last is its answer. */
   private texts: string[] = [];
   private usage?: TokenUsageBreakdown;
+  /** How many times Codex compacted the conversation this turn. */
+  private compactions = 0;
   lastEventAt = Date.now();
   thinking = false;
 
@@ -134,15 +149,16 @@ export class CodexEvents {
     this.sink = sink;
     this.texts = [];
     this.usage = undefined;
+    this.compactions = 0;
     this.recorder.begin();
   }
 
-  /** What the turn said last (its answer), and the tokens it used. Steps it left open end with it. */
-  endTurn(completed = true): { readonly text: string; readonly usage?: TokenUsageBreakdown } {
+  /** What the turn said last (its answer), the tokens it used and how often it compacted. Steps it left open end with it. */
+  endTurn(completed = true): { readonly text: string; readonly usage?: TokenUsageBreakdown; readonly compactions: number } {
     this.recorder.finish(!completed);
     this.tools.clear();
     this.thinking = false;
-    return { text: this.texts.at(-1) ?? '', ...(this.usage ? { usage: this.usage } : {}) };
+    return { text: this.texts.at(-1) ?? '', ...(this.usage ? { usage: this.usage } : {}), compactions: this.compactions };
   }
 
   /** The run ended: steps still open end with it. */
@@ -162,7 +178,10 @@ export class CodexEvents {
       this.usage = tokens?.last;
       if (tokens) this.opts.onTokens?.(tokens);
     }
-    if (method === 'thread/compacted') this.sink.onEvent('progress', 'Compacted the conversation');
+    if (method === 'thread/compacted') {
+      this.compactions++;
+      this.sink.onEvent('progress', 'Compacted the conversation');
+    }
     if (method === 'error' && params.willRetry) this.sink.onEvent('progress', 'Codex is retrying');
   }
 
@@ -175,7 +194,7 @@ export class CodexEvents {
     const label = summarizeTool(call.name, call.input, this.cwd);
     this.tools.set(item.id, { label: call.name === 'Bash' ? String(call.input.command).split('\n')[0]!.slice(0, 80) : label, since: Date.now() });
     this.sink.onEvent('tool', label);
-    this.recorder.observe({ type: 'assistant', message: { content: [{ type: 'tool_use', id: item.id, name: call.name, input: call.input }] } });
+    this.recorder.observe({ type: 'assistant', message: { content: [{ type: 'tool_use', id: item.id, name: call.name, input: call.input, native: item.type }] } });
   }
 
   private completed(item: ThreadItem): void {
@@ -201,8 +220,8 @@ export class CodexEvents {
     // An item that only completes (no started first) still gets its step.
     if (!this.tools.has(item.id)) this.started(item);
     this.tools.delete(item.id);
-    const { content, isError } = toolResultOf(item);
-    this.recorder.observe({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: item.id, content, is_error: isError }] } });
+    const { content, isError, exitCode } = toolResultOf(item);
+    this.recorder.observe({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: item.id, content, is_error: isError, ...(exitCode !== undefined ? { exit_code: exitCode } : {}) }] } });
     if (!this.tools.size) this.sink.onEvent('progress', '');
   }
 }

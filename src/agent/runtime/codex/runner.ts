@@ -392,7 +392,7 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
             if (early) done.resolve(early);
             const turn = await Promise.race([done.promise, stopped.promise, abort.promise]);
             const said = events.endTurn(turn.status === 'completed');
-            if (said.usage) sink.onEvent('usage', usageEvent(said.usage, threadId));
+            if (said.usage) sink.onEvent('usage', usageEvent(said.usage, threadId, { compactions: said.compactions }));
             return { text: said.text, turn };
           } finally {
             active = undefined;
@@ -528,7 +528,7 @@ export function createCodexBackend(opts: CodexBackendOptions): AgentBackend {
             if (own) {
               const turn = await Promise.race([own.done.promise, stopped.promise, abort.promise]);
               const said = events.endTurn(turn.status === 'completed');
-              if (said.usage) original.onEvent('usage', usageEvent(said.usage, threadId));
+              if (said.usage) original.onEvent('usage', usageEvent(said.usage, threadId, { compactions: said.compactions }));
               if (active === own) active = undefined;
               selfStarted = undefined;
               if (turn.status === 'completed' && said.text) answers.push(shelf.finish(said.text));
