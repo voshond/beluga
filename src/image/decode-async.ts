@@ -44,10 +44,10 @@ function getWorker(): Worker | undefined {
   return w;
 }
 
-/** Decode in a background thread (falls back to inline decoding when no worker is available). */
-export function decodeImageAsync(bytes: Uint8Array, name: string): Promise<Bitmap> {
+/** Decode in a background thread (falls back to inline decoding when no worker is available); `keepSide` as decodeImage's. */
+export function decodeImageAsync(bytes: Uint8Array, name: string, keepSide?: number): Promise<Bitmap> {
   const w = getWorker();
-  if (!w) return Promise.resolve().then(() => decodeImage(bytes, name));
+  if (!w) return Promise.resolve().then(() => decodeImage(bytes, name, keepSide));
   const id = nextId++;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -57,6 +57,6 @@ export function decodeImageAsync(bytes: Uint8Array, name: string): Promise<Bitma
       reject(new Error('The image took too long to read'));
     }, DECODE_TIMEOUT_MS);
     pending.set(id, { resolve, reject, timer });
-    w.postMessage({ id, bytes, name });
+    w.postMessage({ id, bytes, name, keepSide });
   });
 }

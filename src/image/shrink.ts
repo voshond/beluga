@@ -4,7 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import jpeg from 'jpeg-js';
 import { PNG } from 'pngjs';
 import type { Bitmap } from './bitmap.js';
-import { decodeImage } from './decode.js';
+import { decodeImageAsync } from './decode-async.js';
 
 /** JPEG keeps no transparency: see-through parts go on white, as a viewer shows them. */
 export function onWhite(bmp: Bitmap): Bitmap {
@@ -27,6 +27,6 @@ export function encodeImage(bmp: Bitmap, format: 'jpeg' | 'png', quality = 80): 
 
 /** `src` at most `side` pixels on its longest side, written to `dest` as a JPEG or PNG. Throws when it can't be read. */
 export async function shrinkImageFile(src: string, dest: string, side: number, format: 'jpeg' | 'png', quality = 80): Promise<void> {
-  const bmp = decodeImage(await readFile(src), src, side);
+  const bmp = await decodeImageAsync(await readFile(src), src, side);
   await writeFile(dest, encodeImage(bmp, format, quality));
 }

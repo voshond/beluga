@@ -48,6 +48,11 @@ they would in a browser, and land in `~/.beluga/uploads/<day>/<random>/` there. 
 drops this way from launch in server mode; switched from Run here to a server while the app is
 open, drops work after the next launch.
 
+Pictures you paste or drop in a message box upload the same way, as the original file (BLG-110).
+The server then keeps a copy that fits what Claude takes, as it does for a pasted path. The chip
+and the lightbox show a copy no bigger than 2048 px, made in a worker, so a 12-megapixel paste
+doesn't freeze the window. Pictures over 100 MB are refused with a message.
+
 ## Device reach
 
 While the app is connected, the server's agents see it as a device: `list_devices` names it,
