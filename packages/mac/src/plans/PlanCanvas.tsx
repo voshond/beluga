@@ -14,6 +14,7 @@ import { useSharpZoom } from '../components/graph/sharp-zoom.js';
 import { breath, turn, useLive } from '../lib/live-motion.js';
 import { MILESTONE_STATE, type MilestoneJoin, type PlanGraphShape, TASK_STATE, changeMarks, gateId, graphShape, groupId, lockWords, milestoneJoin, milestoneLink, milestoneNowWords, repoProgress, startingMilestones, taskNodeId, taskWords } from './plans-model.js';
 import { COMPACT_STATES, FOLDS_KEY, type Folds, type Lane, MILESTONE, type MilestoneFrame, PLAN_GAPS, arrowHead, isFolded, joinAt, labelAt, milestoneAnchors, milestoneFrame, milestoneRoute, placeInLanes, placeMilestones, readFolds, taskSize, withFold } from './plan-layout.js';
+import { measureText } from './measure-text.js';
 import { useCardClock, useCheckerChat, useClock, usePlanActions } from './use-plans.js';
 import { useGlide } from './use-glide.js';
 import { LiveDot, LockMark, RepoChip, TaskChatMark, TaskStateIcon } from './marks.js';
@@ -235,7 +236,7 @@ function Canvas({ view, keys, selected, onSelect, onStart, startable }: PlanCanv
     // milestone would be mostly empty room between its tasks and its gate.
     const frameOf = (id: string, fold: boolean): MilestoneFrame => {
       const o = inner.outs.get(id);
-      return milestoneFrame({ width: o?.width ?? 0, height: o?.height ?? 0 }, criteria.get(id) ?? [], fold, undefined, folded.get(id));
+      return milestoneFrame({ width: o?.width ?? 0, height: o?.height ?? 0 }, criteria.get(id) ?? [], fold, undefined, folded.get(id), measureText);
     };
     const opened = new Map(shape.milestones.map((m) => [m.id, frameOf(m.id, false)] as const));
     const frames = new Map(shape.milestones.map((m) => [m.id, folded.has(m.id) ? frameOf(m.id, true) : opened.get(m.id)!] as const));

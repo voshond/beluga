@@ -12,6 +12,8 @@ import { DEMO_PROVIDER_MODELS, demoDescription } from '../agent/runtime/opencode
 import { createCopilotRuntime } from '../agent/runtime/copilot/index.js';
 import { ScriptedCopilot } from '../agent/runtime/copilot/scripted.js';
 import { AUTO_MODEL } from '../agent/runtime/copilot/status.js';
+import { createAntigravityRuntime } from '../agent/runtime/antigravity/index.js';
+import { ScriptedAgy } from '../agent/runtime/antigravity/scripted.js';
 import { findConversation } from '../agent/runtime/claude/claude-sessions.js';
 import { otherTools } from '../agent/other-tools.js';
 import { copyNative, pasteText } from '../core/clipboard.js';
@@ -103,6 +105,16 @@ function demoCopilot(): AgentRuntime {
   const names: Readonly<Record<string, string>> = { 'claude-sonnet-4.5': 'Claude Sonnet 4.5', 'gpt-5.3-codex': 'GPT-5.3-Codex' };
   const models = [AUTO_MODEL, ...offered.map((value) => ({ value, label: names[value] ?? value, description: '' }))];
   return createCopilotRuntime({ connect: scripted.connect, status: async () => ({ state: 'ready', models }) });
+}
+
+/** The demo's Antigravity: ready, on a plan with Gemini (its thinking levels) and a Claude model. */
+function demoAntigravity(): AgentRuntime {
+  const scripted = new ScriptedAgy({ stepMs: 600, models: ['gemini-3.8-flash', 'claude-sonnet-4-6'] });
+  const models = [
+    { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', description: '', efforts: ['low', 'medium', 'high'] },
+    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (Thinking)', description: '' },
+  ];
+  return createAntigravityRuntime({ connect: scripted.connect, status: async () => ({ state: 'ready', models }) });
 }
 
 let claudeWithStatus: AgentRuntime | undefined;
@@ -344,9 +356,9 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     createAgent: demo
       ? (bridge) => createMockBackend(bridge, Number(belugaEnv('DEMO_PACE')) || 2.6) // unhurried, so you can watch workspaces run side by side
       : undefined,
-    // The demo's Codex, OpenCode and Copilot: the real runtimes over a scripted app-server, a
-    // scripted `opencode acp` and a scripted `copilot --acp`, so a worktree can run on any (BLG-462, BLG-686, BLG-873).
-    ...(demo ? { alsoRuntimes: [createCodexRuntime({ connect: new ScriptedCodex({ stepMs: 600 }).connect }), demoOpenCode(), demoCopilot()] } : {}),
+    // The demo's Codex, OpenCode, Copilot and Antigravity: the real runtimes over a scripted app-server, a
+    // scripted `opencode acp`, a scripted `copilot --acp` and a scripted `agy acp`, so a worktree can run on any (BLG-462, BLG-686, BLG-873).
+    ...(demo ? { alsoRuntimes: [createCodexRuntime({ connect: new ScriptedCodex({ stepMs: 600 }).connect }), demoOpenCode(), demoCopilot(), demoAntigravity()] } : {}),
     // Your agent through the runtime seam (agent/runtime): Claude, the only one registered yet.
     ...(!demo && config.agent
       ? {
@@ -493,6 +505,21 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
       // A second and a third provider, so the Usage tab shows a card for each shape (BLG-458).
       session.updateUsage({ plan: 'plus', windows: [{ label: 'Weekly', pct: 24 }] }, { runtime: 'codex', model: 'gpt-5', label: 'Codex' });
       session.updateUsage({ tokens: { input: 182_000, output: 41_500 }, tokensPerSec: 38 }, { runtime: 'local', model: 'qwen3', label: 'Local' });
+      // Antigravity's quota per group of models, its 5-hour and weekly limits, on a card of its own.
+      const refill = Date.now() + 3 * 60 * 60_000;
+      const week = Date.now() + 6 * 24 * 60 * 60_000;
+      session.updateUsage(
+        {
+          plan: 'AI Ultra',
+          windows: [
+            { group: 'Gemini Models', label: '5-hour', pct: 25, resetsAt: refill },
+            { group: 'Gemini Models', label: 'Weekly', pct: 8, resetsAt: week },
+            { group: 'Claude and GPT models', label: '5-hour', pct: 0, resetsAt: refill + 20 * 60_000 },
+            { group: 'Claude and GPT models', label: 'Weekly', pct: 0, resetsAt: week + 2 * 60 * 60_000 },
+          ],
+        },
+        { runtime: 'antigravity', label: 'Antigravity' },
+      );
     }, 300);
     // bob "arrives" a moment later so you first see how inviting works (sooner at a faster pace: the e2e tests).
     const soon = (ms: number): number => ms * Math.min(1, Number(process.env.KLAUD_DEMO_PACE) || 1);

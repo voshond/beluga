@@ -53,11 +53,12 @@ test('a card per provider, and the chip that makes one your default', async ({ p
   await openUsage(page);
   const claude = page.getByRole('region', { name: 'Claude usage' });
   const codex = page.getByRole('region', { name: 'Codex usage' });
-  const local = page.getByRole('region', { name: 'Local usage' });
-  // Quota windows where the plan has them, tokens and speed where not.
+  const antigravity = page.getByRole('region', { name: 'Antigravity usage' });
+  // Quota windows where the plan has them, by group of models where the plan keeps a limit per group.
   await expect(codex.getByRole('meter', { name: /Weekly: 24% used/ })).toBeVisible();
-  await expect(local.getByText('tok/s')).toBeVisible();
-  await expect(local.getByRole('meter')).toHaveCount(0);
+  await expect(antigravity.getByRole('meter', { name: 'Gemini Models 5-hour: 25% used' })).toBeVisible();
+  // A card only for an agent ready here: the demo's local model has no endpoint, so no card (tokens and speed: tests/usage-providers.test.ts).
+  await expect(page.getByRole('region', { name: 'Local usage' })).toHaveCount(0);
   await expect(claude.getByText('Default')).toBeVisible();
   await page.getByRole('main').screenshot({ path: '../../.beluga/scratch/01-usage-provider-cards.png' }).catch(() => undefined);
   await codex.getByRole('button', { name: 'Make Codex your default agent' }).click();

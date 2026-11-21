@@ -364,6 +364,7 @@ describe('the views of a known Mac', () => {
       ['codex', false],
       ['opencode', false],
       ['copilot', false],
+      ['antigravity', false],
       ['local', false],
     ]);
     expect(w1.agent?.groups[1]?.why).toMatch(/Codex/);

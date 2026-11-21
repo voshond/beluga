@@ -35,6 +35,7 @@ const WHO: Readonly<Record<string, { readonly agent: string; readonly app: strin
   codex: { agent: 'Codex', app: 'Codex', vendor: 'OpenAI' },
   opencode: { agent: 'OpenCode', app: 'OpenCode', vendor: 'its model provider' },
   copilot: { agent: 'Copilot', app: 'Copilot', vendor: 'GitHub' },
+  antigravity: { agent: 'Antigravity', app: 'the Antigravity CLI', vendor: 'Google' },
 };
 
 /** What Continue (and an automatic resume) sends: the same session goes on. */

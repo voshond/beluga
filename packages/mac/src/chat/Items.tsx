@@ -622,10 +622,10 @@ function TurnCard({
                 </Button>
               </ActionsDropdown>
             </div>
-          ) : limited && failure?.kind === 'signed_out' && (failure.runtime === 'opencode' || failure.runtime === 'copilot') ? (
-            // OpenCode's model provider said no (a key expired, none set up), or Copilot's GitHub sign-in did: sign in in Terminal (`opencode auth login`, `copilot login`), then Continue.
+          ) : limited && failure?.kind === 'signed_out' && (failure.runtime === 'opencode' || failure.runtime === 'copilot' || failure.runtime === 'antigravity') ? (
+            // OpenCode's model provider said no (a key expired, none set up), Copilot's GitHub sign-in did, or Antigravity's Google one: sign in in Terminal (`opencode auth login`, `copilot login`, `agy`), then Continue.
             <div className={s.limitActions}>
-              <Button size="small" icon="person" onClick={() => void client.api.workbench.agentSignIn(failure.runtime!).catch((err: unknown) => toast(client, err instanceof Error ? err.message : String(err), 'error'))} title={failure.runtime === 'copilot' ? 'Sign in to GitHub in Terminal (copilot login), then Continue' : 'Add or renew a model provider in Terminal (opencode auth login), then Continue'}>
+              <Button size="small" icon="person" onClick={() => void client.api.workbench.agentSignIn(failure.runtime!).catch((err: unknown) => toast(client, err instanceof Error ? err.message : String(err), 'error'))} title={failure.runtime === 'copilot' ? 'Sign in to GitHub in Terminal (copilot login), then Continue' : failure.runtime === 'antigravity' ? 'Sign in to Google in Terminal (agy), then Continue' : 'Add or renew a model provider in Terminal (opencode auth login), then Continue'}>
                 Sign In
               </Button>
               <Button size="small" icon="play" onClick={resume} title={`Send “continue”: ${agentName(item.agent)} picks up where it stopped`}>

@@ -33,7 +33,7 @@ export function Hello({ onStart }: { readonly onStart: () => void }) {
         </motion.span>
       </h1>
       <Rise delay={2.45} className={s.heroBody}>
-        Beluga runs Claude Code, Codex, OpenCode, GitHub Copilot or a local model on each of your tasks, each in its own copy of the repository. You watch them work, answer when they ask, and merge what’s done.
+        Beluga runs Claude Code, Codex, OpenCode, GitHub Copilot, Antigravity or a local model on each of your tasks, each in its own copy of the repository. You watch them work, answer when they ask, and merge what’s done.
       </Rise>
       <Rise delay={2.75}>
         <GlowButton onClick={onStart} autoFocus>

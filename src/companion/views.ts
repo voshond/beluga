@@ -44,7 +44,7 @@ import { changedEntry } from '../shared/memory.js';
 import { chatPeople, claudePill, offlineNote, waitingIn, waitingLabel } from '../core/chat-people.js';
 import { type AgentRef, CLAUDE_AGENT, type Profile, defaultAgentOf } from '../protocol.js';
 import { threadNesting } from '../ui/thread-tree.js';
-import { providerCards } from '../ui/usage-cards.js';
+import { type RuntimeReadiness, providerCards } from '../ui/usage-cards.js';
 import {
   type BranchView,
   type ChatMessageView,
@@ -181,14 +181,15 @@ const PHONE_WINDOW: Readonly<Record<string, string>> = { '5-hour': '5 hours', We
  * plan windows where they have them, tokens and speed where not; their default first. A provider
  * that has said nothing yet is left out, unless it's signed out.
  */
-export function usageViews(p: Pick<Profile, 'usage' | 'usages' | 'agents'> | undefined, defaultAgent: AgentRef | undefined): UsageView[] {
-  const cards = providerCards(p, defaultAgent)
+export function usageViews(p: Pick<Profile, 'usage' | 'usages' | 'agents'> | undefined, defaultAgent: AgentRef | undefined, runtimes?: RuntimeReadiness): UsageView[] {
+  const cards = providerCards(p, defaultAgent, runtimes)
     .filter((c) => c.shape !== 'empty' || !c.signedIn)
     .sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
   return cards.slice(0, 8).map((c) => ({
     provider: c.key === CLAUDE_AGENT.runtime ? 'Claude Code' : clip(c.agent.label, 40),
     ...(c.plan ? { plan: clip(c.plan, 40) } : {}),
-    windows: c.windows.slice(0, 8).map((w) => ({ label: clip(PHONE_WINDOW[w.label] ?? w.label, 40), pct: Math.max(0, Math.min(100, w.pct)), ...(w.resetsAt !== undefined ? { resetsAt: Math.round(w.resetsAt) } : {}) })),
+    // A window of a group of models says which (Antigravity's "Gemini Models · 5 hours").
+    windows: c.windows.slice(0, 8).map((w) => ({ label: clip([w.group, PHONE_WINDOW[w.label] ?? w.label].filter(Boolean).join(' · '), 40), pct: Math.max(0, Math.min(100, w.pct)), ...(w.resetsAt !== undefined ? { resetsAt: Math.round(w.resetsAt) } : {}) })),
     updatedAt: Math.round(c.updatedAt ?? 0),
     runtime: c.key,
     isDefault: c.isDefault,
@@ -684,7 +685,8 @@ export function homeView(state: DomainState, ctx: ViewContext): HomeView {
     // 1.14: all of Your Mac's chats, for the phone's chat list.
     ...(macChats.length ? { macChats } : {}),
     me: { name: clip(myName(state), 64), peerId: myId(state) },
-    usage: usageViews(state.peers.find((p) => p.peerId === state.self?.peerId) ?? state.self, state.prefs.defaultAgent),
+    // Yours: only the agents ready on this Mac, as on the Mac's Usage tab.
+    usage: usageViews(state.peers.find((p) => p.peerId === state.self?.peerId) ?? state.self, state.prefs.defaultAgent, state.runtimes),
     needsYou: items,
     running: running.slice(0, 20),
     // Outputs live with their conversation now (ConvView `outputs`); Home only hints (`fresh`).

@@ -20,7 +20,7 @@ export interface DialoguesHost {
 }
 
 /** Runtimes a dialogue can name besides your default agent (when this Beluga has them). */
-const KNOWN_RUNTIMES = ['claude', 'codex', 'opencode', 'copilot', 'local'];
+const KNOWN_RUNTIMES = ['claude', 'codex', 'opencode', 'copilot', 'antigravity', 'local'];
 
 /** Your agents: the default one, then every other runtime this Beluga can run. */
 export function myAgents(own: AgentRef): AgentRef[] {
