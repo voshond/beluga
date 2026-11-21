@@ -179,6 +179,9 @@
   font-weight: 650;
   letter-spacing: 0.02em;
   text-transform: capitalize;
+  /* One line, whatever the plan's name: the card's head never wraps. */
+  white-space: nowrap;
+  flex-shrink: 0;
   color: var(--claude);
   background: color-mix(in srgb, var(--claude) 13%, transparent);
 }
@@ -193,6 +196,8 @@
   font: inherit;
   font-size: 0.8rem;
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
   color: var(--text-2);
   background: color-mix(in srgb, var(--text-3) 12%, transparent);
   cursor: default;
@@ -283,6 +288,19 @@
 }
 .window {
   min-width: 0;
+}
+/* A group of models' windows (Antigravity's Gemini Models, Claude and GPT models): a quiet heading over them, a hairline between groups. */
+.windowGroup {
+  grid-column: 1 / -1;
+  margin-bottom: -8px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--card-line);
+  font-size: 0.85em;
+  color: var(--text-3);
+}
+.windowGroup:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
 .windowHead {
   display: flex;

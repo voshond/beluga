@@ -157,7 +157,9 @@ function Question({ channel }: { channel?: string }) {
     const peer = q ? st.peers.find((p) => p.peerId === q.owner) : undefined;
     // Picked in the mode menu (BLG-982), else Settings' default: another agent builds it once you approve.
     const builder = q?.question.kind === 'plan' ? builderFor(st, q.channel) : undefined;
-    return { q, owner: peer?.name, agent: agentName(peer ? defaultAgentOf(peer) : defaultAgentOf(st.self)), selfId: st.selfId, builds: builder ? agentName(builder, { model: true }) : undefined };
+    // Your own conversation's question is asked by the agent at work there (Antigravity's ask_question), not by your default one.
+    const working = q && here?.startsWith('ws:') && (!peer || q.owner === st.selfId) ? st.projects.flatMap((p) => p.workspaces).find((w) => w.id === here.slice(3))?.agent : undefined;
+    return { q, owner: peer?.name, agent: agentName(working ?? (peer ? defaultAgentOf(peer) : defaultAgentOf(st.self))), selfId: st.selfId, builds: builder ? agentName(builder, { model: true }) : undefined };
   }, sameFields);
   // Read in full: the card grows up over the chat, the plan from its first line (no sheet on top of it).
   const full = useUi((u) => Boolean(q && u.planFull === q.qid));

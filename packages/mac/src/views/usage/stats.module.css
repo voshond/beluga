@@ -18,6 +18,7 @@
   --a-codex: var(--series-1);
   --a-opencode: var(--series-4);
   --a-copilot: var(--series-5);
+  --a-antigravity: var(--series-2);
   --a-local: var(--series-3);
 }
 .head {

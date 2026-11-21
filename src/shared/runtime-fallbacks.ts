@@ -41,6 +41,14 @@ export const RUNTIME_FALLBACKS: Readonly<Record<string, Readonly<Partial<Record<
     // agent-wording: claude (the way out is the Claude runtime, by name)
     friends: { capability: 'canGateEveryTool', reason: 'Copilot reads files and runs read-only commands without Beluga asking, so friends’ tasks go to Claude (or Codex) instead.' },
   },
+  antigravity: {
+    fork: { capability: 'canFork', reason: 'On Antigravity a fork starts a new conversation: the files come along, the chat so far doesn’t.' },
+    rewind: { capability: 'canFork', reason: 'On Antigravity, going back puts the files back but starts a new conversation from your edited message.' },
+    // agent-wording: claude (the way out is the Claude runtime, by name)
+    guests: { capability: 'canGateEveryTool', reason: 'Antigravity reads files without Beluga asking, so it doesn’t answer guests. Switch this conversation to Claude for them.' },
+    // agent-wording: claude (the way out is the Claude runtime, by name)
+    friends: { capability: 'canGateEveryTool', reason: 'Antigravity reads files without Beluga asking, so friends’ tasks go to Claude (or Codex) instead.' },
+  },
 };
 
 /**
@@ -55,6 +63,7 @@ export const RUNTIME_MISSING: Readonly<Record<string, readonly FeatureId[]>> = {
   codex: ['btw', 'terminal'],
   opencode: ['terminal', 'steer'],
   copilot: ['btw', 'terminal', 'steer'],
+  antigravity: ['btw', 'terminal', 'steer'],
 };
 
 /** Whether `feature` is there on `runtime` (unset: Claude's, which has them all). */

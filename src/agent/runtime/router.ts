@@ -4,7 +4,7 @@ import type { Complete, RuntimeId } from './types.js';
 import { THIS_COMPUTER } from '../../shared/assistant.js';
 
 /** Runtimes' names, for the words a routed call says when one can't do something. */
-const RUNTIME_LABELS: Readonly<Record<string, string>> = { codex: 'Codex', opencode: 'OpenCode', copilot: 'Copilot' };
+const RUNTIME_LABELS: Readonly<Record<string, string>> = { codex: 'Codex', opencode: 'OpenCode', copilot: 'Copilot', antigravity: 'Antigravity' };
 
 /** The side calls a backend may offer (agent/side-calls.ts). */
 export type SideCallBackend = Pick<AgentBackend, 'nameTask' | 'titlePlan' | 'titleChat' | 'answerChat' | 'fixSetup' | 'fixRun' | 'workOutScripts' | 'draftTask' | 'describeProject' | 'reviewPr' | 'standIn'>;

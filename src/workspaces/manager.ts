@@ -22,6 +22,7 @@ import { isUnder } from '../shared/path-inside.js';
 import { dropCodexSessions } from '../agent/runtime/codex/codex-sessions.js';
 import { dropOpenCodeFolder, dropOpenCodeSession } from '../agent/runtime/opencode/sessions.js';
 import { dropCopilotFolder, dropCopilotSession } from '../agent/runtime/copilot/sessions.js';
+import { dropAgyFolder, dropAgySession } from '../agent/runtime/antigravity/sessions.js';
 import { addDay, dayKey } from './usage-days.js';
 import type { AgentRef } from '../protocol.js';
 import type { BranchList, DeletePlan, MergeWait, Project, ProjectGroup, PullHead, ProjectSync, ProjectsConfig, RenameResult, Workspace, WorkspaceRecord, WorkspaceUsage } from './types.js';
@@ -1352,7 +1353,7 @@ export class WorkspaceManager {
     // A chat in a folder that stays (yours, or a worktree it was forked in): only what you sent it goes.
     else if (ws.kind === 'chat' && existsSync(ws.path)) await dropSent(ws.path, sentFolder(`ws:${ws.id}`, false)).catch(() => undefined);
     if (ours) {
-      // Claude Code's (your own Claude and local models alike), Codex's, OpenCode's and Copilot's, whichever agent ran there.
+      // Claude Code's (your own Claude and local models alike), Codex's, OpenCode's, Copilot's and Antigravity's, whichever agent ran there.
       for (const dir of new Set([sessionsDir, path.resolve(ws.path)])) await dropFolderSessions(dir).catch(() => 0);
       await dropCodexSessions({ dir: sessionsDir }).catch(() => 0);
       if (ws.sessionRuntime === 'opencode') {
@@ -1360,10 +1361,15 @@ export class WorkspaceManager {
         await dropOpenCodeFolder(sessionsDir, ws.kind === 'worktree' ? ws.projectRoot : sessionsDir).catch(() => 0);
       }
       if (ws.sessionRuntime === 'copilot') await dropCopilotFolder(sessionsDir).catch(() => 0);
+      if (ws.sessionRuntime === 'antigravity') {
+        if (ws.sessionId) await dropAgySession(ws.sessionId).catch(() => false);
+        await dropAgyFolder(sessionsDir).catch(() => 0);
+      }
     } else if (ws.kind === 'chat' && this.ownSession(ws)) {
       if (ws.sessionRuntime === 'codex') await dropCodexSessions({ threadId: ws.sessionId! }).catch(() => 0);
       else if (ws.sessionRuntime === 'opencode') await dropOpenCodeSession(ws.sessionId!).catch(() => false);
       else if (ws.sessionRuntime === 'copilot') await dropCopilotSession(ws.sessionId!).catch(() => false);
+      else if (ws.sessionRuntime === 'antigravity') await dropAgySession(ws.sessionId!).catch(() => false);
       else await dropSession(sessionsDir, ws.sessionId!).catch(() => undefined);
     }
     this.records = this.records.filter((r) => r.id !== id);

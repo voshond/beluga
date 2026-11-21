@@ -161,11 +161,11 @@ export function buildServedAppend(host: string): string {
 /**
  * A worktree's run: what it leaves running is stopped when the turn ends, unless kept on purpose (see
  * workspaces/test-procs.ts). Claude Code's Bash call is rewritten to detach a kept one (keptBashInput);
- * Codex's, OpenCode's and Copilot's commands can't be, so they're told to detach it themselves (nohup, output to a file, `&`).
+ * Codex's, OpenCode's, Copilot's and Antigravity's commands can't be, so they're told to detach it themselves (nohup, output to a file, `&`).
  */
 export function buildKeepAppend(agent: AgentRef = CLAUDE_AGENT): string {
   const how =
-    agent.runtime === 'codex' || agent.runtime === 'opencode' || agent.runtime === 'copilot'
+    agent.runtime === 'codex' || agent.runtime === 'opencode' || agent.runtime === 'copilot' || agent.runtime === 'antigravity'
       ? [
           'BELUGA_KEEP=1 in front, detached with its output in a file, e.g.',
           '`BELUGA_KEEP=1 nohup npm run dev > .beluga/dev.log 2>&1 &` (so your command returns at once),',
