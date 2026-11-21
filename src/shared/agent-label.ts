@@ -50,7 +50,7 @@ export function agentLabel(ref: AgentRef | undefined, owner: string | undefined,
 }
 
 /** What each runtime is called. */
-export const RUNTIME_NAMES: Readonly<Record<string, string>> = { claude: 'Claude', codex: 'Codex', opencode: 'OpenCode', copilot: 'Copilot', local: 'Local model' };
+export const RUNTIME_NAMES: Readonly<Record<string, string>> = { claude: 'Claude', codex: 'Codex', opencode: 'OpenCode', copilot: 'Copilot', antigravity: 'Antigravity', local: 'Local model' };
 
 /**
  * A message's small badge: what runs the agent, when its name doesn't already say it, and the

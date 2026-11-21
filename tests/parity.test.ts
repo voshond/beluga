@@ -5,6 +5,7 @@ import { CLAUDE_CAPABILITIES } from '../src/agent/runtime/claude/index.js';
 import { CODEX_CAPABILITIES } from '../src/agent/runtime/codex/index.js';
 import { OPENCODE_CAPABILITIES } from '../src/agent/runtime/opencode/index.js';
 import { COPILOT_CAPABILITIES } from '../src/agent/runtime/copilot/index.js';
+import { ANTIGRAVITY_CAPABILITIES } from '../src/agent/runtime/antigravity/index.js';
 import type { RuntimeCapabilities } from '../src/agent/runtime/types.js';
 import { COMMANDS } from '../src/core/commands.js';
 import { METHODS } from '../src/ipc/api.js';
@@ -67,15 +68,16 @@ describe('docs/parity.md, per runtime', () => {
     { id: 'codex', column: 3, caps: CODEX_CAPABILITIES },
     { id: 'opencode', column: 4, caps: OPENCODE_CAPABILITIES },
     { id: 'copilot', column: 5, caps: COPILOT_CAPABILITIES },
+    { id: 'antigravity', column: 6, caps: ANTIGRAVITY_CAPABILITIES },
   ];
 
-  it('has a column for Claude, Codex, OpenCode and Copilot', () => {
-    expect(header).toEqual(['What', 'Ways in', 'Claude', 'Codex', 'OpenCode', 'Copilot']);
+  it('has a column for Claude, Codex, OpenCode, Copilot and Antigravity', () => {
+    expect(header).toEqual(['What', 'Ways in', 'Claude', 'Codex', 'OpenCode', 'Copilot', 'Antigravity']);
     expect(rows.length).toBeGreaterThan(10);
   });
 
   it('leaves no cell blank: each is pass, a fallback or n/a', () => {
-    const bad = rows.flatMap((r) => [2, 3, 4, 5].filter((i) => r.length !== 6 || !/^(pass|fallback|n\/a)\b/.test(r[i] ?? '')).map((i) => `${r[0]} › ${header[i]}: "${r[i] ?? ''}"`));
+    const bad = rows.flatMap((r) => [2, 3, 4, 5, 6].filter((i) => r.length !== 7 || !/^(pass|fallback|n\/a)\b/.test(r[i] ?? '')).map((i) => `${r[0]} › ${header[i]}: "${r[i] ?? ''}"`));
     expect(bad).toEqual([]);
   });
 

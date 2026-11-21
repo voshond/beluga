@@ -13,6 +13,7 @@ export const INSTALLS: Readonly<Record<string, { readonly page: string; readonly
   codex: { page: 'https://developers.openai.com/codex', command: 'npm i -g @openai/codex' },
   opencode: { page: 'https://opencode.ai/download', command: 'npm i -g opencode-ai' },
   copilot: { page: 'https://github.com/features/copilot/cli', command: 'npm i -g @github/copilot' },
+  antigravity: { page: 'https://antigravity.google/docs/getting-started?tab=cli', command: 'curl -fsSL https://antigravity.google/cli/install.sh | bash' },
 };
 
 /** Codex's own install: the app, or its CLI from npm. */
@@ -44,7 +45,7 @@ export const STATE_WORDS: Readonly<Record<RuntimeState, string>> = {
 
 export const FIX_LABEL: Readonly<Record<AgentFix, string>> = { sign_in: 'Sign In', install: 'Get Codex', set_up: 'Set Up…' };
 
-/** A row's button: "Sign In", "Get Codex", "Get OpenCode", "Get Copilot", "Set Up…". */
+/** A row's button: "Sign In", "Get Codex", "Get OpenCode", "Get Copilot", "Get Antigravity", "Set Up…". */
 export const fixLabel = (row: Pick<AgentRow, 'label' | 'fix'>): string => (row.fix === 'install' ? `Get ${row.label}` : row.fix ? FIX_LABEL[row.fix] : '');
 
 /** Where a runtime stands: what it said once asked, else ready when it runs here; undefined: not asked yet. */
@@ -74,6 +75,12 @@ const DETAIL: Readonly<Record<string, Partial<Record<RuntimeState, string>> & { 
     ready: 'GitHub’s coding agent, through Copilot CLI. Copilot Free works, on Auto.',
     signed_out: 'Installed. Sign in once with your GitHub account (copilot login), and turn on Copilot for it (Free is enough).',
     missing: 'Install GitHub Copilot CLI, or in Terminal:',
+  },
+  antigravity: {
+    // agent-wording: claude (the Claude models Antigravity's plans offer, by name)
+    ready: 'Google’s coding agent, through the Antigravity CLI, on the models your Antigravity plan has (Gemini, Claude and more).',
+    signed_out: 'Installed. Run agy in Terminal once to sign in with your Google account.',
+    missing: 'Install the Antigravity CLI, or in Terminal:',
   },
   local: {
     ready: `A model of your own: Ollama on ${thisComputer()}, or an endpoint you added. Free.`,
