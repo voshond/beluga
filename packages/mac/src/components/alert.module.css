@@ -145,10 +145,14 @@
   box-shadow: none;
   font-weight: 400;
   white-space: nowrap;
-  transition: background var(--dur-fast);
+  transition: background var(--dur-fast), transform var(--dur-fast) var(--ease-out);
+}
+.button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 12%, var(--bg-raised));
 }
 .button:active:not(:disabled) {
   background: var(--control-press);
+  transform: scale(0.97);
 }
 .button:disabled {
   opacity: var(--control-disabled);
@@ -157,14 +161,17 @@
   outline: none;
   box-shadow: 0 0 0 0.5px var(--control-edge), var(--focus-ring);
 }
-/* The default button (Return): the accent, rising toward its top, a lit upper edge. */
+/* The default button (Return): the accent, flat. */
 .default {
-  background: linear-gradient(var(--control-accent-top), var(--control-accent));
+  background: var(--control-accent);
   color: var(--on-accent);
-  box-shadow: 0 0 0 0.5px var(--control-accent-edge), var(--control-drop), var(--control-accent-sheen);
+  box-shadow: 0 0 0 0.5px var(--control-accent-edge), var(--control-drop);
+}
+.default:hover:not(:disabled) {
+  background: var(--control-accent-hover);
 }
 .default:active:not(:disabled) {
-  background: color-mix(in srgb, var(--control-accent) 86%, var(--text));
+  background: var(--control-accent-press);
 }
 /*
  * While the window isn't key, or while it can't be pressed, the default button is drawn as any
@@ -178,11 +185,15 @@
   box-shadow: none;
 }
 .destructive {
-  background: linear-gradient(color-mix(in srgb, var(--error) 84%, var(--control-lift)), var(--error));
-  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--error) 70%, var(--text)), var(--control-drop), var(--control-accent-sheen);
+  background: var(--control-destructive);
+  color: var(--on-destructive);
+  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--control-destructive) 70%, var(--text)), var(--control-drop);
+}
+.destructive:hover:not(:disabled) {
+  background: var(--control-destructive-hover);
 }
 .destructive:active:not(:disabled) {
-  background: color-mix(in srgb, var(--error) 86%, var(--text));
+  background: var(--control-destructive-press);
 }
 .destructiveText {
   color: var(--error);
@@ -202,13 +213,13 @@
   height: 14px;
   margin: 1.5px 0 0;
   border-radius: 3.5px;
-  background: linear-gradient(var(--control-top), var(--control));
+  background: var(--control);
   box-shadow: inset 0 0 0 var(--hair) var(--control-edge), 0 0 0 var(--hair) var(--control-edge), var(--control-drop), var(--control-sheen);
   appearance: none;
   transition: background var(--dur-fast);
 }
 .box:checked {
-  background: linear-gradient(var(--control-accent-top), var(--control-accent));
+  background: var(--control-accent);
   box-shadow: 0 0 0 0.5px var(--control-accent-edge), var(--control-drop), var(--control-accent-sheen);
 }
 .box:active {
@@ -253,18 +264,18 @@
 }
 
 /* Liquid Glass: the buttons are capsules, so their 0.5px ring is a real border (see ui.module.css). */
-:global(:root[data-os='mac'][data-transparency='full']) .button {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .button {
   border: 0.5px solid var(--control-edge);
 }
-:global(:root[data-os='mac'][data-transparency='full']) .default {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .default {
   border-color: var(--control-accent-edge);
   box-shadow: var(--control-drop), var(--control-accent-sheen);
 }
-:global(:root[data-os='mac'][data-transparency='full'][data-window='idle']) .default:not(.destructive) {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos'][data-window='idle']) .default:not(.destructive) {
   border-color: var(--control-edge);
   box-shadow: var(--control-bezel);
 }
-:global(:root[data-os='mac'][data-transparency='full']) .destructive {
-  border-color: color-mix(in srgb, var(--error) 70%, var(--text));
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .destructive {
+  border-color: color-mix(in srgb, var(--control-destructive) 70%, var(--text));
   box-shadow: var(--control-drop), var(--control-accent-sheen);
 }

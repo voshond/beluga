@@ -73,10 +73,17 @@
 /* The ▾ keeps its variant's bezel, so both halves are one height; a line inside parts them. */
 .more {
   position: relative;
+  justify-content: center;
+  width: var(--control-h-large);
   height: var(--control-h-large);
-  padding-inline: 7px;
+  padding: 0;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
+}
+/* The ▾ in the very middle: its icon's box is a block, not a line of text (whose baseline sat it high). */
+.more > span,
+.more svg {
+  display: block;
 }
 .more::before {
   content: '';

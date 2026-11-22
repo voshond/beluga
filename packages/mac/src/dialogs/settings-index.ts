@@ -71,6 +71,7 @@ export const SETTINGS: readonly Entry[] = [
   ...rows('appearance', undefined, [
     ['Appearance', 'Match the system, light or dark.', 'dark mode light mode night theme system'],
     ['Accent', 'Selection, focus and buttons.', 'color colour highlight tint'],
+    ['Style', 'Beluga’s own look, or macOS 26’s round buttons and glass panes.', 'look shape corners rounded round capsule pill buttons liquid glass macos native panes'],
   ]),
   group('appearance', 'Light theme', 'The window’s colours by day.', 'theme day colors colours palette latte'),
   group('appearance', 'Dark theme', 'The window’s colours at night.', 'theme night colors colours palette oled black'),

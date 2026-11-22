@@ -1,9 +1,11 @@
 # Mac controls: sizes and where they go
 
-The Mac app's controls follow AppKit's control sizes (`NSControl.ControlSize`), so a sheet, a
-Settings row and a toolbar each look like the same control in the same place on a Mac. This page
-is the rule; `styles/tokens.css` ("Controls") holds the numbers, and every control reads them from
-there, never a height of its own.
+The Mac app's controls take their sizes from AppKit (`NSControl.ControlSize`), so a sheet, a
+Settings row and a toolbar each line up the same way. Their look is Beluga's own, not a copy of
+macOS: softly rounded corners, soft pastels, no glow. This page is a guide for keeping controls
+consistent, not a cage: when a place reads better another way, say why in its stylesheet.
+`styles/tokens.css` ("Controls") holds the numbers, and every control reads them from there,
+never a height of its own.
 
 ## The scale
 
@@ -12,7 +14,7 @@ pop-up and a button on one row line up without adjusting anything.
 
 | Size | Height | Text | Corner | Icon | Padding (button) | Checkbox | Switch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| **Large** | 28px | 13px | 7px | 16px | 0 16px | 14px | 32 × 19 |
+| **Large** | 28px | 13px | 6px | 16px | 0 16px | 14px | 32 × 19 |
 | **Regular** (default) | 22px | 13px | 5px | 14px | 0 12px | 14px | 32 × 19 |
 | **Small** | 20px | 12px | 4px | 12px | 0 8px | 12px | 26 × 15 |
 
@@ -25,6 +27,23 @@ pop-up and a button on one row line up without adjusting anything.
 | height | `--control-h-large` | `--control-h` | `--control-h-small` |
 | text | `--control-text-large` | `--control-text` | `--control-text-small` |
 | corner | `--control-radius-large` | `--control-radius` | `--control-radius-small` |
+
+## Shape
+
+Controls are **softly rounded** by default: a little rounder than a plain web button, never as
+round as a macOS 26 capsule. A big call to action (Create PR, Add Project) has the 6px corner;
+regular and small controls a slightly smaller one, so on their shorter height they look as soft.
+Faces are flat, never a gradient or a lit top edge, and every button answers the pointer: a
+shade deeper on hover (`--control-hover`, `--control-accent-hover`), deeper still and pressed
+in a touch (`scale(0.97)`) while held.
+
+Settings › Appearance › Style has a second style, **macOS**: buttons, fields and segmented
+controls become capsules, as macOS 26 draws them (`:root[data-look='macos']` sets
+`--control-radius-*` to 999px), and on a Mac whose window blurs, the panes turn to glass (Liquid
+Glass, below). It's off by default: Beluga's own style keeps the sidebar and the right panel the
+window's full height, flush with its edges. A control never hard-codes its corner: it reads
+`--control-radius-*`, so both styles carry through. Badges and status pills (a branch's state, a
+count) are pills in both.
 
 ## Which size where
 
@@ -41,7 +60,7 @@ pop-up and a button on one row line up without adjusting anything.
 - Rows of a list or table: a row's own actions (Merge, Open, Retry).
 - Cards (tasks, sentinels, usage), and the header of a card or panel section.
 - The right panel's and the dock's own toolbars and switchers (Changes / History, the shells'
-  buttons, the dock's Terminal / Background).
+  buttons).
 - Controls inside a conversation: an answer's actions, a step's buttons, a question's choices.
 - Filter bars over a list.
 
@@ -50,8 +69,13 @@ pop-up and a button on one row line up without adjusting anything.
 - The main action of onboarding, a welcome or an empty state ("Add Project", "Turn On").
 - The window's toolbar: its buttons, icon buttons (28 × 28), segmented control and search field.
   This is AppKit's unified toolbar, whose items are 28px tall. The title row goes across the
-  window, so the sidebar's buttons there, its search field and the right panel's view switcher
-  (Changes / Files / Scratch / Info) are Large too.
+  window, so the sidebar's buttons there and its search field are Large too.
+
+The docks' tabs (the right panel's Changes / Files / Scratch / Info and Terminal / Background, and
+what you put beside the chat) are not on this scale: they are editor tabs, not a segmented control.
+Every strip's are the same: flat, as wide as their icon and name need, one height (`--tab-h` in
+`styles/dock.css`), the tab you're on in the content's own background with a line of the accent
+along its top.
 
 Never more than one large button in a view outside the toolbar. One row never mixes sizes.
 
@@ -82,14 +106,14 @@ Keyboard focus is the same everywhere: a 3px accent ring outside the control (`-
 
 ## Liquid Glass
 
-On a Mac whose window blurs what's behind it (`data-transparency='full'`: not with macOS's or the
-app's Reduce transparency, not on a solid theme), the window is drawn as macOS 26 draws its own apps:
+With the macOS style (Settings › Appearance › Style, off by default), on a Mac whose window blurs
+what's behind it (`data-transparency='full'`: not with macOS's or the app's Reduce transparency, not
+on a solid theme), the window is drawn as macOS 26 draws its own apps:
 
 - The sidebar and the right panel are panes of glass, 8px in from the window's edges, with 16px
   corners, a light rim and a soft drop; the window behind them is the content's colour.
-- Controls are capsules: `--control-radius-*` are 999px. A text area keeps 8px corners, or its
-  corners would cut into the text. A capsule's ring is a real 0.5px border, since WebKit breaks a
-  0.5px shadow up round the ends.
+- Controls are capsules. Their ring is a real 0.5px border, since WebKit breaks a 0.5px shadow up
+  round a capsule's ends. A text area keeps 8px corners, or a capsule's would cut into the text.
 - The window toolbar's icon buttons sit on glass capsules.
 - A pop-up button is its value and one chevron, with no bezel, as macOS 26's settings draw it; a soft
   capsule shows under it on hover and while its menu is open. Its menu is a rounded card, the row
@@ -98,8 +122,8 @@ app's Reduce transparency, not on a solid theme), the window is drawn as macOS 2
 It is CSS only and still: nothing follows the pointer, and there is no refraction (the web versions
 draw it with an SVG displacement filter, which WebKit doesn't). The tokens are `--glass-*` in
 `styles/tokens.css`; each rule sits in its component's own stylesheet under
-`:root[data-os='mac'][data-transparency='full']`. Windows, Linux and the flat window keep the look
-above.
+`:root[data-os='mac'][data-transparency='full'][data-look='macos']`. Beluga's own style, Windows,
+Linux and the flat window keep the look above.
 
 ## Menus
 

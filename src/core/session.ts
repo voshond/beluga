@@ -839,9 +839,9 @@ export class Session {
     this.host.btw.dismiss(channel);
   }
 
-  /** Ask you to approve something; `peer` is who it's for. */
-  ask(kind: 'request' | 'tool', title: string, detail: string, peer?: string): Promise<'yes' | 'no' | 'always'> {
-    return this.host.ask(kind, title, detail, peer);
+  /** Ask you to approve something; `peer` is who it's for, `channel` the conversation it's about (Your Mac when none). */
+  ask(kind: 'request' | 'tool', title: string, detail: string, peer?: string, channel?: string): Promise<'yes' | 'no' | 'always'> {
+    return this.host.ask(kind, title, detail, peer, channel);
   }
 
   /**

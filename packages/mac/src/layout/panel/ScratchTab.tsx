@@ -11,12 +11,12 @@ import { ActionsDropdown } from '../../components/SpecMenu.js';
 import { useApi, useApp, useBeluga } from '../../lib/beluga.js';
 import { openWithDefaultApp, revealInFinder } from '../../lib/files.js';
 import { openFocus } from '../../lib/panel.js';
-import { SPLIT_DEFAULT, SPLIT_MAX, SPLIT_MIN, clampShare } from '../../lib/panel-model.js';
 import { setPrefs, usePrefs } from '../../lib/prefs.js';
 import { chordLabel } from '../../lib/shortcuts-model.js';
 import { ChangedFileView } from '../../views/ChangedFile.js';
 import { signalOf } from '../attention-model.js';
 import { ResizeHandle } from './ResizeHandle.js';
+import { useSplit } from './use-split.js';
 import { NextFileRow, ScratchEmpty, ScratchSkeleton } from './ScratchSkeleton.js';
 import { type ScratchEntry, type ScratchKind, type ScratchSort, type ScratchTotal, type ScratchView, atEnd, fileKind, followed, foldersWithFiles, isFresh, isViewable, scratchBytes, scratchCount, scratchPlace, scratchState, sortScratch, splitSent, timeAgo, viewTotal } from './scratch-model.js';
 import s from './panel.module.css';
@@ -257,9 +257,9 @@ export function ScratchTab({ of }: { of: ScratchOf }) {
   const now = useNow();
   const [picked, setPicked] = useState<string>();
   const [closed, setClosed] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const [wanted, setWanted] = useState<ScratchView>('claude');
+  // Not picked yet: the tab picks (what you sent, while your agent has saved nothing).
+  const [wanted, setWanted] = useState<ScratchView>();
   const split = useMemo(() => splitSent(list?.files ?? [], wanted, isSentPath), [list, wanted]);
   const files = split.shown;
   const sort: ScratchSort = prefs.scratchSort === 'viewable' ? 'viewable' : 'newest';
@@ -268,6 +268,8 @@ export function ScratchTab({ of }: { of: ScratchOf }) {
   // Nothing picked: the newest file, as each lands. Picked: that one, while it's there.
   const shown = closed ? undefined : followed(files, !picked, picked);
   const file = files.find((f) => f.path === shown);
+  // Under the list while the tab is narrow, beside it once there's room for both.
+  const stack = useSplit(Boolean(file));
 
   // Nothing picked: the newest file stays in sight as new ones arrive.
   useEffect(() => {
@@ -300,7 +302,6 @@ export function ScratchTab({ of }: { of: ScratchOf }) {
   if (state === 'loading') return <ScratchSkeleton />;
   if (state === 'missing' || !list) return <Empty icon="alert" title="No folder to look in" detail="This workspace’s folder is missing." />;
   if (state === 'empty') return <ScratchEmpty working={working} off={!owner && !on} dir={list.dir} {...(owner ? {} : { onReveal: () => void revealInFinder(client, list.dir) })} />;
-  const share = clampShare(prefs.panelSplit, SPLIT_MIN, SPLIT_MAX);
   const total = viewTotal(split, list.total);
   const bytes = scratchBytes(files, total);
   const sentView = split.view === 'sent';
@@ -309,8 +310,8 @@ export function ScratchTab({ of }: { of: ScratchOf }) {
     setPicked(undefined);
   };
   return (
-    <div ref={box} className={s.stack}>
-      <div className={s.top} style={file ? { flex: `0 0 ${Math.round(share * 100)}%` } : undefined}>
+    <div ref={stack.ref} className={cx(s.stack, stack.side && s.stackSide)}>
+      <div className={s.top} style={stack.listStyle}>
         {split.sent.length ? (
           <div className={k.views}>
             <Segmented size="small"
@@ -342,6 +343,7 @@ export function ScratchTab({ of }: { of: ScratchOf }) {
           </div>
         </div>
         {working && !sentView ? <NextFileRow /> : null}
+        {!rows.length && !sentView && !working ? <p className={k.viewEmpty}>Nothing saved by your agent yet. Screenshots, logs and notes it saves while it works show up here.</p> : null}
         <div ref={listRef} className={s.list} role="listbox" aria-label={sentView ? 'Files you sent' : 'Scratch files'} tabIndex={0} onKeyDown={onKey}>
           {rows.map((f) => {
             const { root: folder, dir, name } = scratchPlace(f.path, sentView ? [SENT_DIR] : SHOWN_SCRATCH_DIRS);
@@ -373,16 +375,7 @@ export function ScratchTab({ of }: { of: ScratchOf }) {
       </div>
       {file ? (
         <>
-          <ResizeHandle
-            axis="y"
-            label="Resize the list"
-            onMove={(y) => {
-              const r = box.current?.getBoundingClientRect();
-              if (r) setPrefs({ panelSplit: clampShare((y - r.top) / r.height, SPLIT_MIN, SPLIT_MAX) });
-            }}
-            onReset={() => setPrefs({ panelSplit: SPLIT_DEFAULT })}
-            onStep={(dir) => setPrefs({ panelSplit: clampShare(share - dir * 0.04, SPLIT_MIN, SPLIT_MAX) })}
-          />
+          <ResizeHandle label="Resize the list" {...stack.handle} />
           <Preview of={of} file={file} list={list} onClose={() => setClosed(true)} />
         </>
       ) : null}

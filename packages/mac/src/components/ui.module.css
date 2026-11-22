@@ -9,7 +9,11 @@
   font-size: var(--control-text);
   font-weight: 400;
   white-space: nowrap;
-  transition: background var(--dur-fast), color var(--dur-fast), opacity var(--dur-fast);
+  transition: background var(--dur-fast), color var(--dur-fast), opacity var(--dur-fast), transform var(--dur-fast) var(--ease-out);
+}
+/* Every push button answers the pointer: a shade deeper on hover (below, per style), pressed in a touch. */
+.button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 .small {
   gap: 5px;
@@ -26,25 +30,34 @@
   font-size: var(--control-text-large);
 }
 .plain {
-  background: linear-gradient(var(--control-top), var(--control));
+  background: var(--control);
   box-shadow: var(--control-bezel);
+}
+.plain:hover:not(:disabled) {
+  background: var(--control-hover);
 }
 .plain:active:not(:disabled) {
   background: var(--control-press);
 }
 .primary {
-  background: linear-gradient(var(--control-accent-top), var(--control-accent));
+  background: var(--control-accent);
   color: var(--on-accent);
-  box-shadow: 0 0 0 0.5px var(--control-accent-edge), var(--control-drop), var(--control-accent-sheen);
+  box-shadow: 0 0 0 0.5px var(--control-accent-edge), var(--control-drop);
+}
+.primary:hover:not(:disabled) {
+  background: var(--control-accent-hover);
 }
 .primary:active:not(:disabled) {
-  background: color-mix(in srgb, var(--control-accent) 86%, var(--text));
+  background: var(--control-accent-press);
 }
 /* Merging changes your main branch: green, as GitHub's Merge, and never the everyday blue. */
 .merge {
-  background: linear-gradient(color-mix(in srgb, var(--merge) 86%, var(--control-lift)), var(--merge));
+  background: var(--merge);
   color: white;
-  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--merge) 70%, var(--text)), var(--control-drop), var(--control-accent-sheen);
+  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--merge) 70%, var(--text)), var(--control-drop);
+}
+.merge:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--merge) 90%, black);
 }
 .merge:active:not(:disabled) {
   background: color-mix(in srgb, var(--merge) 86%, black);
@@ -61,8 +74,11 @@
 }
 .danger {
   color: var(--error);
-  background: linear-gradient(var(--control-top), var(--control));
+  background: var(--control);
   box-shadow: var(--control-bezel);
+}
+.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error) 8%, var(--control));
 }
 .danger:active:not(:disabled) {
   background: color-mix(in srgb, var(--error) 12%, var(--control));
@@ -78,7 +94,7 @@
  */
 .primary:disabled,
 .merge:disabled {
-  background: linear-gradient(var(--control-top), var(--control));
+  background: var(--control);
   color: var(--text);
   box-shadow: var(--control-bezel);
 }
@@ -430,39 +446,39 @@
 }
 
 /* Liquid Glass: the window toolbar's icon buttons sit on glass capsules. */
-:global(:root[data-os='mac'][data-transparency='full'] header[data-tauri-drag-region]) .iconButton {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos'] header[data-tauri-drag-region]) .iconButton {
   border-radius: 999px;
   background: var(--glass-chip);
   box-shadow: var(--glass-ring), 0 1px 2px rgba(0, 0, 0, 0.06);
 }
-:global(:root[data-os='mac'][data-transparency='full'] header[data-tauri-drag-region]) .iconButton:disabled {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos'] header[data-tauri-drag-region]) .iconButton:disabled {
   background: none;
   box-shadow: none;
 }
 
 /* Liquid Glass: buttons and the segmented control are capsules, so their 0.5px ring is a real border
    (WebKit breaks a 0.5px shadow up round a capsule's ends); the bezel keeps its drop and sheen. */
-:global(:root[data-os='mac'][data-transparency='full']) .plain,
-:global(:root[data-os='mac'][data-transparency='full']) .danger {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .plain,
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .danger {
   border: 0.5px solid var(--control-edge);
 }
-:global(:root[data-os='mac'][data-transparency='full']) .primary {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .primary {
   border: 0.5px solid var(--control-accent-edge);
   box-shadow: var(--control-drop), var(--control-accent-sheen);
 }
-:global(:root[data-os='mac'][data-transparency='full']) .merge {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .merge {
   border: 0.5px solid color-mix(in srgb, var(--merge) 70%, var(--text));
   box-shadow: var(--control-drop), var(--control-accent-sheen);
 }
 /* The track's ring is drawn on its own layer and takes no room, so the segments sit the same 1px from
    its top and its bottom whatever the ring rounds to (Chromium makes a 0.5px border 1px, and a track
    at a fractional position then put more room above a segment than below it). */
-:global(:root[data-os='mac'][data-transparency='full']) .segmented {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .segmented {
   position: relative;
   padding: 1px;
   box-shadow: none;
 }
-:global(:root[data-os='mac'][data-transparency='full']) .segmented::after {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .segmented::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -470,10 +486,10 @@
   border-radius: inherit;
   pointer-events: none;
 }
-:global(:root[data-os='mac'][data-transparency='full']) .segment {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .segment {
   border: 0.5px solid transparent;
 }
-:global(:root[data-os='mac'][data-transparency='full']) .segmentOn {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .segmentOn {
   border-color: var(--control-edge);
   /* Even all round: a drop below would fill the track's gap under it, and the segment would look pushed up. */
   box-shadow: 0 0 1.5px rgba(0, 0, 0, 0.14), var(--control-sheen);

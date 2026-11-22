@@ -12,8 +12,6 @@ import { scrollWithin } from '../../lib/scroll-within.js';
 import { ViewBoundary } from '../../lib/lazy-view.js';
 import { localPathOf, openWithDefaultApp } from '../../lib/files.js';
 import { focusFor, openFocus, showChange, usePanelRuntime } from '../../lib/panel.js';
-import { SPLIT_DEFAULT, SPLIT_MAX, SPLIT_MIN, clampShare } from '../../lib/panel-model.js';
-import { setPrefs, usePrefs } from '../../lib/prefs.js';
 import { chordLabel } from '../../lib/shortcuts-model.js';
 import { STATE } from '../../views/DiffView.js';
 import { useRowItems } from '../../views/FilesView.js';
@@ -27,6 +25,7 @@ import { useEditSession } from '../../views/reader/edit-store.js';
 import { SCROLL_ROOT } from '../../components/markdown/md-dom.js';
 import d from '../../views/diff.module.css';
 import { ResizeHandle } from './ResizeHandle.js';
+import { useSplit } from './use-split.js';
 import { type TreeRow, ancestorsOf, foundRows, treeRows } from './tree.js';
 import s from './panel.module.css';
 import k from './content-search.module.css';
@@ -125,7 +124,7 @@ function Preview({ viewer, wsId, local, changed }: { viewer: ViewerState; wsId: 
 
 /**
  * The right panel's Files: the workspace's folder as a tree (search it by name or by contents),
- * and the file you pick, previewed under it. Double-click opens a file in its app; right-click for
+ * and the file you pick, previewed under it (beside it, in a wide tab). Double-click opens a file in its app; right-click for
  * the rest. On a project's page (`project`) it's the project's main folder: the same, without
  * Show Changes (that's a worktree's Changes tab).
  */
@@ -133,7 +132,6 @@ export function FilesTab({ wsId, project = false }: { wsId: string; project?: bo
   const api = useApi();
   const { client } = useBeluga();
   const revealWords = useRevealLabel();
-  const prefs = usePrefs();
   const selfId = useApp((st) => st.selfId);
   const cache = useApp((st) => st.dirCache);
   const viewer = useApp((st) => st.viewer);
@@ -166,7 +164,6 @@ export function FilesTab({ wsId, project = false }: { wsId: string; project?: bo
   const list = useRef<HTMLDivElement>(null);
   const hitList = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLInputElement>(null);
-  const box = useRef<HTMLDivElement>(null);
   // A line found in the contents: the file opens there.
   const openAt = (path: string, line: number): void => {
     revealLine(at(path), line);
@@ -200,6 +197,8 @@ export function FilesTab({ wsId, project = false }: { wsId: string; project?: bo
   }, [answered]);
   const early: ViewerState | undefined = opening && !answered ? { ...opening, content: '', truncated: false, loading: true, scroll: 0 } : undefined;
   const previewed = inFocus ? undefined : (early ?? shown);
+  // Under the tree while the tab is narrow, beside it once there's room for both.
+  const split = useSplit(Boolean(previewed));
   useEffect(() => {
     if (!shown) return;
     const up = ancestorsOf(shown.path);
@@ -303,11 +302,10 @@ export function FilesTab({ wsId, project = false }: { wsId: string; project?: bo
     }
   };
 
-  const split = clampShare(prefs.panelSplit, SPLIT_MIN, SPLIT_MAX);
   const local = shown ? localOf(shown.path) : undefined;
   return (
-    <div ref={box} className={s.stack}>
-      <div className={s.top} style={previewed ? { flex: `0 0 ${Math.round(split * 100)}%` } : undefined}>
+    <div ref={split.ref} className={cx(s.stack, split.side && s.stackSide)}>
+      <div className={s.top} style={split.listStyle}>
         <div className={s.filterRow}>
           <label className={s.filter}>
             <Icon name="search" size={12} />
@@ -392,16 +390,7 @@ export function FilesTab({ wsId, project = false }: { wsId: string; project?: bo
       </div>
       {previewed ? (
         <>
-          <ResizeHandle
-            axis="y"
-            label="Resize the tree"
-            onMove={(y) => {
-              const r = box.current?.getBoundingClientRect();
-              if (r) setPrefs({ panelSplit: clampShare((y - r.top) / r.height, SPLIT_MIN, SPLIT_MAX) });
-            }}
-            onReset={() => setPrefs({ panelSplit: SPLIT_DEFAULT })}
-            onStep={(dir) => setPrefs({ panelSplit: clampShare(split - dir * 0.04, SPLIT_MIN, SPLIT_MAX) })}
-          />
+          <ResizeHandle label="Resize the tree" {...split.handle} />
           <Preview viewer={previewed} wsId={wsId} local={local} changed={canShowChange(previewed.path)} />
         </>
       ) : null}

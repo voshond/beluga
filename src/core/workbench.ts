@@ -68,7 +68,8 @@ export interface WorkbenchDeps {
   readonly setChatModel?: (channel: string, model: string) => boolean;
   readonly setPrefs: (prefs: Partial<Prefs>) => void;
   /** Ask you before something runs by itself the first time (e.g. a repo's own setup command). */
-  readonly confirm?: (title: string, detail: string) => Promise<'yes' | 'no' | 'always'>;
+  /** `channel`: the conversation it's about (a worktree's), so its notification opens there and not Your Mac. */
+  readonly confirm?: (title: string, detail: string, channel?: string) => Promise<'yes' | 'no' | 'always'>;
   /** Open a URL or a file with the system's default app. */
   readonly open?: (target: string) => void;
   /** Models your Claude Code offers (asked at start, and again once Claude Code moved to a newer one). */
@@ -1684,7 +1685,7 @@ export class Workbench {
       const key = `${project.id}\n${command}`;
       let asking = this.askingSetup.get(key);
       if (!asking) {
-        asking = this.deps.confirm(title, `${command}\n\n${from}. Allow it if you trust what's in it. "Always" remembers this exact command.`).finally(() => this.askingSetup.delete(key));
+        asking = this.deps.confirm(title, `${command}\n\n${from}. Allow it if you trust what's in it. "Always" remembers this exact command.`, `ws:${ws.id}`).finally(() => this.askingSetup.delete(key));
         this.askingSetup.set(key, asking);
       }
       void asking.then((answer) => {
@@ -1751,7 +1752,7 @@ export class Workbench {
     const what = kind === 'run' ? 'The run' : 'The setup';
     const tail = output.replace(ANSI, '').trimEnd().slice(-FAIL_TAIL_CHARS);
     void this.deps
-      .confirm(`${what} didn't work in ${ws.name}. Do you want me to fix it?`, `${command}\nstopped with exit code ${code ?? '?'}.${tail ? `\n\n${tail}` : ''}`)
+      .confirm(`${what} didn't work in ${ws.name}. Do you want me to fix it?`, `${command}\nstopped with exit code ${code ?? '?'}.${tail ? `\n\n${tail}` : ''}`, `ws:${ws.id}`)
       .then((answer) => {
         this.offered.delete(key);
         if (answer !== 'no') return this.fixFailed(ws, kind, command, code, output);

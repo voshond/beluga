@@ -320,7 +320,8 @@ export async function createDemoWorkspaces(): Promise<WorkspaceManager> {
     });
     const react = path.resolve(import.meta.dirname, '../packages/mac/node_modules');
     if (existsSync(path.join(react, 'react-dom'))) {
-      symlinkSync(react, path.join(hero.path, 'node_modules'));
+      // A junction on Windows (a plain symlink there needs rights most accounts don't have); elsewhere the type is ignored.
+      symlinkSync(react, path.join(hero.path, 'node_modules'), 'junction');
       // Installed packages aren't a change: the Changes tab leaves them out, as a project's .gitignore would.
       writeFileSync(path.join(landingDir, '.git', 'info', 'exclude'), 'node_modules\n', { flag: 'a' });
     }

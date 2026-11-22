@@ -8,6 +8,8 @@
 mod clipboard;
 mod daemon;
 mod device;
+#[cfg(target_os = "macos")]
+mod drag_inside;
 mod export;
 mod focus;
 mod frame;
@@ -429,6 +431,11 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
                 window_vibrancy(&window, true);
+                // A tab dragged inside the window lands where it's dropped (src/drag_inside.rs).
+                let _ = window.with_webview(|webview| {
+                    // SAFETY: with_webview runs this on the main thread with the window's live WKWebView.
+                    unsafe { drag_inside::install(webview.inner().cast()) }
+                });
             }
             menu::tray(&handle)?;
             spout::start(&handle);

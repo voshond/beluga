@@ -9,7 +9,6 @@ import { useActions } from '../../lib/actions.js';
 import { useApi, useApp, useBeluga } from '../../lib/beluga.js';
 import { useMyAgentName } from '../../lib/agent-words.js';
 import { focusFor, openFocus, showPanelTab, forgetChangeAsk, peekChangeAsk, usePanelRuntime } from '../../lib/panel.js';
-import { SPLIT_DEFAULT, SPLIT_MAX, SPLIT_MIN, clampShare } from '../../lib/panel-model.js';
 import { dirOf, groupByFolder, shownOrder } from '../../lib/changes-model.js';
 import { setPrefs, usePrefs } from '../../lib/prefs.js';
 import { chordLabel } from '../../lib/shortcuts-model.js';
@@ -21,6 +20,7 @@ import { aheadOnHover, readAhead } from '../../views/reader/streamed.js';
 import { useDiffComments } from '../../views/DiffComment.js';
 import d from '../../views/diff.module.css';
 import { ResizeHandle } from './ResizeHandle.js';
+import { useSplit } from './use-split.js';
 import { showGitTrouble } from '../../lib/git-trouble.js';
 import s from './panel.module.css';
 import { shortcutKeys } from '../../lib/shortcuts.js';
@@ -267,6 +267,12 @@ function FileDiff({ wsId, path, onClose }: { wsId: string; path: string; onClose
 }
 
 /** The right panel's Changes: the changed files and, picked one, its diff under them. */
+/**
+ * The file open under the list, per worktree: still open when the tab is drawn again (the panel
+ * hidden and shown, a diff shown full size and back, the tab moved to another group).
+ */
+const openFiles = new Map<string, string>();
+
 export function ChangesTab({ wsId }: { wsId: string }) {
   const api = useApi();
   const { client } = useBeluga();
@@ -278,9 +284,15 @@ export function ChangesTab({ wsId }: { wsId: string }) {
   // Show Changes from the Files tab: that file, once the list is here.
   const [asked] = useState(() => peekChangeAsk(wsId));
   useEffect(forgetChangeAsk, []);
-  const [open, setOpen] = useState<string>();
+  const [open, setShown] = useState<string | undefined>(() => openFiles.get(wsId));
+  const setOpen = (path: string | undefined): void => {
+    if (path) openFiles.set(wsId, path);
+    else openFiles.delete(wsId);
+    setShown(path);
+  };
   const inFocus = usePanelRuntime((r) => r.focus?.wsId === wsId && r.focus.kind === 'diff');
-  const box = useRef<HTMLDivElement>(null);
+  // Open full size, the diff is across the center (no second copy here). Else under the list, or beside it in a wide tab.
+  const split = useSplit(Boolean(open) && !inFocus);
   const files = useMemo(() => data?.files ?? [], [data]);
   const at = open ? files.findIndex((f) => f.path === open) : -1;
   // Grouped by folder (a button at the top): each folder folds; the arrows walk what's shown.
@@ -367,7 +379,6 @@ export function ChangesTab({ wsId }: { wsId: string }) {
       </div>
     );
   }
-  const split = clampShare(prefs.panelSplit, SPLIT_MIN, SPLIT_MAX);
   // A changed file's row: in a folder, just its name (the folder says where).
   const fileRow = (f: Review['files'][number], i: number, inFolder: boolean) => {
     const st = STATE[f.state];
@@ -404,8 +415,8 @@ export function ChangesTab({ wsId }: { wsId: string }) {
   // Open full size, the diff is across the center: no second, smaller copy of it here.
   const shown = inFocus ? undefined : open;
   return (
-    <div ref={box} className={s.stack}>
-      <div className={s.top} style={shown ? { flex: `0 0 ${Math.round(split * 100)}%` } : undefined}>
+    <div ref={split.ref} className={cx(s.stack, split.side && s.stackSide)}>
+      <div className={s.top} style={split.listStyle}>
         <Summary data={data} loading={loading} grouped={grouped} onReload={reload} />
         <div ref={listRef} className={s.list} role="listbox" aria-label="Changed files" tabIndex={0} onKeyDown={onKey}>
           {grouped
@@ -433,18 +444,11 @@ export function ChangesTab({ wsId }: { wsId: string }) {
       </div>
       {shown ? (
         <>
-          <ResizeHandle
-            axis="y"
-            label="Resize the list"
-            onMove={(y) => {
-              const r = box.current?.getBoundingClientRect();
-              if (r) setPrefs({ panelSplit: clampShare((y - r.top) / r.height, SPLIT_MIN, SPLIT_MAX) });
-            }}
-            onReset={() => setPrefs({ panelSplit: SPLIT_DEFAULT })}
-            onStep={(dir) => setPrefs({ panelSplit: clampShare(split - dir * 0.04, SPLIT_MIN, SPLIT_MAX) })}
-          />
-          <FileDiff wsId={wsId} path={shown} onClose={() => setOpen(undefined)} />
-          <Actions wsId={wsId} />
+          <ResizeHandle label="Resize the list" {...split.handle} />
+          <div className={s.second}>
+            <FileDiff wsId={wsId} path={shown} onClose={() => setOpen(undefined)} />
+            <Actions wsId={wsId} />
+          </div>
         </>
       ) : null}
     </div>

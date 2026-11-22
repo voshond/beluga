@@ -44,11 +44,12 @@ export function useTaskFileDrop(): ReactNode {
   const add = async (target: Over, paths: readonly string[]): Promise<void> => {
     let picked;
     try {
-      picked = droppedFiles(await api.local.statFiles(paths.slice(0, MAX_DROPPED)));
+      picked = droppedFiles(await api.local.statFiles(paths.slice(0, MAX_DROPPED)), { folders: false });
     } catch (err) {
       return toast(client, `Couldn’t add what you dropped: ${message(err)}`, 'error');
     }
-    const { files, skipped } = picked;
+    const { files } = picked;
+    const skipped = picked.folders.length + picked.missing;
     if (!files.length) return toast(client, 'Only files can be added to a task (not folders)', 'warn');
     let added = 0;
     for (const f of files) {

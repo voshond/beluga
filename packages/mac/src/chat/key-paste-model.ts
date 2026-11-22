@@ -34,11 +34,11 @@ export interface Offer {
   readonly dismissed?: { readonly prefixes: readonly string[]; readonly keys: readonly OfferedKey[] };
 }
 
-/** The place a box sends to, from its channel and view. */
-export function targetOf(channel: string, view: { readonly draftProject?: string; readonly newChatProject?: { readonly id: string; readonly name: string }; readonly worktree?: boolean }): KeyTarget {
+/** The place a box sends to, from its channel and view. A new chat in Chats (no folder) is one with no project. */
+export function targetOf(channel: string, view: { readonly draftProject?: string; readonly newChatProject?: { readonly id: string; readonly name: string; readonly root: string }; readonly worktree?: boolean }): KeyTarget {
   if (channel.startsWith('ws:')) return { kind: 'chat', workspaceId: channel.slice(3), worktree: view.worktree ?? true };
   if (view.draftProject) return { kind: 'draft', projectId: view.draftProject };
-  if (view.newChatProject) return { kind: 'project', projectId: view.newChatProject.id, projectName: view.newChatProject.name };
+  if (view.newChatProject?.root) return { kind: 'project', projectId: view.newChatProject.id, projectName: view.newChatProject.name };
   return { kind: 'yours' };
 }
 

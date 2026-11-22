@@ -37,8 +37,28 @@ export const sameBox = (a: Box | undefined, b: Box | undefined): boolean => a ==
 /** How many dropped paths are looked at (Beluga checks up to this many at once). */
 export const MAX_DROPPED = 20;
 
-/** Of the dropped paths' details: the files (images and others, in order), and how many weren't files (folders, gone). */
-export function droppedFiles<T extends { readonly kind: string }>(infos: readonly T[]): { readonly files: T[]; readonly skipped: number } {
-  const files = infos.filter((f) => f.kind === 'file');
-  return { files, skipped: infos.length - files.length };
+/**
+ * Of the dropped paths' details: what can go with a message, in order (files, and folders by
+ * their location when `folders`), the folders left out (a chat on another computer can't read a
+ * path on this Mac), and how many were gone.
+ */
+export function droppedFiles<T extends { readonly kind: string }>(infos: readonly T[], { folders = true }: { readonly folders?: boolean } = {}): { readonly files: T[]; readonly folders: T[]; readonly missing: number } {
+  const goes = (f: T): boolean => f.kind === 'file' || (folders && f.kind === 'folder');
+  return {
+    files: infos.filter(goes),
+    folders: infos.filter((f) => f.kind === 'folder' && !folders),
+    missing: infos.filter((f) => f.kind !== 'file' && f.kind !== 'folder').length,
+  };
+}
+
+/** What a drop left out, said once (undefined: nothing was). */
+export function leftOutWords(left: { readonly folders: readonly unknown[]; readonly missing: number }, computer: string): string | undefined {
+  const parts = [
+    left.folders.length === 1 ? `a folder stays on ${computer} (drop the files in it instead)` : '',
+    left.folders.length > 1 ? `${left.folders.length} folders stay on ${computer} (drop the files in them instead)` : '',
+    left.missing ? `${left.missing === 1 ? '1 item was' : `${left.missing} items were`} gone` : '',
+  ].filter(Boolean);
+  if (!parts.length) return undefined;
+  const words = parts.join(', and ');
+  return words[0]!.toUpperCase() + words.slice(1);
 }

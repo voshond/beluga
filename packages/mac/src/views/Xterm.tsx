@@ -200,6 +200,8 @@ export function Xterm({ termKey, start, focus = true, gpu = true, extend, onKey,
     el.addEventListener('mousedown', grab);
     const clipboard = attachTermClipboard(term, el);
     const refit = (): void => {
+      // Not on screen (its tab is behind another one, its dock is folded): it keeps the size it had.
+      if (!el.offsetWidth || !el.offsetHeight) return;
       try {
         fit.fit();
         link?.resize(term.cols, term.rows);

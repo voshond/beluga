@@ -323,6 +323,11 @@ export class EnvVars {
     return id ? this.projects.find((p) => p.id === id) : undefined;
   }
 
+  /** A project with no folder (Chats): not one of `projects`, and no place for variables of its own. */
+  private folderless(id: string | undefined): boolean {
+    return Boolean(id) && this.deps.store.getState().projects.some((p) => p.id === id && !p.root);
+  }
+
   /** Tell screens the names (never the values). */
   private publish(): void {
     const projects = Object.fromEntries(Object.entries(this.kept.projects).map(([root, p]) => [root, { keys: Object.keys(p.vars), dotenv: loadsDotenv(p) }]));
@@ -484,8 +489,10 @@ export class EnvVars {
     const { workspaceId, projectId } = where;
     if (!workspaceId) {
       // A new chat that has no place yet: the project's (or with none, yours), as Settings › Environment would keep them.
-      if (projectId && !this.project(projectId)) throw new Error('That project is gone');
-      this.set(projectId, importEnv(this.get(projectId).vars, rows));
+      // Chats has no folder, so it has no variables of its own: a new chat there is one with no project.
+      const scope = this.folderless(projectId) ? undefined : projectId;
+      if (scope && !this.project(scope)) throw new Error('That project is gone');
+      this.set(scope, importEnv(this.get(scope).vars, rows));
       return {};
     }
     const found = this.workspace(workspaceId);

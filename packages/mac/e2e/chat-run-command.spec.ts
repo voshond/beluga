@@ -70,22 +70,23 @@ test('Run on a shell block opens the terminal in the right panel and runs it the
   await expect.poll(() => termText(term), { timeout: 15_000 }).toContain('again-42');
 });
 
-test('Run uses the bottom drawer when that is where the terminal lives, and only runs the commands of a session', async ({ page }) => {
+test('Run uses the terminal under the chat when that is where it lives, and only runs the commands of a session', async ({ page }) => {
   await openWorkspace(page);
-  // Keep the terminal in the drawer (its ••• menu).
+  // Keep the terminal under the chat (its ••• menu).
   await page.keyboard.press('Meta+J');
   const inPanel = page.getByRole('complementary', { name: 'Panel' }).getByRole('region', { name: 'Terminal' });
   await expect(inPanel).toBeVisible();
   await inPanel.getByRole('button', { name: 'Terminal options' }).click();
-  await page.getByRole('menuitem', { name: 'Move to the Bottom Drawer' }).click();
-  await page.getByRole('button', { name: 'Close the drawer' }).click();
-  await expect(page.getByRole('button', { name: 'Close the drawer' })).toBeHidden();
+  await page.getByRole('menuitem', { name: 'Move Under the Chat' }).click();
+  await page.getByRole('button', { name: 'Put the terminal away' }).click();
+  await expect(page.getByRole('button', { name: 'Put the terminal away' })).toBeHidden();
 
   await sendBlock(page, 'console', '$ echo drawer-$((6*7))\nthis line is output, never run');
   const block = page.locator('[data-block="terminal"]').last();
   await block.hover({ position: { x: 8, y: 8 } });
   await block.getByRole('button', { name: 'Run in the terminal' }).click();
-  const drawer = page.getByRole('region', { name: 'Terminal' }).filter({ has: page.getByRole('button', { name: 'Close the drawer' }) });
+  // Under the chat (the center's dock), where it lives now.
+  const drawer = page.getByRole('main').getByRole('region', { name: 'Terminal' }).filter({ has: page.getByRole('button', { name: 'Put the terminal away' }) });
   await expect(drawer).toBeVisible();
   await expect.poll(() => termText(drawer), { timeout: 15_000 }).toContain('drawer-42');
   expect(await termText(drawer)).not.toContain('command not found: this');
