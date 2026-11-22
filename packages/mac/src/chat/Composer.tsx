@@ -359,9 +359,10 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
       : { hint: `ask your agent: it reads ${ownerName}’s worktree from here`, owner: { name: ownerName, hint: `ask ${ownerName}’s agent, in their worktree` } };
   // Suggestions as you type: commands, people and Claudes, workspaces, folders, tasks.
   // An API key pasted here (BLG-965): a card offers to keep it in Beluga, the message saying $NAME instead.
+  const newChatIn = state.view.kind === 'draft' ? state.projects.find((p) => p.id === (state.view as { projectId: string }).projectId) : undefined;
   const keyTarget = targetOf(channel, {
     ...(draftProject ? { draftProject } : {}),
-    ...(state.view.kind === 'draft' ? { newChatProject: { id: state.view.projectId, name: state.projects.find((p) => p.id === (state.view as { projectId: string }).projectId)?.name ?? 'the project' } } : {}),
+    ...(state.view.kind === 'draft' ? { newChatProject: { id: state.view.projectId, name: newChatIn?.name ?? 'the project', root: newChatIn?.root ?? '' } } : {}),
     worktree: state.projects.some((p) => p.workspaces.some((w) => `ws:${w.id}` === channel && w.kind === 'worktree')),
   });
   // `resend`: Send pressed while a paste was still being looked at, and it held no key.

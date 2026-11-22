@@ -146,7 +146,7 @@ function PlaceGroup() {
         <Segmented
           label="Where the terminal opens"
           value={prefs.termIn}
-          onChange={(v) => setPrefs({ termIn: v, ...(v === 'panel' ? { drawer: false } : {}) })}
+          onChange={(v) => setPrefs({ termIn: v })}
           options={[
             { value: 'drawer', label: 'Bottom Drawer', icon: 'panelBottom' },
             { value: 'panel', label: 'Right Panel', icon: 'panelRight' },

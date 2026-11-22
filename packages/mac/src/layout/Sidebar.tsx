@@ -13,8 +13,6 @@ import { inApp } from '../lib/boot.js';
 import { useApi, useApp, useBeluga } from '../lib/beluga.js';
 import { sameDeep } from '../lib/stable.js';
 import { setPrefs, usePrefs } from '../lib/prefs.js';
-import { SIDEBAR_DEFAULT, clampSidebarWidth } from '../lib/panel-model.js';
-import { ResizeHandle } from './panel/ResizeHandle.js';
 import { RoomStatus } from '../dialogs/native/RoomPopover.js';
 import { PhoneMark } from '../phone/Phone.js';
 import { ChatsMenu } from './ChatsMenu.js';
@@ -56,8 +54,6 @@ import { WebBack } from './WebBack.js';
  * in them. Everything is also in ⌘K and the Go menu (⌘1…7). The room's group chat is no place
  * here (BLG-871): it's the first of Channels while someone else is in the room.
  */
-const STEP = 24;
-
 
 export { workspaceItems } from './workspace-row.js';
 
@@ -227,33 +223,8 @@ export function Sidebar() {
       <UpdatePill />
       <SidebarFooter />
       {friendsSidebar && <SelfBar />}
-      <SidebarEdge />
     </nav>
     </SidebarChatSelection>
-  );
-}
-
-/** The sidebar's right edge, dragged to resize it like the panel's left edge: live while you drag, saved when you let go. */
-function SidebarEdge() {
-  const prefs = usePrefs();
-  const drag = useRef<number>(undefined);
-  const resize = (width: number): void => {
-    drag.current = clampSidebarWidth(width);
-    document.documentElement.style.setProperty('--sidebar-w', `${drag.current}px`);
-  };
-  return (
-    <ResizeHandle
-      axis="x"
-      label="Resize the sidebar"
-      className={s.edge}
-      onMove={resize}
-      onEnd={() => {
-        if (drag.current !== undefined) setPrefs({ sidebarWidth: drag.current });
-        drag.current = undefined;
-      }}
-      onReset={() => setPrefs({ sidebarWidth: SIDEBAR_DEFAULT })}
-      onStep={(dir) => setPrefs({ sidebarWidth: clampSidebarWidth(prefs.sidebarWidth - dir * STEP) })}
-    />
   );
 }
 

@@ -129,6 +129,8 @@ describe('setup and run scripts', () => {
     // It comes from the repository, so the first time it asks; "always" remembers this command.
     await waitFor(() => kay.state().approvals.length === 1, 4000);
     expect(kay.state().approvals[0]?.title).toBe("app's klaud.json wants to run its setup in new worktrees");
+    // Asked about that worktree: its notification opens its chat, not Your Mac.
+    expect(kay.state().approvals[0]?.channel).toBe(`ws:${ws!.id}`);
     kay.session.answerApproval('always');
     // A new worktree and a login shell can take a while on a busy CI runner: generous waits. Flaky on
     // CI's Linux runner only (its shell stopped with no output): if it hangs again, say how it ended.
@@ -163,6 +165,7 @@ describe('setup and run scripts', () => {
     // Your Claude is on, so it offers to fix it; yes sends it the failure, in that worktree.
     await waitFor(() => kay.state().approvals.length === 1, 4000);
     expect(kay.state().approvals[0]?.title).toBe("The setup didn't work in broken. Do you want me to fix it?");
+    expect(kay.state().approvals[0]?.channel).toBe(`ws:${ws!.id}`);
     kay.session.answerApproval('yes');
     await waitFor(() => kay.runs.some((r) => r.prompt.includes('`exit 3` stopped with exit code 3')), 4000);
     kay.screen.dispatch({ type: 'view', view: { kind: 'overview' } });
@@ -230,6 +233,7 @@ describe('setup and run scripts', () => {
     // It came from reading the repository, so it asks before running by itself.
     await waitFor(() => kay.state().approvals.length >= 1, 4000);
     expect(kay.state().approvals[0]?.title).toBe("Claude worked out app's setup for new worktrees");
+    expect([`ws:${one!.id}`, `ws:${two!.id}`]).toContain(kay.state().approvals[0]?.channel);
     kay.session.answerApproval('always');
     // Flaky on CI's runners only (BLG-268 PR): if it hangs again, say how far each worktree got.
     await waitFor(() => kay.state().setup[one!.id]?.status === 'done' && kay.state().setup[two!.id]?.status === 'done', 20_000).catch((err: unknown) => {

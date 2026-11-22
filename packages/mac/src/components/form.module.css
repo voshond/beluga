@@ -313,14 +313,14 @@
 /* Liquid Glass: fields are capsules. Their ring was a 0.5px inset shadow, which WebKit breaks up round
    a capsule's ends; a real 0.5px border draws whole. A text area keeps the rounded rectangle of
    macOS's own text views, or its corners would cut into the text. */
-:global(:root[data-os='mac'][data-transparency='full']) .input {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .input {
   border: 0.5px solid var(--hairline-strong);
   box-shadow: none;
 }
-:global(:root[data-os='mac'][data-transparency='full']) .input:focus {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .input:focus {
   border-color: color-mix(in srgb, var(--accent) 70%, var(--hairline-strong));
   box-shadow: var(--focus-ring);
 }
-:global(:root[data-os='mac'][data-transparency='full']) .area {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .area {
   border-radius: 8px;
 }

@@ -269,6 +269,17 @@ function Appearance() {
             ))}
           </div>
         </Row>
+        <Row label="Style" detail={prefs.look === 'macos' ? 'Round buttons and floating glass panes, as macOS 26 draws its apps.' : 'Softly rounded buttons, with the sidebar and panel the window’s full height.'}>
+          <Select
+            label="Style"
+            value={prefs.look}
+            onChange={(v) => setPrefs({ look: v })}
+            options={[
+              { value: 'beluga', label: 'Beluga' },
+              { value: 'macos', label: 'macOS' },
+            ]}
+          />
+        </Row>
       </Group>
       <ThemeGroups />
       <Group title="Low Power">

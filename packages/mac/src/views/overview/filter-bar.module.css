@@ -183,11 +183,11 @@
 }
 
 /* Liquid Glass: a capsule, so its ring is a real 0.5px border (WebKit breaks a 0.5px shadow up round the ends). */
-:global(:root[data-os='mac'][data-transparency='full']) .field {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .field {
   border: 0.5px solid var(--hairline-strong);
   box-shadow: none;
 }
-:global(:root[data-os='mac'][data-transparency='full']) .field:focus-within {
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .field:focus-within {
   border-color: color-mix(in srgb, var(--accent) 70%, var(--hairline-strong));
   box-shadow: var(--focus-ring);
 }

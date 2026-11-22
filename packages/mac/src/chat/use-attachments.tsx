@@ -7,7 +7,7 @@ import { cx } from '../components/ui.js';
 import { type DropVerdict, type Sending, envAsk, planDrop, sendFiles, sentShare } from './attachments.js';
 import { openSheet } from '../lib/sheets.js';
 import { currentMachines } from '../machines/use-machines.js';
-import { type Box, MAX_DROPPED, appDropScale, dropHits, droppedFiles, sameBox } from './drop-model.js';
+import { type Box, MAX_DROPPED, appDropScale, dropHits, droppedFiles, leftOutWords, sameBox } from './drop-model.js';
 import { imageLinksIn } from '@beluga/shared/attachment-links.js';
 import { type RefKey, boxRef, plainRefs, refKey, referencedImages, withoutRef } from './image-refs.js';
 import { keepPreview, openLightbox, pendingImage, previewCopy, previewOf } from './images.js';
@@ -53,15 +53,26 @@ const savingPastes = new Map<string, Promise<void>>();
 let nextPaste = 1;
 const isTempPaste = (p: string): boolean => p.startsWith('paste:');
 
+/** A folder's path as the message says it: with a slash at its end, so it reads as one. */
+const folderPath = (p: string): string => (/[\\/]$/.test(p) ? p : `${p}${p.includes('\\') && !p.includes('/') ? '\\' : '/'}`);
+
 /** A file chip's tooltip: its path, or for a paste what happens to it. */
 const chipTitle = (f: WaitingFile): string =>
-  f.pasted === undefined ? f.path : savingPastes.has(f.path) ? 'Keeping it as a file…' : isTempPaste(f.path) ? 'Goes as text' : `Goes as its first lines and ${f.path}`;
+  f.kind === 'folder'
+    ? `Goes as its location: ${folderPath(f.path)}`
+    : f.pasted === undefined
+      ? f.path
+      : savingPastes.has(f.path)
+        ? 'Keeping it as a file…'
+        : isTempPaste(f.path)
+          ? 'Goes as text'
+          : `Goes as its first lines and ${f.path}`;
 
-/** A waiting file as the message says it: its path, a chat's copy as its words, a paste as its first lines and its file. */
+/** A waiting file as the message says it: its path (a folder's with a slash), a chat's copy as its words, a paste as its first lines and its file. */
 const fileWords = (f: WaitingFile): string => {
   if (f.copy) return f.copy;
   if (f.pasted !== undefined) return isTempPaste(f.path) ? pastedInline(f.pasted) : pastedWords(f.pasted, f.path);
-  return `\`${f.path}\``;
+  return `\`${f.kind === 'folder' ? folderPath(f.path) : f.path}\``;
 };
 /** The file name each image came with (the end of it shows on its chip in the words). */
 const imageNames = new Map<number, string>();
@@ -381,12 +392,14 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
       return { n: added.n, file: added.file, name: f.name };
     });
 
-  /** Files on this Mac: images wait as thumbnails (referenced at `at`, else where the cursor is), others as chips. */
+  /** Files and folders on this Mac: images wait as thumbnails (referenced at `at`, else where the cursor is), the rest as chips. */
   const addPaths = async (picked: readonly PathInfo[], at?: number): Promise<void> => {
-    const others = picked.filter((f) => !f.image);
+    // A folder named like a picture ("shots.png") is still a folder.
+    const isImage = (f: PathInfo): boolean => f.image && f.kind === 'file';
+    const others = picked.filter((f) => !isImage(f));
     if (others.length) setFiles([...(waitingFiles.get(memo) ?? []), ...others.filter((f) => !(waitingFiles.get(memo) ?? []).some((w) => w.path === f.path))]);
     let cursor = at;
-    for (const f of picked.filter((x) => x.image)) cursor = placeRef(addImageFile(f), cursor);
+    for (const f of picked.filter(isImage)) cursor = placeRef(addImageFile(f), cursor);
   };
 
   /**
@@ -419,8 +432,11 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
     } catch (err) {
       return toast(client, `Couldn't add what you dropped: ${errorText(err)}`, 'error');
     }
-    const { files: picked, skipped } = droppedFiles(infos);
-    if (skipped) toast(client, picked.length ? `Only files go with a message: ${skipped} left out` : 'Only files go with a message (not folders)', 'warn');
+    // A folder goes by its location, which means nothing on that computer: it stays here.
+    const dropped = droppedFiles(infos, { folders: false });
+    const picked = dropped.files;
+    const left = leftOutWords(dropped, thisComputer());
+    if (left) toast(client, left, 'warn');
     if (!picked.length) return;
     // The env send's rules (BLG-854): keys and credential folders stay here; an env file asks first.
     let checks: readonly DropVerdict[];
@@ -446,7 +462,7 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
     if (plan.ask.length) openSheet(envAsk(plan.ask, currentMachines().find((m) => m.id === there)?.name ?? 'that computer', () => void go(plan.ask, true)));
   };
 
-  /** Paths dropped from Finder: the files among them go as a paste of their paths would. */
+  /** Paths dropped from Finder: files go as a paste of their paths would, folders by their location. */
   const dropPaths = async (paths: readonly string[]): Promise<void> => {
     if (machine) return sendThere(machine, paths);
     let infos: readonly PathInfo[];
@@ -455,8 +471,10 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
     } catch (err) {
       return toast(client, `Couldn't add what you dropped: ${errorText(err)}`, 'error');
     }
-    const { files: picked, skipped } = droppedFiles(infos);
-    if (skipped) toast(client, picked.length ? `Only files go with a message: ${skipped} left out` : 'Only files go with a message (not folders)', 'warn');
+    const dropped = droppedFiles(infos);
+    const picked = dropped.files;
+    const left = leftOutWords(dropped, thisComputer());
+    if (left) toast(client, left, 'warn');
     if (!picked.length) return;
     await addPaths(picked);
     box.current?.focus();
@@ -656,7 +674,7 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
         <div className={s.fileChips} role="list" aria-label="Files to send">
           {files.map((f) => (
             <span key={f.path} role="listitem" className={cx(s.fileChip, savingPastes.has(f.path) && s.fileSaving)} title={chipTitle(f)} aria-busy={savingPastes.has(f.path)}>
-              <Icon name={f.pasted !== undefined ? 'fileText' : 'file'} size={11} />
+              <Icon name={f.kind === 'folder' ? 'folder' : f.pasted !== undefined ? 'fileText' : 'file'} size={11} />
               <span className={s.fileName}>{f.name}</span>
               {f.pasted !== undefined ? <span className={s.fileProgress}>{sizeWords(f.size)}</span> : null}
               <button type="button" aria-label={`Remove ${f.name}`} onClick={() => setFiles(files.filter((x) => x.path !== f.path))}>

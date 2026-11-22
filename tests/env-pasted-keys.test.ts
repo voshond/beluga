@@ -85,6 +85,14 @@ describe('keys pasted into a chat', () => {
     expect(() => env.keepPasted({ projectId: 'gone' }, [{ key: 'A', value: 'b' }])).toThrow('That project is gone');
   });
 
+  it('a new chat in Chats (no folder, so no project): yours everywhere', () => {
+    const chats: Project = { id: 'chats', name: 'Chats', root: '', base: '', workspaces: [] };
+    store.dispatch({ type: 'projects', projects: [chats, ...store.getState().projects] });
+    env.keepPasted({ projectId: 'chats' }, [{ key: 'AW_API_KEY', value: OPENAI }]);
+    expect(env.get().vars).toEqual([{ key: 'AW_API_KEY', value: OPENAI }]);
+    expect(env.envFor({ projectId: 'p1' }, { claude: true }).AW_API_KEY).toBe(OPENAI);
+  });
+
   it('a worktree being made gets them before it exists, and loses them if it isn’t made', () => {
     env.presetWorktree('wt-0123456789ab', [{ key: 'OPENAI_API_KEY', value: OPENAI }]);
     expect(store.getState().envKeys.worktrees?.['wt-0123456789ab']).toEqual(['OPENAI_API_KEY']);

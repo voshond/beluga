@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { imageReadOf } from '../packages/mac/src/chat/steps/image-read.js';
-import { dropHits, dropScale, droppedFiles, sameBox } from '../packages/mac/src/chat/drop-model.js';
+import { dropHits, dropScale, droppedFiles, leftOutWords, sameBox } from '../packages/mac/src/chat/drop-model.js';
 
 /** A step reading a picture shows its name as a badge (BLG-19). */
 describe('image reads in steps', () => {
@@ -58,14 +58,27 @@ describe('Finder drops', () => {
     expect(sameBox(box, undefined)).toBe(false);
   });
 
-  it('keeps the files, in order, and counts what isn’t one', () => {
-    const got = droppedFiles([
-      { path: '/a.png', kind: 'file' },
-      { path: '/dir', kind: 'folder' },
-      { path: '/b.txt', kind: 'file' },
-      { path: '/gone', kind: 'missing' },
-    ]);
+  const dropped = [
+    { path: '/a.png', kind: 'file' },
+    { path: '/dir', kind: 'folder' },
+    { path: '/b.txt', kind: 'file' },
+    { path: '/gone', kind: 'missing' },
+  ];
+
+  it('keeps files and folders, in order, and counts what was gone', () => {
+    const got = droppedFiles(dropped);
+    expect(got.files.map((f) => f.path)).toEqual(['/a.png', '/dir', '/b.txt']);
+    expect(got.folders).toEqual([]);
+    expect(got.missing).toBe(1);
+    expect(leftOutWords(got, 'this Mac')).toBe('1 item was gone');
+  });
+
+  it('leaves folders out for a chat on another computer, and says so', () => {
+    const got = droppedFiles(dropped, { folders: false });
     expect(got.files.map((f) => f.path)).toEqual(['/a.png', '/b.txt']);
-    expect(got.skipped).toBe(2);
+    expect(got.folders.map((f) => f.path)).toEqual(['/dir']);
+    expect(leftOutWords(got, 'this Mac')).toBe('A folder stays on this Mac (drop the files in it instead), and 1 item was gone');
+    expect(leftOutWords({ folders: [{}, {}], missing: 0 }, 'this Mac')).toBe('2 folders stay on this Mac (drop the files in them instead)');
+    expect(leftOutWords({ folders: [], missing: 0 }, 'this Mac')).toBeUndefined();
   });
 });

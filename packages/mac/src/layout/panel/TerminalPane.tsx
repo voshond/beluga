@@ -91,14 +91,14 @@ function useMenuItems(where: 'drawer' | 'panel', wsId: string | undefined): Acti
   const project = useApp((st) => (wsId ? st.projects.find((p) => p.workspaces.some((w) => w.id === wsId)) : undefined));
   const other = where === 'drawer' ? 'panel' : 'drawer';
   return [
-    { label: other === 'panel' ? 'Move to the Right Panel' : 'Move to the Bottom Drawer', icon: other === 'panel' ? 'panelRight' : 'panelBottom', onSelect: () => moveTerminal(client.store.getState(), other) },
+    { label: other === 'panel' ? 'Move to the Right Panel' : 'Move Under the Chat', icon: other === 'panel' ? 'panelRight' : 'panelBottom', onSelect: () => moveTerminal(client.store.getState(), other) },
     {
       label: `${chordLabel('Cmd+J')} Opens the Terminal`,
       separate: true,
       onSelect: () => undefined,
       submenu: [
-        { label: 'In the Bottom Drawer', checked: prefs.termIn === 'drawer', onSelect: () => setPrefs({ termIn: 'drawer' }) },
-        { label: 'In the Right Panel', checked: prefs.termIn === 'panel', onSelect: () => setPrefs({ termIn: 'panel' }) },
+        { label: 'Under the Chat', checked: prefs.termIn === 'drawer', onSelect: () => moveTerminal(client.store.getState(), 'drawer') },
+        { label: 'In the Right Panel', checked: prefs.termIn === 'panel', onSelect: () => moveTerminal(client.store.getState(), 'panel') },
       ],
     },
     wsId
@@ -146,7 +146,7 @@ function useTabbed(wsId: string | undefined): Tabbed {
 }
 
 /**
- * A terminal in the right panel or in the drawer under the chat: the workspace's shells (or
+ * A terminal in the right panel or under the chat (`where`: 'drawer', from when that was a drawer): the workspace's shells (or
  * your own) as tabs, + for another, and the terminal itself filling the rest.
  */
 export function TerminalPane({ where, onClose }: { where: 'drawer' | 'panel'; onClose?: () => void }) {
@@ -174,8 +174,8 @@ export function TerminalPane({ where, onClose }: { where: 'drawer' | 'panel'; on
     id = requestAnimationFrame(tryFocus);
     return () => cancelAnimationFrame(id);
   }, [askedFocus, tabbed.key]);
-  // A terminal shows in one place at a time: the drawer or the full-size view has it.
-  const elsewhere = where === 'panel' ? (prefs.drawer ? 'drawer' : focus === 'terminal' ? 'full' : undefined) : focus === 'terminal' ? 'full' : undefined;
+  // A terminal shows in one place at a time: the full-size view has it.
+  const elsewhere = focus === 'terminal' ? 'full' : undefined;
   const { key } = tabbed;
   // Restarted with new variables: a fresh terminal on the new program.
   const stale = useEnvStale(key);
@@ -205,16 +205,15 @@ export function TerminalPane({ where, onClose }: { where: 'drawer' | 'panel'; on
         <ActionsDropdown items={items}>
           <IconButton size="small" icon="more" label="Terminal options" />
         </ActionsDropdown>
-        {onClose ? <IconButton size="small" icon="x" label="Close the drawer" keys={chordLabel('Cmd+J')} onClick={onClose} /> : null}
+        {onClose ? <IconButton size="small" icon="x" label="Put the terminal away" keys={chordLabel('Cmd+J')} onClick={onClose} /> : null}
       </div>
       <div ref={body} className={s.termBody}>
         {elsewhere ? (
           <Empty
-            icon={elsewhere === 'drawer' ? 'panelBottom' : 'expand'}
-            title={elsewhere === 'drawer' ? 'The terminal is in the drawer' : 'The terminal is showing full size'}
-            detail={elsewhere === 'drawer' ? 'It shows in one place at a time.' : undefined}
+            icon="expand"
+            title="The terminal is showing full size"
             action={
-              <Button size="small" onClick={() => (elsewhere === 'drawer' ? setPrefs({ drawer: false }) : closeFocus())}>
+              <Button size="small" onClick={closeFocus}>
                 Show It Here
               </Button>
             }

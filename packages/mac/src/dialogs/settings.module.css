@@ -186,7 +186,7 @@
   transition: transform var(--dur) var(--ease-out);
 }
 .switchOn {
-  background: linear-gradient(var(--control-accent-top), var(--control-accent));
+  background: var(--control-accent);
 }
 .switchOn::after {
   transform: translateX(13px);

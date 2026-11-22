@@ -177,6 +177,8 @@ export function Toolbar() {
   const beluga = useBeluga();
   const { client } = beluga;
   const state = useApp(toolbarPick, sameToolbar);
+  // Drawn again when a preference it reads changes (the Chat · Terminal · Both switch follows Settings › Terminal).
+  const termView = usePrefs().termView;
   const view = state.view;
   // Continue On ▸ another computer of yours (BLG-808).
   const continueItem = useContinueOn(view.kind === 'workspace' ? state.ws : undefined);
@@ -209,7 +211,7 @@ export function Toolbar() {
     const stepW = (fold: BranchFold): number => (branch?.steps[0] ? (fold === 'all' ? shortLabel(branch.steps[0]).length * 7.4 + 42 : branch.steps[0].label.length * 7.4 + 42) + 34 : 0);
     const primaryW = (fold: BranchFold): number => (primary ? (fold === 'all' ? shortOf(primary).length * 7.4 + 48 : primary.label.length * 7.4 + 48) : 0);
     // The Chat · Terminal · Both switch (BLG-534): with its words while there's room, then its icons.
-    const switchW = getPrefs().termView && terminalCapable(client.store.getState(), ws.id) ? (width >= 1180 ? SWITCH_W : SWITCH_ICONS_W) : 0;
+    const switchW = termView && terminalCapable(client.store.getState(), ws.id) ? (width >= 1180 ? SWITCH_W : SWITCH_ICONS_W) : 0;
     const fixedAt = (fold: BranchFold): number => TITLE_MIN + NAV_W + RIGHT_FIXED + switchW + pillW(fold) + stepW(fold) + primaryW(fold) + 34;
     const fold = FOLDS.find((f) => fixedAt(f) <= width) ?? 'all';
     const fit = Math.max(0, Math.min(icons.length, Math.floor((width - fixedAt(fold)) / 30)));

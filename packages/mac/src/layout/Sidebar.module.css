@@ -2,18 +2,12 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  width: var(--sidebar-w);
+  /* As wide as its region in the frame (Workbench.tsx): you drag its divider. */
+  width: 100%;
   flex: none;
   height: 100%;
   background: var(--bg-sidebar);
   border-right: 0.5px solid var(--hairline);
-}
-/* The border is the line; the handle only lights up over it while hovered or dragged. */
-.edge {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 0;
 }
 :global(html:not([data-app])) .sidebar,
 :global(html[data-transparency='reduce']) .sidebar {
@@ -557,8 +551,9 @@
 }
 
 /* Liquid Glass: a pane of glass, inset from the window's edges, its width kept by giving the inset back. */
-:global(:root[data-os='mac'][data-transparency='full']) .sidebar {
-  width: calc(var(--sidebar-w) - var(--glass-inset));
+:global(:root[data-os='mac'][data-transparency='full'][data-look='macos']) .sidebar {
+  /* (Its region in the frame is as wide as you dragged it: Workbench.tsx.) */
+  width: calc(100% - var(--glass-inset));
   height: calc(100% - 2 * var(--glass-inset));
   margin: var(--glass-inset) 0 var(--glass-inset) var(--glass-inset);
   border-right: 0;

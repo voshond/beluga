@@ -23,6 +23,9 @@ import { PartBoundary } from './lib/part-boundary.js';
 import s from './layout/Shell.module.css';
 import './styles/tokens.css';
 import './styles/base.css';
+// Dockview's own styles, then Beluga's look for them (the window's frame and the panel's dock).
+import 'dockview-react/dist/styles/dockview.css';
+import './styles/dock.css';
 
 apply();
 if (native('look')) document.documentElement.dataset.app = 'tauri';
