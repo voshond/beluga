@@ -227,9 +227,9 @@ describe('the right panel’s tabs', () => {
     expect(terminalUnderChat('drawer', tabs, ws)).toBe(true);
     // The Tasks board has no panel: ⌘J still opens a terminal under it.
     expect(terminalUnderChat('panel', panelTabsFor({ kind: 'tasks' }), { kind: 'tasks' })).toBe(true);
-    // Never over the Terminal view or a friend's workspace.
+    // Never over the Terminal view; under a friend's workspace it's your own shells.
     expect(terminalUnderChat('drawer', panelTabsFor({ kind: 'terminal' }), { kind: 'terminal' })).toBe(false);
-    expect(terminalUnderChat('drawer', ['info', 'scratch'], { kind: 'shared', owner: 'o', id: 'x', tab: 'chat' })).toBe(false);
+    expect(terminalUnderChat('drawer', ['info', 'scratch'], { kind: 'shared', owner: 'o', id: 'x', tab: 'chat' })).toBe(true);
   });
 
   it('a list and what you picked in it: the preview under the list in a narrow tab, beside it with room for both', () => {
@@ -239,7 +239,7 @@ describe('the right panel’s tabs', () => {
     expect(splitsSideways(0)).toBe(false);
   });
 
-  it('the drawer goes under anything but the Terminal view and a friend’s workspace', () => {
+  it('the drawer goes under anything but the Terminal view', () => {
     expect(drawerFits(ws)).toBe(true);
     expect(drawerFits(room)).toBe(true);
     expect(drawerFits({ kind: 'terminal' })).toBe(false);
