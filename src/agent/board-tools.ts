@@ -12,7 +12,7 @@ import type { BoardTools } from './types.js';
 
 export const BOARD_TOOL_NAMES = ['task_define', 'task_get', 'task_list', 'task_create', 'task_start', 'board_create', 'task_update', 'task_brief_edit', 'task_note', 'task_relate', 'task_attach_proof'].map((n) => `mcp__beluga_board__${n}`);
 
-const key = z.string().min(2).max(40).optional().describe('The task’s key, like BOB-12. Leave out for the task this worktree is doing');
+const key = z.string().min(2).max(40).optional().describe('The task’s key, like BOB-12. Leave out for this conversation’s own task (including one task_define just opened); give it for any other, like one task_create made');
 const STATUS = z.enum(['backlog', 'todo', 'in_progress', 'in_review', 'done', 'canceled']);
 const PRIORITY = z.enum(['urgent', 'high', 'medium', 'low', 'none']);
 const SECTION = z.enum(['goal', 'context', 'acceptance', 'decisions', 'questions', 'handoff']);

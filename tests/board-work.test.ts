@@ -132,6 +132,19 @@ describe('worktrees and their tasks', () => {
     expect(store.getState().board.issues).toHaveLength(1);
   });
 
+  it('in the same run, the task Claude just defined is the one its key-less calls reach', () => {
+    const { store, work, open } = setup({ autoTasks: true });
+    open(ws('w1', 'api', 'add-rate-limiting'));
+    const tools = work.forRun('ws:w1', 'p-me')!.tools!;
+    expect(() => tools.note(undefined, 'early')).toThrow(/no task of its own yet.*task_list.*task_define/);
+    tools.define(def);
+    expect(tools.note(undefined, 'Started on the limiter')).toBe('Noted on BOB-1');
+    expect(tools.get(undefined)).toContain('Rate-limit login');
+    // Defined again in the same run: rewritten, not a second task.
+    expect(tools.define({ ...def, title: 'Rate-limit sign-in' })).toBe('BOB-1 “Rate-limit sign-in” is defined');
+    expect(store.getState().board.issues).toHaveLength(1);
+  });
+
   it('follows the worktree’s new name until you rename the task (an older automatic one)', async () => {
     const { store, board, work, open } = setup();
     open(ws('w1', 'api', 'quick-name'));
@@ -388,7 +401,7 @@ describe('Claude and the board', () => {
     const { work } = setup();
     const run = work.forRun('room', 'p-me')!;
     expect(run.brief).toContain('Beluga has task boards');
-    expect(() => run.tools!.note(undefined, 'x')).toThrow(/Name a task/);
+    expect(() => run.tools!.note(undefined, 'x')).toThrow(/no task of its own yet/);
   });
 
   it('a friend’s run gets no board', () => {

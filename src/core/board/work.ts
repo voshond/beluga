@@ -787,8 +787,11 @@ export class BoardWork {
     return { kind: 'claude', owner: this.deps.selfId(), ownerName: this.deps.selfName(), agent: this.agentIn(undefined), external: agent };
   }
 
-  private toolsFor(channel: string, current: Issue | undefined, planning = false, home?: FriendHome, external?: { readonly by: Actor; readonly name: string; readonly visible: (issue: Issue) => boolean }): BoardTools {
+  private toolsFor(channel: string, initial: Issue | undefined, planning = false, home?: FriendHome, external?: { readonly by: Actor; readonly name: string; readonly visible: (issue: Issue) => boolean }): BoardTools {
     const board = this.board;
+    // The task this conversation is doing: the one it started with, or the one task_define opens
+    // during the run, so the calls after it (no key) reach it instead of failing.
+    let current = initial;
     const by = (): Actor => external?.by ?? (home ? { ...this.myClaude(channel), for: { id: home.friend.id, name: home.friend.name.slice(0, 64) } } : this.myClaude(channel));
     const state = (): ReturnType<Board['state']> => board.state();
     // A friend's run (BLG-701) reaches its repo's board only, and never a private task.
@@ -798,7 +801,7 @@ export class BoardWork {
     };
     const pick = (key: string | undefined): Issue => {
       const issue = key ? board.need(key) : current ? board.need(current.id) : undefined;
-      if (!issue) throw new Error('Name a task (its key, like BOB-12): this conversation isn’t doing one');
+      if (!issue) throw new Error('This conversation has no task of its own yet, so say which: pass key (like BOB-12; task_list finds it), or open this work’s task with task_define first');
       if (!reachable(issue)) onlyHome(`${issue.key} isn't on it`);
       return issue;
     };
@@ -842,8 +845,12 @@ export class BoardWork {
           this.pending.set(channel, def);
           return `Saved “${def.title}”: it becomes ${current ? `the new brief of ${current.key}` : 'this work’s task in Tasks'} when the user approves your plan. Call ExitPlanMode now.`;
         }
-        if (current) return `${this.define(channel, def, current).key} “${def.title}” is defined`;
+        if (current) {
+          current = this.define(channel, def, current);
+          return `${current.key} “${def.title}” is defined`;
+        }
         const issue = this.define(channel, def, undefined, { private: true });
+        current = issue;
         const which = issue.worktrees.length ? 'this worktree’s task' : 'a task for this work';
         return `Opened ${issue.key} “${issue.title}”, ${which}: private (only the user sees it, until they Share with Team) and assigned to them. Tell the user you opened it and that it’s private: \`task:${issue.key}\`.`;
       },
