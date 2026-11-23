@@ -101,6 +101,8 @@ export type LogItem =
       readonly dialogue?: DialogueMark;
       /** An MCP App in this chat sent it for you (ui/message): its tool's name. Only on this computer. */
       readonly fromApp?: string;
+      /** Beluga wrote it for you (BLG-111): a task's start brief, a sentinel run's prompt. Said as yours, not your words. Only on this computer. */
+      readonly written?: WrittenBy;
       /** Emoji reactions on it (BLG-702): each person's latest change per emoji (core/chat-reactions.ts draws the chips). */
       readonly reacts?: readonly ReactionEvent[];
     }
@@ -188,6 +190,9 @@ export interface MergedMark {
 
 /** A merged divider's words, where it's drawn as plain text (the phone, a log). */
 export const mergedText = (m: MergedMark): string => `Above this line was merged into ${m.into}${m.number !== undefined ? ` in PR #${m.number}` : ''}.`;
+
+/** What wrote a message Beluga sent as yours (BLG-111): a task starting, a sentinel running. */
+export type WrittenBy = 'task' | 'sentinel';
 
 /** Where a dialogue shows in a conversation: its header card (a system line) and its turns (chat lines). */
 export interface DialogueMark {
@@ -772,7 +777,7 @@ export type Action =
   | { type: 'hosting'; hosting: Hosting }
   | { type: 'welcome'; self: PeerInfo }
   | { type: 'peers'; peers: readonly PeerInfo[] }
-  | { type: 'chat'; id: string; from: string; text: string; ts: number; byAgent: boolean; channel?: string; request?: string; steer?: true; queued?: true; agent?: AgentRef; via?: MessageVia; dialogue?: DialogueMark; fromApp?: string }
+  | { type: 'chat'; id: string; from: string; text: string; ts: number; byAgent: boolean; channel?: string; request?: string; steer?: true; queued?: true; agent?: AgentRef; via?: MessageVia; dialogue?: DialogueMark; fromApp?: string; written?: WrittenBy }
   | ChatReactAction
   /** `id`/`ts` are stamped before reducing (see stampAction). */
   | { type: 'system'; text: string; level?: 'info' | 'warn' | 'error'; channel?: string; id?: string; ts?: number; said?: SaidBy; shipped?: ShippedMark; merged?: MergedMark; dialogue?: DialogueMark }
@@ -1300,6 +1305,7 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
           ...(action.queued ? { queued: true as const } : {}),
           ...(action.dialogue ? { dialogue: action.dialogue } : {}),
           ...(action.fromApp ? { fromApp: action.fromApp.slice(0, 80) } : {}),
+          ...(action.written ? { written: action.written } : {}),
         }),
       }, action.channel ?? 'room', true);
     case 'chat_react': {

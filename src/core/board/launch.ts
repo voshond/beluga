@@ -50,6 +50,12 @@ export interface BoardHost {
   readonly demo: boolean;
 }
 
+/** A task's brief to your Claude in its worktree, marked as Beluga's words, not yours (BLG-111). */
+export const askForTask =
+  (session: Pick<Session, 'askOwnClaude'>) =>
+  (prompt: string, channel: string, shown?: string): void =>
+    void session.askOwnClaude(prompt, channel, false, shown ?? true, undefined, undefined, 'task');
+
 export function launchBoard(host: BoardHost): () => void {
   const { session, store } = host;
   const dir = host.demo ? mkdtempSync(path.join(os.tmpdir(), 'beluga-demo-board-')) : belugaHome();
@@ -67,7 +73,7 @@ export function launchBoard(host: BoardHost): () => void {
     ...(session.workspaces ? { controller: session.workspaces } : {}),
     selfId: () => session.selfId,
     selfName: () => store.getState().self?.name ?? store.getState().network.self?.name ?? 'You',
-    askClaude: (prompt, channel, shown) => session.askOwnClaude(prompt, channel, false, shown ?? true),
+    askClaude: askForTask(session),
     ...(session.draftsTasks ? { draftTask: (text: string, ctx: DraftContext) => session.draftTask(text, ctx) } : {}),
     ...(session.describesProjects ? { describeProject: (dir: string, project: string) => session.describeProject(dir, project) } : {}),
     toast: (text: string) => session.toast(text, 'info'),
@@ -93,7 +99,7 @@ export function launchBoard(host: BoardHost): () => void {
     ...(host.demo ? {} : { knownHost: (h: string) => h === 'github.com' || ghHosts().includes(h) }),
     ghReady: async (h) => host.demo || runGhCli(['auth', 'status', '--hostname', h]).then(() => true, () => false),
     source: host.demo ? demoIssueSource() : ghIssueSource(),
-    askClaude: (prompt, channel, shown) => session.askOwnClaude(prompt, channel, false, shown ?? true),
+    askClaude: askForTask(session),
     prPrompt: (ws) => {
       const project = projectOf(ws.projectId);
       return buildPrPrompt({ branch: ws.branch ?? ws.name, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', ...(project?.scripts?.prPrompt ? { projectPrompt: project.scripts.prPrompt } : {}), ...(project?.scripts?.yourPrPrompt ? { yourPrompt: project.scripts.yourPrPrompt } : {}), ...(ws.ticket ? { ticket: ws.ticket } : {}) });

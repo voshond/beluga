@@ -43,6 +43,9 @@ Only while the switch is on, and only from the moment it was turned on (nothing 
 | | Any message that looks like it holds a secret (an API key, a token, a password in a connection string, a private key): left out whole |
 | | Projects you switched off under Projects sent to Honcho |
 | | Files, attachments, diffs and terminal output |
+| | Prompts Beluga writes and says as yours: a task's start brief ("Work on BLG-n … Done means …"), a GitHub issue handed to a task, and a sentinel run's prompt. Each is marked where Beluga sends it (`written` on the chat message), not guessed from its words; what you type to ask for a sentinel is still yours |
+
+A message or answer longer than 4,000 characters (a pasted document, a long report) goes cut to its first 4,000, ending with "[… N more characters left out]" (`MAX_CONTENT` in `src/core/honcho/filter.ts`).
 
 In Honcho, everything goes to one workspace (default `beluga`). You are one peer, `user`; each agent runtime is its own peer (`agent-claude`, `agent-codex`, …), set so Honcho models you and not the agents. Each conversation is one session, `beluga-<channel>`. Honcho is yours alone: it is never shared with a room or with friends, and two of your own computers pointed at the same server and workspace both feed the same `user`.
 

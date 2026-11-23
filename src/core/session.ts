@@ -31,7 +31,7 @@ import type { SharedWorkspace } from './collab-store.js';
 import { sharedAskTarget } from './shared-guest.js';
 import { type ShareService, parseShareSpec } from './shares.js';
 import { existsSync } from 'node:fs';
-import { type Attention, type Location, type MyShare, type Prefs, type Store, peerName } from './store.js';
+import { type Attention, type Location, type MyShare, type Prefs, type Store, type WrittenBy, peerName } from './store.js';
 import { WorkspaceController } from './workspace-controller.js';
 import { QuestionBroker } from './questions.js';
 import type { RunAsks } from './run-asks.js';
@@ -652,7 +652,7 @@ export class Session {
    * show on it); `steer`: it steers the turn your Claude is on (shown as not read yet from the start);
    * `queued`: it waits behind that turn (in the queue from the start, never a sent bubble for a moment).
    */
-  sendChat(text: string, byAgent: boolean, channel = 'room', request?: string, steer = false, queued = false, by: MessageVia | undefined = actingVia()): void {
+  sendChat(text: string, byAgent: boolean, channel = 'room', request?: string, steer = false, queued = false, by: MessageVia | undefined = actingVia(), written?: WrittenBy): void {
     const agent = byAgent ? { agent: this.agentRef } : {};
     const via = by ? { via: by } : {};
     // Its own id, the same in every copy, so reactions can name it (BLG-702).
@@ -660,7 +660,7 @@ export class Session {
     if (channel !== 'room') {
       // Workspace conversations stay on this computer, plus the people you invited into them.
       const id = chatMessageId(this.selfId, mid, '');
-      this.store.dispatch({ type: 'chat', id, from: this.selfId, text: text.slice(0, MAX_TEXT), ts: Date.now(), byAgent, channel, ...agent, ...via, ...(request ? { request } : {}), ...(steer ? { steer: true as const } : {}), ...(queued ? { queued: true as const } : {}) });
+      this.store.dispatch({ type: 'chat', id, from: this.selfId, text: text.slice(0, MAX_TEXT), ts: Date.now(), byAgent, channel, ...agent, ...via, ...(request ? { request } : {}), ...(steer ? { steer: true as const } : {}), ...(queued ? { queued: true as const } : {}), ...(written ? { written } : {}) });
       for (const to of this.sharing.recipients(channel)) this.send({ kind: 'chat', text: text.slice(0, MAX_TEXT), byAgent, channel, mid, ...agent, ...via }, { to });
       return;
     }
@@ -704,9 +704,10 @@ export class Session {
    * someone shared with you) theirs. `echo: false` leaves the prompt out of the chat (it's there already);
    * a string shows that instead (a short line for a long brief: Claude still gets the whole prompt).
    * Returns the request's id (undefined when you can't ask there). `shown`: the message is in the
-   * chat already, under this request id (see showAsk), so it isn't drawn again.
+   * chat already, under this request id (see showAsk), so it isn't drawn again. `written`: Beluga
+   * wrote the prompt (a task's brief, a sentinel's run), so it isn't fed to Honcho as your words.
    */
-  askOwnClaude(prompt: string, channel: string, urgent = false, echo: boolean | string = true, shown?: string, chain?: ChatChain): string | undefined {
+  askOwnClaude(prompt: string, channel: string, urgent = false, echo: boolean | string = true, shown?: string, chain?: ChatChain, written?: WrittenBy): string | undefined {
     const shared = this.sharing.sharedFor(channel);
     if (shared && shared.role !== 'contribute') {
       this.toast(`You can follow ${shared.name}, but not ask its agent. Ask the owner to let you contribute`, 'warn');
@@ -719,7 +720,7 @@ export class Session {
     if (!shared && (echo || shown)) void this.workspaces?.snapshotPrompt(channel, requestId);
     // Your own Claude at work here: a steer says it isn't read yet from the moment it's drawn, and anything else waits in the queue from then.
     const running = !shared && this.host.runningIn(channel);
-    if (echo && !shown) this.sendChat(typeof echo === 'string' ? echo : prompt, false, channel, requestId, urgent && running, !urgent && running);
+    if (echo && !shown) this.sendChat(typeof echo === 'string' ? echo : prompt, false, channel, requestId, urgent && running, !urgent && running, actingVia(), written);
     return this.requestAgent(shared ? shared.owner : this.selfId, prompt, false, channel, urgent, undefined, requestId, undefined, actingVia(), shared ? undefined : chain);
   }
 

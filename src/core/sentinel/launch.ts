@@ -131,7 +131,7 @@ function ownClaude(session: Session, store: Store): SentinelClaude & { close(): 
     else w.reject(new Error(a.text || a.event));
   });
   return {
-    ask: (prompt, channel, shown) => session.askOwnClaude(prompt, channel, false, shown),
+    ask: (prompt, channel, shown, written) => session.askOwnClaude(prompt, channel, false, shown, undefined, undefined, written),
     wait: (requestId) => new Promise<string>((resolve, reject) => void waits.set(requestId, { resolve, reject })),
     // The wait stays until the request ends (its done or error event), so the run can wait for it
     // before archiving its worktree; one that never says so is let go after a while.

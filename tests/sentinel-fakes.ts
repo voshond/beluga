@@ -2,7 +2,7 @@ import type { NoticeEvent } from '../src/core/notify.js';
 import type { SentinelDraft } from '../src/core/sentinel/model.js';
 import type { SentinelClaude, SentinelPlaces, SentinelShell, ShellResult } from '../src/core/sentinel/runner.js';
 import { Sentinels, type SentinelsDeps } from '../src/core/sentinel/sentinels.js';
-import { Store, initialState } from '../src/core/store.js';
+import { Store, type WrittenBy, initialState } from '../src/core/store.js';
 import type { Project } from '../src/workspaces/types.js';
 
 /** Fakes for Sentinel's tests: your Claude, the places it works, a shell, notifications. */
@@ -13,6 +13,7 @@ export interface Asked {
   readonly prompt: string;
   readonly channel: string;
   readonly requestId: string;
+  readonly written?: WrittenBy;
   answer(text: string): void;
   fail(why: string): void;
 }
@@ -32,9 +33,9 @@ export function fakeClaude(reply?: (asked: Asked) => string | undefined, opts: {
     else w.reject(new Error(text));
   };
   const claude: SentinelClaude = {
-    ask: (prompt, channel) => {
+    ask: (prompt, channel, _shown, written) => {
       const requestId = `rq${++n}`;
-      const a: Asked = { prompt, channel, requestId, answer: (t) => settle(requestId, true, t), fail: (w) => settle(requestId, false, w) };
+      const a: Asked = { prompt, channel, requestId, ...(written ? { written } : {}), answer: (t) => settle(requestId, true, t), fail: (w) => settle(requestId, false, w) };
       asked.push(a);
       const said = reply?.(a);
       if (said !== undefined) queueMicrotask(() => a.answer(said));
