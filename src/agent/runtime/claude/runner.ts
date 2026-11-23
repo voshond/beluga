@@ -4,7 +4,8 @@ import { query, type Options, type Query } from '@anthropic-ai/claude-agent-sdk'
 import { MAX_ATTACHMENT_BYTES, linkedImages, mediaTypeOf, withImagePaths } from '../../../core/attachments.js';
 import { buildPrompt, summarizeTool } from '../../prompt.js';
 import { runInstructions } from '../../run-instructions.js';
-import { SECRET_DECLINED, confineSearch, decideTool, denyReason, isYourRun } from '../../policy.js';
+import { SECRET_DECLINED, confineSearch, decideTool, denyReason, isYourRun, planFileOf } from '../../policy.js';
+import { NO_PLAN_TEXT, claudePlansDir, planText } from './plan-text.js';
 import { baseEnv } from '../../../core/peer-run.js';
 import { gateTool } from '../../tool-gate.js';
 import { syncProbes } from '../../sync-main.js';
@@ -316,7 +317,11 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
       const syncMain = askOnly ? place?.syncMain : undefined;
       // A hidden worktree to fix a conflict in (a plan's head Claude, in its main-folder conversation).
       const fixup = place?.fixup;
-      const policy = { cwd, roots: [cwd, ...extraDirs, ...(fixup ? [fixup] : [])], autoEdit, scope: input.scope, guest: input.guest, boardAsks: input.boardAsks, dotenv: Boolean(input.canUseSecret) && !input.guest, yourRun: isYourRun(input), askOnly: Boolean(askOnly), ...(syncMain ? { syncMain: syncProbes(cwd, syncMain) } : {}), ...(fixup ? { fixup } : {}), ...(place?.alsoEdit?.length ? { alsoEdit: place.alsoEdit } : {}) };
+      // Claude Code's plan folder, where it writes its plan in plan mode (also from a main folder: #607).
+      const plans = claudePlansDir(claudeLaunchEnv(input) ?? process.env);
+      /** The plan file this run last wrote (planFileOf). */
+      let planFile: string | undefined;
+      const policy = { cwd, plans, roots: [cwd, ...extraDirs, ...(fixup ? [fixup] : [])], autoEdit, scope: input.scope, guest: input.guest, boardAsks: input.boardAsks, dotenv: Boolean(input.canUseSecret) && !input.guest, yourRun: isYourRun(input), askOnly: Boolean(askOnly), ...(syncMain ? { syncMain: syncProbes(cwd, syncMain) } : {}), ...(fixup ? { fixup } : {}), ...(place?.alsoEdit?.length ? { alsoEdit: place.alsoEdit } : {}) };
       // How the run ends, when it fails: Claude Code's stderr, a limit that said no, an API error.
       const stderr: string[] = [];
       const keepStderr = (data: string): void => keepLines(stderr, data, STDERR_KEEP);
@@ -389,6 +394,8 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
                   const judged = confined ?? toolInput;
                   const decision = decideTool(hookInput.tool_name, judged, policy);
                   if (decision === 'deny') return verdict('deny', denyReason(hookInput.tool_name, judged, policy));
+                  // The plan file it writes: what the card shows when ExitPlanMode brings no plan text.
+                  planFile = planFileOf(hookInput.tool_name, judged, policy) ?? planFile;
                   // A sub-agent is told where its own scratch folder is, so what it makes shows on its page.
                   const scratched = scratchRoot ? withAgentScratch(hookInput.tool_name, judged, hookInput.tool_use_id, scratchRoot) : undefined;
                   // In a worktree, what's kept on purpose is made to outlive the turn (see workspaces/test-procs.ts).
@@ -437,7 +444,6 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
         },
       };
 
-      let lastText = '';
       const ask = async (question: ClaudeQuestion): Promise<ClaudeAnswer> => (input.askUser ? input.askUser(question) : { kind: 'skip' });
       const answerQuestion = async (toolInput: Record<string, unknown>) => {
         const question = toQuestion(toolInput);
@@ -452,8 +458,8 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
           askedToDefine = true;
           return { behavior: 'deny' as const, message: 'Before asking for approval, call mcp__beluga_board__task_define with the task this plan is for (title, goal in your own words, context, acceptance criteria, decisions, open questions, estimate, priority). Then call ExitPlanMode again.' };
         }
-        const plan = typeof toolInput.plan === 'string' && toolInput.plan.trim() ? toolInput.plan : lastText || '(Claude proposed a plan)';
-        const answer = await ask({ kind: 'plan', plan: plan.slice(0, 60_000) });
+        // Its plan, never the last thing it said: that's a chat line, not the plan (#607).
+        const answer = await ask({ kind: 'plan', plan: planText(toolInput, plans, planFile) ?? NO_PLAN_TEXT });
         if (answer.kind === 'plan' && answer.approve) {
           input.planTask?.approved();
           // Approved: leave plan mode so Claude can do the work.
@@ -671,8 +677,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
             thinking = last === 'thinking' || last === 'redacted_thinking';
             for (const block of msg.message.content) {
               if (block.type === 'text' && block.text.trim()) {
-                lastText = block.text.trim();
-                route?.onEvent('text', shelf.expand(lastText));
+                route?.onEvent('text', shelf.expand(block.text.trim()));
               }
               if (block.type === 'tool_use' && subagents.isLaunch(block)) launches.add(block.id);
               if (block.type === 'tool_use' && !subagents.isLaunch(block)) {

@@ -2,6 +2,7 @@ import os from 'node:os';
 import type { AgentRef } from '../protocol.js';
 import type { InstructionPieceView } from '../shared/agent-setup.js';
 import { type MemoryView, PROJECT_MEMORY_MAX, USER_MEMORY_MAX } from '../shared/memory.js';
+import { buildForkedAppend } from './fork-prompt.js';
 import { buildGraphAppend } from './graph-prompt.js';
 import { buildHonchoAppend } from './honcho-prompt.js';
 import { buildMemoryAppend } from './memory-prompt.js';
@@ -91,6 +92,13 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
     source: 'src/agent/prompt.ts',
     text: (c) => (c.input.place?.shipped && !c.askOnly ? buildShippedAppend(c.input.place.shipped) : ''),
     sample: () => buildShippedAppend({ number: 42, into: 'main' }),
+  },
+  {
+    id: 'forked',
+    label: 'Forked from a friend’s worktree',
+    when: 'A worktree forked from a friend’s',
+    source: 'src/agent/fork-prompt.ts',
+    text: (c) => (c.input.place?.forked && !c.askOnly ? buildForkedAppend(c.input.place.forked) : ''),
   },
   {
     id: 'ask-only',

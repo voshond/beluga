@@ -55,7 +55,7 @@ const TOOL_STEP = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('message'), id: stepId, name: stepName, to: z.string().regex(/^(dm|group):[\w-]{1,80}$/).describe('dm:<peerId> or group:<id>'), text: z.string().min(1).max(8000) }),
   z
     .object({ kind: z.literal('chat'), id: stepId, name: stepName, to: z.string().min(1).max(400).describe('The chat that gets the prompt. Use "this chat" for the chat you are in. For another chat of the user, use its ref: "<owner>/ws:<id>"'), text: z.string().min(1).max(20_000).describe('The prompt the chat’s agent gets, as if the user sent it') })
-    .describe('Wake one of the user’s own chats. The step sends the prompt to the chat, waits for the answer, and keeps the first line of the answer. The step does not accept a chat that is shared with a contributor. The step needs the Chat schedules experiment (Settings › Experimental)'),
+    .describe('Wake one of the user’s own chats. The step sends the prompt to the chat, waits for the answer, and keeps the first line of the answer. The step does not accept a chat that is shared with a contributor.'),
   z.object({ kind: z.literal('friend'), id: stepId, name: stepName, peerId: z.string().min(1).max(80), prompt: z.string().min(1).max(20_000), project: z.string().max(200).optional() }),
   z.object({ kind: z.literal('trigger'), id: stepId, name: stepName, sentinelId: z.string().min(1).max(80) }),
   z

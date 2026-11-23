@@ -537,6 +537,10 @@
 .planning[data-mode='btw'] {
   --plan: #e0975f;
 }
+/* A message for later (/schedule): a calm sky blue, Sentinel's clock. */
+.planning[data-mode='schedule'] {
+  --plan: #5b8fd6;
+}
 .planning:focus-within {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--plan) 62%, transparent),

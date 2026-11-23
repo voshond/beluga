@@ -11,7 +11,7 @@ const AUTO = '';
 /**
  * Settings › Agent › Plans (BLG-982): who builds what you plan once you approve it, and how hard it
  * thinks. Plan with a bigger model, build with a smaller one: Plan First, Plan with Tasks and new
- * plans start from it, and Build With ▸ in the mode menu changes it for one chat.
+ * plans start from it, and Builder ▸ in the mode menu changes it for one chat.
  */
 export function BuildWithSettings() {
   const api = useApi();
@@ -34,7 +34,7 @@ export function BuildWithSettings() {
   };
   return (
     <Group title="Plans">
-      <Row label="Build plans with" detail={builder ? `Once you approve a plan, ${pickName(builder)} builds it; the agent you planned with stops there. Build With in the mode menu changes it for one chat.` : 'The agent you plan with builds the plan too. Pick a smaller model to do the building once you approve.'}>
+      <Row label="Build plans with" detail={builder ? `Once you approve a plan, ${pickName(builder)} builds it; the agent you planned with stops there. Builder in the mode menu changes it for one chat.` : 'The agent you plan with builds the plan too. Pick a smaller model to do the building once you approve.'}>
         <Select label="Build plans with" value={builder ? choiceForAgent(builder) : YOUR_AGENT} onChange={handleAgent} options={options} />
       </Row>
       {builder ? (

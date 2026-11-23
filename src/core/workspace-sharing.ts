@@ -1,4 +1,5 @@
 import { defaultAgentOf, wsWireName } from '../protocol.js';
+import type { ForkGrant } from '../shared/share-levels.js';
 import { placeAgent } from '../shared/agent-picker.js';
 import type { BodyInput, BodyOf, GuestCan, WsRole } from '../protocol.js';
 import { agentLabel } from '../shared/agent-label.js';
@@ -15,6 +16,8 @@ export interface FriendShareInput {
   readonly projectId?: string;
   readonly workspaceId?: string;
   readonly role: WsRole;
+  /** They may also fork its worktrees (with `contribute`), and with the secrets you ticked (BLG-1019); `none`: not any more. Unset: as it was. */
+  readonly fork?: ForkGrant | 'none';
   /** The whole project, even for a friend who has only some of its worktrees (without it, their scope stays). */
   readonly whole?: boolean;
 }

@@ -75,10 +75,9 @@ function useFolderDrop(): { ref: React.RefObject<HTMLElement | null>; over: bool
       const scale = appDropScale();
       return !!r && x / scale >= r.left && x / scale <= r.right && y / scale >= r.top && y / scale <= r.bottom;
     };
-    void import('@tauri-apps/api/webview').then(async ({ getCurrentWebview }) => {
-      const un = await getCurrentWebview().onDragDropEvent((e) => {
+    void import('../lib/file-drop.js').then(async ({ onFileDrop }) => {
+      const un = await onFileDrop((p) => {
         if (ui.get().addProject) return setOver(false);
-        const p = e.payload;
         if (p.type === 'leave') return setOver(false);
         const here = inside(p.position.x, p.position.y);
         if (p.type === 'drop') {

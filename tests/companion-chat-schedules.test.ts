@@ -3,7 +3,6 @@ import { phoneMay } from '../src/companion/coverage.js';
 import { convView } from '../src/companion/views.js';
 import { COMPANION_PROTO, ConvView, SINCE } from '../src/companion/protocol.js';
 import { Store, initialState } from '../src/core/store.js';
-import { withExperiment } from '../src/shared/experiments.js';
 import type { Sentinel } from '../src/core/sentinel/model.js';
 import { scheduleSpent, schedulesSummary } from '../packages/companion/lib/schedules.js';
 
@@ -28,9 +27,9 @@ const sentinel = (id: string, to: string, paused = false): Sentinel =>
     updatedAt: 1,
   }) as never;
 
-function storeWith(experiment = true) {
+function storeWith(experiments: string[] = []) {
   const store = new Store({ ...initialState('room', 'auto'), selfId: ME });
-  store.dispatch({ type: 'prefs', prefs: { experiments: withExperiment([], 'chat-schedules', experiment) } });
+  store.dispatch({ type: 'prefs', prefs: { experiments } });
   store.dispatch({ type: 'sentinel_put', item: sentinel('s1', `${ME}/ws:w1`), nextAt: NEXT });
   store.dispatch({ type: 'sentinel_put', item: sentinel('s2', `${ME}/ws:w2`, true) });
   return store;
@@ -55,8 +54,8 @@ describe('a chat’s schedules on the phone', () => {
     expect(view(storeWith(), 'ws:w9')).not.toHaveProperty('schedules');
   });
 
-  it('with the experiment off, the phone sees none', () => {
-    expect(view(storeWith(false))).not.toHaveProperty('schedules');
+  it('an old Beluga’s off mark for the experiment hides nothing', () => {
+    expect(view(storeWith(['-chat-schedules'])).schedules).toHaveLength(1);
   });
 
   it('a one-time schedule that already ran is done, and the summary doesn’t count it as on', () => {

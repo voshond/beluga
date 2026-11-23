@@ -38,6 +38,9 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp", "Win32_System_SystemInformation", "Win32_UI_Input_KeyboardAndMouse"] }
+# Where dropped files are (src/drop_paths.rs): the versions Tauri itself uses, so the types are the same.
+webview2-com = "0.39"
+windows-core = "0.62"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

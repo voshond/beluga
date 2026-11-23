@@ -10,6 +10,7 @@ import { MACHINE_NOTE_MAX } from '../shared/agent-setup.js';
 import { AUTO_CONTINUE_OFF_MAX } from '../shared/auto-continue.js';
 import { ENV_KEY, MAX_ENV_VALUE, MAX_ENV_VARS } from '../shared/env-vars.js';
 import { MAX_RANGE } from '../shared/text-range.js';
+import { CarryPicks } from '../shared/fork-carry.js';
 import { type ArgsRuntime, MAX_AGENT_ARGS, MAX_AGENT_ARG_LENGTH, agentArgsProblem } from '../shared/agent-args.js';
 import { NETWORK_API } from './network-api.js';
 import { TRIAGE_API } from './triage-api.js';
@@ -76,7 +77,7 @@ function args(...items: z.ZodType[]): { args: z.ZodTuple } {
 export const Location = z.object({ owner: id, share: z.string().min(1).max(200), path });
 
 /** A project (all its worktrees, now and later) or one worktree, shared with a friend over the network. */
-const FriendShare = z.object({ peerId: id, projectId: opt(id), workspaceId: opt(id), role: WsRole, whole: opt(bool) }).refine((x) => x.projectId || x.workspaceId, 'Say which project or worktree');
+const FriendShare = z.object({ peerId: id, projectId: opt(id), workspaceId: opt(id), role: WsRole, fork: opt(z.enum(['none', 'code', 'secrets'])), whole: opt(bool) }).refine((x) => x.projectId || x.workspaceId, 'Say which project or worktree');
 const FriendUnshare = z.object({ peerId: id, projectId: opt(id), workspaceId: opt(id) }).refine((x) => x.projectId || x.workspaceId, 'Say which project or worktree');
 
 /** Your flags for one agent's command line, refused when Beluga sets one of them itself (shared/agent-args.ts). */
@@ -266,6 +267,10 @@ export const API = {
   'sharing.runHere': args(id, id, z.string().min(1).max(100_000)),
   // Fork a friend's shared worktree to this Mac: its changes, Scratch and conversation, as a worktree of yours (owner, worktree id, name?).
   'sharing.fork': args(id, id, z.string().max(120).optional()),
+  // What forks of your worktree bring besides its commits, Scratch and conversation (BLG-1017): what git ignores there, what's picked, its files and size, before any goes (worktree id, picks to try without keeping them?).
+  'sharing.forkCarry': args(id, opt(CarryPicks)),
+  // Pick what forks of your worktree bring: git-ignored paths, and each secret-looking file in them that may go (worktree id, picks) → the new preview.
+  'sharing.setForkCarry': args(id, CarryPicks),
 
   // ---- links into one project (or everything)
   'invites.create': args(LinkOptions),
@@ -525,7 +530,7 @@ export const API = {
   // Local and bring-your-own endpoints (BLG-449): → each with its URL and models, never its key (hasKey).
   'env.endpoints': args(),
   // Add (no id) or change one; key unset keeps it, '' removes it → its id.
-  'env.saveEndpoint': args(z.object({ id: opt(z.string().max(20)), label: z.string().min(1).max(40), baseUrl: z.string().min(1).max(500), key: opt(z.string().max(4000)), models: opt(z.array(z.string().max(40)).max(20)) })),
+  'env.saveEndpoint': args(z.object({ id: opt(z.string().max(20)), label: z.string().min(1).max(40), baseUrl: z.string().min(1).max(500), key: opt(z.string().max(4000)), models: opt(z.array(z.string().max(40)).max(20)), format: opt(z.enum(['anthropic', 'openai'])) })),
   'env.removeEndpoint': args(z.string().max(20)),
   // Look at every endpoint again now → the list, with which answer.
   'env.checkEndpoints': args(),

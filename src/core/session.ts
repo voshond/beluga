@@ -493,6 +493,7 @@ export class Session {
       // Claude knows to ask Ata's Claude (the room's own parse only knows people in the room).
       const onlyYours = parsed.kind === 'agent' && parsed.unknown.length === 0 && parsed.targets.every((t) => t === this.selfId);
       const prompt = parsed.kind === 'agent' && onlyYours ? parsed.prompt : parsed.text;
+      if (this.holdWhileMaking(prompt, channel, urgent, terminal, id)) return true;
       const ask = (): string | undefined => (terminal ? this.startInTerminal(prompt, channel) : this.askOwnClaude(prompt, channel, urgent));
       if (!id) {
         const sent = ask() !== undefined;
@@ -697,6 +698,31 @@ export class Session {
     }
     this.send({ kind: 'agent_request', requestId, prompt: prompt.slice(0, MAX_TEXT), viaAgent, channel, urgent, plan, ...(project ? { project: project.slice(0, 80) } : {}), ...(via ? { via } : {}), ...named, ...(chain ? { chain } : {}) }, { to: target });
     return requestId;
+  }
+
+  /**
+   * A message written in a worktree whose page shows while git still makes it (BLG-942, BLG-1013):
+   * sent like any other, never queued. Its agent's card shows under it at once, making the worktree
+   * as its first step; its agent goes on from there once it's made. If it can't be made, the card
+   * says why. False when the worktree isn't being made (the message goes as usual).
+   */
+  private holdWhileMaking(prompt: string, channel: string, urgent: boolean, terminal: boolean, id: string | undefined): boolean {
+    const ctl = this.workspaces;
+    const ws = ctl?.beingMade(channel);
+    if (!ctl || !ws) return false;
+    if (id && this.sentById.has(id)) return true;
+    const requestId = this.showAsk(prompt, channel);
+    if (id) this.sentById.set(id, requestId);
+    // Seen as its terminal, the message opens that instead of a card: it just waits for the worktree.
+    const step = terminal ? undefined : this.host.beforeRuns.start(channel, requestId, prompt, { tool: 'make_worktree', input: { name: ws.name } });
+    ctl.holdAsk(channel, {
+      go: () => {
+        if (step && !step.finish()) return;
+        void (terminal ? this.startInTerminal(prompt, channel, requestId) : this.askOwnClaude(prompt, channel, urgent, false, requestId));
+      },
+      drop: () => (step ? step.fail('The worktree couldn’t be made, so this wasn’t sent to your agent.') : this.toast('The worktree couldn’t be made, so your message wasn’t sent', 'warn')),
+    });
+    return true;
   }
 
   /**

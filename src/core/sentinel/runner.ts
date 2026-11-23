@@ -167,8 +167,6 @@ export interface SentinelChat {
 
 /** Your own chats, woken by a Wake one of your chats step (BLG-397). */
 export interface SentinelWake {
-  /** False: the Chat schedules experiment is off (Settings › Experimental). */
-  readonly on: () => boolean;
   /** Why a sentinel may not wake this chat (it is not yours alone), in words; undefined when it may. */
   readonly refusal: (to: string) => string | undefined;
   /** Send the prompt into the chat → its message id. A run's step delivers once. Throws in words. */
@@ -261,8 +259,8 @@ export type SourceFetch = (
 ) => Promise<{ readonly rows: readonly Row[]; readonly columns: readonly string[] } | { readonly needsYes: string } | string>;
 
 const CANCEL_GRACE_MS = 10_000;
-/** Why a chat step does not run while the experiment is off. */
-export const CHAT_SCHEDULES_OFF = 'waking a chat needs the Chat schedules experiment: turn it on in Settings › Experimental';
+/** Why a chat step does not run where nothing can wake a chat (a Beluga without chats wired). */
+export const NO_CHAT_WAKE = 'waking a chat isn’t available here';
 const POLL_MS = 15_000;
 /** A service's answer kept at most (the step fails above it). */
 const MAX_ANSWER = 4 * 1024 * 1024;
@@ -773,7 +771,7 @@ export class SentinelRunner {
    */
   private async chatStep(active: ActiveRun, step: ChatStep, outputs: Outputs): Promise<StepEnd> {
     const chats = this.deps.wake;
-    if (!chats?.on()) return { kind: 'failed', why: CHAT_SCHEDULES_OFF };
+    if (!chats) return { kind: 'failed', why: NO_CHAT_WAKE };
     if (!step.to) return { kind: 'failed', why: 'pick the chat it wakes' };
     const refusal = chats.refusal(step.to);
     if (refusal) {

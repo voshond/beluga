@@ -1,12 +1,11 @@
 import path from 'node:path';
 import { SocketClient } from '../../../src/ipc/socket-client.js';
-import { withExperiment } from '../../../src/shared/experiments.js';
 import { expect, test, type Page } from './fixtures.js';
 
 /**
  * Chat schedules (plan "Chat schedules on Sentinel", BLG-399…401): a chat's Info panel lists the
- * sentinels that wake it, with Run Now and an on/off switch; the section hides with the
- * chat-schedules experiment off; /schedule makes one; a scheduled chat's row has a clock mark. Screenshots go to .beluga/scratch/chat-schedules-*.png.
+ * sentinels that wake it, with Run Now and an on/off switch; '/schedule ' turns the message box into a
+ * schedule with a When chip (BLG-1023), and Custom… opens the sheet; a scheduled chat's row has a clock mark. Screenshots go to .beluga/scratch/chat-schedules-*.png.
  */
 
 const shots = path.join(import.meta.dirname, '..', '..', '..', '.beluga', 'scratch');
@@ -23,7 +22,8 @@ const connect = (demo: Demo) => SocketClient.connect({ url: demo.endpoint.url, t
 /** A chat in bob-api with one schedule that wakes it every day at 9:00 (made through the API, as the agent would). */
 async function seed(demo: Demo): Promise<void> {
   const client = await connect(demo);
-  await client.api.session.setPrefs({ experiments: ['chat-schedules'], folded: [] });
+  // An off mark an older Beluga saved for the experiment changes nothing (BLG-1023).
+  await client.api.session.setPrefs({ experiments: ['-chat-schedules'], folded: [] });
   const state = client.store.getState();
   const project = state.projects.find((p) => p.name === 'bob-api')!.id;
   const ws = (await client.api.workspaces.newChat(project, CHAT)) as string;
@@ -70,32 +70,60 @@ test('the Info panel lists the chat’s schedule; Run Now runs it and the switch
   await expect(page.locator('main').getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Morning status');
 });
 
-test('/schedule opens the sheet; In hours makes a once schedule that starts on and shows at once', async ({ page }) => {
+const box = (page: Page) => page.locator('textarea[data-composer]');
+const composer = (page: Page) => page.locator('[data-chat-box]').filter({ has: page.locator('textarea[data-composer]') });
+
+test('/schedule turns the box into a schedule: a banner says when, the When chip picks, Schedule makes it on', async ({ page }) => {
   test.setTimeout(90_000);
   await openChat(page);
-  await page.locator('textarea:not(.xterm-helper-textarea)').fill('/schedule Check the build');
-  await page.keyboard.press('Enter');
-  const sheet = page.getByRole('dialog', { name: 'Schedule a Message' });
-  await expect(sheet).toBeVisible();
-  await expect(sheet.getByRole('textbox', { name: 'Prompt' })).toHaveValue('Check the build');
-  await sheet.getByRole('radio', { name: 'In hours' }).click();
-  await sheet.getByRole('textbox', { name: 'In how many hours' }).fill('2');
-  await shoot(page, '03-sheet');
-  await sheet.getByRole('button', { name: 'Schedule', exact: true }).click();
-  await expect(sheet).toBeHidden();
+  await box(page).fill('/schedule ');
+  await expect(composer(page)).toHaveAttribute('data-mode', 'schedule');
+  await expect(box(page)).toHaveValue('');
+  await expect(composer(page).getByRole('status')).toContainText('Sends this here tomorrow at 9:00');
+  await box(page).fill('Check the build');
+  await shoot(page, '03-mode');
+  await composer(page).getByRole('button', { name: /^When: / }).click();
+  await shoot(page, '04-when');
+  await page.getByRole('menuitem', { name: /In 3 hours/ }).click();
+  await expect(composer(page).getByRole('status')).toContainText(/Sends this here (today|tomorrow) at \d+:\d\d/);
+  await composer(page).getByRole('button', { name: 'Schedule', exact: true }).click();
+  await expect(page.getByText(/Scheduled: sends here/)).toBeVisible();
+  await expect(box(page)).toHaveValue('');
+  await expect(composer(page)).not.toHaveAttribute('data-mode', 'schedule');
   const row = inspector(page).locator('[data-schedule]').filter({ hasText: 'Check the build' });
   await expect(row).toContainText(/Once, .* · next/);
   await expect(row.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
-  await shoot(page, '04-made');
+  await shoot(page, '05-made');
 });
 
-test('with the experiment off, the section is hidden', async ({ page, demo }) => {
-  const client = await connect(demo);
-  await client.api.session.setPrefs({ experiments: withExperiment([], 'chat-schedules', false) });
-  client.close();
+test('esc leaves the mode; Custom… opens the sheet with the words, and making it there clears the box', async ({ page }) => {
+  test.setTimeout(90_000);
   await openChat(page);
-  await expect(inspector(page)).toBeVisible();
-  await expect(inspector(page).locator('[data-schedule]')).toHaveCount(0);
-  await expect(inspector(page).getByRole('heading', { name: /^Schedules/ })).toHaveCount(0);
-  await expect(sidebar(page).locator('[data-scheduled]')).toHaveCount(0);
+  await box(page).fill('/schedule ');
+  await expect(composer(page)).toHaveAttribute('data-mode', 'schedule');
+  await page.keyboard.press('Escape');
+  await expect(composer(page)).not.toHaveAttribute('data-mode', 'schedule');
+
+  // Schedule is one of the modes, beside Act and the plans; Act takes the box back.
+  await composer(page).getByRole('button', { name: /^Mode: / }).click();
+  await shoot(page, '07-modes');
+  await page.getByRole('menuitem', { name: /^Schedule/ }).click();
+  await expect(composer(page)).toHaveAttribute('data-mode', 'schedule');
+  await expect(composer(page).getByRole('button', { name: 'Mode: Schedule' })).toBeVisible();
+  await composer(page).getByRole('button', { name: 'Mode: Schedule' }).click();
+  await page.getByRole('menuitem', { name: /^Act/ }).click();
+  await expect(composer(page)).not.toHaveAttribute('data-mode', 'schedule');
+
+  await box(page).fill('/schedule Weekly recap');
+  await composer(page).getByRole('button', { name: /^When: / }).click();
+  await page.getByRole('menuitem', { name: /Custom/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Schedule a Message' });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByRole('textbox', { name: 'Message' })).toHaveValue('Weekly recap');
+  await sheet.getByRole('radio', { name: 'Repeats' }).click();
+  await shoot(page, '06-custom');
+  await sheet.getByRole('button', { name: 'Schedule', exact: true }).click();
+  await expect(sheet).toBeHidden();
+  await expect(box(page)).toHaveValue('');
+  await expect(inspector(page).locator('[data-schedule]').filter({ hasText: 'Weekly recap' })).toContainText(/Every day at 9:00/);
 });

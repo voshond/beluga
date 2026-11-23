@@ -15,7 +15,6 @@ import { workspaceSignal } from './attention-model.js';
 import { DotMark, LaterMark, ScheduledMark, SignalMark, nameClass, signalClass } from './signal-marks.js';
 import { chatSchedules } from '@beluga/core/sentinel/model.js';
 import { scheduleMark } from '../chat/schedule-model.js';
-import { experimentOn } from '@beluga/shared/experiments.js';
 import { inSections, isPrStep, toolbarActions } from './toolbar-actions.js';
 import { askBeforeWork } from '../lib/work-confirm.js';
 import { chatLinkItems } from '../lib/chat-links.js';
@@ -129,8 +128,8 @@ export const WorkspaceRow = memo(function WorkspaceRow({ ws, indent, fold, inFam
       archiving: state.archiving[ws.id],
       // Commits its open PR doesn't have yet (BLG-840): a chip, since merging now would leave them out.
       gap: ws.kind === 'worktree' && !ws.archived ? notOnPr(state.prs[ws.id], ws) : undefined,
-      // Woken by a sentinel on a schedule (BLG-401): how many, and whether all are off (or ran their one time). Behind chat-schedules.
-      scheduled: experimentOn(state.prefs.experiments, 'chat-schedules') && state.selfId ? scheduleMark(chatSchedules(state.sentinel, `${state.selfId}/ws:${ws.id}`)) : undefined,
+      // Woken by a sentinel on a schedule (BLG-401): how many, and whether all are off (or ran their one time).
+      scheduled: state.selfId ? scheduleMark(chatSchedules(state.sentinel, `${state.selfId}/ws:${ws.id}`)) : undefined,
     }),
     sameDeep,
   );

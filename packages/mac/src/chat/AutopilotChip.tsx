@@ -28,9 +28,10 @@ export function useAutopilot(channel: string): AutopilotHere & { readonly fixed:
   };
   const item: ActionItem = {
     label: FULL_AUTOPILOT_INFO.label,
-    hint: fixed ? `On for the plan “${here.planTitle}”: switch it on the plan’s page` : 'Never waits for you: what your agent asks, a stand-in agent answers',
+    hint: fixed ? `On for the plan “${here.planTitle}”: switch it on the plan’s page` : 'In any mode: a stand-in agent answers your agent’s questions, so it never waits for you',
     icon: 'bot',
     checked: here.on,
+    toggle: true,
     disabled: fixed,
     separate: true,
     onSelect: toggle,

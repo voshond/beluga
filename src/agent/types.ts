@@ -571,6 +571,18 @@ export interface AgentPlace {
   readonly openPr?: OpenPr;
   /** Straight to main (no open PR): when its turn ends, Beluga lands its commits on this branch in the main folder. */
   readonly landsOn?: string;
+  /** A fork of a friend's worktree (BLG-1017): what came with it, and what stayed on their computer (its `.beluga/fork.json`). */
+  readonly forked?: ForkedPlace;
+}
+
+/** What a fork brought from its owner's computer and what it left there (core/friend-share/carry.ts ForkNote). */
+export interface ForkedPlace {
+  readonly owner: string;
+  readonly from: string;
+  readonly scratch: number;
+  readonly sent: ReadonlyArray<{ readonly path: string; readonly files: number; readonly bytes: number }>;
+  readonly secrets: readonly string[];
+  readonly left: ReadonlyArray<{ readonly path: string; readonly why: 'secret' | 'big' | 'limit' | 'ignored' | 'there' | 'unplaced' }>;
 }
 
 /** A worktree's open pull request, for its run's commit rules (BLG-840). */

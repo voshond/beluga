@@ -105,9 +105,8 @@ export function useTaskFileDrop(): ReactNode {
     if (!inApp()) return;
     let off: (() => void) | undefined;
     let alive = true;
-    void import('@tauri-apps/api/webview').then(async ({ getCurrentWebview }) => {
-      const un = await getCurrentWebview().onDragDropEvent((e) => {
-        const p = e.payload;
+    void import('../lib/file-drop.js').then(async ({ onFileDrop }) => {
+      const un = await onFileDrop((p) => {
         if (p.type === 'leave') return setOver(undefined);
         const here = overAt(p.position.x / appDropScale(), p.position.y / appDropScale());
         if (p.type === 'drop') {

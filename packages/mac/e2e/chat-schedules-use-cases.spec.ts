@@ -21,10 +21,9 @@ const shoot = (page: Page, name: string) => page.screenshot({ path: path.join(sh
 type Demo = { readonly endpoint: { readonly url: string; readonly token: string } };
 const connect = (demo: Demo) => SocketClient.connect({ url: demo.endpoint.url, token: demo.endpoint.token, kind: 'test', version: 'e2e' });
 
-/** A new chat in bob-api, with the chat-schedules experiment on. → its ref. */
+/** A new chat in bob-api. → its ref. */
 async function newChat(demo: Demo, name: string): Promise<string> {
   const client = await connect(demo);
-  await client.api.session.setPrefs({ experiments: ['chat-schedules'] });
   const project = client.store.getState().projects.find((p) => p.name === 'bob-api')!.id;
   const ws = (await client.api.workspaces.newChat(project, name)) as string;
   const ref = `${client.store.getState().selfId}/ws:${ws}`;
@@ -40,13 +39,23 @@ async function openChat(page: Page, name: string): Promise<void> {
   await page.getByRole('tab', { name: 'Info', exact: true }).click();
 }
 
-/** /schedule in the chat: the sheet, with the prompt filled in. */
+const box = (page: Page) => page.locator('[data-chat-box]').filter({ has: page.locator('textarea[data-composer]') });
+
+/** '/schedule <prompt>' in the chat (BLG-1023): the box turns into a schedule, then When picks `when`. */
+async function scheduleWhen(page: Page, prompt: string, when: RegExp): Promise<void> {
+  await composer(page).fill('/schedule ');
+  await expect(box(page)).toHaveAttribute('data-mode', 'schedule');
+  await composer(page).fill(prompt);
+  await box(page).getByRole('button', { name: /^When: / }).click();
+  await page.getByRole('menuitem', { name: when }).click();
+}
+
+/** The same, through When › Custom…: the sheet, with the prompt filled in. */
 async function scheduleSheet(page: Page, prompt: string) {
-  await composer(page).fill(`/schedule ${prompt}`);
-  await page.keyboard.press('Enter');
+  await scheduleWhen(page, prompt, /Custom/);
   const sheet = page.getByRole('dialog', { name: 'Schedule a Message' });
   await expect(sheet).toBeVisible();
-  await expect(sheet.getByRole('textbox', { name: 'Prompt' })).toHaveValue(prompt);
+  await expect(sheet.getByRole('textbox', { name: 'Message' })).toHaveValue(prompt);
   return sheet;
 }
 
@@ -70,12 +79,11 @@ test('use case 1: "Send XYZ every day at 9:00" wakes the chat and its agent answ
   const chat = 'Daily XYZ';
   const ref = await newChat(demo, chat);
   await openChat(page, chat);
-  const sheet = await scheduleSheet(page, 'Send XYZ');
-  // Repeats, every day at 9:00, is what the sheet starts with.
-  await expect(sheet.getByRole('radio', { name: 'Repeats' })).toHaveAttribute('aria-checked', 'true');
-  await shoot(page, '1-sheet');
-  await sheet.getByRole('button', { name: 'Schedule', exact: true }).click();
-  await expect(sheet).toBeHidden();
+  await scheduleWhen(page, 'Send XYZ', /Every morning/);
+  await expect(box(page).getByRole('status')).toContainText('Sends this here every day at 9:00');
+  await shoot(page, '1-mode');
+  await box(page).getByRole('button', { name: 'Schedule', exact: true }).click();
+  await expect(box(page)).not.toHaveAttribute('data-mode', 'schedule');
 
   const row = inspector(page).locator('[data-schedule]').filter({ hasText: 'Send XYZ' });
   await expect(row).toContainText(/Every day at 9:00 · next/, { timeout: 20_000 });
@@ -99,7 +107,7 @@ test('use case 2: "Send XYZ in 5 hours" makes a once schedule five hours from no
   await page.clock.setFixedTime(new Date(2027, 0, 14, 8, 0));
   await openChat(page, chat);
   const sheet = await scheduleSheet(page, 'Send XYZ');
-  await sheet.getByRole('radio', { name: 'In hours' }).click();
+  await sheet.getByRole('radio', { name: 'In a few hours' }).click();
   await sheet.getByRole('textbox', { name: 'In how many hours' }).fill('5');
   await shoot(page, '2-sheet');
   await sheet.getByRole('button', { name: 'Schedule', exact: true }).click();

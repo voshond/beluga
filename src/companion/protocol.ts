@@ -779,7 +779,7 @@ export const ConvView = z.object({
   /** 1.41 (BLG-702): your quick reactions, for a reactable turn's long-press (the room's or a workspace's chat). */
   quick: z.array(z.string().min(1).max(32)).max(8).optional(),
   /**
-   * 1.60 (BLG-401, upstream's 1.57): the sentinels that send into this chat on a schedule (chat-schedules experiment):
+   * 1.60 (BLG-401, upstream's 1.57): the sentinels that send into this chat on a schedule:
    * its name, when it runs in words, its next time, whether it's off or running. The phone runs
    * (sentinel.run) and pauses or turns on (sentinel.pause) one; it never makes or changes one.
    */

@@ -86,6 +86,8 @@ export const MACHINE: Record<Method, MachineSide> = {
   'sharing.earlier': 'drive',
   'sharing.runHere': 'drive',
   'sharing.fork': 'drive',
+  'sharing.forkCarry': 'drive',
+  'sharing.setForkCarry': 'drive',
   // ---- invites
   'invites.create': 'drive',
   'invites.revoke': 'drive',

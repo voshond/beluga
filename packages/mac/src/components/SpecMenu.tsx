@@ -184,8 +184,12 @@ export interface ActionItem {
   readonly mark?: ReactNode;
   /** Starts a new group (a line above it). */
   readonly separate?: boolean;
-  /** A checkmark in front (the group a project is in). */
+  /** A checkmark in front (the group a project is in); with `toggle`, whether its switch is on. */
   readonly checked?: boolean;
+  /** An on/off setting, not a choice (Full Autopilot): a switch on the right shows `checked`, and picking it keeps the menu open. */
+  readonly toggle?: boolean;
+  /** Picking it keeps the menu open, so the change shows where it was made (a choice in a submenu: Builder ▸). */
+  readonly stay?: boolean;
   /** A colour dot before the name (a choice of colours: a tile's tint). */
   readonly swatch?: string;
   /** A submenu ("Move to Group ▸"): picking the row itself does nothing. */
@@ -233,13 +237,28 @@ function ActionRows({ items, Item, Separator, kit = DROPDOWN_SUB }: { items: rea
               </kit.Portal>
             </kit.Sub>
           ) : (
-          <Item className={`${s.item} ${it.danger ? s.danger : ''}`} disabled={it.disabled} onSelect={it.onSelect} data-checked={it.checked || undefined}>
+          <Item
+            className={`${s.item} ${it.danger ? s.danger : ''}`}
+            disabled={it.disabled}
+            // A switch flips in place, and a choice that stays shows on its row: the menu stays open so you see it change.
+            onSelect={
+              it.toggle || it.stay
+                ? (e: Event) => {
+                    e.preventDefault();
+                    it.onSelect();
+                  }
+                : it.onSelect
+            }
+            data-checked={it.checked || undefined}
+            {...(it.toggle ? { role: 'menuitemcheckbox', 'aria-checked': Boolean(it.checked) } : {})}
+          >
             <span className={s.line}>
               {/* A row with its own icon keeps it (a choice of icons); the check then goes after the name. */}
-              {icons ? <span className={s.icon} aria-hidden="true">{it.mark ?? (it.icon ? <Icon name={it.icon} size={13} /> : it.checked ? <Icon name="check" size={12} /> : null)}</span> : null}
+              {icons ? <span className={s.icon} aria-hidden="true">{it.mark ?? (it.icon ? <Icon name={it.icon} size={13} /> : it.checked && !it.toggle ? <Icon name="check" size={12} /> : null)}</span> : null}
               {it.swatch ? <span className={s.swatch} style={{ background: it.swatch }} aria-hidden="true" /> : null}
               <span className={s.label}>{it.label}</span>
-              {it.checked && (it.icon || it.mark) ? <Icon name="check" size={12} className={s.trailingCheck} /> : null}
+              {it.toggle ? <span className={`${s.toggle} ${it.checked ? s.toggleOn : ''}`} aria-hidden="true" /> : null}
+              {it.checked && !it.toggle && (it.icon || it.mark) ? <Icon name="check" size={12} className={s.trailingCheck} /> : null}
               {it.keys ? <kbd className={s.keys}>{it.keys}</kbd> : null}
             </span>
             {it.hint ? <span className={`${s.hint} ${icons ? s.hintIndent : ''}`}>{it.hint}</span> : null}

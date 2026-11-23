@@ -8,6 +8,8 @@ import { type DropVerdict, type Sending, envAsk, planDrop, sendFiles, sentShare 
 import { openSheet } from '../lib/sheets.js';
 import { currentMachines } from '../machines/use-machines.js';
 import { type Box, MAX_DROPPED, appDropScale, dropHits, droppedFiles, leftOutWords, sameBox } from './drop-model.js';
+import { boxTakesFiles, carriesFiles } from '../lib/file-drop.js';
+import { keyPlatform } from '../lib/shortcuts-model.js';
 import { imageLinksIn } from '@beluga/shared/attachment-links.js';
 import { type RefKey, boxRef, plainRefs, refKey, referencedImages, withoutRef } from './image-refs.js';
 import { keepPreview, openLightbox, pendingImage, previewCopy, previewOf } from './images.js';
@@ -496,9 +498,8 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
       const at = r ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : undefined;
       return dropHits(at, x, y, appDropScale()) ? at : undefined;
     };
-    void import('@tauri-apps/api/webview').then(async ({ getCurrentWebview }) => {
-      const un = await getCurrentWebview().onDragDropEvent((e) => {
-        const p = e.payload;
+    void import('../lib/file-drop.js').then(async ({ onFileDrop }) => {
+      const un = await onFileDrop((p) => {
         if (p.type === 'leave') return setDragOver(undefined);
         const here = zoneAt(p.position.x, p.position.y);
         if (p.type === 'drop') {
@@ -699,6 +700,10 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
       )
     : null;
 
+  // Files the app hands over by path (above) are its, not this box's too: once each (Windows).
+  const ownsFileDrag = (types: readonly string[]): boolean =>
+    !carriesFiles(types) || boxTakesFiles({ platform: keyPlatform(), inApp: inApp(), hearsAppDrops: finderDrops });
+
   return {
     images: pendingImages,
     files,
@@ -707,6 +712,7 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
     dropTarget,
     dropProps: {
       onDragOver: (e) => {
+        if (!ownsFileDrag(e.dataTransfer.types)) return;
         if ([...e.dataTransfer.items].some((i) => i.type.startsWith('image/')) || (webServed() && [...e.dataTransfer.types].includes('Files'))) {
           e.preventDefault();
           setDropping(true);
@@ -714,6 +720,7 @@ export function useAttachments({ channel, box, text, setText, finderDrops = true
       },
       onDragLeave: () => setDropping(false),
       onDrop: (e) => {
+        if (!ownsFileDrag(e.dataTransfer.types)) return setDropping(false);
         const dropped = imagesOf(e.dataTransfer.items);
         const others = webServed() ? othersOf(e.dataTransfer.files) : [];
         setDropping(false);

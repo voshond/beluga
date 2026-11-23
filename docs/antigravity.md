@@ -45,4 +45,6 @@ A model Google retires leaves the list on its own: Beluga asks Antigravity each 
 
 ## Checking it
 
+Antigravity runs on Beluga's ACP core ([ACP agents](acp.md)): what it does past ACP is its extension (`src/agent/runtime/antigravity/extension.ts`).
+
 `npx vitest run tests/antigravity-flow.test.ts` runs it against a scripted `agy acp` in the shapes the Antigravity CLI 1.5.8 sends. `npx tsx scripts/live-antigravity.ts` runs the same checks against your real `agy` (about 15 messages of your quota).

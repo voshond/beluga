@@ -276,7 +276,7 @@ function mentionSuggestions(buffer: string, ctx: SuggestContext): Suggestion[] {
   const paths = pathMentions(typed, ctx)
     .filter((o) => !seen.has(o.label.toLowerCase()))
     .map((o) => ({ label: o.label, hint: o.hint, value: `${before}${o.label}${o.folder ? '' : ' '}`, enter: 'complete' as const, kind: o.folder ? ('folder' as const) : ('file' as const) }));
-  return [...keyMentions(typed, before, ctx), ...named, ...tasks, ...chatMentions(typed, before, ctx), ...paths, ...elsewhere];
+  return [...keyMentions(typed, before, ctx), ...named, ...tasks, ...chatMentions(typed, before, ctx.chats), ...paths, ...elsewhere];
 }
 
 /** This chat's keys a typed "@…" may mean (a lone @ lists them all, "@open" finds OPENAI_API_KEY): first, as you're likely to want one. */
@@ -289,9 +289,12 @@ function keyMentions(typed: string, before: string, ctx: SuggestContext): Sugges
 }
 const MAX_KEY_SUGGESTIONS = 4;
 
-/** The chats a typed "@…" may mean, best first (as tasks: a word of the title, nothing for a lone @). */
-function chatMentions(typed: string, before: string, ctx: SuggestContext): Suggestion[] {
-  return (ctx.chats ?? [])
+/**
+ * The chats a typed "@…" may mean, best first (as tasks: a word of the title, nothing for a lone @).
+ * Also a friends' conversation's box (network/chat-model.ts).
+ */
+export function chatMentions(typed: string, before: string, chats: SuggestContext['chats']): Suggestion[] {
+  return (chats ?? [])
     .flatMap((c) => {
       const rank = titleRank(typed, c.title);
       const ref = parseChatRef(c.ref);

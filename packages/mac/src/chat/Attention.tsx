@@ -167,6 +167,9 @@ function Question({ channel }: { channel?: string }) {
   useLayoutEffect(() => {
     if (planRef.current) planRef.current.scrollTop = 0;
   }, [full, q?.qid]);
+  // Read in full only when there is more to read: a plan that fits the card has nothing to expand (#607).
+  const planText = q?.question.kind === 'plan' ? q.question.plan : undefined;
+  const tall = useOverflows(planRef, planText, full);
   if (!q) return null;
   if (q.question.kind === 'plan') {
     return (
@@ -174,9 +177,11 @@ function Question({ channel }: { channel?: string }) {
         <div className={s.head}>
           <Icon name="wand" size={13} className={s.claude} />
           <span className={s.title}>{owner && q.owner !== selfId ? `${owner}'s ${agent}` : agent} has a plan</span>
-          <Button size="small" variant="quiet" icon={full ? 'chevronDown' : 'chevronUp'} aria-expanded={full} onClick={() => ui.patch({ planFull: full ? undefined : q.qid })}>
-            {full ? 'Show less' : 'Read in full'}
-          </Button>
+          {tall || full ? (
+            <Button size="small" variant="quiet" icon={full ? 'chevronDown' : 'chevronUp'} aria-expanded={full} onClick={() => ui.patch({ planFull: full ? undefined : q.qid })}>
+              {full ? 'Show less' : 'Read in full'}
+            </Button>
+          ) : null}
         </div>
         <div ref={planRef} className={cx(s.plan, full && s.planFull, 'selectable')} role="region" aria-label="The plan">
           <Markdown text={q.question.plan} />
@@ -260,6 +265,26 @@ function QuestionOptions({ q, current, chosen }: QuestionOptionsProps) {
 }
 
 /** Whether a conversation can be opened in this window (one that can't is answered wherever you are). */
+/**
+ * The collapsed plan is taller than the card shows (it scrolls): measured while collapsed, again
+ * when the plan or the card's width changes. While read in full it keeps what it found.
+ */
+function useOverflows(ref: React.RefObject<HTMLElement | null>, text: string | undefined, full: boolean): boolean {
+  const [tall, setTall] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || full) return;
+    const measure = (): void => setTall(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    if (el.firstElementChild) watch.observe(el.firstElementChild);
+    return () => watch.disconnect();
+  }, [ref, text, full]);
+  return tall;
+}
+
 function useOpens(): (channel: string) => boolean {
   const places = useApp((st) => ({ projects: st.projects, shared: st.shared, network: st.network, plans: st.plans, board: st.board, prefs: st.prefs }), sameFields);
   return useMemo(() => (channel: string) => Boolean(macNoticeTarget(places, channel)), [places]);

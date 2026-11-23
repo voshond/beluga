@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { dropGitLocalEnv } from '../core/git-env.js';
 import { PROJECT_DIR } from '../shared/scratch-dir.js';
 import { limiter } from './limit.js';
 import { withSshRoutes } from './ssh-routes.js';
@@ -17,8 +18,14 @@ export class GitError extends Error {}
  */
 export const GIT_IN_ENGLISH = { LC_ALL: 'en_US.UTF-8', LANGUAGE: 'en' } as const;
 
-/** Git must never ask for a password on Beluga's screen: fail instead, and say why. */
+/**
+ * Git must never ask for a password on Beluga's screen: fail instead, and say why. Built as this
+ * module loads, before the daemon or the demo can drop git's own variables (an ESM import runs
+ * first), so they're left out here too: started from a hook or `git rebase -x`, GIT_DIR sent every
+ * worktree and commit into that repository (git-env.ts).
+ */
 const GIT_ENV: NodeJS.ProcessEnv = { ...process.env, ...GIT_IN_ENGLISH, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND ?? 'ssh -o BatchMode=yes' };
+dropGitLocalEnv(GIT_ENV);
 
 /**
  * Run git in a directory; resolves stdout, rejects with git's own message. `env`: more of git's

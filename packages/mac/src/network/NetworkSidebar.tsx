@@ -135,6 +135,8 @@ function FriendRow({ f, groups }: { f: FriendView; groups: readonly GroupView[] 
     <ActionsContext items={() => friendItems(f, groups, { open: () => openDm(client, f.peerId), card: () => openFriendCard(client, f.peerId), say, addTo, room })}>
       <Row
         data-friend-row={f.peerId}
+        // A worktree's or a chat's row dropped here: its chip in your message to them (layout/chat-drag.tsx).
+        data-drop-row={dmId(f.peerId)}
         data-person-row={bits ? f.peerId : undefined}
         selected={selected}
         icon={
@@ -254,6 +256,7 @@ function GroupRow({ g }: { g: GroupView }) {
     <ActionsContext items={() => groupItems(g, { open: () => openGroup(client, g.id), rename: () => setRenaming(true), copyLink: () => void copyLink().catch(() => undefined), read: () => void client.api.network.read(groupId(g.id)) })}>
       <Row
         data-group-row={g.id}
+        data-drop-row={g.active ? groupId(g.id) : undefined}
         selected={selected}
         className={g.active ? undefined : s.left}
         icon={main ? <span className={s.mainIcon}><Icon name="people" size={12} /></span> : <GroupAvatar name={g.name} id={g.id} size={18} muted={!g.active} />}

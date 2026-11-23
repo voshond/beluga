@@ -5,7 +5,6 @@ import type { SentinelWake } from '../src/core/sentinel/runner.js';
 import type { SentinelDraft } from '../src/core/sentinel/model.js';
 import { wakeRefusal } from '../src/core/sentinel/wake.js';
 import { type DomainState, Store, initialState } from '../src/core/store.js';
-import { experimentGate, withExperiment } from '../src/shared/experiments.js';
 import { CONTINUE_PROMPT, encodeFailure } from '../src/shared/run-failure.js';
 import { LIMIT_MARGIN_MS } from '../src/shared/auto-continue.js';
 import type { BodyOf } from '../src/protocol.js';
@@ -73,7 +72,6 @@ function world(end: (prompt: string) => TurnEnd = () => ({ kind: 'done', text: '
   });
   // As the daemon wires it (core/sentinel/launch.ts wake()).
   const wake: SentinelWake = {
-    on: experimentGate(() => store.getState().prefs.experiments, 'chat-schedules'),
     refusal: (to) => wakeRefusal(store.getState(), to),
     deliver: async (input) => (await sends.deliverFromSentinel({ sentinel: input.sentinel, run: input.run, step: input.step, channel: input.to, text: input.text })).messageId,
     wait: (messageId, ms, signal) => sends.outcome(messageId, ms, signal),
@@ -135,8 +133,8 @@ describe('use case 1: "Send XYZ every day at 9:00"', () => {
   });
 });
 
-describe('the chat-schedules switch', () => {
-  it('on by default: a daily wake goes with no experiment saved', async () => {
+describe('chat schedules need no switch', () => {
+  it('a daily wake goes with no experiment saved', async () => {
     const w = world(undefined, []);
     const id = w.schedule({ kind: 'schedule', every: 'day', at: '09:00', missed: 'skip' });
     await w.at(new Date(2026, 10, 12, 9, 0, 20).getTime());
@@ -146,18 +144,11 @@ describe('the chat-schedules switch', () => {
     w.auto.stop();
   });
 
-  it('turned off: nothing runs, nothing is counted against it; turned back on, the next 9:00 wakes the chat', async () => {
-    const w = world();
+  it('an old Beluga’s off mark for the experiment is ignored', async () => {
+    const w = world(undefined, ['-chat-schedules']);
     const id = w.schedule({ kind: 'schedule', every: 'day', at: '09:00', missed: 'skip' });
-    const prefs = (experiments: string[]) => w.store.dispatch({ type: 'prefs', prefs: { ...w.store.getState().prefs, experiments } } as never);
-    prefs(withExperiment([], 'chat-schedules', false));
     await w.at(new Date(2026, 10, 12, 9, 0, 20).getTime());
-    expect(w.s.sentinels.runsOf(id)).toHaveLength(0);
-    expect(w.prompts).toHaveLength(0);
-    expect(w.s.sentinels.get(id)).toMatchObject({ paused: false, failures: 0 });
-    prefs([]);
-    await w.at(new Date(2026, 10, 13, 9, 0, 20).getTime());
-    await until(() => w.runsOf(id).some((r) => r.state === 'done'));
+    await until(() => w.runsOf(id)[0]?.state === 'done');
     expect(w.prompts).toHaveLength(1);
     w.s.sentinels.stopAll();
     w.auto.stop();

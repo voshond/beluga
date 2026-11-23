@@ -48,6 +48,7 @@ describe('the phone app imports only what its bundler can see', () => {
   });
 
   it('finds the watched folders it checks against', () => {
-    expect(watched().map((f) => path.relative(repo, f))).toContain('src/companion');
+    // As the repo writes them (Windows gives src\companion).
+    expect(watched().map((f) => path.relative(repo, f).split(path.sep).join('/'))).toContain('src/companion');
   });
 });

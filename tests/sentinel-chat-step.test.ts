@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sentinelRunChat } from '../src/core/auto-continue.js';
 import { sentinelOfChannel } from '../src/core/sentinel/model.js';
-import { CHAT_SCHEDULES_OFF, type ChatOutcome, type SentinelWake } from '../src/core/sentinel/runner.js';
+import { type ChatOutcome, type SentinelWake } from '../src/core/sentinel/runner.js';
 import { wakeRefusal } from '../src/core/sentinel/wake.js';
 import { type DomainState, initialState } from '../src/core/store.js';
 import { project, setup, until } from './sentinel-fakes.js';
@@ -27,9 +27,8 @@ interface Delivery {
 function fakeWake(onDeliver?: (d: Delivery) => void) {
   const delivered: Delivery[] = [];
   const ends = new Map<string, (o: ChatOutcome) => void>();
-  const flags = { on: true, refusal: undefined as string | undefined };
+  const flags = { refusal: undefined as string | undefined };
   const wake: SentinelWake = {
-    on: () => flags.on,
     refusal: () => flags.refusal,
     deliver: async (input) => {
       const d = { id: `m${delivered.length + 1}`, ...input };
@@ -147,25 +146,11 @@ describe('only a chat that is yours alone', () => {
   });
 });
 
-describe('the chat-schedules experiment off', () => {
-  it('refuses a chat step at create', () => {
-    const w = fakeWake();
-    w.flags.on = false;
-    const s = setup({ wake: w.wake });
-    expect(() => s.sentinels.create({ name: 'Nudge', steps: [wakeStep()] })).toThrow(/^Waking a chat needs the Chat schedules experiment/);
-    // Nothing else changes: a sentinel without one is made as before.
+describe('where nothing can wake a chat', () => {
+  it('refuses a chat step at create, and makes any other sentinel as before', () => {
+    const s = setup({});
+    expect(() => s.sentinels.create({ name: 'Nudge', steps: [wakeStep()] })).toThrow(/^Waking a chat isn’t available here/);
     expect(s.sentinels.create({ name: 'Plain', steps: [{ kind: 'notify', name: 'Tell me', phone: false }] }).name).toBe('Plain');
-  });
-
-  it('refuses it at run time, and delivers nothing', async () => {
-    const w = fakeWake();
-    const s = setup({ wake: w.wake });
-    const made = s.sentinels.create({ name: 'Nudge', steps: [wakeStep()] });
-    w.flags.on = false;
-    const run = s.sentinels.start(made.id, 'you');
-    await until(() => s.sentinels.runGet(run.id).run.state === 'failed');
-    expect(s.sentinels.runGet(run.id).run.why).toBe(CHAT_SCHEDULES_OFF);
-    expect(w.delivered).toHaveLength(0);
   });
 });
 

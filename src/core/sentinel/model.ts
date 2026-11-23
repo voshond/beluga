@@ -218,7 +218,7 @@ export interface MessageStep extends StepBase {
 /**
  * Wake one of your own chats (BLG-397): the prompt goes in as from the sentinel, the step waits for
  * that turn and keeps the first line of its answer. Only a chat that is yours alone: one shared with
- * a contributor is refused, and the sentinel pauses. Behind the chat-schedules experiment.
+ * a contributor is refused, and the sentinel pauses.
  */
 export interface ChatStep extends StepBase {
   readonly kind: 'chat';

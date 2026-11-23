@@ -1,37 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { EXPERIMENT_INFO, EXPERIMENTS, experimentGate, experimentOn, withExperiment } from '../src/shared/experiments.js';
+import { EXPERIMENTS, experimentOn } from '../src/shared/experiments.js';
 
-describe('chat-schedules experiment', () => {
-  it('is listed with its explanation', () => {
-    expect(EXPERIMENTS).toContain('chat-schedules');
-    expect(EXPERIMENT_INFO['chat-schedules'].title).toBe('Chat schedules');
-    expect(EXPERIMENT_INFO['chat-schedules'].changes.length).toBeGreaterThan(0);
+/** Chat schedules left Experimental (BLG-1023): they're always there, whatever an older Beluga saved. */
+describe('chat schedules are no experiment', () => {
+  it('is not listed in Settings › Experimental', () => {
+    expect(EXPERIMENTS as readonly string[]).not.toContain('chat-schedules');
   });
 
-  it('is on by default; the switch turns it off, and back on', () => {
-    let enabled: string[] | undefined;
-    const on = experimentGate(() => enabled, 'chat-schedules');
-    expect(on()).toBe(true);
-    enabled = [];
-    expect(on()).toBe(true);
-    enabled = withExperiment([], 'chat-schedules', false);
-    expect(on()).toBe(false);
-    enabled = withExperiment(enabled, 'chat-schedules', true);
-    expect(on()).toBe(true);
-    // An old list that turned it on by name keeps it on.
-    enabled = ['previews', 'chat-schedules'];
-    expect(on()).toBe(true);
-  });
-
-  it('turning it off keeps the other experiments as they were', () => {
-    const off = withExperiment(['previews'], 'chat-schedules', false);
-    expect(experimentOn(off, 'previews')).toBe(true);
-    expect(experimentOn(off, 'chat-schedules')).toBe(false);
-    expect(withExperiment(off, 'chat-schedules', false)).toEqual(off);
-  });
-
-  it('previews stays off until you turn it on', () => {
-    expect(experimentOn([], 'previews')).toBe(false);
-    expect(experimentOn(withExperiment([], 'previews', true), 'previews')).toBe(true);
+  it('an old off mark in the saved list turns no other experiment on or off', () => {
+    expect(experimentOn(['-chat-schedules'], 'previews')).toBe(false);
+    expect(experimentOn(['-chat-schedules', 'previews'], 'previews')).toBe(true);
   });
 });

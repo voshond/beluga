@@ -95,6 +95,8 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'sharing.earlier': 'gated',
   'sharing.runHere': 'gated',
   'sharing.fork': 'gated',
+  'sharing.forkCarry': { refused: NO_TOOL },
+  'sharing.setForkCarry': { refused: 'Which git-ignored files and secrets go to a friend is the owner\'s pick, ticked file by file (BLG-1017).' },
   'invites.create': 'gated',
   'invites.revoke': 'gated',
   'invites.copyLink': 'ui_only',

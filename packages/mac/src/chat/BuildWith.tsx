@@ -4,9 +4,12 @@ import { builderFor, pickName } from '@beluga/core/build-with.js';
 import { agentName } from '@beluga/shared/agent-label.js';
 import { agentForChoice } from '@beluga/ui/agent-choice.js';
 import type { ActionItem } from '../components/SpecMenu.js';
+import { Icon } from '../components/Icon.js';
+import { Tip, cx } from '../components/ui.js';
 import { agentMenuItems, useAgentEntries } from '../components/agent-options.js';
 import { useApi, useApp } from '../lib/beluga.js';
 import { EFFORT_INFO, modelInfo } from './ModelPicker.js';
+import s from './composer.module.css';
 
 export const samePick = (a: AgentPick | undefined, b: AgentPick | undefined): boolean => a?.runtime === b?.runtime && a?.model === b?.model && a?.label === b?.label && a?.effort === b?.effort;
 
@@ -50,13 +53,18 @@ export function usePickItems(): (current: AgentPick | undefined, pick: (agent: A
 
 /**
  * Plan here, build with another agent (BLG-982), from the composer's mode menu: under Plan First
- * and Plan with Tasks (a new worktree's or chat's too), "Build With ▸" picks who builds what this
+ * and Advanced Planning (a new worktree's or chat's too), "Builder ▸" picks who builds what this
  * chat plans once you approve it: any agent and model, and how hard it thinks. The agent in this
  * chat plans (its picker beside the mode). Settings › Agent › Build plans with is where it starts.
+ *
+ * BLG-1023: the row says who builds ("Builder: Codex") and a pick keeps the menu open, so the choice
+ * shows where it was made; a chip beside the mode says it once the menu closes, with × to undo it.
+ * Only when there is someone to pick: with no usable agent the row isn't there at all.
  */
-export function useBuildWith(channel: string): { readonly builder?: AgentPick; readonly item: ActionItem } {
+export function useBuildWith(channel: string): { readonly builder?: AgentPick; readonly show: boolean; readonly clear: () => void; readonly item: ActionItem } {
   const api = useApi();
   const pickItems = usePickItems();
+  const usable = useApp((s) => s.runtimes.some((r) => r.available));
   const planHere = useApp((s) => {
     const plan = planForHome(s.plans, channel);
     return Boolean(plan && plan.status !== 'done');
@@ -69,20 +77,36 @@ export function useBuildWith(channel: string): { readonly builder?: AgentPick; r
   const fallback = useApp((s) => s.prefs.buildWith, samePick);
   const following = useApp((s) => s.buildWith[channel] === undefined);
   const set = (agent: BuildWithPick | null): void => void api.session.setBuildWith(channel, agent);
+  const here = (): void => set(fallback || planHere ? 'here' : null);
   const yours: ActionItem[] = fallback
-    ? [{ label: `Your Default (${agentName(fallback, { model: true })})`, hint: 'Settings › Agent › Build plans with', checked: !planHere && following, onSelect: () => set(null) }]
+    ? [{ label: `Your Default (${agentName(fallback, { model: true })})`, hint: 'Settings › Agent › Build plans with', checked: !planHere && following, stay: true, onSelect: () => set(null) }]
     : [];
+  const show = usable || builder !== undefined;
   const item: ActionItem = {
-    label: builder ? `Build With ${agentName(builder, { model: true })}` : 'Build With',
+    label: `Builder: ${builder ? agentName(builder, { model: true }) : 'The Agent Planning Here'}`,
     hint: builder ? `${pickName(builder)} builds it once you approve; the agent here plans it` : 'Plan with the agent here, then have another agent or model build it',
     icon: 'wrench',
     separate: true,
     submenu: [
-      { label: 'The Agent Planning Here', hint: 'It plans and builds', checked: !builder, onSelect: () => set(fallback || planHere ? 'here' : null) },
+      { label: 'The Agent Planning Here', hint: 'It plans and builds', checked: !builder, stay: true, onSelect: here },
       ...yours,
-      ...pickItems(builder, set, { effort: true }),
+      ...pickItems(builder, set, { effort: true }).map((row) => (row.submenu ? row : { ...row, stay: true })),
     ],
     onSelect: () => undefined,
   };
-  return { ...(builder ? { builder } : {}), item };
+  return { ...(builder ? { builder } : {}), show, clear: here, item };
+}
+
+/** Beside the mode while another agent will build what's planned here: who, and × to have the agent here build it. */
+export function BuildWithChip({ builder, clear }: { builder: AgentPick; clear: () => void }) {
+  const name = agentName(builder, { model: true });
+  return (
+    <Tip label={`${name} does the work once you approve the plan. Click to have the agent here build it too`}>
+      <button type="button" className={cx(s.chip, s.chipOn)} aria-label={`Built by ${name}: have the agent here build it instead`} onClick={clear}>
+        <Icon name="wrench" size={12} />
+        <span className={s.chipLabel}>Built by {name}</span>
+        <Icon name="x" size={9} />
+      </button>
+    </Tip>
+  );
 }
