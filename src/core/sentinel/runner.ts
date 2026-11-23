@@ -9,6 +9,7 @@ import type { NoticeEvent } from '../notify.js';
 import { type Named, mentionNote, personMentions } from '../person-mentions.js';
 import type { RunFolders } from './files.js';
 import type { AgentRef } from '../../protocol.js';
+import type { WrittenBy } from '../store.js';
 import type { Effort } from '../../shared/settings-schema.js';
 import {
   type ClaudeStep,
@@ -65,8 +66,8 @@ export interface ShellResult {
 export type SentinelShell = (command: string, cwd: string, timeoutMs: number, env: Record<string, string>, signal: AbortSignal) => Promise<ShellResult>;
 
 export interface SentinelClaude {
-  /** Ask your Claude in a conversation → the request's id (undefined: it can't be asked there). `shown`: what the chat shows you asked. */
-  ask(prompt: string, channel: string, shown: string): string | undefined;
+  /** Ask your Claude in a conversation → the request's id (undefined: it can't be asked there). `shown`: what the chat shows you asked; `written`: Beluga wrote it (a run's prompt), not you. */
+  ask(prompt: string, channel: string, shown: string, written?: WrittenBy): string | undefined;
   /** That request's final message; rejects with what went wrong (an error, a denial). */
   wait(requestId: string): Promise<string>;
   /** Stop it (the run's time limit, or you stopped the run). */
@@ -970,7 +971,7 @@ export class SentinelRunner {
       const brief = sentinelRunPrompt({ sentinel: active.sentinel, trigger: active.run.trigger, steps: outputs, minutesLeft: remaining() / 60_000, reports });
       // Known before the run starts, so the run is told what it is (Sentinels.forRun).
       active.claude = { stepId: step.id, channel, brief };
-      const requestId = claude.ask(prompt, channel, prompt);
+      const requestId = claude.ask(prompt, channel, prompt, 'sentinel');
       if (!requestId) return { kind: 'failed', why: 'your agent couldn’t be asked there', channel };
       active.claude.requestId = requestId;
       const settled = claude.wait(requestId).then((text) => ({ ok: true as const, text }), (err: unknown) => ({ ok: false as const, why: err instanceof Error ? err.message : String(err) }));

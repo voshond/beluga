@@ -32,11 +32,15 @@ export type FilterContext = {
 
 const DROPPED_BLOCK = /```(?:console|terminal|shell-session|output|beluga-[\w-]+)[^\n]*\n[\s\S]*?```/g;
 
+export const MAX_CONTENT = 4000;
+
+const capped = (text: string): string => (text.length <= MAX_CONTENT ? text : `${text.slice(0, MAX_CONTENT).trimEnd()}\n[… ${text.length - MAX_CONTENT} more characters left out]`);
+
 export const cleanText = (text: string): string | undefined => {
   const kept = text.replace(DROPPED_BLOCK, '[…]').trim();
   if (!kept || kept === '[…]') return undefined;
   if (secretIn(kept)) return undefined;
-  return kept;
+  return capped(kept);
 };
 
 export const conversationOf = (state: DomainState, channel: string): Conversation | undefined => {
@@ -65,7 +69,7 @@ export const pickOutgoing = (action: Action, ctx: FilterContext): Outgoing | und
   const self = ctx.state.selfId;
   if (!self) return undefined;
   if (action.type === 'chat') {
-    if (action.from !== self || action.byAgent || action.via || action.fromApp || action.dialogue) return undefined;
+    if (action.from !== self || action.byAgent || action.via || action.fromApp || action.dialogue || action.written) return undefined;
     if (action.ts < ctx.since) return undefined;
     const conversation = allowedConversation(ctx, action.channel);
     if (!conversation) return undefined;
