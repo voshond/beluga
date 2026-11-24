@@ -725,6 +725,7 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'memory.keepProposal': { refused: APPROVALS },
   'memory.discardProposal': { refused: APPROVALS },
   'memory.reflect': { refused: NO_TOOL },
+  'memory.tidy': { refused: NO_TOOL },
   'devices.list': { refused: COMPUTERS },
   'chats.resolve': { refused: NO_TOOL },
   'chats.snapshot': { refused: NO_TOOL },

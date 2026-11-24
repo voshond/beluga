@@ -809,6 +809,8 @@ export const PHONE: Record<Method, Side> = {
   'memory.keepProposal': 'phone',
   'memory.discardProposal': 'phone',
   'memory.reflect': 'mac',
+  // BLG-120: Tidy in Settings › Memory; its merge, forget and move cards are answered like the others
+  'memory.tidy': 'mac',
 
   // External agents: only the Mac app and `beluga mcp` manage who connects.
   'external.status': 'mac',

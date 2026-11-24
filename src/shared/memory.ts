@@ -58,7 +58,7 @@ export const changedEntry = (change: MemoryChange): MemoryEntry => (change.after
 /** What starts a look back (BLG-96): a worktree merging (once, and only with the setting on), or you asking (any time, BLG-108). */
 export type ReflectionTrigger = 'merge' | 'manual';
 
-export type ReflectionSkip = 'off' | 'not_yours' | 'short' | 'nothing_new' | 'done' | 'running' | 'full' | 'trouble';
+export type ReflectionSkip = 'off' | 'not_yours' | 'short' | 'nothing_new' | 'done' | 'running' | 'full' | 'trouble' | 'empty';
 
 export type ReflectionOutcome = { readonly proposed: number; readonly skill?: 'new' | 'change' } | { readonly skipped: ReflectionSkip; readonly why: string };
 
@@ -69,4 +69,11 @@ export const lookBackWords = (outcome: ReflectionOutcome): string => {
   const found = [...(memories ? [`${memories} thing${memories === 1 ? '' : 's'} to remember`] : []), ...(outcome.skill ? [outcome.skill === 'new' ? 'a skill to keep' : 'a fix to a skill'] : [])];
   const words = found.join(' and ');
   return words ? `${words.charAt(0).toUpperCase()}${words.slice(1)}: see Needs You.` : 'Looked back: nothing worth keeping this time.';
+};
+
+/** What a Tidy came to (BLG-120): how many merges, forgets and moves wait, or why none. */
+export const tidyWords = (outcome: ReflectionOutcome): string => {
+  if ('skipped' in outcome) return outcome.why;
+  if (!outcome.proposed) return 'Your memory is tidy: nothing to merge, forget or move.';
+  return `${outcome.proposed} way${outcome.proposed === 1 ? '' : 's'} to tidy your memory: see Needs You.`;
 };

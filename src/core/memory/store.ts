@@ -132,6 +132,33 @@ export class MemoryStore {
     return { view: this.save(scope, entries, entries.filter((e) => e.id !== before.id)), change: { scope, op: 'remove', before, index: entries.indexOf(before) } };
   }
 
+  /** BLG-120: rewrite `keep` and remove the `fold` entries, as one write: it fits whenever the result is no bigger. */
+  merge(scope: MemoryScope, keep: string, fold: readonly string[], text: string, by: MemoryAuthor): MemoryView {
+    const { entries } = this.load(this.fileOf(scope));
+    const clean = checkText(text);
+    const kept = findEntry(entries, keep);
+    const gone = new Set(fold.map((ref) => findEntry(entries, ref).id).filter((id) => id !== kept.id));
+    const after = entries.filter((e) => !gone.has(e.id)).map((e) => (e.id === kept.id ? { ...e, text: clean, at: Date.now(), by } : e));
+    return this.save(scope, entries, after);
+  }
+
+  /** BLG-121: move an entry to another memory (its text may change on the way); the target is put back when the source can't be written. */
+  move(from: MemoryScope, to: MemoryScope, ref: string, text: string, by: MemoryAuthor): MemoryView {
+    const source = this.load(this.fileOf(from)).entries;
+    const entry = findEntry(source, ref);
+    const target = this.load(this.fileOf(to)).entries;
+    const clean = checkText(text);
+    const known = target.some((e) => e.text.toLowerCase() === clean.toLowerCase());
+    const view = known ? this.read(to) : this.save(to, target, [...target, { id: newId(), text: clean, at: Date.now(), by }]);
+    try {
+      this.save(from, source, source.filter((e) => e.id !== entry.id));
+    } catch (err) {
+      if (!known) writeJson(this.fileOf(to), { ...(to.kind === 'project' ? { root: path.resolve(to.root) } : {}), entries: target });
+      throw err;
+    }
+    return view;
+  }
+
   /**
    * Undo one write (BLG-102): an add is removed, a replace restored, a remove put back where it was.
    * Refused, with nothing changed, when the entry changed again since (or the undo was done already),

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -61,6 +61,40 @@ describe('the memory store', () => {
     writeFileSync(path.join(home, 'memory', 'user.json'), JSON.stringify({ entries: [{ id, text: 'z'.repeat(USER_MEMORY_MAX + 50), at: 0, by: 'you' }] }));
     expect(store.replace(USER, id, 'z'.repeat(USER_MEMORY_MAX + 10), 'you').used).toBe(USER_MEMORY_MAX + 10);
     expect(store.remove(USER, id).used).toBe(0);
+  });
+
+  it('merges entries in one write, and refuses a merge that would leave a secret (BLG-120)', () => {
+    const store = new MemoryStore(tempHome());
+    const [a, b, c] = ['Uses Helium on arch.', 'Uses Chromium on m1arch.', 'Uses zsh.'].map((t) => store.add(USER, t, 'agent').entries.at(-1)!);
+    const merged = store.merge(USER, a!.id, [b!.id, a!.id], 'Uses Helium on arch, Chromium on m1arch.', 'you');
+    expect(merged.entries.map((e) => [e.id, e.text, e.by])).toEqual([
+      [a!.id, 'Uses Helium on arch, Chromium on m1arch.', 'you'],
+      [c!.id, 'Uses zsh.', 'agent'],
+    ]);
+    expect(() => store.merge(USER, a!.id, [c!.id], 'NAS password: hunter22', 'you')).toThrow(/Secrets/);
+    expect(() => store.merge(USER, a!.id, ['gone'], 'x', 'you')).toThrow(/No entry/);
+    expect(store.read(USER).entries).toHaveLength(2);
+  });
+
+  it('moves an entry between memories, and puts the target back when the source cannot be written (BLG-121)', () => {
+    const home = tempHome();
+    const store = new MemoryStore(home);
+    const id = store.add(USER, 'Landing deploys through the NAS.', 'agent').entries[0]!.id;
+    store.add(PROJECT, 'Uses pnpm.', 'you');
+    expect(store.move(USER, PROJECT, id, 'Deploys through the NAS.', 'you').entries.map((e) => e.text)).toEqual(['Uses pnpm.', 'Deploys through the NAS.']);
+    expect(store.read(USER).entries).toEqual([]);
+
+    const back = store.read(PROJECT).entries[1]!.id;
+    if (process.getuid?.() === 0) return;
+    const projects = path.join(home, 'memory', 'projects');
+    chmodSync(projects, 0o500);
+    try {
+      expect(() => store.move(PROJECT, USER, back, 'Deploys through the NAS.', 'you')).toThrow();
+    } finally {
+      chmodSync(projects, 0o700);
+    }
+    expect(store.read(PROJECT).entries.map((e) => e.text)).toEqual(['Uses pnpm.', 'Deploys through the NAS.']);
+    expect(store.read(USER).entries).toEqual([]);
   });
 
   it('refuses what looks like a secret, empty text and duplicates', () => {

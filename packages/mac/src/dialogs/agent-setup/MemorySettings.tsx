@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { MemoryEntry, MemoryOverview, MemoryScope, MemoryView } from '@beluga/shared/memory.js';
+import { type MemoryEntry, type MemoryOverview, type MemoryScope, type MemoryView, tidyWords } from '@beluga/shared/memory.js';
 import { Button } from '../../components/ui.js';
 import { toast, useBeluga } from '../../lib/beluga.js';
 import { Group, Row, Select } from '../settings-controls.js';
@@ -17,6 +17,7 @@ export const MemorySettings = () => {
   const [memory, setMemory] = useState<MemoryOverview>();
   const [picked, setPicked] = useState(USER_KEY);
   const [draft, setDraft] = useState('');
+  const [tidying, setTidying] = useState(false);
 
   const load = async () => setMemory(await client.api.memory.list());
 
@@ -51,6 +52,17 @@ export const MemorySettings = () => {
     void handleChange(() => client.api.memory.remove(current.scope, entry.id));
   };
 
+  const handleTidy = async () => {
+    setTidying(true);
+    try {
+      toast(client, tidyWords(await client.api.memory.tidy()), 'info');
+    } catch (err) {
+      toast(client, errorText(err as Error), 'error');
+    } finally {
+      setTidying(false);
+    }
+  };
+
   return (
     <Group title="Memory">
       <Row label="What your agents remember" detail="Added to every run you start, on Claude Code, Codex, Copilot, OpenCode and local models. Never to a friend’s run. Agents keep it with their memory tools.">
@@ -81,6 +93,9 @@ export const MemorySettings = () => {
             <span className={a.muted}>
               {current.used} / {current.cap}
             </span>
+            <Button size="small" icon="sparkles" disabled={tidying} onClick={() => void handleTidy()}>
+              {tidying ? 'Tidying…' : 'Tidy'}
+            </Button>
           </div>
         </div>
       ) : null}

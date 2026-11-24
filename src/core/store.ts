@@ -312,10 +312,23 @@ export interface MemoryProposal {
   readonly previous?: string;
   /** Why it is worth keeping: what in the conversation showed it. */
   readonly reason?: string;
-  /** The conversation it came from. */
+  /** BLG-120: other entries of the same memory folded into `entry`, as they are now: removed when it is kept. */
+  readonly merges?: readonly MemoryRef[];
+  /** BLG-120: forget `entry`; nothing is written in its place. */
+  readonly drop?: boolean;
+  /** BLG-121: `entry` moves here from this memory. */
+  readonly from?: MemoryPlace;
+  /** The conversation it came from, or empty for a tidy pass. */
   readonly channel: string;
   readonly askedAt: number;
 }
+
+export interface MemoryRef {
+  readonly id: string;
+  readonly text: string;
+}
+
+export type MemoryPlace = { readonly kind: 'user' } | { readonly kind: 'project'; readonly root: string; readonly project?: string };
 
 export interface Location {
   readonly owner: string;

@@ -29,4 +29,6 @@ export const MEMORY_API = {
   'memory.discardProposal': { args: z.tuple([proposalId]) },
   // BLG-96: look back at one of your own conversations now and propose what to remember → { proposed } or { skipped, why }.
   'memory.reflect': { args: z.tuple([z.string().min(1).max(400)]) },
+  // BLG-120: tidy every memory now: propose merges, forgets and moves between about you and a project (BLG-121) → { proposed } or { skipped, why }.
+  'memory.tidy': { args: z.tuple([]) },
 };
