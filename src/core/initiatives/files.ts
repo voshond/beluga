@@ -1,9 +1,9 @@
 import { type Dirent, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { z } from 'zod';
-import { type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type OutboxDraft, OutboxSchema, type Suggestion, SuggestionsSchema, openDecisionsOf, recentOf } from './model.js';
+import { type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, type InitiativeTasks, TasksSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type OutboxDraft, OutboxSchema, type Suggestion, SuggestionsSchema, openDecisionsOf, recentOf } from './model.js';
 
-export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'suggestions.json', 'outbox.json'] as const;
+export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json'] as const;
 
 const MAX_FILES = 200;
 const MAX_READ = 512 * 1024;
@@ -15,6 +15,7 @@ export type InitiativeFolder = {
   readonly brief: string;
   readonly progress?: EpicStatus;
   readonly tickets?: EpicTickets;
+  readonly tasks?: InitiativeTasks;
   readonly suggestions: readonly Suggestion[];
   readonly outbox: readonly OutboxDraft[];
   readonly openDecisions: readonly string[];
@@ -98,10 +99,11 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
   const config = parseJson(file('initiative.json'), InitiativeConfigSchema, 'initiative.json');
   const status = parseJson(file('status.json'), EpicStatusSchema, 'status.json');
   const tickets = parseJson(file('tickets.json'), TicketsSchema, 'tickets.json');
+  const tasks = parseJson(file('tasks.json'), TasksSchema, 'tasks.json');
   const suggestions = parseJson(file('suggestions.json'), SuggestionsSchema, 'suggestions.json');
   const outbox = parseJson(file('outbox.json'), OutboxSchema, 'outbox.json');
   const missing = config.value || config.trouble ? undefined : 'initiative.json is missing';
-  const troubles = [config.trouble ?? missing, status.trouble, tickets.trouble, suggestions.trouble, outbox.trouble].filter((t): t is string => Boolean(t));
+  const troubles = [config.trouble ?? missing, status.trouble, tickets.trouble, tasks.trouble, suggestions.trouble, outbox.trouble].filter((t): t is string => Boolean(t));
   return {
     slug,
     folder,
@@ -109,6 +111,7 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
     brief: file('brief.md') ?? '',
     ...(status.value ? { progress: status.value } : {}),
     ...(tickets.value ? { tickets: tickets.value } : {}),
+    ...(tasks.value ? { tasks: tasks.value } : {}),
     suggestions: suggestions.value ?? [],
     outbox: outbox.value ?? [],
     openDecisions: openDecisionsOf(file('decisions.md') ?? ''),
@@ -121,6 +124,8 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
 export const writeConfig = (root: string, slug: string, config: InitiativeConfig): void => writeJsonFile(path.join(folderOf(root, slug), 'initiative.json'), config);
 
 export const writeSuggestions = (root: string, slug: string, suggestions: readonly Suggestion[]): void => writeText(path.join(folderOf(root, slug), 'suggestions.json'), `${JSON.stringify(suggestions, null, 2)}\n`);
+
+export const writeTasks = (root: string, slug: string, tasks: InitiativeTasks): void => writeJsonFile(path.join(folderOf(root, slug), 'tasks.json'), tasks);
 
 export const writeOutbox = (root: string, slug: string, outbox: readonly OutboxDraft[]): void => writeText(path.join(folderOf(root, slug), 'outbox.json'), `${JSON.stringify(outbox, null, 2)}\n`);
 

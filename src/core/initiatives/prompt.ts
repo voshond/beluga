@@ -56,7 +56,7 @@ const DOCS_HOW =
   'For each doc source, read it as its line says (Confluence pages with the Confluence MCP by page id, Google Docs, Sheets and Slides with the calendar MCP’s drive_read_file by file id, or Google Drive’s read_file_content when only that is there), compare it with its snapshot in sources/docs/, write the new snapshot there (its text as Markdown, with the date read and the page’s title on top), and note in timeline.md what changed since the last check-in, or that it was first read. One you cannot read stays as it was: say so in your answer.';
 
 export const TICKETS_SHAPE =
-  '{"at" (now, an ISO date), "tickets": [{"key", "url", "summary", "status", "statusCategory" ("todo" | "inProgress" | "done"), "assignee", "updated" (an ISO date), "epic" (the epic’s key), "prs": [{"url", "number", "state" ("open" | "draft" | "merged" | "closed"), "repo", "title"}]}]}';
+  '{"at" (now, an ISO date), "epics": [{"key", "url" (its Jira link), "title"}], "tickets": [{"key", "url", "summary", "status", "statusCategory" ("todo" | "inProgress" | "done"), "assignee", "updated" (an ISO date), "epic" (the epic’s key), "prs": [{"url", "number", "state" ("open" | "draft" | "merged" | "closed"), "repo", "title"}]}]}';
 
 const TICKETS_HOW = [
   'For each Jira epic, list every issue under it with the Jira MCP (jira_search with the JQL "parent = KEY", or the epic link field on older projects): key, link, summary, status, status category, assignee and last update.',
@@ -71,10 +71,27 @@ export const TICKETS_PROMPT = [
   'Answer with one line: how many tickets, how many are done, and how many pull requests are open.',
 ].join(' ');
 
+export const TASKS_SHAPE =
+  '{"at" (now, an ISO date), "tasks": [{"id" (the calendar MCP’s task id), "title", "notes", "list" (its list’s title), "due" (an ISO date), "scheduled" (the start of its first calendar placement, an ISO date; leave it out when it has none), "done" (true once completed), "url"}]}';
+
+const TASKS_HOW = [
+  'Read the user’s Google Tasks with the calendar MCP (list_tasks with status needsAction, and with status completed for ones done in the last two weeks).',
+  'Keep the ones that belong to this initiative: their title or notes name it, its goal’s subject, an epic or one of its tickets, and every task you made for it before (the ids already in tasks.json stay unless the task is gone).',
+  `Write tasks.json whole: ${TASKS_SHAPE}. Never change a task in Google while reading them.`,
+].join(' ');
+
+export const TASKS_PROMPT = [
+  'Refresh this initiative’s Google Tasks, and nothing else.',
+  TASKS_HOW,
+  'Leave the other memory files as they are, and change nothing outside this folder.',
+  'Answer with one line: how many tasks are open, how many of them are scheduled, and how many are done.',
+].join(' ');
+
 export const CHECK_IN_PROMPT = [
   'Check in on this initiative.',
-  'Read, in this order: the epic tickets in Jira, every Slack conversation it follows (each channel since the last check-in, each thread by its link with slack_read_thread), the calendar a week back and a week ahead for every meeting it follows, every doc source, and the linked repos’ open and recently merged pull requests (gh).',
+  'Read, in this order: the epic tickets in Jira, every Slack conversation it follows (each channel since the last check-in, each thread by its link with slack_read_thread), the calendar a week back and a week ahead for every meeting it follows, every doc source, the linked repos’ open and recently merged pull requests (gh), and the user’s Google Tasks.',
   TICKETS_HOW,
+  TASKS_HOW,
   DOCS_HOW,
   'For each meeting: one that is coming gets prep notes (what to raise, what is open, who to ask), one that happened gets its follow-ups (what was agreed, who owes what), both in sources/meetings/.',
   'Then update the rest of the memory: snapshots in sources/ (jira.md, slack/, meetings/, docs/, prs.md), status.json (counts across the epics: total, done, inProgress, blocked, stale for open tickets untouched in 7 days, with "at" set to now as an ISO date), brief.md (where it stands, in a few lines), timeline.md (what happened since last time, newest first), decisions.md (new open questions under "## Open", settled ones moved to "## Decided" with the date and why) and suggestions.json (what you propose next; a question only the user can settle is a "decision" with its "options"; a message worth sending can be drafted straight into outbox.json).',
@@ -87,7 +104,7 @@ export const initiativeBrief = (item: InitiativeView, briefMd: string, repos: re
   const repoLines = repos.length ? repos.map((r) => `- ${r.name}${r.root ? ` (${r.root})` : ''}`).join('\n') : '- none linked yet';
   const checkIn =
     chat === CHECK_IN_CHAT
-      ? `\n\nThis is the initiative’s Check-in chat: a schedule wakes it with the check-in prompt, and Refresh sends it a ticket refresh. Do the whole check-in each time it is asked for, as it is written here even when the message that wakes you is an older wording:\n${CHECK_IN_PROMPT}`
+      ? `\n\nThis is the initiative’s Check-in chat: a schedule wakes it with the check-in prompt, and Refresh sends it a ticket or task refresh. Do the whole check-in each time it is asked for, as it is written here even when the message that wakes you is an older wording:\n${CHECK_IN_PROMPT}`
       : '';
   return `
 
@@ -111,6 +128,7 @@ Your working folder is the initiative's memory, a folder in a git repository Bel
 - people.md: who is involved and what they own.
 - status.json: {"at", "total", "done", "inProgress", "blocked", "stale", "epics": [{"key", "title", "total", "done", "inProgress", "blocked", "stale"}]} from the epics.
 - tickets.json: every ticket under the epics with its pull requests, which the page shows as a table: ${TICKETS_SHAPE}. Rewrite it whole whenever you read the epics.
+- tasks.json: the user's Google Tasks that belong to this initiative, which the page shows as scheduled and unscheduled with a checkbox each: ${TASKS_SHAPE}. A task you create for it (create_task, when the user asks) goes in here too.
 - suggestions.json: an array of {"id" (a number, never reused), "text", "why", "kind" ("jira" | "slack" | "calendar" | "task" | "doc" | "decision" | "other"), "state": "open", "createdAt"}. When the next step is the user's call (in or out of scope, which way to go), make it a "decision" with "options": 2 to 4 short answers to pick from ("In scope", "Out of scope"); the page shows them as buttons, with Other… for an answer of their own. Keep the ones the user resolved as they are.
 - outbox.json: messages you prepared for the user to send, an array of {"id" (a number, never reused), "to", "text", "why", "suggestion" (the suggestion's id it comes from, if any), "state": "draft", "createdAt"}. "to" is {"kind": "slack", "channel" (the channel, DM or group DM id, C… or D…), "thread" (the parent's ts, only for a reply), "label" ("#checkout-v2", "DM with Julia")} or {"kind": "jira", "issue" ("RUN-12"), "label"}. Write the text exactly as it should go out, in the voice of the user. Leave the others as they are: the user sends, edits or discards each one from the chat.
 - sources/: snapshots of what you read (meetings/ holds each meeting’s prep notes before it and follow-ups after it).
@@ -120,6 +138,7 @@ Rules:
 - Suggest, never act outward on your own: no Jira comments or transitions, no Slack posts, no calendar changes unless the user asked in this chat or approved a suggestion ("Do suggestion N: …"). Then do exactly that one thing; its tool asks the user as usual.
 - A message (a Slack post or reply, a Jira comment) never goes out from you directly, even when asked or approved: draft it in outbox.json, one draft per message, and say in one line what you drafted. Beluga refuses a direct post. "Send draft N …" means the user sent it: make exactly that call, with exactly that text, then answer with the message's link if the tool gave one.
 - "Decided suggestion N: … Answer: …" is the user's decision: record it in decisions.md under "## Decided" with today's date (moving its question out of "## Open"), then do what follows from that answer; outward steps still ask as usual.
+- "Complete task ID: …" or "Reopen task ID: …" means the user ticked it on the page: read it with get_task for its version, call complete_task or reopen_task with that id, then set its "done" in tasks.json and drop its "pending". Answer with one line. When the user asks you in chat to tick a task off, do the same.
 - Record every decision the user makes here in decisions.md, and every notable event in timeline.md.
 - Linked repos, where code work happens (task_create with project set to the repo's name, then task_start when the user wants it started):
 ${repoLines}${checkIn}

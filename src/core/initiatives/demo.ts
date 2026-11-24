@@ -1,13 +1,14 @@
 import path from 'node:path';
 import { writeText } from './files.js';
 import type { Initiatives } from './initiatives.js';
-import type { EpicStatus, EpicTickets, InitiativeDraft, OutboxDraft, Suggestion } from './model.js';
+import type { EpicStatus, EpicTickets, InitiativeDraft, InitiativeTasks, OutboxDraft, Suggestion } from './model.js';
 import { dayOf } from './repo.js';
 
 type DemoInitiative = {
   readonly draft: InitiativeDraft;
   readonly status: EpicStatus;
   readonly tickets: EpicTickets;
+  readonly tasks?: InitiativeTasks;
   readonly brief: string;
   readonly decisions: string;
   readonly timeline: readonly string[];
@@ -26,11 +27,21 @@ const demos = (now: number): DemoInitiative[] => {
       draft: { name: 'Checkout v2', goal: 'Ship the new one-page checkout to every market before the holiday freeze.\n\n## Scope\n\n- In: cards, Apple Pay, address lookup\n- Out: Google Pay (after the freeze)\n\n## Acceptance\n\n- Live in every market\n- Conversion no worse than the old flow', epics: ['SHOP-120'], slack: [{ ref: '#checkout-v2' }, { ref: 'https://example.slack.com/archives/C0CHECKOUT/p1763990000000100', label: '3DS on Safari' }], docs: [{ ref: 'https://acme.atlassian.net/wiki/spaces/SHOP/pages/2201/Checkout+v2', label: 'Checkout v2 spec', kind: 'confluence' }, { ref: 'https://docs.google.com/spreadsheets/d/1CheckoutRolloutPlan0000/edit', label: 'Rollout plan', kind: 'gsheet' }], meetings: [{ match: 'Checkout' }, { match: 'Go/no-go', label: 'Thursday' }], repos: [] },
       tickets: {
         at: iso,
+        epics: [{ key: 'SHOP-120', url: 'https://example.atlassian.net/browse/SHOP-120', title: 'One-page checkout' }],
         tickets: [
           { key: 'SHOP-141', url: 'https://example.atlassian.net/browse/SHOP-141', summary: 'Tax rates for Norway', status: 'Blocked', statusCategory: 'inProgress', assignee: 'Ana Ruiz', updated: at(4), epic: 'SHOP-120', prs: [] },
           { key: 'SHOP-150', url: 'https://example.atlassian.net/browse/SHOP-150', summary: '3DS challenge fails on Safari', status: 'In Review', statusCategory: 'inProgress', assignee: undefined, updated: at(1), epic: 'SHOP-120', prs: [{ url: 'https://github.com/example/shop/pull/412', number: 412, state: 'open', repo: 'example/shop', title: 'Retry the 3DS frame on Safari' }] },
           { key: 'SHOP-152', url: 'https://example.atlassian.net/browse/SHOP-152', summary: 'Address lookup falls back to manual entry', status: 'To Do', statusCategory: 'todo', assignee: 'Jonas Berg', updated: at(6), epic: 'SHOP-120', prs: [] },
           { key: 'SHOP-133', url: 'https://example.atlassian.net/browse/SHOP-133', summary: 'Apple Pay button on the one-page form', status: 'Done', statusCategory: 'done', assignee: 'Mia Chen', updated: at(2), epic: 'SHOP-120', prs: [{ url: 'https://github.com/example/shop/pull/398', number: 398, state: 'merged', repo: 'example/shop', title: 'Apple Pay on one page' }] },
+        ],
+      },
+      tasks: {
+        at: iso,
+        tasks: [
+          { id: 'demo-task-1', title: 'Prep the go/no-go deck', notes: 'Norway tax and Safari 3DS on the first slide', list: 'My Tasks', due: undefined, scheduled: at(-2), done: false, pending: undefined, url: undefined },
+          { id: 'demo-task-2', title: 'Ask finance for the final NO tax table', notes: undefined, list: 'My Tasks', due: at(-4), scheduled: undefined, done: false, pending: undefined, url: undefined },
+          { id: 'demo-task-3', title: 'Review the address form copy', notes: undefined, list: 'My Tasks', due: undefined, scheduled: undefined, done: false, pending: undefined, url: undefined },
+          { id: 'demo-task-4', title: 'Book the Thursday go/no-go room', notes: undefined, list: 'My Tasks', due: undefined, scheduled: undefined, done: true, pending: undefined, url: undefined },
         ],
       },
       status: { at: iso, total: 34, done: 21, inProgress: 7, blocked: 2, stale: 3, epics: [{ key: 'SHOP-120', title: 'One-page checkout', total: 34, done: 21, inProgress: 7, blocked: 2, stale: 3 }] },
@@ -51,6 +62,7 @@ const demos = (now: number): DemoInitiative[] => {
       draft: { name: 'Mobile Onboarding', goal: 'Cut the time to a first saved list from 6 minutes to under 2.', epics: ['APP-88', 'APP-91'], slack: [{ ref: '#onboarding' }], docs: [], meetings: [{ match: 'Onboarding' }], repos: [] },
       tickets: {
         at: new Date(now - 3 * DAY).toISOString(),
+        epics: [],
         tickets: [
           { key: 'APP-93', url: 'https://example.atlassian.net/browse/APP-93', summary: 'Skip button on the welcome carousel', status: 'In Progress', statusCategory: 'inProgress', assignee: 'Sam Okafor', updated: at(3), epic: 'APP-88', prs: [{ url: 'https://github.com/example/app/pull/77', number: 77, state: 'draft', repo: 'example/app', title: 'Welcome: skip' }] },
           { key: 'APP-90', url: 'https://example.atlassian.net/browse/APP-90', summary: 'New welcome copy', status: 'Done', statusCategory: 'done', assignee: 'Sam Okafor', updated: at(8), epic: 'APP-88', prs: [] },
@@ -76,6 +88,7 @@ export const seedDemoInitiatives = async (initiatives: Initiatives, root: string
     writeText(path.join(folder, 'decisions.md'), demo.decisions);
     writeText(path.join(folder, 'timeline.md'), `# Timeline\n\nNewest first.\n\n${demo.timeline.map((t) => `- ${t}`).join('\n')}\n`);
     writeText(path.join(folder, 'suggestions.json'), `${JSON.stringify(demo.suggestions, null, 2)}\n`);
+    if (demo.tasks) writeText(path.join(folder, 'tasks.json'), `${JSON.stringify(demo.tasks, null, 2)}\n`);
     if (demo.outbox) writeText(path.join(folder, 'outbox.json'), `${JSON.stringify(demo.outbox, null, 2)}\n`);
     writeText(path.join(folder, 'sources', 'jira.md'), `# Jira\n\n${demo.status.epics.map((e) => `- ${e.key} ${e.title ?? ''}: ${e.done}/${e.total} done`).join('\n')}\n`);
     initiatives.refresh(slug);

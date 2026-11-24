@@ -8,10 +8,11 @@ import { openSheet } from '../lib/sheets.js';
 import { sameDeep } from '../lib/stable.js';
 import { GoalSection } from './GoalRefine.js';
 import { Follows } from './InitiativeFollows.js';
-import { Bullets, ProgressBar, Suggestions } from './InitiativeParts.js';
+import { Bullets, EpicLink, ProgressBar, Suggestions } from './InitiativeParts.js';
 import { CheckInRow, MemoryFiles, Repos } from './InitiativeSettings.js';
 import { InitiativeChat } from './InitiativeChat.js';
 import { NewInitiativeSheet } from './NewInitiativeSheet.js';
+import { TasksSection } from './TasksSection.js';
 import { TicketsTable } from './TicketsTable.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import home from '../sentinel/home.module.css';
@@ -57,12 +58,12 @@ const Header = ({ item, onEdit }: { item: InitiativeView; onEdit: () => void }) 
 };
 
 const Facts = ({ item }: { item: InitiativeView }) => {
-  const facts = item.epics.length ? [`Epics: ${item.epics.join(', ')}`] : [];
-  if (!facts.length) return null;
+  if (!item.epics.length) return null;
   return (
     <div className={s.facts}>
-      {facts.map((fact) => (
-        <span key={fact}>{fact}</span>
+      <span>Epics:</span>
+      {item.epics.map((epic) => (
+        <EpicLink key={epic} epic={epic} item={item} />
       ))}
     </div>
   );
@@ -95,6 +96,7 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
           <TicketsTable item={item} />
           <CheckInRow item={item} />
           <Suggestions item={item} />
+          <TasksSection item={item} />
           <Bullets title="Open decisions" items={item.openDecisions} empty="Nothing open in decisions.md." />
           <Bullets title="Recent" items={item.recent} empty="Nothing in timeline.md yet." />
           <Follows item={item} />

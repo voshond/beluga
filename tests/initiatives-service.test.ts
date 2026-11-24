@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { resolveChat } from '../src/core/chat-links/resolve.js';
 import { type CheckInHost, Initiatives, OUTBOX_DENIED } from '../src/core/initiatives/initiatives.js';
 import { CHECK_IN_CHAT, type GoalRefine, initiativeChatChannel } from '../src/core/initiatives/model.js';
-import { CHECK_IN_PROMPT, TICKETS_PROMPT } from '../src/core/initiatives/prompt.js';
-import type { SentinelDraft } from '../src/core/sentinel/model.js';
+import { CHECK_IN_PROMPT, TASKS_PROMPT, TICKETS_PROMPT } from '../src/core/initiatives/prompt.js';
+import type { ScheduleTrigger, SentinelDraft } from '../src/core/sentinel/model.js';
 import { Store, initialState } from '../src/core/store.js';
 import { runInstructions } from '../src/agent/run-instructions.js';
 import { seedDemoInitiatives } from '../src/core/initiatives/demo.js';
@@ -16,16 +16,18 @@ import { waitFor } from './helpers.js';
 const SELF = 'peer-12345678';
 const tmp = (): string => mkdtempSync(path.join(os.tmpdir(), 'beluga-initiatives-'));
 
-type Host = CheckInHost & { readonly drafts: SentinelDraft[]; readonly paused: Map<string, boolean>; readonly ran: string[] };
+type Host = CheckInHost & { readonly drafts: SentinelDraft[]; readonly paused: Map<string, boolean>; readonly ran: string[]; readonly triggers: Map<string, ScheduleTrigger> };
 
 const fakeHost = (): Host => {
   const drafts: SentinelDraft[] = [];
   const paused = new Map<string, boolean>();
   const ran: string[] = [];
+  const triggers = new Map<string, ScheduleTrigger>();
   return {
     drafts,
     paused,
     ran,
+    triggers,
     create: (draft) => {
       drafts.push(draft);
       const id = `sn${drafts.length}`;
@@ -35,6 +37,7 @@ const fakeHost = (): Host => {
     exists: (id) => paused.has(id),
     pause: (id, on) => void paused.set(id, on),
     runNow: (id) => void ran.push(id),
+    reschedule: (id, trigger) => void triggers.set(id, trigger),
     remove: (id) => void paused.delete(id),
   };
 };
@@ -97,6 +100,48 @@ describe('Initiatives', () => {
     expect(host.paused.get('sn1')).toBe(true);
     expect(service.checkInNow(slug)).toEqual({ channel: initiativeChatChannel(slug, CHECK_IN_CHAT) });
     expect(host.ran).toEqual(['sn1']);
+  });
+
+  it('sets when its check-in runs, and makes it again if it was deleted', async () => {
+    const { host, service } = await setup();
+    const { slug } = await service.create({ name: 'A' });
+    service.setCheckInTime(slug, { at: '09:30', days: [5, 1, 3, 1] });
+    expect(host.triggers.get('sn1')).toEqual({ kind: 'schedule', every: 'week', at: '09:30', days: [1, 3, 5], missed: 'catch-up' });
+    host.remove('sn1');
+    service.setCheckInTime(slug, { at: '07:00', days: [0] });
+    expect(host.triggers.get('sn2')).toMatchObject({ at: '07:00', days: [0] });
+    expect(() => service.setCheckInTime(slug, { at: '25:00', days: [1] })).toThrow();
+    expect(() => service.setCheckInTime(slug, { at: '08:00', days: [] })).toThrow();
+  });
+
+  it('ticks a task: pending at once, and the chat completes or reopens it', async () => {
+    const { root, asked, store, service } = await setup();
+    const { slug } = await service.create({ name: 'A' });
+    writeFileSync(path.join(root, slug, 'tasks.json'), JSON.stringify({ at: '2026-11-24T08:00:00Z', tasks: [{ id: 't1', title: 'Prep the deck', scheduled: '2026-11-26T09:00:00Z' }, { id: 't2', title: 'Book a room', done: true }] }));
+    service.refresh(slug);
+    const tasks = (): readonly { readonly id: string; readonly pending?: string }[] => store.getState().initiatives.items.find((i) => i.slug === slug)!.tasks!.tasks;
+    expect(await service.setTaskDone(slug, 't1', true)).toEqual({ channel: initiativeChatChannel(slug, 'main') });
+    expect(tasks().find((t) => t.id === 't1')).toMatchObject({ pending: 'complete' });
+    expect(asked.at(-1)).toEqual({ prompt: 'Complete task t1: Prep the deck', channel: initiativeChatChannel(slug, 'main') });
+    await service.setTaskDone(slug, 't2', false);
+    expect(asked.at(-1)!.prompt).toBe('Reopen task t2: Book a room');
+    expect(JSON.parse(readFileSync(path.join(root, slug, 'tasks.json'), 'utf8')).tasks[1]).toMatchObject({ id: 't2', pending: 'reopen' });
+    await expect(service.setTaskDone(slug, 'nope', true)).rejects.toThrow(/gone/);
+    expect(service.refreshTasks(slug)).toEqual({ channel: initiativeChatChannel(slug, CHECK_IN_CHAT) });
+    expect(asked.at(-1)!.prompt).toBe(TASKS_PROMPT);
+  });
+
+  it('tells the agent how to keep tasks.json and tick a task, in the refresh, the check-in and the brief', async () => {
+    const { service } = await setup();
+    const { slug } = await service.create({ name: 'A' });
+    const brief = service.chatRun(initiativeChatChannel(slug, 'main'), SELF)!.brief;
+    for (const text of [TASKS_PROMPT, CHECK_IN_PROMPT, brief]) {
+      expect(text).toContain('tasks.json');
+      expect(text).toContain('"scheduled"');
+    }
+    expect(TASKS_PROMPT).toContain('list_tasks');
+    expect(brief).toContain('complete_task');
+    expect(brief).toContain('"Complete task ID: …"');
   });
 
   it('keeps many chats: new, open, delete, and the check-in chat stays', async () => {

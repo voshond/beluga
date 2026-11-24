@@ -669,9 +669,12 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `initiatives.update` | ✓ an initiative's page › Edit… (the same fields as New Initiative), and its Status menu (Active, Paused, Shipped) |
 | `initiatives.archive` | ✓ an initiative's page › ⋯ › Archive (its check-in pauses; the folder stays) |
 | `initiatives.setRepo` | ✓ an initiative's page › Repos: a linked repo's ×, and + to link another of your projects |
-| `initiatives.setCheckIn` | ✓ an initiative's page › Check-in switch (weekday mornings at 8:00; a sentinel with one chat step, docs/sentinel.md §13) |
+| `initiatives.setCheckIn` | ✓ an initiative's page › Check-in switch (weekdays at 08:00 until you set another time; a sentinel with one chat step, docs/sentinel.md §13) |
+| `initiatives.setCheckInTime` | ✓ an initiative's page › Check-in row: its time and weekday chips (rewrites the check-in sentinel's schedule trigger; makes it again if it was deleted) |
 | `initiatives.checkInNow` | ✓ an initiative's page › Check In Now (runs its check-in sentinel once, on or off) |
 | `initiatives.refreshTickets` | ✓ an initiative's page › Tickets › Refresh (its Check-in chat reads the epics' tickets and their pull requests into `tickets.json`; also sent when an initiative is made with epics or its epics change) |
+| `initiatives.refreshTasks` | ✓ an initiative's page › Tasks › Refresh (its Check-in chat reads your Google Tasks that belong to it through the calendar MCP into `tasks.json`; every check-in does too) |
+| `initiatives.setTaskDone` | ✓ an initiative's page › Tasks: a task's checkbox (marks it pending in `tasks.json` at once and sends “Complete task ID: …” or “Reopen task ID: …” into its chat, which calls complete_task or reopen_task) |
 | `initiatives.refineGoal` | ✓ New Initiative and Edit… › Refine With Agent beside the goal, and an initiative's page › Goal › Refine With Agent (a draft in Markdown with Use This · Keep Mine; reads your Jira, the Confluence pages and Google files among its docs, writes nowhere) |
 | `initiatives.chatNew` | ✓ an initiative's chat › New Chat (the bar, and the picker) |
 | `initiatives.chatOpen` | ✓ an initiative's chat: the chat's name, a picker of its chats (Check-in among them) |
