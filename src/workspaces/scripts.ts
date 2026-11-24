@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { belugaEnvBoth } from '../core/beluga-env.js';
+import { type ReviewGuideInfo, reviewGuideInfo } from './review-guide.js';
 import { ToolSchema } from './toolbox.js';
 
 /** Commands a project runs in its workspaces: `setup` once per new worktree, `run` on demand. */
@@ -31,6 +32,8 @@ export interface ResolvedScripts {
   readonly prPrompt?: string;
   /** Your own pull request instructions for this project (kept in Beluga, not committed). */
   readonly yourPrPrompt?: string;
+  /** The project's review guide, when it has one (kept in Beluga, not committed: review-guide.ts). */
+  readonly reviewGuide?: ReviewGuideInfo;
 }
 
 const Command = z.string().trim().min(1).max(2000);
@@ -215,7 +218,8 @@ export function resolveScripts(root: string, yours: ProjectScripts = {}): Resolv
   };
   const setup = yours.skipSetup && !yours.setup ? undefined : pick('setup', detectSetup);
   const run = pick('run', detectRun);
-  return { ...(setup ? { setup } : {}), ...(run ? { run } : {}), ...(file?.prPrompt ? { prPrompt: file.prPrompt } : {}), ...(yours.prPrompt?.trim() ? { yourPrPrompt: yours.prPrompt.trim() } : {}) };
+  const guide = reviewGuideInfo(root);
+  return { ...(setup ? { setup } : {}), ...(run ? { run } : {}), ...(file?.prPrompt ? { prPrompt: file.prPrompt } : {}), ...(yours.prPrompt?.trim() ? { yourPrPrompt: yours.prPrompt.trim() } : {}), ...(guide ? { reviewGuide: guide } : {}) };
 }
 
 /** Write the scripts into the project's beluga.json (or its older klaud.json) so teammates get them too (keeps other fields). */

@@ -9,7 +9,7 @@ import type { EnvPlace } from './env-vars.js';
 import { systemOpen } from './os-open.js';
 import { editorCommand } from './editor-command.js';
 import { tilde } from './paths.js';
-import type { WorkspaceManager } from '../workspaces/manager.js';
+import { CHATS_PROJECT, type WorkspaceManager } from '../workspaces/manager.js';
 import type { Workspace } from '../workspaces/types.js';
 import { worktreeOrigin } from '../workspaces/origin.js';
 import { parseToolReport, toolTrailLine } from '../workspaces/toolbox.js';
@@ -20,6 +20,7 @@ import { type MergeOptions, type MergeProblem, type PrStepKind, buildPrPrompt, c
 import { prTargetOf, pullOfBranch } from '../workspaces/github.js';
 import { failedRunIds, prOnOriginal, runningRunIds } from './branch-state.js';
 import { PROJECT_FILES, type ProjectScripts, checkSetup, projectFileName, scriptEnv } from '../workspaces/scripts.js';
+import { DEFAULT_REVIEW_GUIDE_PROMPT, type ReviewGuideInfo, buildReviewGuideAppend, customReviewGuidePrompt, ensureReviewGuideDir, removeReviewGuide, reviewGuideFile, reviewGuideInfo, reviewGuidePrompt, saveReviewGuidePrompt } from '../workspaces/review-guide.js';
 import { clonedSetup } from '../workspaces/setup-clone.js';
 import type { ScriptFix, SetupFix, WorkedOutScripts } from '../agent/setup-fixer.js';
 import type { SetupTools } from '../agent/types.js';
@@ -503,14 +504,16 @@ export class Workbench {
     const project = this.manager.list.find((p) => p.id === ws.projectId);
     // Read now, not from the last refresh: instructions saved a moment ago (the PR sheet) apply to this one.
     const scripts = project ? this.manager.scripts(project.id) : {};
-    const prompt = buildPrPrompt({ branch: ws.branch, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', projectPrompt: scripts.prPrompt, yourPrompt: scripts.yourPrPrompt, extra, ...(ws.ticket ? { ticket: ws.ticket } : {}) });
+    const guide = project?.root && scripts.reviewGuide ? reviewGuideFile(project.root) : undefined;
+    const prompt = buildPrPrompt({ branch: ws.branch, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', projectPrompt: scripts.prPrompt, yourPrompt: scripts.yourPrPrompt, extra, ...(ws.ticket ? { ticket: ws.ticket } : {}), ...(guide ? { reviewGuide: guide } : {}) });
     if (!this.deps.store.getState().prs[ws.id]) this.prAsked.add(ws.id);
     if (!opts.auto) this.deps.controller.open(ws.id);
     const ask = (): void => this.deps.askClaude(prompt, `ws:${ws.id}`);
     // Its last PR went to a fork's original: this one goes to the fork, as the menu says (before the run reads where gh points).
     if (prTargetOf(ws.path, ws.branch)) void setPrTarget(ws.path, ws.branch, undefined).catch(() => undefined).finally(ask);
     else ask();
-    this.deps.toast(opts.auto ? `${ws.name} is ready for review: ${this.agent()} is opening a draft pull request…` : `${this.agent()} is preparing the pull request…`);
+    const checking = guide ? ', checking it against the review guide first' : '';
+    this.deps.toast(opts.auto ? `${ws.name} is ready for review: ${this.agent()} is opening a draft pull request${checking}…` : `${this.agent()} is preparing the pull request${checking}…`);
   }
 
   /**
@@ -530,6 +533,11 @@ export class Workbench {
       const state = this.deps.hasGh ? ((await this.deps.hasGh()) ? 'ok' : 'logged_out') : await ghState();
       if (state !== 'ok') return this.troubleOr(ws, new Error(state === 'missing' ? 'The GitHub CLI (gh) isn’t installed' : 'The GitHub CLI isn’t logged in: gh auth login'), 'GitHub didn’t open the pull request');
       this.deps.store.dispatch({ type: 'gh', ok: true });
+    }
+    // A project with a review guide: your agent checks the work against it, then opens the pull request.
+    if (!opts.original && !opts.own && this.reviewGuideOf(ws.projectId)) {
+      this.createPr(id, opts.draft ? 'Open it as a draft (gh pr create --draft).' : '');
+      return { ok: true, message: `${this.agent()} is checking it against the review guide, then opens the pull request` };
     }
     // Create PR on the original (BLG-727): into the repository the project's origin was forked from.
     const fork = opts.original ? this.manager.list.find((p) => p.id === ws.projectId)?.fork : undefined;
@@ -1390,10 +1398,14 @@ export class Workbench {
   /** Open your PR instructions in your editor (created with the built-in text the first time). */
   editPrPrompt(): void {
     const file = ensurePrPromptFile();
-    const opened = (): void => {
+    this.openInEditor(file, () => {
       this.deps.store.dispatch({ type: 'pr_custom', custom: true });
       this.deps.toast(`Opened ${tilde(file)}. Save it; the next PR uses it`, 'success');
-    };
+    });
+  }
+
+  /** Open a file in your editor ($VISUAL when it's one Beluga knows), else as the system opens text. */
+  private openInEditor(file: string, opened: () => void): void {
     // The system's own way to open it: when there's no editor to start, or yours didn't start.
     const openHere = (): void => {
       (this.deps.open ?? systemOpen)(file);
@@ -2008,6 +2020,62 @@ export class Workbench {
     } catch (err) {
       this.deps.toast(err instanceof Error ? err.message : String(err), 'error');
     }
+  }
+
+  /** The project's review guide file, when it has one: pull requests your agent opens there are checked against it. */
+  private reviewGuideOf(projectId: string): string | undefined {
+    const root = this.manager.list.find((p) => p.id === projectId)?.root;
+    return root && reviewGuideInfo(root) ? reviewGuideFile(root) : undefined;
+  }
+
+  /** What your own runs in a project's chats and worktrees are told about its review guide (undefined: it has none). */
+  reviewGuideForRun(channel: string): string | undefined {
+    const ws = this.manager.find(channel.slice(3));
+    const root = ws ? this.manager.list.find((p) => p.id === ws.projectId)?.root : undefined;
+    return (root && buildReviewGuideAppend(root)) || undefined;
+  }
+
+  /** A project's review guide as it is now, and the prompt that writes it (yours, else the built-in one). */
+  reviewGuide(projectId: string): { readonly info?: ReviewGuideInfo; readonly prompt: string; readonly custom: boolean } {
+    const root = this.manager.list.find((p) => p.id === projectId)?.root;
+    if (!root) return { prompt: DEFAULT_REVIEW_GUIDE_PROMPT, custom: false };
+    const custom = customReviewGuidePrompt(root);
+    const info = reviewGuideInfo(root);
+    return { ...(info ? { info } : {}), prompt: custom ?? DEFAULT_REVIEW_GUIDE_PROMPT, custom: Boolean(custom) };
+  }
+
+  /** Save the prompt that writes a project's review guide ('' goes back to the built-in one). */
+  setReviewGuidePrompt(projectId: string, text: string): void {
+    const project = this.manager.list.find((p) => p.id === projectId);
+    if (!project?.root) return;
+    saveReviewGuidePrompt(project.root, text);
+    this.deps.toast(customReviewGuidePrompt(project.root) ? `Saved how ${project.name}’s review guide is written` : `${project.name}’s review guide is written with the built-in prompt again`, 'success');
+  }
+
+  /** Your agent writes the project's review guide from its pull requests' reviews, in a chat of its own in Beluga's folder for it. */
+  async generateReviewGuide(projectId: string): Promise<void> {
+    const project = this.manager.list.find((p) => p.id === projectId);
+    if (!project?.root) return;
+    const ws = await this.deps.controller.newChat(CHATS_PROJECT, `Review guide for ${project.name}`, ensureReviewGuideDir(project.root));
+    if (!ws) return;
+    this.deps.askClaude(reviewGuidePrompt(project.root, project.name), `ws:${ws.id}`);
+    this.deps.toast(`${this.agent()} is writing ${project.name}’s review guide from its pull requests’ reviews…`);
+  }
+
+  /** Open a project's review guide in your editor. */
+  openReviewGuide(projectId: string): void {
+    const guide = this.reviewGuideOf(projectId);
+    if (!guide) return void this.deps.toast('This project has no review guide yet: Generate one first', 'warn');
+    this.openInEditor(guide, () => this.deps.toast(`Opened ${tilde(guide)}. Your agent reads it as you save it`, 'success'));
+  }
+
+  /** Take a project's review guide out: its pull requests open as before, and runs there stop getting its brief. */
+  removeReviewGuide(projectId: string): void {
+    const project = this.manager.list.find((p) => p.id === projectId);
+    if (!project?.root) return;
+    removeReviewGuide(project.root);
+    void this.deps.controller.refresh();
+    this.deps.toast(`${project.name} has no review guide now`, 'success');
   }
 
   /** Put your commands in the project's beluga.json (or its older klaud.json) so teammates get them. */

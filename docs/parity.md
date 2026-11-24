@@ -414,6 +414,11 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `workbench.setScript` | ✓ |
 | `workbench.shareScripts` | ✓ |
 | `workbench.setPrInstructions` | Create PR with Instructions… › “Use these for every pull request in <project>” (yours, kept in Beluga; every agent-written PR in that project follows them, beside beluga.json's `prPrompt`) |
+| `workbench.reviewGuide` | Project Settings › Review Guide: the guide as it is now (updated, size, whether it has a brief) and the prompt that writes it (docs/review-guide.md) |
+| `workbench.setReviewGuidePrompt` | Project Settings › Review Guide › Save, Use the Built-in Prompt |
+| `workbench.generateReviewGuide` | Project Settings › Review Guide › Generate / Regenerate (a chat of its own in Beluga's folder for the guide) |
+| `workbench.openReviewGuide` | Project Settings › Review Guide › Open (your editor) |
+| `workbench.removeReviewGuide` | Project Settings › Review Guide › Remove |
 | `workbench.setModel` | ✓ (the composer's agent picker: a model of the same runtime, for this conversation or new ones; the phone's picker since 1.32) |
 | `workbench.setEffort` | ✓ (the composer's agent picker: Thinking, Auto to Max, for this conversation or new ones) |
 | `workbench.setAgent` | ✓ (the agent picker's other runtimes, grouped Claude › Codex › Local model; a runtime this Mac doesn't run is greyed with why; the phone's picker since 1.32) |

@@ -143,6 +143,8 @@ export interface AgentHostDeps {
   /** How freely Claude may use the phone now (off · ask · use · full), for the owner-approval gate. */
   /** Your own worktree runs: the project's setup, and Claude's tool to correct it (core/workbench). */
   readonly setup?: (channel: string) => import('../agent/types.js').SetupTools | undefined;
+  /** What your own runs in a project's chat or worktree are told about its review guide (undefined: it has none). */
+  readonly reviewGuide?: (channel: string) => string | undefined;
   readonly phoneUse?: () => 'off' | 'ask' | 'use' | 'full';
   /** The agent's own terminal is driving this conversation now (BLG-534): the chat waits until you take over. */
   readonly terminalDriving?: (channel: string) => boolean;
@@ -1746,6 +1748,7 @@ export class AgentHost {
         ...(move && !plans?.tools ? { continueInWorktree: move } : {}),
         // Your own Claude in a worktree keeps the project's setup true for the next one.
         ...(worktree && from === this.selfId && body.channel.startsWith('ws:') ? (({ setup }) => (setup ? { setup } : {}))({ setup: this.deps.setup?.(body.channel) }) : {}),
+        ...(yours && !external && body.channel.startsWith('ws:') ? (({ reviewGuideBrief }) => (reviewGuideBrief ? { reviewGuideBrief } : {}))({ reviewGuideBrief: this.deps.reviewGuide?.(body.channel) }) : {}),
         onProcess: (p) => {
           proc = p;
           watch(p);

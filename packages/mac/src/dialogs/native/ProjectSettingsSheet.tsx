@@ -3,6 +3,7 @@ import { Segmented } from '../../components/ui.js';
 import { EnvEditor } from '../EnvEditor.js';
 import { EnvAgentGroups } from '../EnvironmentSettings.js';
 import { EnvWorktreeGroups } from '../EnvWorktreeGroups.js';
+import { ReviewGuideSettings } from '../ReviewGuideSettings.js';
 import e from '../env-settings.module.css';
 import type { ResolvedScripts } from '@beluga/workspaces/scripts.js';
 import { Checkbox, Field, FormSheet, SourceTag, TextInput } from '../../components/FormSheet.js';
@@ -22,12 +23,13 @@ const SOURCE: Record<Source, { label: string; tone: 'team' | 'mine' | 'guess'; d
   detected: { label: 'Guessed', tone: 'guess', detail: 'Beluga guessed it from the project. Change it if it’s wrong' },
 };
 
-export type ProjectTab = 'general' | 'environment' | 'worktrees';
+export type ProjectTab = 'general' | 'environment' | 'worktrees' | 'review';
 
 const TABS: ReadonlyArray<{ value: ProjectTab; label: string; hint: string }> = [
   { value: 'general', label: 'General', hint: 'Setup, Run and its agent' },
   { value: 'environment', label: 'Environment', hint: 'Its variables and .env' },
   { value: 'worktrees', label: 'Worktrees', hint: 'How worktrees share env' },
+  { value: 'review', label: 'Review Guide', hint: 'What pull requests are checked against' },
 ];
 
 /** ⌘K › Project Settings…, a terminal's Commands…: the General tab. */
@@ -36,10 +38,10 @@ export function ProjectSettingsSheet({ menu, close }: NativeMenuProps<'scripts'>
 }
 
 /**
- * A project's settings in one sheet (BLG-926), on three tabs: General (its Setup and Run commands,
+ * A project's settings in one sheet (BLG-926), on four tabs: General (its Setup and Run commands,
  * where each one comes from now and whether they go in beluga.json, and its agent), Environment
- * (its variables beside its main folder's .env, saved as you go) and Worktrees (how they share env,
- * and the ones with variables of their own). Done saves General's changes too.
+ * (its variables beside its main folder's .env, saved as you go), Worktrees (how they share env,
+ * and the ones with variables of their own) and Review Guide (ReviewGuideSettings). Done saves General's changes too.
  */
 export function ProjectSettings({ projectId, tab: first, close }: { projectId: string; tab: ProjectTab; close: () => void }) {
   const api = useApi();
@@ -103,6 +105,8 @@ export function ProjectSettings({ projectId, tab: first, close }: { projectId: s
               <EnvEditor projectId={project.id} />
               <EnvAgentGroups projectId={project.id} />
             </>
+          ) : tab === 'review' ? (
+            <ReviewGuideSettings projectId={project.id} close={close} />
           ) : (
             <EnvWorktreeGroups projectId={project.id} />
           )}

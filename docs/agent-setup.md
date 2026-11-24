@@ -81,6 +81,8 @@ On Windows, linking a file needs an administrator, so Beluga copies the file ins
 
 This is a read-only list of each piece Beluga adds to a run's instructions, in the order it adds them. Each piece shows when it is added (every run, worktree runs, a main folder, the terminal view, …), the file it comes from, and its text. Pieces that are written for each run (a task's brief, a plan's) show only their source. To change a piece, edit that source and open a pull request.
 
+A project with a review guide adds its brief to your own runs there (the **Review guide** entry, docs/review-guide.md).
+
 The list and the real instructions come from the same code, `INSTRUCTION_PIECES` in `src/agent/run-instructions.ts`, so they can't drift apart. That code is the hook: `runInstructions` joins the pieces for every run. Claude receives the result through `systemPrompt.append`, Codex through `developerInstructions`, and OpenCode through its instructions file. Your own `CLAUDE.md`, `AGENTS.md` and skills don't pass through Beluga: each agent loads them itself on your own runs.
 
 ## Zsh

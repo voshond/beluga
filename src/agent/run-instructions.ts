@@ -9,6 +9,7 @@ import { buildMemoryAppend } from './memory-prompt.js';
 import { type ShellSetup, buildAskOnlyAppend, buildChatRecallAppend, buildChatSendAppend, buildChatVarsAppend, buildCommitAppend, buildKeepAppend, buildMachineAppend, buildServedAppend, buildScratchAppend, buildSetupAppend, buildShellAppend, buildShippedAppend, buildSystemAppend, loginShellSetup } from './prompt.js';
 import { buildSkillProposeAppend } from './skill-tools.js';
 import { buildSyncMainAppend } from './sync-main.js';
+import { reviewGuideAppend } from '../workspaces/review-guide.js';
 import { buildTerminalAppend } from './terminal-prompt.js';
 import type { AgentRunInput } from './types.js';
 import { buildChatLinkAppend, buildViewAppend } from './view-prompt.js';
@@ -65,6 +66,14 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
     source: 'src/agent/prompt.ts',
     text: (c) => (c.input.setup && !c.askOnly ? c.input.setup.brief : ''),
     sample: () => buildSetupAppend(SAMPLE_PROJECT, 'npm ci', 'detected'),
+  },
+  {
+    id: 'review-guide',
+    label: 'Review guide',
+    when: 'Your own runs in a project with a review guide',
+    source: 'Project Settings › Review Guide',
+    text: (c) => c.input.reviewGuideBrief ?? '',
+    sample: () => reviewGuideAppend('~/.beluga/review-guides/your-project/guide.md'),
   },
   { id: 'scratch', label: 'Scratch folder', when: 'Worktree runs, with Scratch folder on', source: 'src/agent/prompt.ts', text: (c) => (c.input.scratchDir ? buildScratchAppend(c.input.scratchDir) : ''), sample: () => buildScratchAppend('.beluga/scratch') },
   {

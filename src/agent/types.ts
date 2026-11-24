@@ -139,6 +139,8 @@ export interface AgentRunInput {
   readonly continueInWorktree?: (task: string) => Promise<string>;
   /** Your own runs in a worktree: the project's setup, and Claude's tool to correct it. */
   readonly setup?: SetupTools;
+  /** Your own runs in a project with a review guide (workspaces/review-guide.ts): its brief, and to check pull requests against it. */
+  readonly reviewGuideBrief?: string;
   /** A friend's task: the extra tools its owner allowed (the screen, device info). */
   readonly taskTools?: TaskTools;
   /** Your own runs: the task board (Claude reads and keeps tasks true; see core/board). */

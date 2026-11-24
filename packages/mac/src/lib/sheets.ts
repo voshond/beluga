@@ -50,7 +50,7 @@ export type NativeSheet =
   /** About This Project: what Claude reads when it writes a task there, shared with teammates (BLG-298). */
   | { readonly kind: 'project_context'; readonly projectId: string }
   /** Environment…: a project's settings on its Environment tab, its variables beside its main folder's .env (BLG-369, BLG-926); `tab` another of its tabs. */
-  | { readonly kind: 'project_env'; readonly projectId: string; readonly tab?: 'general' | 'environment' | 'worktrees' }
+  | { readonly kind: 'project_env'; readonly projectId: string; readonly tab?: 'general' | 'environment' | 'worktrees' | 'review' }
   | { readonly kind: 'project_agent'; readonly projectId: string }
   /** A worktree's own variables, over its project's (BLG-924). */
   | { readonly kind: 'worktree_env'; readonly workspaceId: string }
