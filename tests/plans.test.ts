@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Board } from '../src/core/board/board.js';
 import { BoardWork } from '../src/core/board/work.js';
 import { type BodyInput, PlanError, applyOps, normalizeBody } from '../src/core/plans/edit.js';
-import { diffBodies, milestoneDeps, planBranchFor, planForHome } from '../src/core/plans/model.js';
+import { diffBodies, findMilestone, milestoneDeps, planBranchFor, planForHome } from '../src/core/plans/model.js';
 import { boardOf, isVisiting, reposOf, showsOn } from '../src/core/board/model.js';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -18,7 +18,10 @@ import type { WorkspaceController, WorktreeEvent } from '../src/core/workspace-c
 import type { Project, Workspace } from '../src/workspaces/types.js';
 import { isPlanOwned, planOf } from '../src/core/plans/owner.js';
 import { needsYou } from '../src/companion/needs-you.js';
-import { PLAN_TOOL_NAMES, createPlanToolDefs, milestoneInput, toOps } from '../src/agent/plan-tools.js';
+import { PLAN_TOOL_NAMES, createPlanToolDefs, createPlanTools, milestoneInput, notesOf, toOps, verdictOf } from '../src/agent/plan-tools.js';
+import { mcpServerFor } from '../src/agent/tool-host.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { decideTool } from '../src/agent/policy.js';
 import { PlanBodySchema } from '../src/core/team/protocol.js';
 import { PlanOpSchema } from '../src/ipc/plans-api.js';
@@ -584,6 +587,95 @@ describe('running a plan', () => {
     await tick(5);
     expect(t.made).toHaveLength(0);
     expect(planView(t.plans.need(plan.id), t.store.getState().board).next.kind).toBe('resume');
+  });
+
+  it('plan_gate takes what a Codex checker sends over MCP, and names the field it can’t take (BLG-1029)', async () => {
+    const t = await running('gated');
+    for (const title of ['Auth on payment routes', 'Idempotent webhooks']) t.board.update(issue(t, title).id, { status: 'done' }, t.me);
+    await tick(5);
+    t.board.update(issue(t, 'Receipts once').id, { status: 'in_review' }, t.claude);
+    await tick(5);
+    const checker = t.plans.need(t.plan.id).runs.safe!.checker!;
+    // Over MCP, as a Codex run reaches Beluga's tools (ToolHost), with the same schemas and validation.
+    const server = mcpServerFor(createPlanTools(t.work.forRun(`ws:${checker}`, 'p-me')!.tools!), async () => undefined);
+    const [ours, theirs] = InMemoryTransport.createLinkedPair();
+    await server.connect(theirs);
+    const client = new Client({ name: 'codex', version: '0' });
+    await client.connect(ours);
+    const gate = async (args: Record<string, unknown>) => {
+      const r = (await client.callTool({ name: 'plan_gate', arguments: args })) as { content: Array<{ text: string }>; isError?: boolean };
+      return { text: r.content.map((c) => c.text).join('\n'), failed: r.isError === true };
+    };
+    // A value it can't read: refused, naming the field.
+    const bad = await gate({ milestone: 'safe', verdict: 'maybe', notes: 'x' });
+    expect(bad.failed).toBe(true);
+    expect(bad.text).toMatch(/at verdict/);
+    const wrong = await gate({ milestone: 'refunds', verdict: 'pass', notes: 'x' });
+    expect(wrong).toMatchObject({ failed: true });
+    expect(wrong.text).toMatch(/^milestone: you check “Safe payments” only: call plan_gate again with milestone "safe"/);
+    // What Codex checkers send: the milestone as the brief writes it, the verdict in capitals, notes per criterion, long.
+    const codex = await gate({
+      milestone: '“Safe payments” [id safe]',
+      verdict: 'PASS',
+      notes: [
+        { criterion: '401 without a session', result: 'pass', evidence: `curl without a cookie returns 401. ${'Checked every route. '.repeat(500)}` },
+        { criterion: 'A replayed webhook charges once', result: 'pass' },
+      ],
+    });
+    expect(codex).toMatchObject({ failed: false });
+    expect(codex.text).toMatch(/^Recorded/);
+    const check = t.plans.need(t.plan.id).runs.safe!.check!;
+    expect(check.verdict).toBe('pass');
+    expect(check.notes.startsWith('- 401 without a session: pass: curl without a cookie returns 401.')).toBe(true);
+    expect(check.notes.length).toBeLessThanOrEqual(8000);
+    await client.close();
+  });
+
+  it('a gate’s verdict, notes and milestone, read the ways agents write them (BLG-1029)', () => {
+    expect(['pass', 'PASS', 'Passed.', 'ok', true].map(verdictOf)).toEqual(['pass', 'pass', 'pass', 'pass', 'pass']);
+    expect(['fail', 'FAILED', 'no', false].map(verdictOf)).toEqual(['fail', 'fail', 'fail', 'fail']);
+    expect(verdictOf('maybe')).toBe('maybe');
+    expect(notesOf({ '401 without a session': 'ok', 'Replays once': { result: 'fail', why: 'charges twice' } })).toBe('- 401 without a session: ok\n- Replays once: fail: charges twice');
+    expect(notesOf(['a', 'b'])).toBe('- a\n- b');
+    const ms = [{ id: 'auth', title: 'Auth' }, { id: 'auth-api', title: 'Auth API' }, { id: 'refunds', title: 'Refunds' }];
+    for (const said of ['auth-api', 'AUTH-API', 'Auth API', '[id auth-api]', 'auth-api: Auth API', 'Milestone: Auth API', '“Auth API”']) expect(findMilestone(ms, said)?.id, said).toBe('auth-api');
+    expect(findMilestone(ms, 'auth')?.id).toBe('auth');
+    // Two milestones named: none rather than a guess.
+    expect(findMilestone(ms, 'auth-api and refunds')).toBeUndefined();
+    expect(findMilestone(ms, 'payments')).toBeUndefined();
+  });
+
+  it('plan_start_task: a task already started, waiting on others or over the limit is said, not refused (BLG-1029)', async () => {
+    const t = await running('gated', 3, 'task');
+    const tools = t.work.forRun('ws:main', 'p-me')!.tools!;
+    const states = () => Object.fromEntries(planView(t.plans.need(t.plan.id), t.store.getState().board).milestones.flatMap((m) => m.tasks.map((x) => [x.task.id, x.state])));
+    // Beluga started the ready ones by itself.
+    expect(states()).toMatchObject({ auth: 'idle', retries: 'idle', receipts: 'blocked', 'refund-api': 'later' });
+    const made = t.made.length;
+    for (const id of ['auth', 'receipts', 'refund-api']) {
+      const said = await tools.start(id);
+      expect(said, id).toContain('Don’t call plan_start_task for it again');
+    }
+    expect(await tools.start('auth')).toMatch(/already started \(idle\): nothing to do/);
+    expect(await tools.start('receipts')).toMatch(/can’t start yet: .*Beluga starts it by itself/);
+    expect(await tools.start('refund-api')).toMatch(/can’t start yet: .*Beluga starts it by itself/);
+    // Nothing was started twice.
+    expect(t.made).toHaveLength(made);
+    // Finished: nothing to start.
+    t.board.update(issue(t, 'Auth on payment routes').id, { status: 'done' }, t.me);
+    await tick(5);
+    expect(await tools.start('auth')).toMatch(/is done: nothing to start/);
+    // Still refused, saying why and not to try again: the user's task, or one that isn't there.
+    await expect(tools.start('keys')).rejects.toThrow(/the user’s.*Don’t call plan_start_task/);
+    await expect(tools.start('nope')).rejects.toThrow(/no task "nope" in this plan \(its tasks: auth, retries/);
+  });
+
+  it('plan_start_task over the plan’s limit: Beluga starts it when one finishes (BLG-1029)', async () => {
+    const t = await running('gated', 1, 'task');
+    const tools = t.work.forRun('ws:main', 'p-me')!.tools!;
+    const retries = planView(t.plans.need(t.plan.id), t.store.getState().board).milestones[0]!.tasks.find((x) => x.task.id === 'retries')!;
+    expect(retries.state).toBe('ready');
+    expect(await tools.start('retries')).toMatch(/^Not started yet: 1 tasks are already running \(the plan’s limit\)\. Beluga starts it by itself when one finishes/);
   });
 
   it('warns about parallel tasks touching the same files', () => {

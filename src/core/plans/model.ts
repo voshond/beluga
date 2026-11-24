@@ -694,6 +694,32 @@ export const shownBody = (plan: Plan): PlanBody | undefined => plan.draft ?? pla
 
 export const planTitle = (plan: Plan): string => shownBody(plan)?.title || 'New plan';
 
+/** A milestone's name as an agent may write it: lower case, without quotes or brackets. */
+const milestoneWords = (s: string): string => s.toLowerCase().replace(/[“”"'‘’`[\]()]/g, ' ').replace(/\s+/g, ' ').trim();
+
+/**
+ * The milestone an agent means (plan_gate): its id or its title, exactly; else written the way
+ * checkers write it ("[id auth-api]", "auth-api: Auth API", "Milestone: Auth API"), when that
+ * names one milestone only (BLG-1029). Undefined: none, or more than one.
+ */
+export function findMilestone<M extends { readonly id: string; readonly title: string }>(milestones: readonly M[], said: string): M | undefined {
+  const words = milestoneWords(said);
+  const exact = milestones.find((m) => m.id === said || m.id.toLowerCase() === words || milestoneWords(m.title) === words);
+  if (exact) return exact;
+  const bare = words.replace(/^(?:milestone|id)\s*:?\s*/, '');
+  const named = milestones.find((m) => m.id.toLowerCase() === bare || milestoneWords(m.title) === bare);
+  if (named) return named;
+  // Its id among the words ("[id auth-api] Auth API"), else its title as whole words: when that's one milestone only.
+  const tokens = new Set(words.split(/[^\p{L}\p{N}_-]+/u).filter(Boolean));
+  const one = (hits: readonly M[]): M | undefined => (hits.length === 1 ? hits[0] : undefined);
+  const ids = milestones.filter((m) => tokens.has(m.id.toLowerCase()));
+  // "auth-api: Auth API" names auth-api, not also "auth" (a part of its id, and of its title).
+  const byId = ids.filter((m) => !ids.some((o) => o !== m && o.id.toLowerCase().split('-').includes(m.id.toLowerCase())));
+  if (byId.length) return one(byId);
+  const padded = ` ${words.replace(/[^\p{L}\p{N}_-]+/gu, ' ')} `;
+  return one(milestones.filter((m) => milestoneWords(m.title).length >= 4 && padded.includes(` ${milestoneWords(m.title).replace(/[^\p{L}\p{N}_-]+/gu, ' ')} `)));
+}
+
 /** Every task of a body, with the milestone it's in. */
 export function allTasks(body: PlanBody | undefined): Array<{ readonly task: PlanTask; readonly milestone: PlanMilestone; readonly index: number }> {
   return (body?.milestones ?? []).flatMap((milestone, index) => milestone.tasks.map((task) => ({ task, milestone, index })));

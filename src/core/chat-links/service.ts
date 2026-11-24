@@ -87,6 +87,14 @@ interface SentMessage {
   lost?: string;
 }
 
+/**
+ * What a refusal that ends the chain tells the agent (BLG-1029: agents retried these): plainly, that
+ * nothing went, that retrying never helps, and to stop. Never a time to try again.
+ */
+const STOP = 'Not sent, and a retry is refused too: do not send it again, with this tool or another way, and end your turn now. Your user has been told.';
+/** Refusals that end the chain: no "try again after". */
+const ENDS_CHAIN: ReadonlySet<SendRefusal> = new Set(['hop_limit', 'chain_limit', 'target_rate', 'chain_stopped']);
+
 /** These stop a runaway chain: you are asked, one time per chain. The others pass by themselves. */
 const ASKS_YOU: ReadonlySet<GuardRefusal> = new Set(['hop_limit', 'chain_limit', 'target_rate']);
 const STOPPED_CHAIN = 'You stopped this chain of messages';
@@ -104,13 +112,13 @@ const WORDS: Readonly<Record<SendRefusal, string>> = {
   offline: 'the person who shared that chat is not online. Nothing was queued. Try again later.',
   mode_wider: 'this chat runs with less permission than that chat, so it cannot ask that chat to act. Tell your user.',
   not_delivered: 'that chat did not take the message.',
-  chain_stopped: 'your user stopped this chain. Do not send again. End your turn.',
+  chain_stopped: `your user stopped this chain. ${STOP}`,
   self: 'that is this chat. Do the work here.',
-  hop_limit: 'too many agents in a row passed this on. Stop sending and end your turn.',
-  chain_limit: 'this chain has sent too many messages. Stop sending and end your turn.',
-  pair_rate: 'this chat sent that chat too many messages in a short time.',
-  target_rate: 'that chat got too many messages in a short time. Stop sending and end your turn.',
-  queue_full: 'too many messages wait at that chat already.',
+  hop_limit: `too many agents in a row passed this on. ${STOP}`,
+  chain_limit: `this chain has sent too many messages. ${STOP}`,
+  pair_rate: 'this chat sent that chat too many messages in a short time. Not sent: do not retry it in this turn.',
+  target_rate: `that chat got too many messages in a short time. ${STOP}`,
+  queue_full: 'too many messages wait at that chat already. Not sent: do not retry it in this turn.',
   not_yours: 'a sentinel sends only to your own chats, not to a chat another person shared with you.',
   shared_contributor: 'that chat is shared with a contributor, and a sentinel wakes only a chat that is yours alone.',
 };
@@ -429,5 +437,5 @@ export function refusalText(code: SendRefusal): string {
 }
 
 function refused(code: SendRefusal, retryAt?: number): Error {
-  return new Error(`${code}: ${WORDS[code]}${retryAt === undefined ? '' : ` Try again after ${new Date(retryAt).toISOString()}.`}`);
+  return new Error(`${code}: ${WORDS[code]}${retryAt === undefined || ENDS_CHAIN.has(code) ? '' : ` Try again after ${new Date(retryAt).toISOString()}, in a later turn.`}`);
 }
