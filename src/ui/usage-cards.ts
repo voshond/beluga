@@ -33,6 +33,7 @@ export interface ProviderCard {
   readonly updatedAt?: number;
   /** An ACP agent's week, as Beluga counted it (none for the fixed agents, or before your stats are here). */
   readonly week?: AgentWeek;
+  readonly error?: string;
 }
 
 /** A provider's quota windows in order: 5-hour, weekly, then its own. */
@@ -66,6 +67,7 @@ function cardOf(agent: AgentRef, u: ProviderUsage | undefined, isDefault: boolea
     isDefault,
     ...(u ? { updatedAt: u.updatedAt } : {}),
     ...(week ? { week } : {}),
+    ...(u?.error ? { error: u.error } : {}),
   };
 }
 
@@ -83,6 +85,7 @@ export function providerCards(self: Pick<Profile, 'usage' | 'usages' | 'agents'>
   const usages = usagesOf(self);
   const def = (defaultAgent ?? CLAUDE_AGENT).runtime;
   const ready = (runtime: string): boolean => {
+    if (usages.some((u) => u.agent.runtime === runtime && u.via === 'gateway')) return true;
     const state = runtimes?.find((r) => r.id === runtime)?.state;
     return state === undefined || state === 'ready';
   };

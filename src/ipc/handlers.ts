@@ -58,6 +58,7 @@ import { INITIATIVES_HANDLERS } from './initiatives-handlers.js';
 import { CHATS_HANDLERS } from './chats-handlers.js';
 import { VOICE_HANDLERS } from './voice-handlers.js';
 import { HONCHO_HANDLERS } from './honcho-handlers.js';
+import { USAGE_GATEWAY_HANDLERS } from './usage-gateway-handlers.js';
 import { CALLS_HANDLERS } from './calls-handlers.js';
 import { TERMINAL_IMPORT_HANDLERS } from './terminal-import-handlers.js';
 import { AGENT_TERM_HANDLERS } from './agent-term-handlers.js';
@@ -543,6 +544,7 @@ export const HANDLERS = {
   ...CHATS_HANDLERS,
   ...VOICE_HANDLERS,
   ...HONCHO_HANDLERS,
+  ...USAGE_GATEWAY_HANDLERS,
   ...CALLS_HANDLERS,
   ...TERMINAL_IMPORT_HANDLERS,
   ...AGENT_TERM_HANDLERS,

@@ -200,6 +200,7 @@ export function usageViews(p: Pick<Profile, 'usage' | 'usages' | 'agents'> | und
     ...(c.tokens ? { tokens: c.tokens } : {}),
     ...(c.tokensPerSec !== undefined ? { tokensPerSec: c.tokensPerSec } : {}),
     ...(c.signedIn ? {} : { signedIn: false }),
+    ...(c.error ? { error: clip(c.error, 200) } : {}),
     ...(c.week ? { week: { runs: c.week.runs, agentMs: Math.round(c.week.agentMs), tokens: c.week.tokens, ...(c.week.cost > 0 ? { cost: c.week.cost } : {}), days: c.week.days.map((ms) => Math.round(ms)) } } : {}),
   }));
 }

@@ -125,6 +125,12 @@ export const SETTINGS: readonly Entry[] = [
     ['Skipped this session', 'Nothing continues on its own until the limit resets.', 'usage limit skip session resume continue'],
     ['Chats it’s off in', 'Chats that wait for you to press Continue.', 'usage limit chats off resume continue'],
   ]),
+  ...rows('claude', 'Usage source', [
+    ['Read Claude Code and Codex usage from', 'Local agents, or your ai-gateway every 5 minutes.', 'usage source ai-gateway gateway quota plan limits remote'],
+    ['Address', 'Where your ai-gateway answers.', 'usage gateway url address server'],
+    ['Usage key', 'The gateway’s read-only usage key.', 'usage gateway key token USAGE_READ_TOKEN'],
+    ['Check', 'Whether Claude Code and Codex came back.', 'usage gateway check test connection'],
+  ]),
   ...rows('claude', 'Working at once', [['Conversations your agent works in at once', 'Past it, a message waits its turn.', 'parallel concurrency limit queue simultaneous runs']]),
   ...rows('claude', 'Open chats', [['Chats kept at once', `How many chats ${ASSISTANT_TITLE} and Sentinel keep as tabs.`, 'chat limit tabs sentinel']]),
   ...rows('claude', THREAD_LIMITS_GROUP, [

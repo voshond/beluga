@@ -89,6 +89,8 @@ export const ProviderUsage = Usage.extend({
   tokensPerSec: z.number().min(0).max(100_000).optional(),
   /** False when the provider is installed but not signed in. */
   signedIn: z.boolean().optional(),
+  via: z.literal('gateway').optional(),
+  error: z.string().max(200).optional(),
 });
 export type ProviderUsage = z.infer<typeof ProviderUsage>;
 

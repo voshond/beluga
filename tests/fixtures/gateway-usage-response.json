@@ -1,0 +1,61 @@
+{
+  "providers": {
+    "claude": {
+      "fetchedAt": 1789142400,
+      "usage": {
+        "five_hour": {
+          "utilization": 18.5,
+          "resets_at": "2026-09-11T21:00:00Z"
+        },
+        "seven_day": {
+          "utilization": 42,
+          "resets_at": "2026-09-16T12:00:00Z"
+        },
+        "seven_day_opus": null,
+        "seven_day_sonnet": null,
+        "extra_usage": {
+          "is_enabled": false
+        }
+      },
+      "error": null
+    },
+    "codex": {
+      "fetchedAt": 1789142100,
+      "usage": {
+        "rateLimits": {
+          "limitId": "codex",
+          "limitName": null,
+          "planType": "plus",
+          "primary": {
+            "usedPercent": 27.5,
+            "windowDurationMins": 300,
+            "resetsAt": 1789153200
+          },
+          "secondary": {
+            "usedPercent": 64,
+            "windowDurationMins": 10080,
+            "resetsAt": 1789560000
+          }
+        },
+        "rateLimitsByLimitId": {
+          "codex": {
+            "limitId": "codex",
+            "limitName": null,
+            "planType": "plus",
+            "primary": {
+              "usedPercent": 27.5,
+              "windowDurationMins": 300,
+              "resetsAt": 1789153200
+            },
+            "secondary": {
+              "usedPercent": 64,
+              "windowDurationMins": 10080,
+              "resetsAt": 1789560000
+            }
+          }
+        }
+      },
+      "error": "Codex usage poll failed: app-server exited"
+    }
+  }
+}

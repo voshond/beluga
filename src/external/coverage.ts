@@ -38,6 +38,7 @@ const MCP_APP = 'An MCP App is drawn in a window\'s frame: an agent has no frame
 const SAVE_PANEL = 'It writes a file where a person chose in the Save panel.';
 const COMPUTERS = 'It manages your other computers, or moves work between them: a person does that from the app.';
 const HONCHO = 'Where the person\'s conversations are sent is their choice, and its setup holds an API key.';
+const USAGE_GATEWAY = 'The usage source holds the person\'s ai-gateway key.';
 const NO_TOOL = 'No tool reaches it yet: a tool for it comes with its own decision.';
 
 export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
@@ -612,6 +613,9 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'honcho.configure': { refused: HONCHO },
   'honcho.test': { refused: HONCHO },
   'honcho.picture': { refused: HONCHO },
+  'usageGateway.status': { refused: USAGE_GATEWAY },
+  'usageGateway.configure': { refused: USAGE_GATEWAY },
+  'usageGateway.check': { refused: USAGE_GATEWAY },
   'stats.get': { refused: STATS },
   'stats.leaderboard': { refused: STATS },
   'stats.note': { refused: STATS },
