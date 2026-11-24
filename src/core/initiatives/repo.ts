@@ -13,7 +13,7 @@ const README = `# Initiatives
 
 One folder per initiative, kept by Beluga. Each holds \`initiative.json\` (the source of truth), \`brief.md\`, \`decisions.md\`, \`timeline.md\`, \`people.md\`, \`status.json\`, \`suggestions.json\` and \`sources/\`.
 
-Beluga commits a folder after each check-in and each chat turn that changed it. It never pushes.
+Beluga commits a folder after each check-in and each chat turn that changed it. When the branch tracks a remote, each commit is pushed; a failed push is tried again with the next commit.
 `;
 
 const IGNORE = `.beluga/\n*.tmp\n.DS_Store\n`;
@@ -53,6 +53,12 @@ export const ensureRepo = async (root: string): Promise<void> => {
   await git(root, [...(await commitArgs(root)), 'commit', '--quiet', '-m', 'Initiatives'], 60_000);
 };
 
+const pushIfTracked = async (root: string): Promise<void> => {
+  const upstream = await tryGit(root, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+  if (!upstream?.trim()) return;
+  await tryGit(root, ['push', '--quiet']);
+};
+
 const queues = new Map<string, Promise<boolean>>();
 
 export const commitFolder = (root: string, slug: string, message: string): Promise<boolean> => {
@@ -63,6 +69,7 @@ export const commitFolder = (root: string, slug: string, message: string): Promi
     const changed = (await git(root, ['diff', '--cached', '--name-only', '--', slug])).trim();
     if (!changed) return false;
     await git(root, [...(await commitArgs(root)), 'commit', '--quiet', '-m', message, '--', slug]);
+    await pushIfTracked(root);
     return true;
   };
   const previous = queues.get(root) ?? Promise.resolve(false);

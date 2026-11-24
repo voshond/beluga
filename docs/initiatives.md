@@ -6,7 +6,7 @@ The agent **suggests, the user approves**. It never writes to Jira, Slack or the
 
 ## 1. The memory repo
 
-One git repository, one folder per initiative. Its path is kept in `~/.beluga/initiatives.json` (`{ "root": "~/…" }`), `~/Documents/GitHub/initiatives` by default. Beluga runs `git init` on first use (with a `README.md` and a `.gitignore` that leaves out `.beluga/`). It never pushes; a remote is yours to add.
+One git repository, one folder per initiative. Its path is kept in `~/.beluga/initiatives.json` (`{ "root": "~/…" }`), `~/Documents/GitHub/initiatives` by default. Beluga runs `git init` on first use (with a `README.md` and a `.gitignore` that leaves out `.beluga/`). Without a remote it only commits. When the branch tracks one (`git push -u`), every commit is pushed right after; a push that fails (offline, no access) leaves the commit local and goes out with the next one.
 
 ```
 initiatives/

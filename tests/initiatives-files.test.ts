@@ -94,4 +94,16 @@ describe('the memory repo', () => {
     const status = execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' });
     expect(status).toContain('two/');
   });
+
+  it('pushes each commit when the branch tracks a remote', async () => {
+    const remote = path.join(tmp(), 'remote.git');
+    execFileSync('git', ['init', '--quiet', '--bare', remote]);
+    const root = path.join(tmp(), 'initiatives');
+    await ensureRepo(root);
+    execFileSync('git', ['remote', 'add', 'origin', remote], { cwd: root });
+    execFileSync('git', ['push', '--quiet', '-u', 'origin', 'HEAD'], { cwd: root });
+    scaffoldFolder(root, 'one', config, '2026-11-24');
+    expect(await commitFolder(root, 'one', 'one: created')).toBe(true);
+    expect(gitLog(remote)[0]).toBe('one: created');
+  });
 });
