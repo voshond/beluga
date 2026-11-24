@@ -130,7 +130,7 @@ export type PeerInfo = z.infer<typeof PeerInfo>;
  */
 // `dm:`/`group:`: your own Claude acting in a friends' chat (BLG-207); its events only go to you.
 // `sentinel-chat:<id>`: the Sentinel chat (docs/sentinel.md §12), yours only; its events only go to you.
-export const Channel = z.string().regex(/^(room|mac:assistant(:[a-z0-9]{1,24})?|sentinel-chat:[a-z0-9]{1,24}|ws:[\w:.-]{1,80}|dm:[\w-]{8,64}|group:[\w-]{1,80})$/).default('room');
+export const Channel = z.string().regex(/^(room|mac:assistant(:[a-z0-9]{1,24})?|sentinel-chat:[a-z0-9]{1,24}|initiative:[a-z0-9][a-z0-9-]{0,39}:[a-z0-9]{1,24}|ws:[\w:.-]{1,80}|dm:[\w-]{8,64}|group:[\w-]{1,80})$/).default('room');
 
 /**
  * An external agent acted through its owner's Beluga: the frame is signed with the owner's key, so

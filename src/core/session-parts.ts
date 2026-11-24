@@ -27,6 +27,7 @@ import { LOCAL_RUNTIME, localModels, localWhy } from '../shared/local-endpoints.
 import { useViewEnv } from './views/sources.js';
 import { boardOf } from './board/registry.js';
 import { sentinelOf } from './sentinel/registry.js';
+import { initiativesOf } from './initiatives/registry.js';
 import { needPlans, plansOf } from './plans/registry.js';
 import { assistantOf } from './assistant/registry.js';
 import { companionOf } from '../companion/registry.js';
@@ -267,6 +268,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       board: (channel, from, o) => boardOf(session)?.forRun(channel, from, o),
       sentinel: (channel, from) => sentinelOf(session)?.forRun(channel, from),
       sentinelChat: (channel, from) => sentinelOf(session)?.chatPlace(channel, from),
+      initiativeChat: (channel, from) => initiativesOf(session)?.chatRun(channel, from),
       confirmTool: (toolName, input) => sentinelOf(session)?.confirmWords(toolName, input),
       plans: (channel, from, said, chain) => plansOf(session)?.forRun(channel, from, said, chain),
       threads: (channel) => threadsOf(session)?.forRun(channel),

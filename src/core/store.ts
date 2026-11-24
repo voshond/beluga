@@ -22,6 +22,7 @@ import { type GatewayAction, type GatewaySlice, initialGateway, reduceGateway } 
 import { type FriendShareAction, type FriendShareSlice, initialFriendShare, reduceFriendShare } from './friend-share-store.js';
 import { type BoardAction, type BoardSlice, initialBoard, reduceBoard } from './board/model.js';
 import { FIRST_SENTINEL_CHAT, type SentinelAction, type SentinelSlice, initialSentinel, reduceSentinel, sentinelChatChannel } from './sentinel/model.js';
+import { FIRST_INITIATIVE_CHAT, type InitiativesAction, type InitiativesSlice, initialInitiatives, initiativeChatChannel, reduceInitiatives } from './initiatives/model.js';
 import { type PlansAction, type PlansSlice, initialPlans, isPlanHome, reducePlans } from './plans/model.js';
 import { type DialoguesAction, type DialoguesSlice, initialDialogues, reduceDialogues } from './dialogues/model.js';
 import { type TeamAction, type TeamSlice, initialTeam, reduceTeam } from './team/model.js';
@@ -545,6 +546,8 @@ export type View =
   | { readonly kind: 'dashboard'; readonly id?: string }
   /** The Sentinel chat (docs/sentinel.md §12), one of its conversations (none: the first), docked beside Sentinel's page, or beside a sentinel's own page (`about`, its id) when you asked from there. */
   | { readonly kind: 'sentinel_chat'; readonly chat?: string; readonly about?: string }
+  | { readonly kind: 'initiatives' }
+  | { readonly kind: 'initiative_page'; readonly slug: string; readonly chat?: string }
   /**
    * A page on one of your computers (BLG-784, Mac app): the app draws `view` itself, with that
    * computer's state and calls (its screen over /machine/<id>). Only this window's screen has it;
@@ -601,6 +604,8 @@ export const channelOf = (view: View): string =>
         : activeAssistantChannel(NO_ASSISTANT_CHATS)
       : view.kind === 'sentinel_chat'
         ? sentinelChatChannel(view.chat ?? FIRST_SENTINEL_CHAT)
+        : view.kind === 'initiative_page'
+          ? initiativeChatChannel(view.slug, view.chat ?? FIRST_INITIATIVE_CHAT)
         : view.kind === 'draft' || view.kind === 'draft_worktree'
           ? 'draft'
           : 'room';
@@ -614,7 +619,7 @@ export function busyChannels(log: readonly LogItem[]): Set<string> {
 
 /** The conversation a view shows, if any (Overview, Search, Terminal… show none, so the chat's unread count stays). */
 export const shownChannel = (view: View): string | undefined =>
-  view.kind === 'conversation' ? view.id : view.kind === 'room' || view.kind === 'workspace' || view.kind === 'shared' || view.kind === 'assistant' || view.kind === 'sentinel_chat' ? channelOf(view) : undefined;
+  view.kind === 'conversation' ? view.id : view.kind === 'room' || view.kind === 'workspace' || view.kind === 'shared' || view.kind === 'assistant' || view.kind === 'sentinel_chat' || view.kind === 'initiative_page' ? channelOf(view) : undefined;
 
 /** What the screens attached to this computer's Beluga are looking at (all of them together). */
 export interface Attention {
@@ -644,7 +649,7 @@ export interface MyShare {
  * Everything Beluga knows that isn't about a screen: the room, people, projects, conversations,
  * approvals… The core (the daemon) owns it and every client sees the same.
  */
-export interface DomainState extends CollabState, WorkState, NetworkSlice, SupportSlice, ClaudeCodeSlice, GatewaySlice, BoardSlice, SentinelSlice, PlansSlice, DialoguesSlice, CompanionSlice, FriendShareSlice, TeamSlice {
+export interface DomainState extends CollabState, WorkState, NetworkSlice, SupportSlice, ClaudeCodeSlice, GatewaySlice, BoardSlice, SentinelSlice, InitiativesSlice, PlansSlice, DialoguesSlice, CompanionSlice, FriendShareSlice, TeamSlice {
   readonly room: string;
   readonly projects: readonly Project[];
   /** The first scan of the projects is done: a workspace that isn't in `projects` now is really gone. */
@@ -856,6 +861,7 @@ export type Action =
   | FriendShareAction
   | BoardAction
   | SentinelAction
+  | InitiativesAction
   | PlansAction
   | DialoguesAction
   | TeamAction
@@ -984,6 +990,7 @@ export function initialState(room: string, policy: Policy = 'ask', prefs: Partia
     ...initialFriendShare,
     ...initialBoard,
     ...initialSentinel,
+    ...initialInitiatives,
     ...initialPlans,
     ...initialDialogues,
     ...initialTeam,
@@ -1609,6 +1616,11 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
     case 'sentinel_chats':
     case 'sentinel_off':
       return { ...state, ...reduceSentinel(state, action) };
+    case 'initiatives_init':
+    case 'initiative_put':
+    case 'initiative_remove':
+    case 'initiatives_off':
+      return { ...state, ...reduceInitiatives(state, action) };
     case 'plans_init':
     case 'plan_put':
     case 'plan_remove':

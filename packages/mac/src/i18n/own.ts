@@ -41,6 +41,7 @@ function namesOf(state: Loose): Set<string> {
     add(d?.name);
     for (const tile of list(d?.tiles)) add(tile?.title);
   }
+  for (const i of list((state?.initiatives as Loose)?.items)) add(i?.name);
   for (const p of [state?.self as Loose, ...list(state?.peers)]) add(p?.name);
   const network = state?.network as Loose;
   for (const f of [...list(network?.friends), ...list(network?.groups)]) add(f?.name);
@@ -51,7 +52,7 @@ function namesOf(state: Loose): Set<string> {
  * The parts of the state that hold what people named. The network slice changes with every message
  * that comes in, so only its friends and groups are compared, not the whole slice.
  */
-const SLICES = ['projects', 'projectGroups', 'board', 'plans', 'sentinel', 'peers', 'self'] as const;
+const SLICES = ['projects', 'projectGroups', 'board', 'plans', 'sentinel', 'initiatives', 'peers', 'self'] as const;
 
 function partsOf(state: Record<string, unknown>): unknown[] {
   const network = state.network as Loose;

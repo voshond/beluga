@@ -1,0 +1,142 @@
+import { type Dirent, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import type { z } from 'zod';
+import { type EpicStatus, EpicStatusSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type Suggestion, SuggestionsSchema, openDecisionsOf, recentOf } from './model.js';
+
+export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'suggestions.json'] as const;
+
+const MAX_FILES = 200;
+const MAX_READ = 512 * 1024;
+
+export type InitiativeFolder = {
+  readonly slug: string;
+  readonly folder: string;
+  readonly config?: InitiativeConfig;
+  readonly brief: string;
+  readonly progress?: EpicStatus;
+  readonly suggestions: readonly Suggestion[];
+  readonly openDecisions: readonly string[];
+  readonly recent: readonly string[];
+  readonly files: readonly string[];
+  readonly trouble?: string;
+};
+
+export const folderOf = (root: string, slug: string): string => {
+  if (!INITIATIVE_SLUG.test(slug)) throw new Error(`“${slug}” is not an initiative’s folder name`);
+  return path.join(root, slug);
+};
+
+const readText = (file: string): string | undefined => {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch {
+    return undefined;
+  }
+};
+
+export const writeText = (file: string, text: string): void => {
+  mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, file);
+};
+
+const writeJsonFile = (file: string, value: object): void => writeText(file, `${JSON.stringify(value, null, 2)}\n`);
+
+type Parsed<T> = { readonly value?: T; readonly trouble?: string };
+
+const parseJson = <S extends z.ZodTypeAny>(text: string | undefined, schema: S, name: string): Parsed<z.infer<S>> => {
+  if (text === undefined) return {};
+  try {
+    const parsed = schema.safeParse(JSON.parse(text));
+    if (parsed.success) return { value: parsed.data };
+    const issue = parsed.error.issues[0];
+    return { trouble: `${name}: ${issue ? `${issue.path.join('.') || 'the file'} ${issue.message}` : 'not what it should be'}` };
+  } catch (err) {
+    return { trouble: `${name} is not valid JSON (${err instanceof Error ? err.message : String(err)})` };
+  }
+};
+
+export const listSlugs = (root: string): string[] => {
+  try {
+    return readdirSync(root, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && INITIATIVE_SLUG.test(d.name))
+      .map((d) => d.name)
+      .sort();
+  } catch {
+    return [];
+  }
+};
+
+export const memoryFiles = (folder: string): string[] => {
+  const out: string[] = [];
+  const walk = (dir: string, rel: string): void => {
+    if (out.length >= MAX_FILES) return;
+    let entries: Dirent[] = [];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.name.startsWith('.') || out.length >= MAX_FILES) continue;
+      const next = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(path.join(dir, entry.name), next);
+      else if (entry.isFile()) out.push(next);
+    }
+  };
+  walk(folder, '');
+  const known = new Set<string>(MEMORY_FILES);
+  return [...MEMORY_FILES.filter((f) => out.includes(f)), ...out.filter((f) => !known.has(f))];
+};
+
+export const readFolder = (root: string, slug: string): InitiativeFolder => {
+  const folder = folderOf(root, slug);
+  const file = (name: string): string | undefined => readText(path.join(folder, name));
+  const config = parseJson(file('initiative.json'), InitiativeConfigSchema, 'initiative.json');
+  const status = parseJson(file('status.json'), EpicStatusSchema, 'status.json');
+  const suggestions = parseJson(file('suggestions.json'), SuggestionsSchema, 'suggestions.json');
+  const missing = config.value || config.trouble ? undefined : 'initiative.json is missing';
+  const troubles = [config.trouble ?? missing, status.trouble, suggestions.trouble].filter((t): t is string => Boolean(t));
+  return {
+    slug,
+    folder,
+    ...(config.value ? { config: config.value } : {}),
+    brief: file('brief.md') ?? '',
+    ...(status.value ? { progress: status.value } : {}),
+    suggestions: suggestions.value ?? [],
+    openDecisions: openDecisionsOf(file('decisions.md') ?? ''),
+    recent: recentOf(file('timeline.md') ?? ''),
+    files: memoryFiles(folder),
+    ...(troubles.length ? { trouble: troubles.join('; ') } : {}),
+  };
+};
+
+export const writeConfig = (root: string, slug: string, config: InitiativeConfig): void => writeJsonFile(path.join(folderOf(root, slug), 'initiative.json'), config);
+
+export const writeSuggestions = (root: string, slug: string, suggestions: readonly Suggestion[]): void => writeText(path.join(folderOf(root, slug), 'suggestions.json'), `${JSON.stringify(suggestions, null, 2)}\n`);
+
+const list = (items: readonly string[], empty: string): string => (items.length ? items.map((i) => `- ${i}`).join('\n') : `- ${empty}`);
+
+export const scaffoldFolder = (root: string, slug: string, config: InitiativeConfig, today: string): void => {
+  const folder = folderOf(root, slug);
+  mkdirSync(path.join(folder, 'sources'), { recursive: true });
+  writeConfig(root, slug, config);
+  const put = (name: string, text: string): void => writeText(path.join(folder, name), text);
+  put('brief.md', `# ${config.name}\n\n${config.goal || 'The goal is not written down yet.'}\n\n## Where it stands\n\nNothing checked yet. The first check-in fills this in.\n\n## Epics\n\n${list(config.epics, 'none linked yet')}\n`);
+  put('decisions.md', `# Decisions\n\n## Open\n\n## Decided\n`);
+  put('timeline.md', `# Timeline\n\nNewest first.\n\n- ${today}: initiative created\n`);
+  put('people.md', `# People\n\nWho is involved and what they own.\n`);
+  put('suggestions.json', '[]\n');
+  put('sources/README.md', `# Sources\n\nSnapshots the check-in keeps: jira.md, slack/, meetings/, docs/, prs.md.\n`);
+};
+
+export const readMemoryFile = (root: string, slug: string, rel: string): { readonly name: string; readonly text: string; readonly cut: boolean } => {
+  const folder = folderOf(root, slug);
+  const file = path.resolve(folder, rel);
+  const inside = path.relative(folder, file);
+  if (!inside || inside.startsWith('..') || path.isAbsolute(inside) || inside.split(path.sep).some((p) => p.startsWith('.'))) throw new Error('That file is not in the initiative’s folder');
+  const size = statSync(file).size;
+  const text = readFileSync(file, 'utf8');
+  return { name: inside.split(path.sep).join('/'), text: text.slice(0, MAX_READ), cut: size > MAX_READ };
+};

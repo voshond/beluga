@@ -28,6 +28,7 @@ const INBOX = 'The inbox marks what a person has read, and an agent\'s mark woul
 const NO_SCOPE = 'A file name does not say which chat the image is in, so a grant cannot check it.';
 const VIEW_SOURCE = 'It runs a view\'s source, which can be a command: sentinel_try_source tries one under its own class.';
 const AGENT_TERM = 'A terminal app for a person to type in: an agent works through beluga_chat_send.';
+const INITIATIVES = { refused: 'Initiatives are the person’s own section: an agent works in an initiative’s chat, where outward steps ask.' } as const;
 const STATS = 'The Usage tab counts the person\'s work in every project, past any grant\'s scope.';
 const WEB_SESSION = 'A browser session can answer approvals and read secret values, which no agent does (BLG-244).';
 const PR_INSTRUCTIONS = 'A person\'s own standing instructions to their agent: an agent passes one-off instructions with pr_create.';
@@ -409,6 +410,17 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'sentinel.chatOpen': 'covered',
   'sentinel.chatClear': 'covered',
   'sentinel.chatDelete': 'covered',
+  'initiatives.create': INITIATIVES,
+  'initiatives.update': INITIATIVES,
+  'initiatives.archive': INITIATIVES,
+  'initiatives.setRepo': INITIATIVES,
+  'initiatives.setCheckIn': INITIATIVES,
+  'initiatives.checkInNow': INITIATIVES,
+  'initiatives.chatNew': INITIATIVES,
+  'initiatives.chatOpen': INITIATIVES,
+  'initiatives.chatDelete': INITIATIVES,
+  'initiatives.resolveSuggestion': INITIATIVES,
+  'initiatives.readFile': INITIATIVES,
   'dashboard.create': 'covered',
   'dashboard.update': 'covered',
   'dashboard.remove': 'covered',

@@ -12812,5 +12812,22 @@
   "{0} is not signed in: it asked to sign in in a browser. {1}.": "{0} 未登录：它要求在浏览器中登录。{1}。",
   "{0} stopped reading what Beluga sent.": "{0} 不再读取 Beluga 发送的内容。",
   "{0} exited before the turn ended (stopped by {1})": "{0} 在轮次结束前退出了（被 {1} 终止）",
-  "{0} exited before the turn ended (exit code {1})": "{0} 在轮次结束前退出了（退出码 {1}）"
+  "{0} exited before the turn ended (exit code {1})": "{0} 在轮次结束前退出了（退出码 {1}）",
+ "Initiatives": "举措",
+ "New Initiative": "新建举措",
+ "Make Initiative": "创建举措",
+ "Open decisions": "待定决策",
+ "Memory": "记忆",
+ "Check In Now": "立即检查进展",
+ "Shipped": "已上线",
+ "Docs": "文档",
+ "Meetings": "会议",
+ "Jira epics": "Jira 史诗",
+ "Slack channels": "Slack 频道",
+ "Link Repos": "关联仓库",
+ "Never checked in": "尚未检查进展",
+ "Drive a thing to ship": "推动一件事上线",
+ "No initiatives yet": "还没有举措",
+ "Ask about this initiative": "询问这个举措",
+ "Initiatives need the Beluga app": "举措需要 Beluga 应用"
 }

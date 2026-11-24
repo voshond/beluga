@@ -16,7 +16,7 @@ export interface ChatRef {
 export const CHAT_LINK_PREFIX = 'beluga://chat/';
 const OWNER = /^[\w-]{8,64}$/;
 // The kinds of src/protocol.ts's Channel that belong to one computer.
-const ADDRESSABLE = /^(ws:[\w:.-]{1,80}|mac:assistant(:[a-z0-9]{1,24})?|sentinel-chat:[a-z0-9]{1,24})$/;
+const ADDRESSABLE = /^(ws:[\w:.-]{1,80}|mac:assistant(:[a-z0-9]{1,24})?|sentinel-chat:[a-z0-9]{1,24}|initiative:[a-z0-9][a-z0-9-]{0,39}:[a-z0-9]{1,24})$/;
 
 export const isAddressableChannel = (channel: string): boolean => ADDRESSABLE.test(channel);
 

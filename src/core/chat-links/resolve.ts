@@ -1,6 +1,8 @@
 import { FIRST_CHAT, assistantChatOf, assistantChatTitle } from '../../shared/assistant.js';
 import { type ChatRef, formatChatRef, parseChatRef } from '../../shared/chat-ref.js';
 import { FIRST_SENTINEL_CHAT, sentinelChatOf, sentinelChatTitle } from '../sentinel/model.js';
+import { initiativeChatFound } from '../initiatives/chat-ref.js';
+import { initiativeChatOf } from '../initiatives/model.js';
 import { type DomainState, type View, busyChannels } from '../store.js';
 import { chatsWithThreadsWorking } from '../threads/model.js';
 
@@ -13,7 +15,7 @@ export interface ResolvedChat {
   readonly ref: ChatRef;
   /** Its current title. Unset when it's gone, or not yours to read. */
   readonly title?: string;
-  readonly kind: 'worktree' | 'chat' | 'assistant' | 'sentinel';
+  readonly kind: 'worktree' | 'chat' | 'assistant' | 'sentinel' | 'initiative';
   /**
    * 'removed' also for a chat you can't see: nothing here to open. `ownership` tells the two apart.
    * 'loading': a workspace of yours not found before the first scan of the projects is done.
@@ -77,6 +79,7 @@ export function addressableChats(state: DomainState): Array<{ ref: string; owner
     ...state.projects.flatMap((p) => p.workspaces.filter((w) => w.kind !== 'main').map((w) => ({ owner: state.selfId, channel: `${WS}${w.id}`, createdAt: w.createdAt }))),
     ...state.assistant.chats.map((c) => ({ owner: state.selfId, channel: c.channel })),
     ...(state.sentinel.chats?.chats ?? []).map((c) => ({ owner: state.selfId, channel: c.channel })),
+    ...(state.initiatives?.items ?? []).flatMap((i) => i.chats.chats).map((c) => ({ owner: state.selfId, channel: c.channel })),
     ...state.shared.map((w) => ({ owner: w.owner, channel: `${WS}${w.id}` })),
   ];
   return all.flatMap((c) => {
@@ -121,7 +124,7 @@ function ownChat(state: DomainState, channel: string): Found | undefined {
     if (!chats.some((c) => c.channel === channel) && (chats.length || sentinel !== FIRST_SENTINEL_CHAT)) return undefined;
     return { title: sentinelChatTitle(channel, state.log, 60), kind: 'sentinel', view: { kind: 'sentinel_chat', chat: sentinel } };
   }
-  return undefined;
+  return initiativeChatFound(state, channel);
 }
 
 function ownWorkspace(state: DomainState, id: string): Found | undefined {
@@ -135,4 +138,4 @@ function ownWorkspace(state: DomainState, id: string): Found | undefined {
   return undefined;
 }
 
-const kindOf = (channel: string): ResolvedChat['kind'] => (assistantChatOf(channel) ? 'assistant' : sentinelChatOf(channel) ? 'sentinel' : 'worktree');
+const kindOf = (channel: string): ResolvedChat['kind'] => (assistantChatOf(channel) ? 'assistant' : sentinelChatOf(channel) ? 'sentinel' : initiativeChatOf(channel) ? 'initiative' : 'worktree');

@@ -9,6 +9,7 @@ import { type DomainState, type LogItem, type SaidBy, type Store, clean, peerNam
 import { shareNameOf } from './workspace-controller.js';
 import type { Intent } from './intents.js';
 import { SENTINEL_CHAT_PREFIX } from './sentinel/model.js';
+import { INITIATIVE_CHAT_PREFIX } from './initiatives/model.js';
 
 /** What to share with a friend: a project (all its worktrees, now and later), or one worktree (`workspaceId`; `projectId` may come with it). */
 export interface FriendShareInput {
@@ -44,7 +45,7 @@ const HISTORY_ITEMS = 60;
 const HISTORY_TEXT = 8000;
 const wsIdOf = (channel: string): string | undefined => (channel.startsWith('ws:') ? channel.slice(3) : undefined);
 /** Your Mac chats and the Sentinel chat: only you post into them (BLG-393). */
-const isOwnerOnly = (channel: string): boolean => channel === 'mac:assistant' || channel.startsWith('mac:assistant:') || channel.startsWith(SENTINEL_CHAT_PREFIX);
+const isOwnerOnly = (channel: string): boolean => channel === 'mac:assistant' || channel.startsWith('mac:assistant:') || channel.startsWith(SENTINEL_CHAT_PREFIX) || channel.startsWith(INITIATIVE_CHAT_PREFIX);
 
 /** A short, plain-text version of the recent conversation for someone joining: its last `limit` messages, each up to `max` characters. */
 export function historyFor(log: readonly LogItem[], channel: string, nameOf: (id: string) => string, limit = HISTORY_ITEMS, max = HISTORY_TEXT): Array<{ from: string; text: string; ts: number; byAgent: boolean }> {

@@ -40,6 +40,8 @@ const PlansView = lazyView('plans/PlansView', () => import('../plans/PlansView.j
 const PlanPage = lazyView('plans/PlanPage', () => import('../plans/PlanPage.js').then((m) => m.PlanPage));
 const SentinelPage = lazyView('sentinel/SentinelPage', () => import('../sentinel/SentinelPage.js').then((m) => m.SentinelPage));
 const SentinelRunPage = lazyView('sentinel/RunPage', () => import('../sentinel/RunPage.js').then((m) => m.RunPage));
+const InitiativesHome = lazyView('initiatives/InitiativesHome', () => import('../initiatives/InitiativesHome.js').then((m) => m.InitiativesHome));
+const InitiativePage = lazyView('initiatives/InitiativePage', () => import('../initiatives/InitiativePage.js').then((m) => m.InitiativePage));
 const SentinelHome = lazyView('sentinel/SentinelHome', () => import('../sentinel/SentinelHome.js').then((m) => m.SentinelHome));
 const PhoneView = lazyView('phone/PhoneView', () => import('../phone/PhoneView.js').then((m) => m.PhoneView));
 
@@ -134,6 +136,10 @@ function Route() {
       return <SentinelPage key={view.id} id={view.id} />;
     case 'sentinel_run':
       return <SentinelRunPage key={view.runId} runId={view.runId} />;
+    case 'initiatives':
+      return <InitiativesHome />;
+    case 'initiative_page':
+      return <InitiativePage key={view.slug} slug={view.slug} />;
     case 'worktrees':
       return <WorktreesView projectId={view.projectId} />;
     case 'project':
