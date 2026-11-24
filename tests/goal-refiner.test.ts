@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isJiraServer, jiraReadVerdict, parseGoal, refineGoal, refinePrompt } from '../src/agent/goal-refiner.js';
+import { isDriveServer, isJiraServer, isSpilledResult, parseGoal, refineGoal, refinePrompt, sourceReadVerdict } from '../src/agent/goal-refiner.js';
 import { CompletionError, type CompletionRequest } from '../src/agent/runtime/types.js';
 
 describe('refining an initiative’s goal', () => {
@@ -33,6 +33,26 @@ describe('refining an initiative’s goal', () => {
     expect(req.vetTool!('mcp__jira__jira_get_issue', {}).allow).toBe(true);
     expect(req.vetTool!('mcp__jira__jira_add_comment', {}).allow).toBe(false);
     expect(req.maxTurns).toBeGreaterThan(1);
+    expect(req.ownerMcp!('calendar')).toBe(false);
+  });
+
+  it('names each doc source and how to read it, and mounts the calendar server only for a Google file', async () => {
+    const docs = [
+      { ref: 'https://acme.atlassian.net/wiki/spaces/MDM/pages/2543222788/MDM+Part+2', label: 'MDM 2', kind: 'confluence' as const },
+      { ref: 'https://docs.google.com/document/d/1AbCdEfGhIjKlMnOp/edit', kind: 'gdoc' as const },
+    ];
+    expect(refinePrompt({ name: 'A', goal: '', epics: [], docs })).toContain(
+      'Doc sources:\n- https://acme.atlassian.net/wiki/spaces/MDM/pages/2543222788/MDM+Part+2 “MDM 2” (Confluence page 2543222788: read it with the Confluence MCP (confluence_get_page, page_id 2543222788))\n- https://docs.google.com/document/d/1AbCdEfGhIjKlMnOp/edit (Google Doc, file id 1AbCdEfGhIjKlMnOp: read it with the calendar MCP’s drive_read_file (it tries the work and the private Google account))',
+    );
+    const seen: CompletionRequest[] = [];
+    const answer = async (req: CompletionRequest): Promise<string> => (seen.push(req), 'Ship the thing to everyone, soon.');
+    await refineGoal({ name: 'A', goal: 'ship', epics: [], docs }, { cwd: '/tmp', complete: answer });
+    await refineGoal({ name: 'A', goal: 'ship', epics: [], docs: [docs[0]!] }, { cwd: '/tmp', complete: answer });
+    expect(seen.map((req) => req.tools)).toEqual([['Read'], ['Read']]);
+    expect(seen.map((req) => [req.ownerMcp!('calendar'), req.ownerMcp!('jira'), req.ownerMcp!('slack'), req.maxTurns! > 1])).toEqual([
+      [true, true, false, true],
+      [false, true, false, true],
+    ]);
   });
 
   it('takes one turn when there is no epic to read', async () => {
@@ -41,12 +61,62 @@ describe('refining an initiative’s goal', () => {
     expect(seen[0]!.maxTurns).toBe(1);
   });
 
-  it('allows Jira reads only', () => {
-    const allowed = ['mcp__jira__jira_get_issue', 'mcp__jira__jira_search', 'mcp__jira__jira_get_project_issues', 'mcp__mcp-atlassian__jira_get_issue', 'mcp__atlassian__getJiraIssue', 'mcp__atlassian__searchJiraIssuesUsingJql'];
-    const denied = ['mcp__jira__jira_add_comment', 'mcp__jira__jira_update_issue', 'mcp__jira__jira_transition_issue', 'mcp__jira__jira_create_issue', 'mcp__jira__jira_delete_issue', 'mcp__jira__jira_get_transitions', 'mcp__jira__jira_download_attachments', 'mcp__slack__slack_read_thread', 'Bash', 'Read', 'Write', 'mcp__atlassian__editJiraIssue'];
-    expect(allowed.filter((tool) => !jiraReadVerdict(tool).allow)).toEqual([]);
-    expect(denied.filter((tool) => jiraReadVerdict(tool).allow)).toEqual([]);
+  it('allows Jira, Confluence and Google Drive reads only', () => {
+    const allowed = [
+      'mcp__jira__jira_get_issue',
+      'mcp__jira__jira_search',
+      'mcp__jira__jira_get_project_issues',
+      'mcp__mcp-atlassian__jira_get_issue',
+      'mcp__atlassian__getJiraIssue',
+      'mcp__atlassian__searchJiraIssuesUsingJql',
+      'mcp__jira__confluence_get_page',
+      'mcp__jira__confluence_search',
+      'mcp__atlassian__getConfluencePage',
+      'mcp__calendar__drive_read_file',
+      'mcp__calendar__drive_get_file',
+      'mcp__calendar__drive_search',
+    ];
+    const denied = [
+      'mcp__jira__jira_add_comment',
+      'mcp__jira__jira_update_issue',
+      'mcp__jira__jira_transition_issue',
+      'mcp__jira__jira_create_issue',
+      'mcp__jira__jira_delete_issue',
+      'mcp__jira__jira_get_transitions',
+      'mcp__jira__jira_download_attachments',
+      'mcp__jira__confluence_create_page',
+      'mcp__jira__confluence_update_page',
+      'mcp__jira__confluence_add_comment',
+      'mcp__jira__confluence_add_label',
+      'mcp__calendar__create_event',
+      'mcp__calendar__update_event',
+      'mcp__calendar__get_agenda',
+      'mcp__calendar__respond_to_event',
+      'mcp__claude_ai_Google_Drive__read_file_content',
+      'mcp__claude_ai_Google_Drive__update_file',
+      'mcp__claude_ai_Gmail__search_threads',
+      'mcp__jira__drive_read_file',
+      'mcp__slack__slack_read_thread',
+      'Bash',
+      'Read',
+      'Write',
+      'mcp__atlassian__editJiraIssue',
+    ];
+    expect(allowed.filter((tool) => !sourceReadVerdict(tool).allow)).toEqual([]);
+    expect(denied.filter((tool) => sourceReadVerdict(tool).allow)).toEqual([]);
     expect(isJiraServer('Atlassian')).toBe(true);
+    expect(isDriveServer('calendar')).toBe(true);
+  });
+
+  it('reads only a source Claude Code saved for being too long', () => {
+    const base = '/home/me/.claude';
+    expect(isSpilledResult('/home/me/.claude/projects/-tmp-x/0f3a/tool-results/mcp-calendar-drive_read_file-1.txt', base)).toBe(true);
+    expect(isSpilledResult('/home/me/.claude/projects/-tmp-x/0f3a/tool-results/../../../../notes.txt', base)).toBe(false);
+    expect(isSpilledResult('/home/me/.claude/projects/-tmp-x/0f3a/notes.md', base)).toBe(false);
+    expect(isSpilledResult('/home/me/Documents/plan.md', base)).toBe(false);
+    expect(isSpilledResult('projects/x/tool-results/a.txt', base)).toBe(false);
+    expect(isSpilledResult(undefined, base)).toBe(false);
+    expect(sourceReadVerdict('Read', { file_path: '/tmp/x.txt' }).allow).toBe(false);
   });
 
   it('keeps only the Markdown: no fence, nothing too short, never past the goal’s cap', () => {

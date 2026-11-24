@@ -57,7 +57,7 @@ const Header = ({ item, onEdit }: { item: InitiativeView; onEdit: () => void }) 
 };
 
 const Facts = ({ item }: { item: InitiativeView }) => {
-  const facts = [item.epics.length ? `Epics: ${item.epics.join(', ')}` : '', item.docs.length ? `${item.docs.length} ${item.docs.length === 1 ? 'doc' : 'docs'}` : ''].filter(Boolean);
+  const facts = item.epics.length ? [`Epics: ${item.epics.join(', ')}`] : [];
   if (!facts.length) return null;
   return (
     <div className={s.facts}>
