@@ -68,33 +68,42 @@ export function EnvAgentGroups({ projectId }: { projectId: string }) {
 }
 
 /**
- * Whether the database your Claude's views would use here answers: the same lookup they make
- * (DATABASE_URL and the like, or Supabase's variables), so a pass here works for them too.
+ * Whether the databases your Claude's views would use here answer: the same lookup they make
+ * (DATABASE_URL and the like, or Supabase's variables; a BigQuery service account's key), so a pass
+ * here works for them too.
  */
 function DatabaseTest({ projectId }: { projectId: string }) {
   const api = useApi();
-  const [result, setResult] = useState<{ ok: true; from: string } | { ok: false; message: string } | 'testing' | undefined>(undefined);
-  const test = (): void => {
-    setResult('testing');
-    api.env.testDatabase(projectId || undefined).then(setResult, (err: unknown) => setResult({ ok: false, message: envErrorText(err) }));
-  };
   return (
     <Group title="Database">
-      <Row
+      <ConnectionTest
         label="Postgres for your agent’s views"
-        detail={
-          result === undefined || result === 'testing'
-            ? 'Uses DATABASE_URL (or POSTGRES_URL…), or a Supabase project’s URL and SUPABASE_DB_PASSWORD, from here or the project’s .env.'
-            : result.ok
-              ? `Connected, using ${result.from}.`
-              : result.message
-        }
-      >
-        <Button icon={result !== undefined && result !== 'testing' && result.ok ? 'check' : undefined} disabled={result === 'testing'} onClick={test}>
-          {result === 'testing' ? 'Testing…' : 'Test Connection'}
-        </Button>
-      </Row>
+        idle="Uses DATABASE_URL (or POSTGRES_URL…), or a Supabase project’s URL and SUPABASE_DB_PASSWORD, from here or the project’s .env."
+        test={() => api.env.testDatabase(projectId || undefined)}
+      />
+      <ConnectionTest
+        label="BigQuery for your agent’s views"
+        idle="Uses a service account’s key JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON (or BIGQUERY_CREDENTIALS), from here or the project’s .env. Queries only read, and bill at most 1 GB unless a view says more."
+        test={() => api.env.testBigquery(projectId || undefined)}
+      />
     </Group>
+  );
+}
+
+type TestResult = { ok: true; from: string } | { ok: false; message: string };
+
+function ConnectionTest({ label, idle, test }: { label: string; idle: string; test: () => Promise<TestResult> }) {
+  const [result, setResult] = useState<TestResult | 'testing' | undefined>(undefined);
+  const run = (): void => {
+    setResult('testing');
+    test().then(setResult, (err: unknown) => setResult({ ok: false, message: envErrorText(err) }));
+  };
+  return (
+    <Row label={label} detail={result === undefined || result === 'testing' ? idle : result.ok ? `Connected, using ${result.from}.` : result.message}>
+      <Button icon={result !== undefined && result !== 'testing' && result.ok ? 'check' : undefined} disabled={result === 'testing'} onClick={run}>
+        {result === 'testing' ? 'Testing…' : 'Test Connection'}
+      </Button>
+    </Row>
   );
 }
 

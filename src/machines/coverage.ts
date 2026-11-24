@@ -259,6 +259,7 @@ export const MACHINE: Record<Method, MachineSide> = {
   'env.set': 'drive',
   'env.claudeDotenv': 'drive',
   'env.testDatabase': 'drive',
+  'env.testBigquery': 'drive',
   'env.importDotenv': 'drive',
   'env.newKeysBack': 'drive',
   'env.worktree': 'drive',

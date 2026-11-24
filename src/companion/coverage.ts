@@ -255,6 +255,7 @@ export const PHONE: Record<Method, Side> = {
   'env.set': 'mac',
   'env.claudeDotenv': 'mac',
   'env.testDatabase': 'mac',
+  'env.testBigquery': 'mac',
   'env.importDotenv': 'mac',
   'env.newKeysBack': 'mac',
   'env.worktree': 'mac',

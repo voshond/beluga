@@ -230,6 +230,7 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'env.set': { refused: ENV_LIST },
   'env.claudeDotenv': { refused: SECRET_VALUES },
   'env.testDatabase': 'gated',
+  'env.testBigquery': 'gated',
   'env.importDotenv': 'gated',
   'env.newKeysBack': 'gated',
   'env.worktree': { refused: SECRET_VALUES },

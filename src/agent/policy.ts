@@ -675,7 +675,7 @@ function decideShow(input: Record<string, unknown>, ctx: PolicyContext): Decisio
   const source = parsed.data;
   if (source.kind === 'command') return mentionsSecret(source.command) ? 'deny' : ctx.askOnly && !isReadOnlyCommand(source.command) ? 'deny' : 'ask';
   if (source.kind === 'http') return Object.values(source.headers ?? {}).some((v) => /\$\{?[A-Za-z_]/.test(v)) ? 'ask' : 'allow';
-  if (source.kind === 'postgres') return 'allow';
+  if (source.kind === 'postgres' || source.kind === 'bigquery') return 'allow';
   const target = resolveTarget(ctx.cwd, expandHome(source.path));
   if (secretAt(target)) return 'deny';
   if (ctx.roots.some((r) => within(r, target))) return 'allow';

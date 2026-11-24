@@ -517,6 +517,7 @@ export const API = {
   'env.claudeDotenv': args(opt(id), bool),
   // Connect to the database a view would use there (a project, or none: yours) → { ok, from } or { ok: false, message } (never a value).
   'env.testDatabase': args(opt(id)),
+  'env.testBigquery': args(opt(id)),
   // Copy a project's main folder .env values into its own variables (kept even if the file goes) → how many were added.
   'env.importDotenv': args(id),
   // Keys a worktree adds go into the project's main .env on their own (on by default).

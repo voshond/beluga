@@ -27,12 +27,13 @@ import { isSecretPath } from '../shares.js';
 import { loadEnvFile } from '../env-vars.js';
 import { type FoundDatabase, databaseUrl, databaseUrlOf } from './database-url.js';
 import { PSQL_MISSING, type Psql, connectPostgres } from './postgres-connect.js';
+import { TOTAL_COLUMN, bigqueryPageSql, bigqueryRun, bqLiteral, queryBigquery } from './bigquery.js';
 import { belugaHome } from '../home.js';
 import { keep, recall } from './kept.js';
 
 /**
- * Running a view's source (shared/view-spec.ts) on this computer: a file, a folder, a SQLite or
- * Postgres query, a web address or a command, turned into rows. Databases and commands that say
+ * Running a view's source (shared/view-spec.ts) on this computer: a file, a folder, a SQLite,
+ * Postgres or BigQuery query, a web address or a command, turned into rows. Databases and commands that say
  * where a page goes ({{limit}}, {{offset}}, {{search}}…) sort, search and page at the source;
  * everything else is fetched whole (up to MAX_SOURCE_ROWS), kept a little while, and paged here.
  * Credential files are never read, and a command runs only once its owner said yes (Claude's
@@ -195,7 +196,7 @@ function keysOfFetch(named: Source, source: Source, query: ViewQuery, opts: Fetc
   // Grouped by the source as the view names it (before its controls fill it in), so it can be forgotten with its view.
   const group = sourceKey(named);
   // Where it ran only matters to a source that doesn't say (the show tool makes paths whole, so its first fetch is the window's too).
-  const place = ('path' in source && !path.isAbsolute(source.path)) || ((source.kind === 'command' || source.kind === 'postgres') && !source.cwd) ? (opts.cwd ?? '') : '';
+  const place = ('path' in source && !path.isAbsolute(source.path)) || ((source.kind === 'command' || source.kind === 'postgres' || source.kind === 'bigquery') && !source.cwd) ? (opts.cwd ?? '') : '';
   const whole = `${sourceKey(source)}\u0000${place}\u0000${opts.text ? 't' : 'r'}`;
   if (opts.text || !pagesItself(source)) return { group, whole };
   const { params: _p, ...q } = query;
@@ -233,6 +234,10 @@ async function fetchWhole(source: Source, opts: FetchOptions): Promise<Whole> {
     }
     case 'postgres': {
       const rows = await postgres(source, `SELECT * FROM (${bare(source.query)}) s LIMIT ${MAX_SOURCE_ROWS + 1}`, timeout, opts.cwd);
+      return { ...capped(rows), at };
+    }
+    case 'bigquery': {
+      const rows = await bigquery(source, `SELECT * FROM (${bare(source.query)}) s LIMIT ${MAX_SOURCE_ROWS + 1}`, timeout, MAX_SOURCE_ROWS + 1, opts.cwd);
       return { ...capped(rows), at };
     }
     case 'http': {
@@ -345,7 +350,7 @@ const quoteIdent = (k: string): string => `"${k.replace(/"/g, '""')}"`;
 const quoteText = (s: string): string => `'${s.replace(/'/g, "''")}'`;
 
 /** A database, or a command or address that says where a page goes ({{limit}}, {{offset}}…). */
-const pagesItself = (source: Source): boolean => source.kind === 'sqlite' || source.kind === 'postgres' || (source.kind === 'command' && TEMPLATE.test(source.command)) || (source.kind === 'http' && TEMPLATE.test(source.url + (source.body ?? '')));
+const pagesItself = (source: Source): boolean => source.kind === 'sqlite' || source.kind === 'postgres' || source.kind === 'bigquery' || (source.kind === 'command' && TEMPLATE.test(source.command)) || (source.kind === 'http' && TEMPLATE.test(source.url + (source.body ?? '')));
 
 /** A database (or a command or address that says where a page goes) pages, sorts and searches itself. */
 async function pushedDown(source: Source, q: ViewQuery, opts: FetchOptions): Promise<ViewPage | undefined> {
@@ -372,6 +377,12 @@ async function pushedDown(source: Source, q: ViewQuery, opts: FetchOptions): Pro
     const kept = q.top ? `SELECT * FROM (${sel} LIMIT ${q.top}) s${order}` : sel;
     const [rows, count] = await Promise.all([postgres(source, `${kept} LIMIT ${q.limit} OFFSET ${q.offset}`, timeout, opts.cwd), postgres(source, `SELECT count(*) AS n FROM (${kept}) c`, timeout, opts.cwd)]);
     const total = Number(count[0]?.n ?? rows.length);
+    return { rows, columns: keysOf(rows), total, hasMore: q.offset + rows.length < total, at, pushedDown: true };
+  }
+  if (source.kind === 'bigquery') {
+    const found = await bigquery(source, bigqueryPageSql(bare(source.query), q), timeout, q.limit, opts.cwd);
+    const total = Number(found[0]?.[TOTAL_COLUMN] ?? 0);
+    const rows = found.map(({ [TOTAL_COLUMN]: _n, ...row }) => row);
     return { rows, columns: keysOf(rows), total, hasMore: q.offset + rows.length < total, at, pushedDown: true };
   }
   if (source.kind === 'command' && TEMPLATE.test(source.command)) {
@@ -448,6 +459,14 @@ async function postgres(source: Extract<Source, { kind: 'postgres' }>, sql: stri
   return queryPostgres(found, sql, timeout);
 }
 
+async function bigquery(source: Extract<Source, { kind: 'bigquery' }>, sql: string, timeout: number, max: number, cwd: string | undefined): Promise<Row[]> {
+  // The key is found as Postgres's connection string is: your variables, the project's, its .env.
+  const place = viewEnv.database(source.cwd ?? cwd);
+  const run = bigqueryRun(source, { ...process.env, ...place.vars });
+  if ('problem' in run) throw new Error(`${run.problem}. Looked in ${place.where}.`);
+  return queryBigquery(run, sql, timeout, max);
+}
+
 /**
  * Settings › Environment's Test connection: the database a view there would use, asked SELECT 1.
  * → which variables it came from, or what went wrong (never a value).
@@ -518,7 +537,7 @@ export function bind(source: Source, params: Readonly<Record<string, string | nu
     t.replace(SLOT, (m, name: string) => {
       if (RESERVED.has(name)) return m;
       const v = params?.[name];
-      return v === undefined || v === '' ? (quote === shellQuote ? "''" : quote === sqlLiteral ? 'NULL' : '') : quote(String(v));
+      return v === undefined || v === '' ? (quote === shellQuote ? "''" : quote === sqlLiteral || quote === bqLiteral ? 'NULL' : '') : quote(String(v));
     });
   if (!/\{\{\s*[A-Za-z_]/.test(JSON.stringify(source))) return source;
   switch (source.kind) {
@@ -529,6 +548,8 @@ export function bind(source: Source, params: Readonly<Record<string, string | nu
     case 'sqlite':
     case 'postgres':
       return { ...source, query: put(source.query, sqlLiteral) };
+    case 'bigquery':
+      return { ...source, query: put(source.query, bqLiteral) };
     case 'file':
     case 'folder':
       return { ...source, path: put(source.path, (v) => v.replace(/\.\.\//g, '')) } as Source;

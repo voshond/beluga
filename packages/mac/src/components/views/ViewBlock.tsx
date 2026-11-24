@@ -322,7 +322,7 @@ function Foot({ view, data }: { view: View; data: ViewData }) {
     <div className={v.foot}>
       <Icon name={kind === 'http' ? 'globe' : kind === 'folder' ? 'folder' : kind === 'file' ? 'file' : kind === 'command' ? 'terminal' : 'grid'} size={11} />
       <span className={v.sourceText} title={describeSource(data.source)}>
-        {kind === 'sqlite' ? 'SQLite' : kind === 'postgres' ? 'Postgres' : kind === 'http' ? 'Web' : kind === 'command' ? 'Command' : kind === 'folder' ? 'Folder' : 'File'} · {describeSource(data.source)}
+        {kind === 'sqlite' ? 'SQLite' : kind === 'postgres' ? 'Postgres' : kind === 'bigquery' ? 'BigQuery' : kind === 'http' ? 'Web' : kind === 'command' ? 'Command' : kind === 'folder' ? 'Folder' : 'File'} · {describeSource(data.source)}
       </span>
       {data.mode === 'snapshot' ? <span className={v.footNote}>Live on its owner’s computer</span> : data.source.refresh ? <span className={v.footNote}>Every {data.source.refresh}s</span> : null}
     </div>
