@@ -8,6 +8,8 @@ import { Composer } from '../chat/Composer.js';
 import { Icon } from '../components/Icon.js';
 import { type ActionItem, ActionsDropdown } from '../components/SpecMenu.js';
 import { Empty, IconButton, Tip } from '../components/ui.js';
+import { ResizeHandle } from '../layout/panel/ResizeHandle.js';
+import { useDockWidth } from '../layout/panel/use-dock-width.js';
 import { useActions } from '../lib/actions.js';
 import { useApp } from '../lib/beluga.js';
 import { openSheet } from '../lib/sheets.js';
@@ -19,8 +21,6 @@ import chat from '../sentinel/sentinel.module.css';
 import home from '../sentinel/home.module.css';
 import s from './initiatives.module.css';
 
-const PANEL_WIDTH = 400;
-
 const STARTERS: readonly string[] = ['Where does this stand?', 'What should I decide this week?', 'Who is blocked, and on what?'];
 
 export const InitiativeChat = ({ item }: { item: InitiativeView }) => {
@@ -29,6 +29,7 @@ export const InitiativeChat = ({ item }: { item: InitiativeView }) => {
   const id = initiativeChatOf(channel)?.chat ?? item.chats.active;
   const actions = useActions();
   const a = useInitiativeActions();
+  const dock = useDockWidth('initiatives.chat.width', 400);
   const titles = useApp((st) => JSON.stringify(item.chats.chats.map((c) => initiativeChatTitle(c.channel, st.log))));
   const names = useMemo(() => JSON.parse(titles) as string[], [titles]);
   const busy = useApp((st) => activityOf(st.log, channel).running);
@@ -64,8 +65,9 @@ export const InitiativeChat = ({ item }: { item: InitiativeView }) => {
     </div>
   );
   return (
-    <aside className={home.panel} style={{ width: PANEL_WIDTH }} aria-label={`${item.name} chat`}>
-      <div className={home.panelInner} style={{ width: PANEL_WIDTH }}>
+    <aside ref={dock.ref} className={home.panel} style={{ width: dock.width }} aria-label={`${item.name} chat`}>
+      <ResizeHandle label={`Resize ${item.name} chat`} className={home.panelEdge} {...dock.handle} />
+      <div className={home.panelInner} style={{ width: dock.width }}>
         <div className={chat.chatTab} data-initiative-chat={id}>
           <div className={chat.chatBar}>
             <PickMenu<string> label="Chats" choices={item.chats.chats.map((c, i) => ({ value: c.id, label: names[i] ?? 'New chat', mark: <Icon name={c.id === CHECK_IN_CHAT ? 'calendar' : 'chat'} size={13} /> }))} chosen={[id]} onPick={handleOpen} actions={[{ label: 'New Chat', icon: 'plus', onSelect: () => void handleNew() }]}>
