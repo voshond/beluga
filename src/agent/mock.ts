@@ -959,6 +959,11 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
       await new Promise((r) => setTimeout(r, Math.max(watch, (ctx.look ? 6000 : 1500) * pace)));
       return mockDraft(text, ctx);
     },
+    refineGoal: async (req) => {
+      await new Promise((r) => setTimeout(r, 2500 * pace));
+      const first = req.goal.trim().split('\n').find((l) => l.trim()) ?? `Ship ${req.name || 'it'}.`;
+      return `${first}\n\n## Background\n\n${req.epics.length ? `Tracked in ${req.epics.join(', ')}.` : 'No epic is linked yet.'}\n\n## Scope\n\n- In: what the epic lists today\n- Out: anything not on it\n\n## Acceptance\n\n- Every ticket under the epic is done\n- It is live for every market\n\n## Open questions\n\n- Who signs off the launch?`;
+    },
     describeProject: async (_dir, project) => {
       await new Promise((r) => setTimeout(r, 4000 * pace));
       return mockAbout(project);

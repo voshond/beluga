@@ -7,6 +7,13 @@ import {
   NO_INITIATIVES,
   type InitiativeView,
   SuggestionsSchema,
+  TicketsSchema,
+  linkOf,
+  meetingKindOf,
+  sameKeys,
+  slackKindOf,
+  sortedTickets,
+  ticketGroups,
   activeInitiativeChat,
   initiativeChatChannel,
   initiativeChatOf,
@@ -31,10 +38,10 @@ const item = (slug: string, name = slug): InitiativeView => ({
   goal: '',
   status: 'active',
   epics: [],
-  slackChannels: [],
+  slack: [],
   docs: [],
   repos: [],
-  calendarMatch: '',
+  meetings: [],
   people: [],
   suggestions: [],
   openDecisions: [],
@@ -110,6 +117,84 @@ describe('initiative schemas', () => {
 
   it('says an approved suggestion as a message', () => {
     expect(suggestionMessage({ id: 3, text: 'Comment on SHOP-150' })).toBe('Do suggestion 3: Comment on SHOP-150');
+  });
+});
+
+describe('what an initiative follows', () => {
+  it('takes Slack conversations and meetings as lists, each with an optional label', () => {
+    const config = InitiativeConfigSchema.parse({
+      name: 'A',
+      slack: [{ ref: '#checkout' }, { ref: 'https://acme.slack.com/archives/C01ABC/p1763990000000100', label: 'Vendor thread' }],
+      meetings: [{ match: 'Checkout' }, { match: 'https://calendar.google.com/calendar/event?eid=abc', label: 'Go/no-go' }],
+    });
+    expect(config.slack).toEqual([{ ref: '#checkout' }, { ref: 'https://acme.slack.com/archives/C01ABC/p1763990000000100', label: 'Vendor thread' }]);
+    expect(config.meetings).toHaveLength(2);
+    expect(InitiativeConfigSchema.safeParse({ name: 'A', slack: [{ ref: `https://x.slack.com/${'a'.repeat(500)}` }] }).success).toBe(false);
+    expect(InitiativeDraftSchema.parse({ name: 'A', slack: [{ ref: '#a' }], meetings: [{ match: 'Sync' }] })).toMatchObject({ slack: [{ ref: '#a' }], meetings: [{ match: 'Sync' }] });
+  });
+
+  it('migrates an old file’s slackChannels and calendarMatch on read, and writes the new shape', () => {
+    const old = InitiativeConfigSchema.parse({ name: 'A', goal: 'g', slackChannels: ['#checkout', ' #pay '], calendarMatch: 'Checkout', people: [], docs: [], repos: [] });
+    expect(old.slack).toEqual([{ ref: '#checkout' }, { ref: '#pay' }]);
+    expect(old.meetings).toEqual([{ match: 'Checkout' }]);
+    expect(Object.keys(old)).not.toContain('slackChannels');
+    expect(Object.keys(old)).not.toContain('calendarMatch');
+    expect(InitiativeConfigSchema.parse(JSON.parse(JSON.stringify(old)))).toEqual(old);
+    expect(InitiativeConfigSchema.parse({ name: 'A', slackChannels: ['#old'], slack: [], calendarMatch: '' })).toMatchObject({ slack: [], meetings: [] });
+  });
+
+  it('keeps a goal of up to 12000 characters', () => {
+    expect(InitiativeConfigSchema.parse({ name: 'A', goal: 'x'.repeat(12_000) }).goal).toHaveLength(12_000);
+    expect(InitiativeConfigSchema.safeParse({ name: 'A', goal: 'x'.repeat(12_001) }).success).toBe(false);
+  });
+
+  it('tells a channel from a thread, and title words from an event link', () => {
+    expect(slackKindOf('#checkout')).toBe('channel');
+    expect(slackKindOf('https://acme.slack.com/archives/C01ABC/p1763990000000100')).toBe('thread');
+    expect(slackKindOf('https://acme.slack.com/archives/D01ABC')).toBe('conversation');
+    expect(linkOf('#checkout')).toBeUndefined();
+    expect(meetingKindOf('Checkout sync')).toBe('title');
+    expect(meetingKindOf('https://calendar.google.com/calendar/event?eid=abc')).toBe('event');
+  });
+});
+
+describe('an epic’s tickets', () => {
+  const file = {
+    at: '2026-11-24T08:00:00Z',
+    tickets: [
+      { key: 'SHOP-2', summary: 'Done one', status: 'Done', statusCategory: 'done', epic: 'SHOP-120', updated: '2026-11-20T10:00:00Z', prs: [{ url: 'https://github.com/a/b/pull/7', number: 7, state: 'MERGED', repo: 'a/b' }] },
+      { key: 'SHOP-3', summary: 'Open one', status: 'To Do', statusCategory: 'new', assignee: null, epic: 'SHOP-121', updated: '2026-11-22T10:00:00Z' },
+      { key: 'SHOP-1', url: 'https://x.atlassian.net/browse/SHOP-1', summary: 'Moving', status: 'In Review', statusCategory: 'In Progress', assignee: 'Ana', epic: 'SHOP-120', updated: '2026-11-23T10:00:00Z', prs: [{ url: 'https://github.com/a/b/pull/9', state: 'draft' }] },
+    ],
+  };
+
+  it('reads tickets.json as the agent writes it, forgiving how it spells a state', () => {
+    const read = TicketsSchema.parse(file);
+    expect(read.tickets.map((t) => t.statusCategory)).toEqual(['done', 'todo', 'inProgress']);
+    expect(read.tickets[0]!.prs[0]).toMatchObject({ number: 7, state: 'merged', repo: 'a/b' });
+    expect(read.tickets[1]).toMatchObject({ prs: [], assignee: undefined });
+    expect(read.tickets[2]!.prs[0]).toMatchObject({ state: 'draft' });
+    expect(TicketsSchema.safeParse({ tickets: [] }).success).toBe(false);
+    expect(TicketsSchema.safeParse({ at: 'now', tickets: [{ summary: 'no key' }] }).success).toBe(false);
+  });
+
+  it('sorts open tickets first, and groups by epic when there are several', () => {
+    const { tickets } = TicketsSchema.parse(file);
+    expect(sortedTickets(tickets).map((t) => t.key)).toEqual(['SHOP-1', 'SHOP-3', 'SHOP-2']);
+    expect(ticketGroups(tickets, ['SHOP-120'])).toHaveLength(1);
+    expect(ticketGroups(tickets, ['SHOP-120'])[0]!.epic).toBeUndefined();
+    expect(ticketGroups(tickets, ['SHOP-120', 'SHOP-121']).map((g) => [g.epic, g.tickets.map((t) => t.key)])).toEqual([
+      ['SHOP-120', ['SHOP-1', 'SHOP-2']],
+      ['SHOP-121', ['SHOP-3']],
+    ]);
+    expect(ticketGroups(tickets, ['SHOP-120', 'SHOP-999']).map((g) => g.epic)).toEqual(['SHOP-120', undefined]);
+    expect(ticketGroups([], ['SHOP-120'])).toEqual([]);
+  });
+
+  it('knows when the epics changed', () => {
+    expect(sameKeys(['A-1', 'B-2'], ['B-2', 'A-1'])).toBe(true);
+    expect(sameKeys(['A-1'], ['A-1', 'B-2'])).toBe(false);
+    expect(sameKeys(['A-1'], ['B-2'])).toBe(false);
   });
 });
 

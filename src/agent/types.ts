@@ -665,6 +665,8 @@ export interface AgentBackend {
   reviewPr?(input: import('./pr-reviewer.js').PrReviewInput): Promise<import('./pr-reviewer.js').PrReview | undefined>;
   /** Full Autopilot's stand-in (BLG-981): answer for you what your agent asked (one turn, no tools) → its reply (JSON). */
   standIn?(req: import('./stand-in.js').StandInRequest): Promise<string>;
+  /** An initiative's goal shaped into Markdown from what was typed and its Jira epics, read through your own Jira MCP (read-only; BLG-116). */
+  refineGoal?(req: import('./goal-refiner.js').GoalRefineRequest): Promise<string | undefined>;
   /** Models this Claude Code offers, for the model picker. */
   listModels?(): Promise<ReadonlyArray<{ value: string; label: string; description: string; efforts?: readonly string[] }> | undefined>;
   /**

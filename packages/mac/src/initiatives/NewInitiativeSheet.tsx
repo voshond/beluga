@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { EPIC_KEY, type InitiativeView } from '@beluga/core/initiatives/model.js';
+import { EPIC_KEY, GOAL_MAX, type InitiativeView } from '@beluga/core/initiatives/model.js';
 import { Field, FormSheet, TextArea, TextInput } from '../components/FormSheet.js';
 import { Icon } from '../components/Icon.js';
 import { Button } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
 import { PickMenu } from '../tasks/PickMenu.js';
-import { epicKeys, splitList } from './initiatives-model.js';
+import { GoalDraft, RefineButton, useGoalRefine } from './GoalRefine.js';
+import { type RefRow, epicKeys, meetingEntries, meetingRows, slackEntries, slackRows, splitList } from './initiatives-model.js';
+import { RefList } from './RefList.js';
 import { useInitiativeActions } from './use-initiatives.js';
+import s from './initiatives.module.css';
 
 type SheetProps = {
   readonly editing?: InitiativeView;
@@ -20,12 +23,15 @@ export const NewInitiativeSheet = ({ editing, close }: SheetProps) => {
   const [name, setName] = useState(editing?.name ?? '');
   const [goal, setGoal] = useState(editing?.goal ?? '');
   const [epics, setEpics] = useState(editing?.epics.join(', ') ?? '');
-  const [slack, setSlack] = useState(editing?.slackChannels.join(', ') ?? '');
+  const [slack, setSlack] = useState<readonly RefRow[]>(() => slackRows(editing?.slack ?? []));
   const [docs, setDocs] = useState(editing?.docs.join('\n') ?? '');
-  const [calendar, setCalendar] = useState(editing?.calendarMatch ?? '');
+  const [meetings, setMeetings] = useState<readonly RefRow[]>(() => meetingRows(editing?.meetings ?? []));
   const [repos, setRepos] = useState<readonly string[]>(editing?.repos ?? []);
   const badEpics = epicKeys(epics).filter((key) => !EPIC_KEY.test(key));
-  const fields = { name: name.trim(), goal: goal.trim(), epics: epicKeys(epics), slackChannels: splitList(slack), docs: splitList(docs), calendarMatch: calendar.trim(), repos: [...repos] };
+  const fields = { name: name.trim(), goal: goal.trim(), epics: epicKeys(epics), slack: slackEntries(slack), docs: splitList(docs), meetings: meetingEntries(meetings), repos: [...repos] };
+  const goodEpics = fields.epics.filter((key) => EPIC_KEY.test(key));
+  const refine = useGoalRefine({ name: fields.name, goal: fields.goal, epics: goodEpics });
+  const canRefine = Boolean(fields.name || fields.goal || goodEpics.length);
 
   const handlePickRepo = (repo: string): void => setRepos((was) => (was.includes(repo) ? was.filter((r) => r !== repo) : [...was, repo]));
 
@@ -56,20 +62,26 @@ export const NewInitiativeSheet = ({ editing, close }: SheetProps) => {
       <Field label="Name" htmlFor="initiative-name">
         <TextInput id="initiative-name" value={name} onChange={setName} maxLength={120} placeholder="Checkout v2" data-autofocus />
       </Field>
-      <Field label="Goal" htmlFor="initiative-goal" hint="What shipped looks like, in a sentence or two">
-        <TextArea id="initiative-goal" value={goal} onChange={setGoal} rows={3} maxLength={4000} placeholder="Ship the one-page checkout to every market before the holiday freeze" />
+      <Field label="Goal" htmlFor="initiative-goal" hint="What shipped looks like. Markdown works; your agent can shape it from a few words and the epic.">
+        <div className={s.stack}>
+          <TextArea id="initiative-goal" value={goal} onChange={setGoal} rows={goal.length > 300 ? 9 : 3} maxLength={GOAL_MAX} placeholder="Ship the one-page checkout to every market before the holiday freeze" />
+          <div>
+            <RefineButton refine={refine} disabled={!canRefine} />
+          </div>
+          <GoalDraft refine={refine} onUse={setGoal} />
+        </div>
       </Field>
       <Field label="Jira epics" htmlFor="initiative-epics" hint="Keys, separated by commas: progress comes from their tickets" error={badEpics.length ? `Not an epic key: ${badEpics.join(', ')}` : undefined}>
         <TextInput id="initiative-epics" value={epics} onChange={setEpics} placeholder="SHOP-120, SHOP-121" />
       </Field>
-      <Field label="Slack channels" htmlFor="initiative-slack">
-        <TextInput id="initiative-slack" value={slack} onChange={setSlack} placeholder="#checkout-v2" />
+      <Field label="Slack" hint="A #channel, or the link of a thread or a DM. Paste several links at once for a row each.">
+        <RefList name="Slack conversation" rows={slack} onChange={setSlack} placeholder="#checkout-v2 or a Slack link" addLabel="Add Conversation" />
       </Field>
       <Field label="Docs" htmlFor="initiative-docs" hint="One link per line">
         <TextArea id="initiative-docs" value={docs} onChange={setDocs} rows={2} placeholder="https://docs.example.com/checkout-v2" />
       </Field>
-      <Field label="Meetings" htmlFor="initiative-calendar" hint="Calendar events whose title has these words">
-        <TextInput id="initiative-calendar" value={calendar} onChange={setCalendar} maxLength={200} placeholder="Checkout" />
+      <Field label="Meetings" hint="Words a meeting’s title has, or one event’s link (a recurring one counts as a whole)">
+        <RefList name="Meeting" rows={meetings} onChange={setMeetings} placeholder="Checkout sync, or an event link" addLabel="Add Meeting" />
       </Field>
       <Field label="Repos" hint={repos.length ? repos.join(', ') : 'Your projects where its code work happens'}>
         <PickMenu<string> label="Repos" multiple choices={projects.map((p) => ({ value: p, label: p, mark: <Icon name="folder" size={13} /> }))} chosen={repos} onPick={handlePickRepo}>

@@ -416,6 +416,8 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'initiatives.setRepo': INITIATIVES,
   'initiatives.setCheckIn': INITIATIVES,
   'initiatives.checkInNow': INITIATIVES,
+  'initiatives.refreshTickets': INITIATIVES,
+  'initiatives.refineGoal': INITIATIVES,
   'initiatives.chatNew': INITIATIVES,
   'initiatives.chatOpen': INITIATIVES,
   'initiatives.chatDelete': INITIATIVES,

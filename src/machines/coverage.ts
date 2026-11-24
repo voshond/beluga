@@ -485,6 +485,8 @@ export const MACHINE: Record<Method, MachineSide> = {
   'initiatives.setRepo': 'drive',
   'initiatives.setCheckIn': 'drive',
   'initiatives.checkInNow': 'drive',
+  'initiatives.refreshTickets': 'drive',
+  'initiatives.refineGoal': 'drive',
   'initiatives.chatNew': 'drive',
   'initiatives.chatOpen': 'drive',
   'initiatives.chatDelete': 'drive',

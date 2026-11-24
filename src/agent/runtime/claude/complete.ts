@@ -1,6 +1,7 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { CompletionError, type CompletionRequest } from '../types.js';
 import { PromptQueue } from './live-run.js';
+import { ownerMcpServers } from './owner-mcp.js';
 import { sdkServers } from './sdk-mount.js';
 import { claudeExecutable } from '../../claude-code.js';
 
@@ -21,6 +22,9 @@ export async function claudeComplete(req: CompletionRequest, claudePath?: string
     prompt.close();
   }
   const vet = req.vetTool;
+  const pick = vet ? req.ownerMcp : undefined;
+  const own = pick ? Object.fromEntries(Object.entries(ownerMcpServers(req.cwd)).filter(([name]) => pick(name))) : {};
+  const mounted = req.suites || pick ? { ...own, ...(req.suites ? sdkServers(req.suites) : {}) } : undefined;
   try {
     const q = query({
       prompt,
@@ -28,7 +32,7 @@ export async function claudeComplete(req: CompletionRequest, claudePath?: string
         cwd: req.cwd,
         ...(req.model ? { model: req.model } : {}),
         tools: [...(req.tools ?? [])],
-        ...(req.suites ? { mcpServers: sdkServers(req.suites), strictMcpConfig: true } : {}),
+        ...(mounted ? { mcpServers: mounted, strictMcpConfig: true } : {}),
         ...(req.allowedTools ? { allowedTools: [...req.allowedTools] } : {}),
         maxTurns: req.maxTurns ?? 1,
         settingSources: [],

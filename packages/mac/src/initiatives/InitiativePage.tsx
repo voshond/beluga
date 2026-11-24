@@ -6,10 +6,13 @@ import { Button, Empty, IconButton } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
 import { openSheet } from '../lib/sheets.js';
 import { sameDeep } from '../lib/stable.js';
-import { Bullets, ProgressBar, Section, Suggestions } from './InitiativeParts.js';
+import { GoalSection } from './GoalRefine.js';
+import { Follows } from './InitiativeFollows.js';
+import { Bullets, ProgressBar, Suggestions } from './InitiativeParts.js';
 import { CheckInRow, MemoryFiles, Repos } from './InitiativeSettings.js';
 import { InitiativeChat } from './InitiativeChat.js';
 import { NewInitiativeSheet } from './NewInitiativeSheet.js';
+import { TicketsTable } from './TicketsTable.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import home from '../sentinel/home.module.css';
 import s from './initiatives.module.css';
@@ -54,7 +57,7 @@ const Header = ({ item, onEdit }: { item: InitiativeView; onEdit: () => void }) 
 };
 
 const Facts = ({ item }: { item: InitiativeView }) => {
-  const facts = [item.epics.length ? `Epics: ${item.epics.join(', ')}` : '', item.slackChannels.length ? `Slack: ${item.slackChannels.join(', ')}` : '', item.calendarMatch ? `Meetings: “${item.calendarMatch}”` : '', item.docs.length ? `${item.docs.length} ${item.docs.length === 1 ? 'doc' : 'docs'}` : ''].filter(Boolean);
+  const facts = [item.epics.length ? `Epics: ${item.epics.join(', ')}` : '', item.docs.length ? `${item.docs.length} ${item.docs.length === 1 ? 'doc' : 'docs'}` : ''].filter(Boolean);
   if (!facts.length) return null;
   return (
     <div className={s.facts}>
@@ -84,15 +87,17 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
               {item.trouble}
             </div>
           ) : null}
-          <Section title="Goal">
-            <p className={s.lede}>{item.goal || 'Not written down yet: Edit… to add it.'}</p>
+          <GoalSection item={item} />
+          <div className={s.section}>
             <ProgressBar progress={item.progress} />
             <Facts item={item} />
-          </Section>
+          </div>
+          <TicketsTable item={item} />
           <CheckInRow item={item} />
           <Suggestions item={item} />
           <Bullets title="Open decisions" items={item.openDecisions} empty="Nothing open in decisions.md." />
           <Bullets title="Recent" items={item.recent} empty="Nothing in timeline.md yet." />
+          <Follows item={item} />
           <Repos item={item} />
           <MemoryFiles item={item} />
         </div>

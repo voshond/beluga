@@ -39,6 +39,7 @@ export const launchInitiatives = (host: InitiativesHost): (() => void) => {
     selfId: () => session.selfId,
     ask: (prompt, channel) => session.askOwnClaude(prompt, channel, false),
     checkIns: () => checkInsOf(session),
+    refine: (input) => session.refineGoal(input),
     commit: !demo,
   });
   attachInitiatives(session, initiatives);

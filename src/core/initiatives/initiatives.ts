@@ -8,6 +8,8 @@ import { folderOf, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeC
 import {
   CHECK_IN_CHAT,
   FIRST_INITIATIVE_CHAT,
+  type GoalRefine,
+  GoalRefineSchema,
   type InitiativeConfig,
   InitiativeConfigSchema,
   type InitiativeDraft,
@@ -18,10 +20,11 @@ import {
   INITIATIVE_SLUG,
   initiativeChatChannel,
   initiativeChatOf,
+  sameKeys,
   suggestionMessage,
   uniqueSlug,
 } from './model.js';
-import { CHECK_IN_PROMPT, type LinkedRepo, initiativeBrief } from './prompt.js';
+import { CHECK_IN_PROMPT, type LinkedRepo, TICKETS_PROMPT, initiativeBrief } from './prompt.js';
 import { type PushResult, commitFolder, dayOf, ensureRepo, pushIfTracked, unpushedCount } from './repo.js';
 
 export type CheckInHost = {
@@ -39,6 +42,7 @@ export type InitiativesDeps = {
   readonly selfId: () => string;
   readonly ask: (prompt: string, channel: string) => string | undefined;
   readonly checkIns?: () => CheckInHost | undefined;
+  readonly refine?: (input: GoalRefine) => Promise<string | undefined>;
   readonly commit?: boolean;
   readonly now?: () => number;
   readonly claudeDir?: string;
@@ -143,12 +147,13 @@ export class Initiatives {
       goal: config?.goal ?? '',
       status: config?.status ?? 'active',
       epics: config?.epics ?? [],
-      slackChannels: config?.slackChannels ?? [],
+      slack: config?.slack ?? [],
       docs: config?.docs ?? [],
       repos: config?.repos ?? [],
-      calendarMatch: config?.calendarMatch ?? '',
+      meetings: config?.meetings ?? [],
       people: config?.people ?? [],
       ...(folder.progress ? { progress: folder.progress } : {}),
+      ...(folder.tickets ? { tickets: folder.tickets } : {}),
       suggestions: folder.suggestions,
       openDecisions: folder.openDecisions,
       recent: folder.recent,
@@ -214,7 +219,31 @@ export class Initiatives {
     return made.id;
   }
 
-  async create(draft: InitiativeDraft): Promise<{ readonly slug: string }> {
+  private fetchTickets(slug: string): string | undefined {
+    try {
+      return this.deps.ask(TICKETS_PROMPT, initiativeChatChannel(slug, CHECK_IN_CHAT));
+    } catch {
+      return undefined;
+    }
+  }
+
+  refreshTickets(slug: string): { readonly channel: string } {
+    const item = this.need(slug);
+    if (!item.epics.length) throw new Error('Link a Jira epic first: Edit… › Jira epics');
+    if (this.fetchTickets(slug) === undefined) throw new Error('The ticket refresh could not start');
+    return { channel: initiativeChatChannel(slug, CHECK_IN_CHAT) };
+  }
+
+  async refineGoal(input: GoalRefine): Promise<{ readonly goal: string }> {
+    const parsed = GoalRefineSchema.parse(input);
+    if (!parsed.name && !parsed.goal.trim() && !parsed.epics.length) throw new Error('Write a name, a few words on the goal or an epic key first');
+    if (!this.deps.refine) throw new Error('Refining a goal needs an agent on this computer');
+    const goal = await this.deps.refine(parsed).catch(() => undefined);
+    if (!goal) throw new Error('Your agent could not draft a goal just now. Try again, or write it yourself.');
+    return { goal };
+  }
+
+  async create(draft: InitiativeDraft, opts: { readonly quiet?: boolean } = {}): Promise<{ readonly slug: string }> {
     const parsed = InitiativeDraftSchema.parse(draft);
     const slug = uniqueSlug(parsed.name, new Set(listSlugs(this.deps.root)));
     const config = InitiativeConfigSchema.parse({ ...parsed, status: 'active', createdAt: new Date(this.now).toISOString() });
@@ -227,16 +256,19 @@ export class Initiatives {
     }
     await this.commit(slug, `${slug}: created`);
     this.refresh(slug);
+    if (config.epics.length && !opts.quiet) this.fetchTickets(slug);
     return { slug };
   }
 
   async update(slug: string, patch: InitiativePatch): Promise<InitiativeView> {
     this.need(slug);
     const parsed = InitiativePatchSchema.parse(patch);
-    const next = InitiativeConfigSchema.parse({ ...this.config(slug), ...parsed });
+    const was = this.config(slug);
+    const next = InitiativeConfigSchema.parse({ ...was, ...parsed });
     writeConfig(this.deps.root, slug, next);
     await this.commit(slug, `${slug}: updated`);
     this.refresh(slug);
+    if (next.epics.length && !sameKeys(was.epics, next.epics)) this.fetchTickets(slug);
     return this.view(slug);
   }
 
