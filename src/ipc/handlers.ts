@@ -54,6 +54,7 @@ import { FILES_EDIT_HANDLERS } from './files-handlers.js';
 import { COMPANION_HANDLERS } from './companion-handlers.js';
 import { MACHINE_HANDLERS } from './machine-handlers.js';
 import { ASSISTANT_HANDLERS } from './assistant-handlers.js';
+import { INITIATIVES_HANDLERS } from './initiatives-handlers.js';
 import { CHATS_HANDLERS } from './chats-handlers.js';
 import { VOICE_HANDLERS } from './voice-handlers.js';
 import { HONCHO_HANDLERS } from './honcho-handlers.js';
@@ -538,6 +539,7 @@ export const HANDLERS = {
   ...COMPANION_HANDLERS,
   ...MACHINE_HANDLERS,
   ...ASSISTANT_HANDLERS,
+  ...INITIATIVES_HANDLERS,
   ...CHATS_HANDLERS,
   ...VOICE_HANDLERS,
   ...HONCHO_HANDLERS,

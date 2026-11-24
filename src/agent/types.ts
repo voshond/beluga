@@ -172,6 +172,8 @@ export interface AgentRunInput {
   /** Your own runs: sentinels (core/sentinel), and what Claude is told (a sentinel run's brief, or a short note). */
   readonly sentinelTools?: SentinelTools;
   readonly sentinelBrief?: string;
+  /** An initiative's chat (core/initiatives): what it is, its memory and its rules. */
+  readonly initiativeBrief?: string;
   /** Your own runs: project Toolbox tools (BLG-75): list, run and propose named commands. */
   readonly toolboxTools?: ToolboxTools;
   /** Your own runs: your shared skills (BLG-98): read them, and propose a new one or a fix behind a card. */

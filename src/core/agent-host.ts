@@ -103,6 +103,8 @@ export interface AgentHostDeps {
   readonly board?: (channel: string, from: string, opts: { readonly plan: boolean; readonly friend?: import('./board/work.js').BoardFriend }) => import('./board/work.js').RunBoard | undefined;
   /** The Sentinel chat (core/sentinel/chat.ts, your own runs): where its Claude runs, its own folder and session. */
   readonly sentinelChat?: (channel: string, from: string) => AgentPlace | undefined;
+  /** An initiative's chats (core/initiatives, your own runs): its folder as the place, and its brief. */
+  readonly initiativeChat?: (channel: string, from: string) => { readonly place: AgentPlace; readonly brief: string } | undefined;
   /** What a tool that always asks you (policy ALWAYS_ASK_YOU: deleting a sentinel or a dashboard) says on its card, in words. */
   readonly confirmTool?: (toolName: string, input: Record<string, unknown>) => { readonly title: string; readonly detail: string } | undefined;
   /** Sentinels (your own runs): their tools, and a sentinel run's brief in its Claude step's conversation (core/sentinel). */
@@ -400,7 +402,7 @@ export class AgentHost {
       ...(deps.agentRef ? { agentRef: deps.agentRef } : {}),
       ...(deps.terminalDriving ? { terminalDriving: deps.terminalDriving } : {}),
       ...(deps.searchSources ? { searchSources: deps.searchSources } : {}),
-      placeOf: (channel) => deps.assistant?.(channel, this.selfId)?.place ?? deps.sentinelChat?.(channel, this.selfId) ?? deps.workspaces?.place(channel),
+      placeOf: (channel) => deps.assistant?.(channel, this.selfId)?.place ?? deps.sentinelChat?.(channel, this.selfId) ?? deps.initiativeChat?.(channel, this.selfId)?.place ?? deps.workspaces?.place(channel),
       load: (channel) => void (channel.startsWith('ws:') && deps.workspaces?.ensureLoaded(channel.slice(3))),
       queuedFromChats: (channel) => this.lanes.get(channel)?.waiting.filter((w) => w.body.origin).length ?? 0,
       deliver: (body, steer) => this.deliverFromChat(body, steer),
@@ -1559,9 +1561,10 @@ export class AgentHost {
     const mac = root ? undefined : this.deps.assistant?.(body.channel, from);
     // The Sentinel chat: its own folder and session (your runs only).
     const sentinelChat = root || mac ? undefined : this.deps.sentinelChat?.(body.channel, from);
+    const initiative = root || mac || sentinelChat ? undefined : this.deps.initiativeChat?.(body.channel, from);
     // A friend's worktree, your own agent asked there: it works here and reads theirs from afar.
-    const guest = root || mac || sentinelChat ? undefined : this.deps.guestRun?.(body.channel, from);
-    const place = root ? { cwd: root, additionalDirectories: [], autoEdit: false, onSession: () => undefined, askOnly: { project: body.project ?? '' } } : (mac?.place ?? sentinelChat ?? guest?.place ?? this.deps.workspaces?.place(body.channel));
+    const guest = root || mac || sentinelChat || initiative ? undefined : this.deps.guestRun?.(body.channel, from);
+    const place = root ? { cwd: root, additionalDirectories: [], autoEdit: false, onSession: () => undefined, askOnly: { project: body.project ?? '' } } : (mac?.place ?? sentinelChat ?? initiative?.place ?? guest?.place ?? this.deps.workspaces?.place(body.channel));
     let markFinished: () => void = () => undefined;
     /** Claude Code's process for this run (see gone), and whether the run is over. */
     let proc: RunProcess | undefined;
@@ -1637,7 +1640,7 @@ export class AgentHost {
       lane.routedModel = routed?.model;
       // Child threads: your own runs in your own chats, with the flag on. A dialogue's turn comes through runDialogueTurn and never gets them.
       // Not an external agent's run: a thread would run as you, without its grant, label or Stop.
-      const threads = from === this.selfId && !external && this.store.getState().prefs.agentThreads && !root && !place?.syncMain && !sentinelChat && !sentinel?.inRun ? this.deps.threads?.(body.channel) : undefined;
+      const threads = from === this.selfId && !external && this.store.getState().prefs.agentThreads && !root && !place?.syncMain && !sentinelChat && !initiative && !sentinel?.inRun ? this.deps.threads?.(body.channel) : undefined;
       // A run stopped but not ending (wedged, or never started: no Claude Code yet) has its Claude
       // Code killed after a moment (at once when it's gone already), then is left behind so what
       // comes next in the conversation starts (BLG-402): never while its Claude Code could still
@@ -1685,6 +1688,7 @@ export class AgentHost {
         ...(threads ? { threadTools: threads } : {}),
         ...(mac ? { macTools: mac.tools, macBrief: mac.brief } : {}),
         ...(guest ? { sharedBrief: guest.brief } : {}),
+        ...(initiative ? { initiativeBrief: initiative.brief } : {}),
         ...(phone ? { phoneTools: phone.tools, phoneBrief: phone.brief } : {}),
         ...(callNotes ? { callNotesTools: callNotes } : {}),
         ...(mcpTools ? { mcpTools } : {}),

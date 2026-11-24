@@ -54,6 +54,7 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
   { id: 'shared', label: 'A friend’s worktree', when: 'Your agent in a worktree a friend shared with you', source: 'src/core/shared-guest.ts', text: (c) => c.input.sharedBrief ?? '' },
   { id: 'phone', label: 'Your phone', when: 'Your own runs, with a phone set up', source: 'src/core/phone', text: (c) => c.input.phoneBrief ?? '' },
   { id: 'preview', label: 'Live previews', when: 'Your own runs, with Live previews on (Settings › Experimental)', source: 'src/core/previews', text: (c) => (c.input.terminal ? '' : (c.input.previewBrief ?? '')) },
+  { id: 'initiative', label: 'Initiative', when: 'An initiative’s chats', source: 'src/core/initiatives/prompt.ts', text: (c) => c.input.initiativeBrief ?? '' },
   { id: 'sentinel', label: 'Sentinel', when: 'Your own runs (a sentinel run gets its brief)', source: 'src/core/sentinel/prompt.ts', text: (c) => c.input.sentinelBrief ?? '' },
   { id: 'skills', label: 'Skills you propose', when: 'Your own runs', source: 'src/agent/skill-tools.ts', text: (c) => (c.input.skillTools ? buildSkillProposeAppend() : ''), sample: () => buildSkillProposeAppend() },
   { id: 'dialogue', label: 'Dialogue turn', when: 'A turn of a chaired dialogue', source: 'src/core/dialogues/prompt.ts', text: (c) => c.input.dialogue?.brief ?? '' },

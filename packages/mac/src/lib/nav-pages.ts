@@ -15,6 +15,7 @@ export interface AliveState {
   readonly board: { readonly enabled: boolean; readonly issues: ReadonlyArray<{ readonly id: string }> };
   readonly plans: { readonly plans: ReadonlyArray<{ readonly id: string }> };
   readonly sentinel: { readonly items: ReadonlyArray<{ readonly id: string }> };
+  readonly initiatives?: { readonly items: ReadonlyArray<{ readonly slug: string }> };
   /** Who's in the room, you included: its group chat is a page only while someone else is (BLG-871). */
   readonly peers: ReadonlyArray<unknown>;
 }
@@ -58,6 +59,8 @@ export function pageAlive(state: AliveState, view: View): boolean {
       return state.plans.plans.some((p) => p.id === view.id);
     case 'sentinel_page':
       return state.sentinel.items.some((s) => s.id === view.id);
+    case 'initiative_page':
+      return !state.initiatives || state.initiatives.items.some((i) => i.slug === view.slug);
     case 'room':
       return groupChatOpen(state);
     default:

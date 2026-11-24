@@ -775,6 +775,17 @@ export const PHONE: Record<Method, Side> = {
   'sentinel.chatOpen': 'mac',
   'sentinel.chatClear': 'mac',
   'sentinel.chatDelete': 'mac',
+  'initiatives.create': 'mac',
+  'initiatives.update': 'mac',
+  'initiatives.archive': 'mac',
+  'initiatives.setRepo': 'mac',
+  'initiatives.setCheckIn': 'mac',
+  'initiatives.checkInNow': 'mac',
+  'initiatives.chatNew': 'mac',
+  'initiatives.chatOpen': 'mac',
+  'initiatives.chatDelete': 'mac',
+  'initiatives.resolveSuggestion': 'mac',
+  'initiatives.readFile': 'mac',
 
   // ---- project Toolbox (BLG-75): the phone lists tools and can run them; create/edit/delete are Mac-only
   'toolbox.list': 'phone',
