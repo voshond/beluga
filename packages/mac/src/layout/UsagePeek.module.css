@@ -1,0 +1,87 @@
+.peek {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--text-2);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+.peek:hover,
+.peek[data-active] {
+  background: var(--bg-hover);
+}
+.wide {
+  flex: 1;
+  gap: 16px;
+  margin-left: 4px;
+}
+.provider {
+  --tone: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wide .provider {
+  flex: 1;
+}
+.provider[data-pressure='warm'] {
+  --tone: var(--warn);
+}
+.provider[data-pressure='hot'] {
+  --tone: var(--error);
+}
+.logo {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
+.pct {
+  min-width: 26px;
+  text-align: right;
+}
+.provider[data-pressure='hot'] .pct {
+  color: var(--error);
+}
+.track {
+  position: relative;
+  width: 40px;
+  height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--tone) 18%, transparent);
+}
+.wide .track {
+  flex: 1;
+  width: auto;
+}
+.segmented {
+  -webkit-mask-image: linear-gradient(to right, transparent 1.5px, #000 1.5px);
+  mask-image: linear-gradient(to right, transparent 1.5px, #000 1.5px);
+  -webkit-mask-size: calc(100% / var(--segments)) 100%;
+  mask-size: calc(100% / var(--segments)) 100%;
+  -webkit-mask-position: -0.75px 0;
+  mask-position: -0.75px 0;
+}
+.projected,
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  transition: width var(--dur) var(--ease-out);
+}
+.projected {
+  background: color-mix(in srgb, var(--tone) 40%, transparent);
+}
+.fill {
+  background: var(--tone);
+}

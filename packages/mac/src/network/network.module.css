@@ -198,13 +198,13 @@
 
 /* You, at the start of the sidebar's bottom card: your avatar, name and status (a button to change it). */
 .me {
-  --ring: var(--bg-raised);
+  --ring: var(--bg-sidebar);
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  height: 52px;
+  height: 44px;
   margin: 0;
   padding: 0 6px 0 12px;
   text-align: left;
