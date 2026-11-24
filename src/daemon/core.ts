@@ -42,6 +42,7 @@ import { launchSupport } from '../core/merge-counter.js';
 import { launchAttachmentSweep } from '../core/attachment-sweep.js';
 import { launchStats } from '../core/stats/counter.js';
 import { launchHoncho, maybeHonchoOf } from '../core/honcho/feed.js';
+import { launchUsageGateway } from '../core/usage-gateway/poller.js';
 import { launchReflection } from '../core/memory/reflection.js';
 import { runStepsFrom } from '../core/memory/reflection-skills.js';
 import { launchSkillProposals } from '../core/skill-proposal-file.js';
@@ -410,6 +411,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
   let stopAttachmentSweep = (): void => undefined;
   let stopStats = (): void => undefined;
   let stopHoncho = (): void => undefined;
+  let stopUsageGateway = (): void => undefined;
   let stopSkillProposals = (): void => undefined;
   let stopReflection = (): void => undefined;
   let stopLeaderboard = (): void => undefined;
@@ -453,6 +455,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
         honcho: () => maybeHonchoOf(session),
       });
     if (opts.network && !demo) stopHoncho = launchHoncho({ session, store, sharedWith: (channel) => session.sharing.recipients(channel).length > 0 });
+    if (opts.network && !demo) stopUsageGateway = launchUsageGateway({ session, report: (agent, update, at) => session.updateUsage(update, agent, at), usages: () => session.ownUsages() });
     // The leaderboard: friends swap three numbers a day (prompt characters, merged PRs, agent time) while the network is on.
     if (opts.network) stopLeaderboard = launchLeaderboard({ session, store, demo: Boolean(demo) });
     // Claude Code sessions running outside Beluga (Conductor, a terminal): the Mac app shows them live, read-only.
@@ -580,6 +583,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
     stopLeaderboard();
     stopStats();
     stopHoncho();
+    stopUsageGateway();
     stopSkillProposals();
     stopReflection();
     stopClaudeCode();

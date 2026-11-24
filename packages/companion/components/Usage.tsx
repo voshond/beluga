@@ -87,6 +87,18 @@ function WeekFigures({ week }: { readonly week: NonNullable<UsageView['week']> }
 }
 
 export function UsageBars({ usage }: { readonly usage: UsageView }) {
+  if (!usage.error) return <UsageFigures usage={usage} />;
+  return (
+    <View style={{ gap: 8 }}>
+      <UsageFigures usage={usage} />
+      <T v="caption" c={color.warn}>
+        {usage.error}
+      </T>
+    </View>
+  );
+}
+
+function UsageFigures({ usage }: { readonly usage: UsageView }) {
   if (usage.signedIn === false) return <T v="caption">Not signed in on your Mac.</T>;
   if (!usage.windows.length) return usage.week ? <WeekFigures week={usage.week} /> : <TokenFigures usage={usage} />;
   return (

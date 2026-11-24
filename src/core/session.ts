@@ -20,8 +20,8 @@ import { localRuntime } from '../agent/runtime/local.js';
 import { LOCAL_RUNTIME } from '../shared/local-endpoints.js';
 import type { LocalEndpoints } from './local-endpoints.js';
 import type { IncomingMessage, PeerClient } from '../net/peer-client.js';
-import { type AgentRef, Body, type BodyInput, type BodyOf, CLAUDE_AGENT, type ClaudeAnswer, chatMessageId, defaultAgentOf, type FsEntry, MAX_TEXT, type MessageVia, type PeerInfo, type Profile } from '../protocol.js';
-import { type UsageUpdate, withUsage } from '../agent/usage.js';
+import { type AgentRef, Body, type BodyInput, type BodyOf, CLAUDE_AGENT, type ClaudeAnswer, chatMessageId, defaultAgentOf, type FsEntry, MAX_TEXT, type MessageVia, type PeerInfo, type Profile, type ProviderUsage } from '../protocol.js';
+import { type UsageUpdate, usagesOf, withUsage } from '../agent/usage.js';
 import { dialoguesOf } from './dialogues/registry.js';
 import { agentName } from '../shared/agent-label.js';
 import { parseInput, parseWorkspaceMention, workspaceMentions } from './mentions.js';
@@ -1690,8 +1690,12 @@ export class Session {
   }
 
   /** Merge new usage numbers into that provider's (Claude's unless named) and share them with the room. */
-  updateUsage(update: UsageUpdate, agent: AgentRef = CLAUDE_AGENT): void {
-    this.updateProfile(withUsage(this.opts.client.currentProfile, agent, update));
+  updateUsage(update: UsageUpdate, agent: AgentRef = CLAUDE_AGENT, at?: number): void {
+    this.updateProfile(withUsage(this.opts.client.currentProfile, agent, update, at));
+  }
+
+  ownUsages(): readonly ProviderUsage[] {
+    return usagesOf(this.opts.client.currentProfile);
   }
 
   /** Ask the agent backend for fresh plan usage (no prompt is sent), joined with other asks around it. */

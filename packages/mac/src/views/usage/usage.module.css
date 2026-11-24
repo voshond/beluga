@@ -115,6 +115,13 @@
   line-height: 1.45;
 }
 
+.cardError {
+  margin: 8px 0 0;
+  color: var(--warn);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 /* ------------------------------------------------------------ cards */
 
 /*

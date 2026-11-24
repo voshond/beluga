@@ -200,6 +200,11 @@ function ProviderBox({ card, now }: { card: ProviderCard; now: number }) {
       ) : (
         <p className={s.quiet}>{card.agent.label}’s usage shows up here after its next run.</p>
       )}
+      {card.error ? (
+        <p className={s.cardError} role="status">
+          {card.error}
+        </p>
+      ) : null}
       {details ? (
         <dl className={s.providerDetails}>
           <dt>Runtime</dt>
