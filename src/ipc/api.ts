@@ -437,6 +437,14 @@ export const API = {
   'workbench.shareScripts': args(id),
   // Your own instructions for every pull request your agent writes in a project ('' clears them); kept in Beluga, not committed.
   'workbench.setPrInstructions': args(id, z.string().max(8000)),
+  // A project's review guide (workspaces/review-guide.ts), kept in Beluga: how it is now and the prompt that writes it. → { info?, prompt, custom }
+  'workbench.reviewGuide': args(id),
+  // The prompt that writes it ('' goes back to the built-in one).
+  'workbench.setReviewGuidePrompt': args(id, z.string().max(40000)),
+  // Your agent writes it from the project's pull request reviews, in a chat of its own.
+  'workbench.generateReviewGuide': args(id),
+  'workbench.openReviewGuide': args(id),
+  'workbench.removeReviewGuide': args(id),
   'workbench.setModel': args(opt(channel), z.string().max(80)),
   /** A conversation's thinking effort, its own ('auto': the agent decides); no conversation: the default for new ones. */
   'workbench.setEffort': args(opt(channel), z.enum([...EFFORTS, 'auto'])),

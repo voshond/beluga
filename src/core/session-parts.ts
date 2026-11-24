@@ -289,6 +289,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       servedTo: () => servedLan(session)?.host,
       phoneUse: () => companionOf(session)?.control.useLevel() ?? 'off',
       setup: (channel) => workbench?.setupForRun(channel.slice(3)),
+      reviewGuide: (channel) => workbench?.reviewGuideForRun(channel),
       terminalDriving: (channel) => agentTerms?.driving(channel) ?? false,
       toolbox: (channel) => {
         const service = toolboxOf(session);

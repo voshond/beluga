@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import path from 'node:path';
 import type { PrCheck, PrFork, PullRequest } from '../core/work-store.js';
 import { GIT_IN_ENGLISH, pullHeadRef } from './git.js';
+import { buildReviewGuidePrStep } from './review-guide.js';
 import { belugaHome } from './store.js';
 import { belugaEnv } from '../core/beluga-env.js';
 import { type GitSetup, type GitTroubleKind, classifyGitError, httpsRemoteOf } from '../shared/git-trouble.js';
@@ -76,6 +77,8 @@ export interface PrContext {
   readonly extra?: string;
   /** The ticket the worktree was started for (RUN-117): the title starts with it, as Jira links it. */
   readonly ticket?: string;
+  /** The project's review guide (review-guide.ts): the work is checked against it before it's pushed. */
+  readonly reviewGuide?: string;
 }
 
 /** The full prompt Claude gets for one PR. */
@@ -86,7 +89,8 @@ export function buildPrPrompt(ctx: PrContext, template = customPrPrompt() ?? DEF
   const yours = ctx.yourPrompt?.trim() ? `\n\nThe owner's own instructions for this project's pull requests:\n${ctx.yourPrompt.trim()}` : '';
   const extra = ctx.extra?.trim() ? `\n\nFor this pull request, also: ${ctx.extra.trim()}` : '';
   const ticket = ctx.ticket ? `\n\nThis work is for ticket ${ctx.ticket}: start the pull request's title with "${ctx.ticket}: " so the tracker links it.` : '';
-  return `${filled}${project}${yours}${extra}${ticket}`;
+  const guide = ctx.reviewGuide ? `\n\n${buildReviewGuidePrStep(ctx.reviewGuide)}` : '';
+  return `${filled}${guide}${project}${yours}${extra}${ticket}`;
 }
 
 /** Ask Claude to fix the failing checks on a PR. */

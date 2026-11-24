@@ -32,6 +32,7 @@ const INITIATIVES = { refused: 'Initiatives are the person’s own section: an a
 const STATS = 'The Usage tab counts the person\'s work in every project, past any grant\'s scope.';
 const WEB_SESSION = 'A browser session can answer approvals and read secret values, which no agent does (BLG-244).';
 const PR_INSTRUCTIONS = 'A person\'s own standing instructions to their agent: an agent passes one-off instructions with pr_create.';
+const REVIEW_GUIDE = 'A project\'s review guide is the person\'s own standing instructions to their agents.';
 const WINDOW_LOAD = 'The window notes a part of itself that did not load: an agent has no window.';
 const PREVIEW = 'A live preview is built for a window\'s frame and drawn there: an agent has no frame.';
 const MCP_APP = 'An MCP App is drawn in a window\'s frame: an agent has no frame.';
@@ -185,6 +186,11 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'workbench.setScript': 'covered',
   'workbench.shareScripts': 'gated',
   'workbench.setPrInstructions': { refused: PR_INSTRUCTIONS },
+  'workbench.reviewGuide': { refused: REVIEW_GUIDE },
+  'workbench.setReviewGuidePrompt': { refused: REVIEW_GUIDE },
+  'workbench.generateReviewGuide': { refused: REVIEW_GUIDE },
+  'workbench.openReviewGuide': { refused: REVIEW_GUIDE },
+  'workbench.removeReviewGuide': { refused: REVIEW_GUIDE },
   'workbench.setModel': 'covered',
   'workbench.setEffort': 'covered',
   'workbench.setAgent': 'covered',

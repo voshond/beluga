@@ -6,6 +6,7 @@ import type { Session } from '../session.js';
 import type { Store } from '../store.js';
 import type { DraftContext } from '../../agent/task-drafter.js';
 import { buildPrPrompt, findPr } from '../../workspaces/pr.js';
+import { reviewGuideFile } from '../../workspaces/review-guide.js';
 import { ghHosts } from '../../workspaces/github.js';
 import { GitHubIssues } from '../issues/issues.js';
 import { ghIssueSource, runGhCli } from '../issues/gh.js';
@@ -102,7 +103,7 @@ export function launchBoard(host: BoardHost): () => void {
     askClaude: askForTask(session),
     prPrompt: (ws) => {
       const project = projectOf(ws.projectId);
-      return buildPrPrompt({ branch: ws.branch ?? ws.name, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', ...(project?.scripts?.prPrompt ? { projectPrompt: project.scripts.prPrompt } : {}), ...(project?.scripts?.yourPrPrompt ? { yourPrompt: project.scripts.yourPrPrompt } : {}), ...(ws.ticket ? { ticket: ws.ticket } : {}) });
+      return buildPrPrompt({ branch: ws.branch ?? ws.name, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', ...(project?.scripts?.prPrompt ? { projectPrompt: project.scripts.prPrompt } : {}), ...(project?.scripts?.yourPrPrompt ? { yourPrompt: project.scripts.yourPrPrompt } : {}), ...(ws.ticket ? { ticket: ws.ticket } : {}), ...(project?.root && project.scripts?.reviewGuide ? { reviewGuide: reviewGuideFile(project.root) } : {}) });
     },
   });
   attachIssues(session, issues);
