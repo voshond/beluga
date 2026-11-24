@@ -1,3 +1,5 @@
+import os from 'node:os';
+import path from 'node:path';
 import type { DocRef } from '../core/initiatives/model.js';
 import { docSource } from '../core/initiatives/prompt.js';
 import type { Complete } from './runtime/types.js';
@@ -24,7 +26,20 @@ export const isJiraServer = (server: string): boolean => JIRA_SERVER.test(server
 
 export const isDriveServer = (server: string): boolean => DRIVE_SERVER.test(server);
 
-export const sourceReadVerdict = (tool: string): { readonly allow: boolean; readonly reason: string } => {
+const claudeDir = (): string => process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+
+export const isSpilledResult = (file: unknown, base = claudeDir()): boolean => {
+  if (typeof file !== 'string' || !path.isAbsolute(file)) return false;
+  const resolved = path.resolve(file);
+  const projects = path.join(base, 'projects') + path.sep;
+  return resolved.startsWith(projects) && resolved.split(path.sep).includes('tool-results');
+};
+
+export const sourceReadVerdict = (tool: string, input: Record<string, unknown> = {}): { readonly allow: boolean; readonly reason: string } => {
+  if (tool === 'Read') {
+    const allow = isSpilledResult(input.file_path);
+    return { allow, reason: allow ? 'Reading a source that was too long to answer inline.' : 'Read is only for a source Claude Code saved because it was too long.' };
+  }
   const match = /^mcp__(.+?)__(.+)$/.exec(tool);
   const server = match?.[1] ?? '';
   const name = match?.[2] ?? '';
@@ -80,7 +95,8 @@ export const refineGoal = async (req: GoalRefineRequest, opts: { readonly comple
       cwd: opts.cwd,
       model: opts.model ?? 'sonnet',
       ownerMcp: readsGoogle(docs) ? (server) => isJiraServer(server) || isDriveServer(server) : isJiraServer,
-      vetTool: (tool) => sourceReadVerdict(tool),
+      ...(docs.length ? { tools: ['Read'] } : {}),
+      vetTool: (tool, input) => sourceReadVerdict(tool, input),
       maxTurns: req.epics.length || docs.length ? REFINE_TURNS : 1,
       signal: abortController.signal,
       system: SYSTEM,

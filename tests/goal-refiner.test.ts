@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isDriveServer, isJiraServer, parseGoal, refineGoal, refinePrompt, sourceReadVerdict } from '../src/agent/goal-refiner.js';
+import { isDriveServer, isJiraServer, isSpilledResult, parseGoal, refineGoal, refinePrompt, sourceReadVerdict } from '../src/agent/goal-refiner.js';
 import { CompletionError, type CompletionRequest } from '../src/agent/runtime/types.js';
 
 describe('refining an initiative’s goal', () => {
@@ -48,6 +48,7 @@ describe('refining an initiative’s goal', () => {
     const answer = async (req: CompletionRequest): Promise<string> => (seen.push(req), 'Ship the thing to everyone, soon.');
     await refineGoal({ name: 'A', goal: 'ship', epics: [], docs }, { cwd: '/tmp', complete: answer });
     await refineGoal({ name: 'A', goal: 'ship', epics: [], docs: [docs[0]!] }, { cwd: '/tmp', complete: answer });
+    expect(seen.map((req) => req.tools)).toEqual([['Read'], ['Read']]);
     expect(seen.map((req) => [req.ownerMcp!('calendar'), req.ownerMcp!('jira'), req.ownerMcp!('slack'), req.maxTurns! > 1])).toEqual([
       [true, true, false, true],
       [false, true, false, true],
@@ -105,6 +106,17 @@ describe('refining an initiative’s goal', () => {
     expect(denied.filter((tool) => sourceReadVerdict(tool).allow)).toEqual([]);
     expect(isJiraServer('Atlassian')).toBe(true);
     expect(isDriveServer('calendar')).toBe(true);
+  });
+
+  it('reads only a source Claude Code saved for being too long', () => {
+    const base = '/home/me/.claude';
+    expect(isSpilledResult('/home/me/.claude/projects/-tmp-x/0f3a/tool-results/mcp-calendar-drive_read_file-1.txt', base)).toBe(true);
+    expect(isSpilledResult('/home/me/.claude/projects/-tmp-x/0f3a/tool-results/../../../../notes.txt', base)).toBe(false);
+    expect(isSpilledResult('/home/me/.claude/projects/-tmp-x/0f3a/notes.md', base)).toBe(false);
+    expect(isSpilledResult('/home/me/Documents/plan.md', base)).toBe(false);
+    expect(isSpilledResult('projects/x/tool-results/a.txt', base)).toBe(false);
+    expect(isSpilledResult(undefined, base)).toBe(false);
+    expect(sourceReadVerdict('Read', { file_path: '/tmp/x.txt' }).allow).toBe(false);
   });
 
   it('keeps only the Markdown: no fence, nothing too short, never past the goal’s cap', () => {
