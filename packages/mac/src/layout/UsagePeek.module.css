@@ -1,8 +1,9 @@
 .peek {
   flex: none;
-  display: grid;
-  gap: 3px;
-  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px;
   border-radius: 6px;
   color: var(--text-2);
   font-size: 0.72rem;
@@ -13,12 +14,43 @@
 .peek[data-active] {
   background: var(--bg-hover);
 }
+.wide {
+  flex: 1;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin-left: 4px;
+  padding: 7px 8px;
+}
+.provider {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.provider[data-pressure='warm'] > svg {
+  color: var(--warn);
+}
+.provider[data-pressure='hot'] > svg {
+  color: var(--error);
+}
+.bars {
+  display: grid;
+  gap: 3px;
+}
+.wide .bars {
+  flex: 1;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 10px;
+}
 .line {
   --tone: var(--accent);
   display: grid;
-  grid-template-columns: 16px 56px 28px;
+  grid-template-columns: 36px;
   align-items: center;
   gap: 5px;
+}
+.wide .line {
+  grid-template-columns: 14px 1fr 28px;
 }
 .line[data-pressure='warm'] {
   --tone: var(--warn);

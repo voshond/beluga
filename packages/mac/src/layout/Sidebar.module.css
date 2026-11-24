@@ -398,6 +398,10 @@
   align-items: center;
   margin-left: auto;
 }
+.footerWide {
+  flex: 1;
+  margin-left: 0;
+}
 /* A folder dragged from Finder over the sidebar: dropping it adds it as a project. */
 .dropping {
   box-shadow: inset 0 0 0 2px var(--accent);

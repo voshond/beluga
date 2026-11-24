@@ -234,8 +234,8 @@ function Dock() {
   return (
     <div className={s.footer}>
       {friendsSidebar && (netOn ? <SelfBar extra={<RoomSection />} /> : <RoomFallback />)}
-      <span className={s.footerTools}>
-        <UsagePeek />
+      <span className={cx(s.footerTools, !friendsSidebar && s.footerWide)}>
+        <UsagePeek wide={!friendsSidebar} />
       </span>
     </div>
   );
