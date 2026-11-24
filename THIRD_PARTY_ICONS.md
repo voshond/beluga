@@ -61,3 +61,15 @@ VirtualBox, Parallels, Hyper-V and Apple Virtualization machines get Beluga's ow
 Apple's, Microsoft's, Oracle's or Parallels' marks, which they don't let others use.
 
 Every other icon in the app is Beluga's own set (`packages/mac/src/components/Icon.tsx`).
+
+## Agent logos in the sidebar's usage bar
+
+The sidebar's foot shows each agent's 5-hour usage beside its logo. The logos are in
+`packages/mac/src/layout/usage-logos/`, each file exactly as it came from the
+[gnome-usage](https://github.com/voshond/gnome-usage) project (`core/icons/`), and are drawn as a
+mask in the text's colour.
+
+- `claude-symbolic.svg` and `codex-symbolic.svg` come from [SVGStack](https://svgstack.com/), whose
+  source comments state that attribution is required. Claude is a trademark of Anthropic; ChatGPT,
+  OpenAI and Codex are trademarks of OpenAI. They are used only to say which agent a bar is for.
+- `antigravity-symbolic.svg` is gnome-usage's own glyph for Antigravity.

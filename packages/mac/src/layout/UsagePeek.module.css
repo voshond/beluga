@@ -2,13 +2,13 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 5px 6px;
+  gap: 12px;
+  height: 28px;
+  padding: 0 8px;
   border-radius: 6px;
   color: var(--text-2);
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   font-variant-numeric: tabular-nums;
-  line-height: 1;
 }
 .peek:hover,
 .peek[data-active] {
@@ -16,64 +16,54 @@
 }
 .wide {
   flex: 1;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
+  gap: 16px;
   margin-left: 4px;
-  padding: 7px 8px;
 }
 .provider {
+  --tone: var(--accent);
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
-.provider[data-pressure='warm'] > svg {
-  color: var(--warn);
-}
-.provider[data-pressure='hot'] > svg {
-  color: var(--error);
-}
-.bars {
-  display: grid;
-  gap: 3px;
-}
-.wide .bars {
+.wide .provider {
   flex: 1;
-  grid-template-columns: 1fr 1fr;
-  column-gap: 10px;
 }
-.line {
-  --tone: var(--accent);
-  display: grid;
-  grid-template-columns: 36px;
-  align-items: center;
-  gap: 5px;
-}
-.wide .line {
-  grid-template-columns: 14px 1fr 28px;
-}
-.line[data-pressure='warm'] {
+.provider[data-pressure='warm'] {
   --tone: var(--warn);
 }
-.line[data-pressure='hot'] {
+.provider[data-pressure='hot'] {
   --tone: var(--error);
 }
-.short {
-  color: var(--text-3);
+.logo {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
 }
 .pct {
+  min-width: 26px;
   text-align: right;
 }
-.line[data-pressure='hot'] .pct {
+.provider[data-pressure='hot'] .pct {
   color: var(--error);
-  font-weight: 600;
 }
 .track {
   position: relative;
-  height: 6px;
+  width: 40px;
+  height: 5px;
   border-radius: 999px;
   overflow: hidden;
   background: color-mix(in srgb, var(--tone) 18%, transparent);
+}
+.wide .track {
+  flex: 1;
+  width: auto;
 }
 .segmented {
   -webkit-mask-image: linear-gradient(to right, transparent 1.5px, #000 1.5px);
@@ -90,17 +80,8 @@
   transition: width var(--dur) var(--ease-out);
 }
 .projected {
-  background: color-mix(in srgb, var(--tone) 45%, transparent);
+  background: color-mix(in srgb, var(--tone) 40%, transparent);
 }
 .fill {
   background: var(--tone);
-}
-.now {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1.5px;
-  margin-left: -0.75px;
-  background: var(--text);
-  opacity: 0.55;
 }
