@@ -2047,7 +2047,8 @@ export class WorkspaceController {
    */
   private sayMade(channel: string, text: string, began: number): void {
     const here = this.deps.store.getState().log.filter((l) => l.channel === channel);
-    const at = here.findIndex((l) => l.ts >= began);
+    // Strictly after: a line written in the same millisecond the making began (carried over) stays above it.
+    const at = here.findIndex((l) => l.ts > began);
     if (at < 0) return void this.deps.store.dispatch({ type: 'system', channel, text });
     const line: LogItem = { id: `made-${randomUUID()}`, type: 'system', channel, text, ts: here[at]!.ts, level: 'info' };
     this.deps.store.dispatch({ type: 'history', channel, items: [...here.slice(0, at), line, ...here.slice(at)] });
