@@ -44,7 +44,7 @@ const docHow = (entry: Pick<DocRef, 'ref' | 'kind'>): string => {
   const pageId = confluencePageIdOf(entry.ref);
   const fileId = googleFileIdOf(entry.ref);
   if (entry.kind === 'confluence') return pageId ? `Confluence page ${pageId}: read it with the Confluence MCP (confluence_get_page, page_id ${pageId})` : 'Confluence page: find it with the Confluence MCP (confluence_search by its title) and read it with confluence_get_page';
-  if (entry.kind !== 'link' && fileId) return `${DOC_KIND_NAME[entry.kind]}, file id ${fileId}: read it with Google Drive’s read_file_content`;
+  if (entry.kind !== 'link' && fileId) return `${DOC_KIND_NAME[entry.kind]}, file id ${fileId}: read it with the calendar MCP’s drive_read_file (it tries the work and the private Google account)`;
   return 'a link: read it if a tool of yours can open it';
 };
 
@@ -53,7 +53,7 @@ export const docSource = (entry: DocRef): string => `${entry.ref}${entry.label ?
 export const docLine = (entry: DocRef): string => `${docSource(entry)}, snapshot in ${docSnapshot(entry)}`;
 
 const DOCS_HOW =
-  'For each doc source, read it as its line says (Confluence pages with the Confluence MCP by page id, Google Docs, Sheets and Slides with Google Drive’s read_file_content by file id), compare it with its snapshot in sources/docs/, write the new snapshot there (its text as Markdown, with the date read and the page’s title on top), and note in timeline.md what changed since the last check-in, or that it was first read. One you cannot read stays as it was: say so in your answer.';
+  'For each doc source, read it as its line says (Confluence pages with the Confluence MCP by page id, Google Docs, Sheets and Slides with the calendar MCP’s drive_read_file by file id, or Google Drive’s read_file_content when only that is there), compare it with its snapshot in sources/docs/, write the new snapshot there (its text as Markdown, with the date read and the page’s title on top), and note in timeline.md what changed since the last check-in, or that it was first read. One you cannot read stays as it was: say so in your answer.';
 
 export const TICKETS_SHAPE =
   '{"at" (now, an ISO date), "tickets": [{"key", "url", "summary", "status", "statusCategory" ("todo" | "inProgress" | "done"), "assignee", "updated" (an ISO date), "epic" (the epic’s key), "prs": [{"url", "number", "state" ("open" | "draft" | "merged" | "closed"), "repo", "title"}]}]}';

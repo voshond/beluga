@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isJiraServer, parseGoal, refineGoal, refinePrompt, sourceReadVerdict } from '../src/agent/goal-refiner.js';
+import { isDriveServer, isJiraServer, parseGoal, refineGoal, refinePrompt, sourceReadVerdict } from '../src/agent/goal-refiner.js';
 import { CompletionError, type CompletionRequest } from '../src/agent/runtime/types.js';
 
 describe('refining an initiative’s goal', () => {
@@ -33,24 +33,24 @@ describe('refining an initiative’s goal', () => {
     expect(req.vetTool!('mcp__jira__jira_get_issue', {}).allow).toBe(true);
     expect(req.vetTool!('mcp__jira__jira_add_comment', {}).allow).toBe(false);
     expect(req.maxTurns).toBeGreaterThan(1);
-    expect(req.connectors).toBeUndefined();
+    expect(req.ownerMcp!('calendar')).toBe(false);
   });
 
-  it('names each doc source and how to read it, and loads the claude.ai connectors only for a Google file', async () => {
+  it('names each doc source and how to read it, and mounts the calendar server only for a Google file', async () => {
     const docs = [
       { ref: 'https://acme.atlassian.net/wiki/spaces/MDM/pages/2543222788/MDM+Part+2', label: 'MDM 2', kind: 'confluence' as const },
       { ref: 'https://docs.google.com/document/d/1AbCdEfGhIjKlMnOp/edit', kind: 'gdoc' as const },
     ];
     expect(refinePrompt({ name: 'A', goal: '', epics: [], docs })).toContain(
-      'Doc sources:\n- https://acme.atlassian.net/wiki/spaces/MDM/pages/2543222788/MDM+Part+2 “MDM 2” (Confluence page 2543222788: read it with the Confluence MCP (confluence_get_page, page_id 2543222788))\n- https://docs.google.com/document/d/1AbCdEfGhIjKlMnOp/edit (Google Doc, file id 1AbCdEfGhIjKlMnOp: read it with Google Drive’s read_file_content)',
+      'Doc sources:\n- https://acme.atlassian.net/wiki/spaces/MDM/pages/2543222788/MDM+Part+2 “MDM 2” (Confluence page 2543222788: read it with the Confluence MCP (confluence_get_page, page_id 2543222788))\n- https://docs.google.com/document/d/1AbCdEfGhIjKlMnOp/edit (Google Doc, file id 1AbCdEfGhIjKlMnOp: read it with the calendar MCP’s drive_read_file (it tries the work and the private Google account))',
     );
     const seen: CompletionRequest[] = [];
     const answer = async (req: CompletionRequest): Promise<string> => (seen.push(req), 'Ship the thing to everyone, soon.');
     await refineGoal({ name: 'A', goal: 'ship', epics: [], docs }, { cwd: '/tmp', complete: answer });
     await refineGoal({ name: 'A', goal: 'ship', epics: [], docs: [docs[0]!] }, { cwd: '/tmp', complete: answer });
-    expect(seen.map((req) => [req.connectors, req.maxTurns! > 1])).toEqual([
-      [true, true],
-      [undefined, true],
+    expect(seen.map((req) => [req.ownerMcp!('calendar'), req.ownerMcp!('jira'), req.ownerMcp!('slack'), req.maxTurns! > 1])).toEqual([
+      [true, true, false, true],
+      [false, true, false, true],
     ]);
   });
 
@@ -71,9 +71,9 @@ describe('refining an initiative’s goal', () => {
       'mcp__jira__confluence_get_page',
       'mcp__jira__confluence_search',
       'mcp__atlassian__getConfluencePage',
-      'mcp__claude_ai_Google_Drive__read_file_content',
-      'mcp__claude_ai_Google_Drive__get_file_metadata',
-      'mcp__claude_ai_Google_Drive__search_files',
+      'mcp__calendar__drive_read_file',
+      'mcp__calendar__drive_get_file',
+      'mcp__calendar__drive_search',
     ];
     const denied = [
       'mcp__jira__jira_add_comment',
@@ -87,12 +87,14 @@ describe('refining an initiative’s goal', () => {
       'mcp__jira__confluence_update_page',
       'mcp__jira__confluence_add_comment',
       'mcp__jira__confluence_add_label',
+      'mcp__calendar__create_event',
+      'mcp__calendar__update_event',
+      'mcp__calendar__get_agenda',
+      'mcp__calendar__respond_to_event',
+      'mcp__claude_ai_Google_Drive__read_file_content',
       'mcp__claude_ai_Google_Drive__update_file',
-      'mcp__claude_ai_Google_Drive__create_file',
-      'mcp__claude_ai_Google_Drive__share_file',
-      'mcp__claude_ai_Google_Drive__trash_file',
-      'mcp__claude_ai_Google_Drive__download_file_content',
       'mcp__claude_ai_Gmail__search_threads',
+      'mcp__jira__drive_read_file',
       'mcp__slack__slack_read_thread',
       'Bash',
       'Read',
@@ -102,6 +104,7 @@ describe('refining an initiative’s goal', () => {
     expect(allowed.filter((tool) => !sourceReadVerdict(tool).allow)).toEqual([]);
     expect(denied.filter((tool) => sourceReadVerdict(tool).allow)).toEqual([]);
     expect(isJiraServer('Atlassian')).toBe(true);
+    expect(isDriveServer('calendar')).toBe(true);
   });
 
   it('keeps only the Markdown: no fence, nothing too short, never past the goal’s cap', () => {

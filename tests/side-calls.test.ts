@@ -80,19 +80,6 @@ describe('claudeComplete', () => {
     expect(await hook?.({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: {} } as never, 't', { signal: new AbortController().signal })).toEqual({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'No.' } });
   });
 
-  it('loads your claude.ai connectors only for a vetted call that asks, without your CLAUDE.md', async () => {
-    claude.result = { subtype: 'success', is_error: false, result: 'ok' };
-    const vetTool = () => ({ allow: false, reason: 'No.' });
-    await claudeComplete({ prompt: 'p', system: 's', cwd: '/x', ownerMcp: () => false, connectors: true, vetTool });
-    expect(claude.options).toMatchObject({ strictMcpConfig: false, settingSources: ['user'], env: { CLAUDE_CODE_DISABLE_CLAUDE_MDS: '1' } });
-    await claudeComplete({ prompt: 'p', system: 's', cwd: '/x', ownerMcp: () => false, vetTool });
-    expect(claude.options).toMatchObject({ strictMcpConfig: true, settingSources: [] });
-    expect(claude.options?.env).toBeUndefined();
-    await claudeComplete({ prompt: 'p', system: 's', cwd: '/x', ownerMcp: () => false, connectors: true });
-    expect(claude.options).toMatchObject({ settingSources: [] });
-    expect(claude.options?.strictMcpConfig).toBeUndefined();
-  });
-
   it('streams a prompt with images, and mounts suites strictly', async () => {
     claude.result = { subtype: 'success', result: 'ok' };
     await claudeComplete({ prompt: 'what is this', images: [{ mime: 'image/png', data: 'AAAA' }], system: 's', cwd: '/x', suites: { beluga_chat: { name: 'beluga_chat', version: '1', tools: [] } } });
