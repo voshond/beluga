@@ -1,9 +1,13 @@
 import { activityOf } from '@beluga/ui/workspace-models.js';
-import { CHECK_IN_CHAT, type InitiativeView, type Ticket, type TicketPr, initiativeChatChannel, ticketGroups } from '@beluga/core/initiatives/model.js';
+import type { IssueStatus } from '@beluga/core/board/model.js';
+import { CHECK_IN_CHAT, type InitiativeView, type Ticket, type TicketCategory, type TicketPr, initiativeChatChannel, ticketGroups } from '@beluga/core/initiatives/model.js';
 import { Button } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
 import { openExternal } from '../lib/system.js';
 import { useClock } from '../lib/window-active.js';
+import { TonePill } from '../plans/marks.js';
+import type { Tone } from '../plans/plans-model.js';
+import { StatusIcon } from '../tasks/marks.js';
 import { ago } from '../tasks/tasks-model.js';
 import { CATEGORY_LABEL, PR_STATE_LABEL, prName, ticketsWords } from './initiatives-model.js';
 import { Section } from './InitiativeParts.js';
@@ -30,67 +34,40 @@ const PrLinks = ({ prs }: { prs: readonly TicketPr[] }) => (
   </span>
 );
 
+const TICKET_STATUS: Readonly<Record<TicketCategory, IssueStatus>> = { todo: 'todo', inProgress: 'in_progress', done: 'done' };
+
+const TICKET_TONE: Readonly<Record<TicketCategory, Tone>> = { todo: 'neutral', inProgress: 'claude', done: 'ok' };
+
 const TicketRow = ({ ticket, now }: { ticket: Ticket; now: number }) => {
   const url = ticket.url;
-  const who = ticket.assignee ?? 'Unassigned';
-  const when = whenOf(ticket.updated, now);
+  const who = [ticket.assignee ?? 'Unassigned', whenOf(ticket.updated, now)].filter(Boolean).join(' · ');
+  const handleOpen = (): void => {
+    if (url) void openExternal(url);
+  };
   return (
-    <tr data-ticket={ticket.key} data-category={ticket.statusCategory}>
-      <td className={s.ticketKey}>
-        {url ? (
-          <button type="button" className={s.ticketLink} onClick={() => void openExternal(url)} aria-label={`Open ${ticket.key} in Jira`}>
-            {ticket.key}
-          </button>
-        ) : (
-          ticket.key
-        )}
-      </td>
-      <td className={s.ticketSummary}>
-        {ticket.summary}
-        <span className={s.ticketMeta}>
-          <span>{[who, when].filter(Boolean).join(' · ')}</span>
-          {ticket.prs.length ? <PrLinks prs={ticket.prs} /> : null}
-        </span>
-      </td>
-      <td>
-        <span className={s.status} data-category={ticket.statusCategory} title={CATEGORY_LABEL[ticket.statusCategory]}>
-          {ticket.status || CATEGORY_LABEL[ticket.statusCategory]}
-        </span>
-      </td>
-      <td className={s.ticketWide}>{who}</td>
-      <td className={s.ticketWide}>{when}</td>
-      <td className={s.ticketWide}>
-        <PrLinks prs={ticket.prs} />
-      </td>
-    </tr>
+    <div role="listitem" className={s.ticket} data-ticket={ticket.key} data-category={ticket.statusCategory}>
+      <button type="button" className={s.ticketMain} onClick={handleOpen} disabled={!url} aria-label={`Open ${ticket.key} in Jira: ${ticket.summary}`}>
+        <StatusIcon status={TICKET_STATUS[ticket.statusCategory]} size={14} />
+        <span className={s.ticketKey}>{ticket.key}</span>
+        <span className={s.ticketSummary}>{ticket.summary}</span>
+      </button>
+      <span className={s.ticketEnd}>
+        {ticket.prs.map((pr) => (
+          <PrLink key={pr.url} pr={pr} />
+        ))}
+        <span className={s.ticketWho}>{who}</span>
+        <TonePill tone={TICKET_TONE[ticket.statusCategory]}>{ticket.status || CATEGORY_LABEL[ticket.statusCategory]}</TonePill>
+      </span>
+    </div>
   );
 };
 
-const Table = ({ tickets, caption, now }: { tickets: readonly Ticket[]; caption: string; now: number }) => (
-  <table className={s.tickets}>
-    <caption className={s.ticketsCaption}>{caption}</caption>
-    <thead>
-      <tr>
-        <th scope="col">Key</th>
-        <th scope="col">Summary</th>
-        <th scope="col">Status</th>
-        <th scope="col" className={s.ticketWide}>
-          Assignee
-        </th>
-        <th scope="col" className={s.ticketWide}>
-          Updated
-        </th>
-        <th scope="col" className={s.ticketWide}>
-          Pull requests
-        </th>
-      </tr>
-    </thead>
-    <tbody>
-      {tickets.map((ticket) => (
-        <TicketRow key={ticket.key} ticket={ticket} now={now} />
-      ))}
-    </tbody>
-  </table>
+const TicketList = ({ tickets, name, now }: { tickets: readonly Ticket[]; name: string; now: number }) => (
+  <div className={s.ticketList} role="list" aria-label={name}>
+    {tickets.map((ticket) => (
+      <TicketRow key={ticket.key} ticket={ticket} now={now} />
+    ))}
+  </div>
 );
 
 const emptyWords = (item: InitiativeView, fetching: boolean): string => {
@@ -122,7 +99,7 @@ export const TicketsTable = ({ item }: { item: InitiativeView }) => {
           {groups.map((group) => (
             <div key={group.epic ?? 'other'} className={s.ticketGroup} data-epic={group.epic ?? 'other'}>
               {groups.length > 1 || group.epic ? <span className={s.epicName}>{group.epic ?? 'Other tickets'}</span> : null}
-              <Table tickets={group.tickets} caption={group.epic ? `Tickets under ${group.epic}` : 'Tickets under the epic'} now={now} />
+              <TicketList tickets={group.tickets} name={group.epic ? `Tickets under ${group.epic}` : 'Tickets under the epic'} now={now} />
             </div>
           ))}
         </div>

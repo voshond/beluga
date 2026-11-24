@@ -10,7 +10,8 @@ export const ProgressBar = ({ progress }: { progress: EpicStatus | undefined }) 
   return (
     <span className={s.progress}>
       <span className={s.bar} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label={progressWords(progress)}>
-        <span className={s.barFill} style={{ width: `${percent}%` }} />
+        <span className={s.barFill} data-part="done" style={{ width: `${percent}%` }} />
+        <span className={s.barFill} data-part="inProgress" style={{ width: `${progressPercent(progress, 'inProgress')}%` }} />
       </span>
       <span className={s.progressLine}>
         <span>{progressWords(progress)}</span>

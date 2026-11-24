@@ -18,10 +18,12 @@ const openInitiative = async (page: Page, name: string): Promise<void> => {
 test('an initiative’s page shows the epic’s tickets, open first, with their pull requests', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
   const tickets = page.getByRole('region', { name: 'Tickets' });
-  await expect(tickets.getByRole('row')).toHaveCount(5);
-  await expect(tickets.locator('tbody tr').first()).toHaveAttribute('data-category', 'inProgress');
-  await expect(tickets.locator('tbody tr').last()).toHaveAttribute('data-ticket', 'SHOP-133');
-  await expect(tickets.getByRole('button', { name: 'Open SHOP-150 in Jira' })).toBeVisible();
+  await expect(tickets.getByRole('listitem')).toHaveCount(4);
+  await expect(tickets.getByRole('listitem').first()).toHaveAttribute('data-category', 'inProgress');
+  await expect(tickets.getByRole('listitem').last()).toHaveAttribute('data-ticket', 'SHOP-133');
+  await expect(tickets.getByRole('button', { name: 'Open SHOP-150 in Jira: 3DS challenge fails on Safari' })).toBeVisible();
+  await expect(tickets.locator('[data-ticket="SHOP-141"]')).toContainText('Ana Ruiz');
+  await expect(tickets.locator('[data-ticket="SHOP-141"]')).toContainText('Blocked');
   await expect(tickets.getByRole('button', { name: /Open pull request #412 in example\/shop: Open/ })).toBeVisible();
   await expect(tickets.getByRole('button', { name: /Open pull request #398 in example\/shop: Merged/ })).toBeVisible();
   await expect(tickets.getByText(/4 tickets · 1 done · 1 open pull request/)).toBeVisible();
@@ -36,18 +38,25 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
   await docs.scrollIntoViewIfNeeded();
   await shot(page, '01c-initiative-docs.png');
   await shot(page, '01-initiative-page.png');
-  await expect(tickets.getByRole('columnheader', { name: 'Assignee' })).toHaveCount(0);
+  if (shots) {
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await tickets.screenshot({ path: path.join(shots, '06-tickets-dark.png') });
+    await page.getByRole('progressbar').first().locator('..').screenshot({ path: path.join(shots, '07-bar-dark.png') });
+  }
+  const bar = page.getByRole('progressbar').first();
+  expect((await bar.locator('[data-part="done"]').boundingBox())!.width).toBeGreaterThan(100);
+  expect((await bar.locator('[data-part="inProgress"]').boundingBox())!.width).toBeGreaterThan(30);
   await page.setViewportSize({ width: 2300, height: 1000 });
-  await expect(tickets.getByRole('columnheader', { name: 'Assignee' })).toBeVisible();
-  await expect(tickets.getByRole('cell', { name: 'Ana Ruiz', exact: true })).toBeVisible();
+  await expect(tickets.getByText('Ana Ruiz')).toBeVisible();
   await shot(page, '01b-initiative-page-wide.png');
+  if (shots) await tickets.screenshot({ path: path.join(shots, '08-tickets-dark-wide.png') });
 });
 
 test('several epics group the tickets by epic', async ({ page }) => {
   await openInitiative(page, 'Mobile Onboarding');
   const tickets = page.getByRole('region', { name: 'Tickets' });
   await expect(tickets.locator('[data-epic]')).toHaveCount(2);
-  await expect(tickets.locator('[data-epic="APP-88"] tbody tr')).toHaveCount(2);
+  await expect(tickets.locator('[data-epic="APP-88"]').getByRole('listitem')).toHaveCount(2);
   await expect(tickets.getByRole('button', { name: /pull request #77 in example\/app: Draft/ })).toBeVisible();
   await shot(page, '02-two-epics.png');
 });
