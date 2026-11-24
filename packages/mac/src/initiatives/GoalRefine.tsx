@@ -48,7 +48,7 @@ export const GoalDraft = ({ refine, onUse }: { refine: Refine; onUse: (goal: str
   if (state.kind === 'working')
     return (
       <div className={s.draft} role="status" data-refine="working">
-        <span className={s.quiet}>Your agent is reading the epic and drafting a goal. This can take a minute.</span>
+        <span className={s.quiet}>Your agent is reading the epic and its docs, and drafting a goal. This can take a minute.</span>
         <span className={s.buttons}>
           <Button size="small" variant="quiet" onClick={refine.clear}>
             Stop
@@ -86,7 +86,7 @@ export const GoalDraft = ({ refine, onUse }: { refine: Refine; onUse: (goal: str
 
 export const GoalSection = ({ item }: { item: InitiativeView }) => {
   const a = useInitiativeActions();
-  const refine = useGoalRefine({ name: item.name, goal: item.goal, epics: [...item.epics] });
+  const refine = useGoalRefine({ name: item.name, goal: item.goal, epics: [...item.epics], docs: [...item.docs] });
   const handleUse = (goal: string): void => void a.act(() => a.update(item.slug, { goal }), 'Saved the goal');
   return (
     <Section title="Goal" aside={<RefineButton refine={refine} disabled={Boolean(item.trouble)} />}>

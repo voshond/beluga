@@ -6,7 +6,7 @@ import { Button } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
 import { PickMenu } from '../tasks/PickMenu.js';
 import { GoalDraft, RefineButton, useGoalRefine } from './GoalRefine.js';
-import { type RefRow, epicKeys, meetingEntries, meetingRows, slackEntries, slackRows, splitList } from './initiatives-model.js';
+import { type RefRow, docEntries, docRows, epicKeys, meetingEntries, meetingRows, slackEntries, slackRows } from './initiatives-model.js';
 import { RefList } from './RefList.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import s from './initiatives.module.css';
@@ -24,14 +24,14 @@ export const NewInitiativeSheet = ({ editing, close }: SheetProps) => {
   const [goal, setGoal] = useState(editing?.goal ?? '');
   const [epics, setEpics] = useState(editing?.epics.join(', ') ?? '');
   const [slack, setSlack] = useState<readonly RefRow[]>(() => slackRows(editing?.slack ?? []));
-  const [docs, setDocs] = useState(editing?.docs.join('\n') ?? '');
+  const [docs, setDocs] = useState<readonly RefRow[]>(() => docRows(editing?.docs ?? []));
   const [meetings, setMeetings] = useState<readonly RefRow[]>(() => meetingRows(editing?.meetings ?? []));
   const [repos, setRepos] = useState<readonly string[]>(editing?.repos ?? []);
   const badEpics = epicKeys(epics).filter((key) => !EPIC_KEY.test(key));
-  const fields = { name: name.trim(), goal: goal.trim(), epics: epicKeys(epics), slack: slackEntries(slack), docs: splitList(docs), meetings: meetingEntries(meetings), repos: [...repos] };
+  const fields = { name: name.trim(), goal: goal.trim(), epics: epicKeys(epics), slack: slackEntries(slack), docs: docEntries(docs), meetings: meetingEntries(meetings), repos: [...repos] };
   const goodEpics = fields.epics.filter((key) => EPIC_KEY.test(key));
-  const refine = useGoalRefine({ name: fields.name, goal: fields.goal, epics: goodEpics });
-  const canRefine = Boolean(fields.name || fields.goal || goodEpics.length);
+  const refine = useGoalRefine({ name: fields.name, goal: fields.goal, epics: goodEpics, docs: fields.docs });
+  const canRefine = Boolean(fields.name || fields.goal || goodEpics.length || fields.docs.length);
 
   const handlePickRepo = (repo: string): void => setRepos((was) => (was.includes(repo) ? was.filter((r) => r !== repo) : [...was, repo]));
 
@@ -77,8 +77,8 @@ export const NewInitiativeSheet = ({ editing, close }: SheetProps) => {
       <Field label="Slack" hint="A #channel, or the link of a thread or a DM. Paste several links at once for a row each.">
         <RefList name="Slack conversation" rows={slack} onChange={setSlack} placeholder="#checkout-v2 or a Slack link" addLabel="Add Conversation" />
       </Field>
-      <Field label="Docs" htmlFor="initiative-docs" hint="One link per line">
-        <TextArea id="initiative-docs" value={docs} onChange={setDocs} rows={2} placeholder="https://docs.example.com/checkout-v2" />
+      <Field label="Docs" hint="A Confluence page, a Google Doc, Sheet or Slides, or any link. The check-in reads each and notes what changed.">
+        <RefList name="Doc" rows={docs} onChange={setDocs} placeholder="A Confluence or Google Docs link" addLabel="Add Doc" max={50} />
       </Field>
       <Field label="Meetings" hint="Words a meeting’s title has, or one event’s link (a recurring one counts as a whole)">
         <RefList name="Meeting" rows={meetings} onChange={setMeetings} placeholder="Checkout sync, or an event link" addLabel="Add Meeting" />

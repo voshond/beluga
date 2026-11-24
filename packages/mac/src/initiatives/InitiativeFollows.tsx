@@ -1,4 +1,4 @@
-import { type InitiativeView, type MeetingRef, type SlackRef, linkOf, meetingKindOf, slackKindOf } from '@beluga/core/initiatives/model.js';
+import { DOC_KIND_NAME, type DocKind, type DocRef, type InitiativeView, type MeetingRef, type SlackRef, linkOf, meetingKindOf, slackKindOf } from '@beluga/core/initiatives/model.js';
 import { Icon, type IconName } from '../components/Icon.js';
 import { openExternal } from '../lib/system.js';
 import { Section } from './InitiativeParts.js';
@@ -7,6 +7,10 @@ import s from './initiatives.module.css';
 const SLACK_KIND: Readonly<Record<ReturnType<typeof slackKindOf>, string>> = { channel: 'Channel', thread: 'Thread', conversation: 'Conversation' };
 
 const MEETING_KIND: Readonly<Record<ReturnType<typeof meetingKindOf>, string>> = { event: 'One event', title: 'Title has' };
+
+const DOC_ICON: Readonly<Record<DocKind, IconName>> = { confluence: 'file', gdoc: 'file', gsheet: 'table', gslides: 'image', link: 'link' };
+
+const DOC_KIND: Readonly<Record<DocKind, string>> = { ...DOC_KIND_NAME, confluence: 'Confluence' };
 
 type FollowRowProps = {
   readonly icon: IconName;
@@ -45,6 +49,11 @@ const MeetingRow = ({ entry }: { entry: MeetingRef }) => {
   return <FollowRow icon="calendar" kind={MEETING_KIND[kind]} name={name} {...(detail ? { detail } : {})} {...(link ? { link } : {})} opens="the calendar" />;
 };
 
+const DocRow = ({ entry }: { entry: DocRef }) => {
+  const link = linkOf(entry.ref);
+  return <FollowRow icon={DOC_ICON[entry.kind]} kind={DOC_KIND[entry.kind]} name={entry.label ?? entry.ref} {...(entry.label ? { detail: entry.ref } : {})} {...(link ? { link } : {})} opens="the browser" />;
+};
+
 export const Follows = ({ item }: { item: InitiativeView }) => (
   <>
     {item.slack.length ? (
@@ -52,6 +61,15 @@ export const Follows = ({ item }: { item: InitiativeView }) => (
         <ul className={s.follows}>
           {item.slack.map((entry) => (
             <SlackRow key={entry.ref} entry={entry} />
+          ))}
+        </ul>
+      </Section>
+    ) : null}
+    {item.docs.length ? (
+      <Section title="Docs">
+        <ul className={s.follows}>
+          {item.docs.map((entry) => (
+            <DocRow key={entry.ref} entry={entry} />
           ))}
         </ul>
       </Section>

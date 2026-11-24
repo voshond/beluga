@@ -667,7 +667,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `initiatives.setCheckIn` | ✓ an initiative's page › Check-in switch (weekday mornings at 8:00; a sentinel with one chat step, docs/sentinel.md §13) |
 | `initiatives.checkInNow` | ✓ an initiative's page › Check In Now (runs its check-in sentinel once, on or off) |
 | `initiatives.refreshTickets` | ✓ an initiative's page › Tickets › Refresh (its Check-in chat reads the epics' tickets and their pull requests into `tickets.json`; also sent when an initiative is made with epics or its epics change) |
-| `initiatives.refineGoal` | ✓ New Initiative and Edit… › Refine With Agent beside the goal, and an initiative's page › Goal › Refine With Agent (a draft in Markdown with Use This · Keep Mine; reads your Jira, writes nowhere) |
+| `initiatives.refineGoal` | ✓ New Initiative and Edit… › Refine With Agent beside the goal, and an initiative's page › Goal › Refine With Agent (a draft in Markdown with Use This · Keep Mine; reads your Jira, the Confluence pages and Google files among its docs, writes nowhere) |
 | `initiatives.chatNew` | ✓ an initiative's chat › New Chat (the bar, and the picker) |
 | `initiatives.chatOpen` | ✓ an initiative's chat: the chat's name, a picker of its chats (Check-in among them) |
 | `initiatives.chatDelete` | ✓ an initiative's chat › ⋯ › Delete Chat… (confirms; the Check-in chat stays) |

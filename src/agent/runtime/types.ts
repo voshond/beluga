@@ -153,6 +153,8 @@ export interface CompletionRequest {
   readonly suites?: Readonly<Record<string, ToolSuite>>;
   /** Your own MCP servers to mount for this call (agent/runtime/claude/owner-mcp.ts), picked by name: only for a call you started yourself, and only with `vetTool` deciding each of their tools. A runtime without them ignores it. */
   readonly ownerMcp?: (server: string) => boolean;
+  /** With ownerMcp: your claude.ai connectors (Google Drive and the like) load too, each of their tools still decided by `vetTool`. */
+  readonly connectors?: boolean;
   /** Asked before each tool call: allowed (run without asking) or denied, and the reason told to the model. */
   readonly vetTool?: (toolName: string, input: Record<string, unknown>) => { readonly allow: boolean; readonly reason: string };
   /** At most this many turns (default 1). */

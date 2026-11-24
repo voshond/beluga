@@ -1,4 +1,4 @@
-import { type EpicStatus, type EpicTickets, type InitiativeView, type MeetingRef, type PrState, type SlackRef, type TicketCategory, lastCheckInAt, openSuggestions, progressShare } from '@beluga/core/initiatives/model.js';
+import { type DocRef, type EpicStatus, type EpicTickets, type InitiativeView, type MeetingRef, type PrState, type SlackRef, type TicketCategory, docKindOf, lastCheckInAt, openSuggestions, progressShare } from '@beluga/core/initiatives/model.js';
 
 export const INITIATIVE_VIEWS: ReadonlySet<string> = new Set(['initiatives', 'initiative_page']);
 
@@ -60,11 +60,15 @@ export const slackRows = (entries: readonly SlackRef[]): RefRow[] => entries.map
 
 export const meetingRows = (entries: readonly MeetingRef[]): RefRow[] => entries.map((entry) => newRow(entry.match, entry.label ?? ''));
 
+export const docRows = (entries: readonly DocRef[]): RefRow[] => entries.map((entry) => newRow(entry.ref, entry.label ?? ''));
+
 const filled = (rows: readonly RefRow[]): RefRow[] => rows.filter((row) => row.value.trim());
 
 export const slackEntries = (rows: readonly RefRow[]): SlackRef[] => filled(rows).map((row) => ({ ref: row.value.trim(), ...(row.label.trim() ? { label: row.label.trim() } : {}) }));
 
 export const meetingEntries = (rows: readonly RefRow[]): MeetingRef[] => filled(rows).map((row) => ({ match: row.value.trim(), ...(row.label.trim() ? { label: row.label.trim() } : {}) }));
+
+export const docEntries = (rows: readonly RefRow[]): DocRef[] => filled(rows).map((row) => ({ ref: row.value.trim(), ...(row.label.trim() ? { label: row.label.trim() } : {}), kind: docKindOf(row.value) }));
 
 export const pastedValues = (text: string): string[] =>
   text

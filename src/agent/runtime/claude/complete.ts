@@ -6,6 +6,12 @@ import { sdkServers } from './sdk-mount.js';
 import { claudeExecutable } from '../../claude-code.js';
 
 /**
+ * claude.ai connectors (Google Drive) come only with your user settings and a loose MCP config;
+ * your CLAUDE.md files stay out so they don't steer the answer. Every tool is still vetted.
+ */
+const connectorSettings = () => ({ settingSources: ['user' as const], env: { ...process.env, CLAUDE_CODE_DISABLE_CLAUDE_MDS: '1' } });
+
+/**
  * A side call on Claude Code (agent/side-calls.ts): one model turn or a few, no saved session, no
  * settings files (a friend with :rw access could plant hooks there), only the tools it's given.
  */
@@ -24,6 +30,7 @@ export async function claudeComplete(req: CompletionRequest, claudePath?: string
   const vet = req.vetTool;
   const pick = vet ? req.ownerMcp : undefined;
   const own = pick ? Object.fromEntries(Object.entries(ownerMcpServers(req.cwd)).filter(([name]) => pick(name))) : {};
+  const connectors = Boolean(pick && req.connectors);
   const mounted = req.suites || pick ? { ...own, ...(req.suites ? sdkServers(req.suites) : {}) } : undefined;
   try {
     const q = query({
@@ -32,10 +39,10 @@ export async function claudeComplete(req: CompletionRequest, claudePath?: string
         cwd: req.cwd,
         ...(req.model ? { model: req.model } : {}),
         tools: [...(req.tools ?? [])],
-        ...(mounted ? { mcpServers: mounted, strictMcpConfig: true } : {}),
+        ...(mounted ? { mcpServers: mounted, strictMcpConfig: !connectors } : {}),
         ...(req.allowedTools ? { allowedTools: [...req.allowedTools] } : {}),
         maxTurns: req.maxTurns ?? 1,
-        settingSources: [],
+        ...(connectors ? connectorSettings() : { settingSources: [] }),
         persistSession: false,
         abortController,
         systemPrompt: req.system,

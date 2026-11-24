@@ -29,6 +29,12 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
   await expect(page.getByRole('region', { name: 'Goal' }).getByRole('heading', { name: 'Scope' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Slack conversations' }).getByRole('button', { name: 'Open 3DS on Safari in Slack' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Meetings' }).getByText('Thursday')).toBeVisible();
+  const docs = page.getByRole('region', { name: 'Docs' });
+  await expect(docs.getByRole('button', { name: 'Open Checkout v2 spec in the browser' })).toBeVisible();
+  await expect(docs.getByText('Confluence', { exact: true })).toBeVisible();
+  await expect(docs.getByText('Google Sheet', { exact: true })).toBeVisible();
+  await docs.scrollIntoViewIfNeeded();
+  await shot(page, '01c-initiative-docs.png');
   await shot(page, '01-initiative-page.png');
   await expect(tickets.getByRole('columnheader', { name: 'Assignee' })).toHaveCount(0);
   await page.setViewportSize({ width: 2300, height: 1000 });
@@ -62,7 +68,7 @@ test('Refine With Agent drafts the goal on the page, and saves it only when take
   await expect(goal.getByLabel('The agent’s draft of the goal')).toHaveCount(0);
 });
 
-test('Edit lists Slack conversations and meetings row by row, and Refine fills the goal', async ({ page }) => {
+test('Edit lists Slack conversations, docs and meetings row by row, and Refine fills the goal', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
   await page.getByRole('button', { name: 'Edit…' }).click();
   const sheet = page.getByRole('dialog');
@@ -84,6 +90,12 @@ test('Edit lists Slack conversations and meetings row by row, and Refine fills t
   const meetings = sheet.getByRole('group', { name: 'Meeting' });
   await meetings.getByRole('button', { name: 'Add Meeting' }).click();
   await meetings.getByLabel('Meeting 3', { exact: true }).fill('https://calendar.google.com/calendar/event?eid=abc');
+  const docs = sheet.getByRole('group', { name: 'Doc' });
+  await expect(docs.locator('[data-ref-row]')).toHaveCount(2);
+  await expect(docs.getByLabel('Label for doc 1')).toHaveValue('Checkout v2 spec');
+  await docs.getByRole('button', { name: 'Add Doc' }).click();
+  await docs.getByLabel('Doc 3', { exact: true }).fill('https://docs.google.com/document/d/1CheckoutCopyDeck0000/edit');
+  await docs.getByLabel('Label for doc 3').fill('Copy deck');
   await sheet.getByRole('button', { name: 'Refine the goal with your agent' }).click();
   await sheet.getByLabel('The agent’s draft of the goal').getByRole('button', { name: 'Use This' }).click();
   await expect(sheet.getByRole('textbox', { name: 'Goal' })).toHaveValue(/## Open questions/);
@@ -95,6 +107,10 @@ test('Edit lists Slack conversations and meetings row by row, and Refine fills t
   await expect(follows.getByRole('button', { name: 'Open Payments thread in Slack' })).toBeVisible();
   await expect(follows.getByText('#checkout-v2')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Meetings' }).getByRole('listitem')).toHaveCount(3);
+  const docList = page.getByRole('region', { name: 'Docs' });
+  await expect(docList.getByRole('listitem')).toHaveCount(3);
+  await expect(docList.getByRole('listitem').last()).toContainText('Google Doc');
+  await expect(docList.getByRole('button', { name: 'Open Copy deck in the browser' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Goal' }).getByRole('heading', { name: 'Open questions' })).toBeVisible();
   await shot(page, '05-after-save.png');
 });

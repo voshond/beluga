@@ -8,6 +8,9 @@ import {
   type InitiativeView,
   SuggestionsSchema,
   TicketsSchema,
+  confluencePageIdOf,
+  docKindOf,
+  googleFileIdOf,
   linkOf,
   meetingKindOf,
   sameKeys,
@@ -155,6 +158,60 @@ describe('what an initiative follows', () => {
     expect(linkOf('#checkout')).toBeUndefined();
     expect(meetingKindOf('Checkout sync')).toBe('title');
     expect(meetingKindOf('https://calendar.google.com/calendar/event?eid=abc')).toBe('event');
+  });
+});
+
+describe('doc sources', () => {
+  it('works out each doc’s kind from its link', () => {
+    const kinds = {
+      'https://lendis.atlassian.net/wiki/spaces/IT/pages/2543222788/MDM+-+Part+2': 'confluence',
+      'https://lendis.atlassian.net/wiki/spaces/IT/pages/edit-v2/2543222788': 'confluence',
+      'https://wiki.acme.com/pages/viewpage.action?pageId=12345': 'confluence',
+      'https://github.com/acme/site/pages/123': 'link',
+      'https://wiki.acme.com/display/SHOP/Checkout': 'confluence',
+      'https://acme.atlassian.net/wiki/x/AbCd': 'link',
+      'https://docs.google.com/document/d/1AbCdEfGhIjKlMnOp/edit': 'gdoc',
+      'https://docs.google.com/document/u/1/d/1AbCdEfGhIjKlMnOp/edit': 'gdoc',
+      'https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOp/edit#gid=0': 'gsheet',
+      'https://docs.google.com/presentation/d/1AbCdEfGhIjKlMnOp/edit': 'gslides',
+      'https://docs.google.com/forms/d/1AbCdEfGhIjKlMnOp/edit': 'link',
+      'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view': 'link',
+      'https://docs.example.com/checkout-v2': 'link',
+      'not a link': 'link',
+    };
+    expect(Object.fromEntries(Object.keys(kinds).map((ref) => [ref, docKindOf(ref)]))).toEqual(kinds);
+    expect(docKindOf('https://wiki.acme.com/wiki/pages/viewpage.action?pageId=12345')).toBe('confluence');
+  });
+
+  it('finds the Confluence page id and the Google file id', () => {
+    expect(confluencePageIdOf('https://lendis.atlassian.net/wiki/spaces/IT/pages/2543222788/MDM')).toBe('2543222788');
+    expect(confluencePageIdOf('https://wiki.acme.com/wiki/pages/viewpage.action?pageId=12345')).toBe('12345');
+    expect(confluencePageIdOf('https://wiki.acme.com/display/SHOP/Checkout')).toBeUndefined();
+    expect(googleFileIdOf('https://docs.google.com/spreadsheets/d/1AbC-dEf_GhIjKlMnOp/edit#gid=0')).toBe('1AbC-dEf_GhIjKlMnOp');
+    expect(googleFileIdOf('https://evil.example.com/d/1AbCdEfGhIjKlMnOp')).toBeUndefined();
+  });
+
+  it('takes {ref, label?, kind?} docs and fills the kind in from the link', () => {
+    const config = InitiativeConfigSchema.parse({
+      name: 'A',
+      docs: [{ ref: ' https://docs.google.com/document/d/1AbCdEfGhIjKlMnOp/edit ', label: ' Spec ' }, { ref: 'https://acme.com/x', kind: 'gdoc' }],
+    });
+    expect(config.docs).toEqual([
+      { ref: 'https://docs.google.com/document/d/1AbCdEfGhIjKlMnOp/edit', label: 'Spec', kind: 'gdoc' },
+      { ref: 'https://acme.com/x', kind: 'gdoc' },
+    ]);
+    expect(InitiativeConfigSchema.safeParse({ name: 'A', docs: [{ ref: 'https://x', kind: 'pdf' }] }).success).toBe(false);
+    expect(InitiativeConfigSchema.safeParse({ name: 'A', docs: [{ ref: '' }] }).success).toBe(false);
+    expect(InitiativeDraftSchema.parse({ name: 'A', docs: [{ ref: 'https://docs.google.com/presentation/d/1AbCdEfGhIjKlMnOp/edit' }] }).docs).toEqual([{ ref: 'https://docs.google.com/presentation/d/1AbCdEfGhIjKlMnOp/edit', kind: 'gslides' }]);
+  });
+
+  it('migrates an old file’s plain string docs on read, and writes the new shape', () => {
+    const old = InitiativeConfigSchema.parse({ name: 'A', docs: ['https://lendis.atlassian.net/wiki/spaces/IT/pages/2543222788/MDM', ' https://docs.example.com/a '] });
+    expect(old.docs).toEqual([
+      { ref: 'https://lendis.atlassian.net/wiki/spaces/IT/pages/2543222788/MDM', kind: 'confluence' },
+      { ref: 'https://docs.example.com/a', kind: 'link' },
+    ]);
+    expect(InitiativeConfigSchema.parse(JSON.parse(JSON.stringify(old)))).toEqual(old);
   });
 });
 

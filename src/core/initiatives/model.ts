@@ -37,6 +37,60 @@ export type MeetingRef = z.infer<typeof MeetingRefSchema>;
 const slackRefs = z.array(SlackRefSchema).max(40);
 const meetingRefs = z.array(MeetingRefSchema).max(40);
 
+export const DOC_KINDS = ['confluence', 'gdoc', 'gsheet', 'gslides', 'link'] as const;
+export const DocKindSchema = z.enum(DOC_KINDS);
+export type DocKind = z.infer<typeof DocKindSchema>;
+
+export const DOC_KIND_NAME: Readonly<Record<DocKind, string>> = { confluence: 'Confluence page', gdoc: 'Google Doc', gsheet: 'Google Sheet', gslides: 'Google Slides', link: 'Link' };
+
+const GOOGLE_KINDS: ReadonlyArray<readonly [RegExp, DocKind]> = [
+  [/^\/document\/(?:u\/\d+\/)?d\//, 'gdoc'],
+  [/^\/spreadsheets\/(?:u\/\d+\/)?d\//, 'gsheet'],
+  [/^\/presentation\/(?:u\/\d+\/)?d\//, 'gslides'],
+];
+
+const urlOf = (ref: string): URL | undefined => {
+  try {
+    return /^https?:\/\//i.test(ref.trim()) ? new URL(ref.trim()) : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+export const confluencePageIdOf = (ref: string): string | undefined => {
+  const url = urlOf(ref);
+  if (!url) return undefined;
+  return /\/pages\/(?:edit-v2\/)?(\d+)/.exec(url.pathname)?.[1] ?? /^\d+$/.exec(url.searchParams.get('pageId') ?? '')?.[0];
+};
+
+export const googleFileIdOf = (ref: string): string | undefined => {
+  const url = urlOf(ref);
+  if (!url || !/(^|\.)google\.com$/i.test(url.hostname)) return undefined;
+  return /\/d\/([A-Za-z0-9_-]{10,})/.exec(url.pathname)?.[1];
+};
+
+export const docKindOf = (ref: string): DocKind => {
+  const url = urlOf(ref);
+  if (!url) return 'link';
+  if (url.hostname.toLowerCase() === 'docs.google.com' && googleFileIdOf(ref)) return GOOGLE_KINDS.find(([path]) => path.test(url.pathname))?.[1] ?? 'link';
+  if (/\/display\/[^/]+\/./.test(url.pathname)) return 'confluence';
+  const confluencePath = /^\/wiki\//.test(url.pathname) || /\/spaces\//.test(url.pathname) || /\/pages\/viewpage\.action$/.test(url.pathname);
+  return confluencePath && confluencePageIdOf(ref) ? 'confluence' : 'link';
+};
+
+const DocEntrySchema = z.object({
+  ref: z.string().trim().min(1).max(500),
+  label: z.string().trim().max(120).optional(),
+  kind: DocKindSchema.optional(),
+});
+
+export const DocRefSchema = z.union([z.string().trim().min(1).max(500).transform((ref) => ({ ref })), DocEntrySchema]).transform(
+  (entry): { ref: string; label?: string; kind: DocKind } => ({ ref: entry.ref, ...('label' in entry && entry.label ? { label: entry.label } : {}), kind: ('kind' in entry && entry.kind) || docKindOf(entry.ref) }),
+);
+export type DocRef = z.infer<typeof DocRefSchema>;
+
+const docRefs = z.array(DocRefSchema).max(50);
+
 export const InitiativeConfigSchema = z
   .object({
     name: z.string().trim().min(1).max(120),
@@ -48,7 +102,7 @@ export const InitiativeConfigSchema = z
     people: z.array(PersonSchema).max(100).default([]),
     meetings: meetingRefs.optional(),
     calendarMatch: z.string().max(500).optional(),
-    docs: z.array(z.string().min(1).max(500)).max(50).default([]),
+    docs: docRefs.default([]),
     repos: z.array(z.string().min(1).max(120)).max(30).default([]),
     createdAt: z.string().max(40).optional(),
   })
@@ -69,22 +123,23 @@ export const InitiativeDraftSchema = z.object({
   goal: z.string().max(GOAL_MAX).optional(),
   epics: z.array(z.string().regex(EPIC_KEY)).max(20).optional(),
   slack: slackRefs.optional(),
-  docs: z.array(z.string().min(1).max(500)).max(50).optional(),
+  docs: docRefs.optional(),
   repos: z.array(z.string().min(1).max(120)).max(30).optional(),
   meetings: meetingRefs.optional(),
 });
-export type InitiativeDraft = z.infer<typeof InitiativeDraftSchema>;
+export type InitiativeDraft = z.input<typeof InitiativeDraftSchema>;
 
 export const InitiativePatchSchema = InitiativeDraftSchema.partial().extend({
   status: InitiativeStatusSchema.optional(),
   people: z.array(PersonSchema).max(100).optional(),
 });
-export type InitiativePatch = z.infer<typeof InitiativePatchSchema>;
+export type InitiativePatch = z.input<typeof InitiativePatchSchema>;
 
 export const GoalRefineSchema = z.object({
   name: z.string().trim().max(120).default(''),
   goal: z.string().max(GOAL_MAX).default(''),
   epics: z.array(z.string().regex(EPIC_KEY)).max(20).default([]),
+  docs: docRefs.optional(),
 });
 export type GoalRefine = z.infer<typeof GoalRefineSchema>;
 
@@ -211,7 +266,7 @@ export type InitiativeView = {
   readonly status: InitiativeStatus;
   readonly epics: readonly string[];
   readonly slack: readonly SlackRef[];
-  readonly docs: readonly string[];
+  readonly docs: readonly DocRef[];
   readonly repos: readonly string[];
   readonly meetings: readonly MeetingRef[];
   readonly people: readonly InitiativePerson[];

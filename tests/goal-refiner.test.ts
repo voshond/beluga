@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isJiraServer, jiraReadVerdict, parseGoal, refineGoal, refinePrompt } from '../src/agent/goal-refiner.js';
+import { isJiraServer, parseGoal, refineGoal, refinePrompt, sourceReadVerdict } from '../src/agent/goal-refiner.js';
 import { CompletionError, type CompletionRequest } from '../src/agent/runtime/types.js';
 
 describe('refining an initiative’s goal', () => {
@@ -33,6 +33,25 @@ describe('refining an initiative’s goal', () => {
     expect(req.vetTool!('mcp__jira__jira_get_issue', {}).allow).toBe(true);
     expect(req.vetTool!('mcp__jira__jira_add_comment', {}).allow).toBe(false);
     expect(req.maxTurns).toBeGreaterThan(1);
+    expect(req.connectors).toBeUndefined();
+  });
+
+  it('names each doc source and how to read it, and loads the claude.ai connectors only for a Google file', async () => {
+    const docs = [
+      { ref: 'https://acme.atlassian.net/wiki/spaces/MDM/pages/2543222788/MDM+Part+2', label: 'MDM 2', kind: 'confluence' as const },
+      { ref: 'https://docs.google.com/document/d/1AbCdEfGhIjKlMnOp/edit', kind: 'gdoc' as const },
+    ];
+    expect(refinePrompt({ name: 'A', goal: '', epics: [], docs })).toContain(
+      'Doc sources:\n- https://acme.atlassian.net/wiki/spaces/MDM/pages/2543222788/MDM+Part+2 “MDM 2” (Confluence page 2543222788: read it with the Confluence MCP (confluence_get_page, page_id 2543222788))\n- https://docs.google.com/document/d/1AbCdEfGhIjKlMnOp/edit (Google Doc, file id 1AbCdEfGhIjKlMnOp: read it with Google Drive’s read_file_content)',
+    );
+    const seen: CompletionRequest[] = [];
+    const answer = async (req: CompletionRequest): Promise<string> => (seen.push(req), 'Ship the thing to everyone, soon.');
+    await refineGoal({ name: 'A', goal: 'ship', epics: [], docs }, { cwd: '/tmp', complete: answer });
+    await refineGoal({ name: 'A', goal: 'ship', epics: [], docs: [docs[0]!] }, { cwd: '/tmp', complete: answer });
+    expect(seen.map((req) => [req.connectors, req.maxTurns! > 1])).toEqual([
+      [true, true],
+      [undefined, true],
+    ]);
   });
 
   it('takes one turn when there is no epic to read', async () => {
@@ -41,11 +60,47 @@ describe('refining an initiative’s goal', () => {
     expect(seen[0]!.maxTurns).toBe(1);
   });
 
-  it('allows Jira reads only', () => {
-    const allowed = ['mcp__jira__jira_get_issue', 'mcp__jira__jira_search', 'mcp__jira__jira_get_project_issues', 'mcp__mcp-atlassian__jira_get_issue', 'mcp__atlassian__getJiraIssue', 'mcp__atlassian__searchJiraIssuesUsingJql'];
-    const denied = ['mcp__jira__jira_add_comment', 'mcp__jira__jira_update_issue', 'mcp__jira__jira_transition_issue', 'mcp__jira__jira_create_issue', 'mcp__jira__jira_delete_issue', 'mcp__jira__jira_get_transitions', 'mcp__jira__jira_download_attachments', 'mcp__slack__slack_read_thread', 'Bash', 'Read', 'Write', 'mcp__atlassian__editJiraIssue'];
-    expect(allowed.filter((tool) => !jiraReadVerdict(tool).allow)).toEqual([]);
-    expect(denied.filter((tool) => jiraReadVerdict(tool).allow)).toEqual([]);
+  it('allows Jira, Confluence and Google Drive reads only', () => {
+    const allowed = [
+      'mcp__jira__jira_get_issue',
+      'mcp__jira__jira_search',
+      'mcp__jira__jira_get_project_issues',
+      'mcp__mcp-atlassian__jira_get_issue',
+      'mcp__atlassian__getJiraIssue',
+      'mcp__atlassian__searchJiraIssuesUsingJql',
+      'mcp__jira__confluence_get_page',
+      'mcp__jira__confluence_search',
+      'mcp__atlassian__getConfluencePage',
+      'mcp__claude_ai_Google_Drive__read_file_content',
+      'mcp__claude_ai_Google_Drive__get_file_metadata',
+      'mcp__claude_ai_Google_Drive__search_files',
+    ];
+    const denied = [
+      'mcp__jira__jira_add_comment',
+      'mcp__jira__jira_update_issue',
+      'mcp__jira__jira_transition_issue',
+      'mcp__jira__jira_create_issue',
+      'mcp__jira__jira_delete_issue',
+      'mcp__jira__jira_get_transitions',
+      'mcp__jira__jira_download_attachments',
+      'mcp__jira__confluence_create_page',
+      'mcp__jira__confluence_update_page',
+      'mcp__jira__confluence_add_comment',
+      'mcp__jira__confluence_add_label',
+      'mcp__claude_ai_Google_Drive__update_file',
+      'mcp__claude_ai_Google_Drive__create_file',
+      'mcp__claude_ai_Google_Drive__share_file',
+      'mcp__claude_ai_Google_Drive__trash_file',
+      'mcp__claude_ai_Google_Drive__download_file_content',
+      'mcp__claude_ai_Gmail__search_threads',
+      'mcp__slack__slack_read_thread',
+      'Bash',
+      'Read',
+      'Write',
+      'mcp__atlassian__editJiraIssue',
+    ];
+    expect(allowed.filter((tool) => !sourceReadVerdict(tool).allow)).toEqual([]);
+    expect(denied.filter((tool) => sourceReadVerdict(tool).allow)).toEqual([]);
     expect(isJiraServer('Atlassian')).toBe(true);
   });
 

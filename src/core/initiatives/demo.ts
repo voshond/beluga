@@ -22,7 +22,7 @@ const demos = (now: number): DemoInitiative[] => {
   const at = (back: number): string => new Date(now - back * DAY).toISOString();
   return [
     {
-      draft: { name: 'Checkout v2', goal: 'Ship the new one-page checkout to every market before the holiday freeze.\n\n## Scope\n\n- In: cards, Apple Pay, address lookup\n- Out: Google Pay (after the freeze)\n\n## Acceptance\n\n- Live in every market\n- Conversion no worse than the old flow', epics: ['SHOP-120'], slack: [{ ref: '#checkout-v2' }, { ref: 'https://example.slack.com/archives/C0CHECKOUT/p1763990000000100', label: '3DS on Safari' }], docs: ['https://docs.example.com/checkout-v2'], meetings: [{ match: 'Checkout' }, { match: 'Go/no-go', label: 'Thursday' }], repos: [] },
+      draft: { name: 'Checkout v2', goal: 'Ship the new one-page checkout to every market before the holiday freeze.\n\n## Scope\n\n- In: cards, Apple Pay, address lookup\n- Out: Google Pay (after the freeze)\n\n## Acceptance\n\n- Live in every market\n- Conversion no worse than the old flow', epics: ['SHOP-120'], slack: [{ ref: '#checkout-v2' }, { ref: 'https://example.slack.com/archives/C0CHECKOUT/p1763990000000100', label: '3DS on Safari' }], docs: [{ ref: 'https://acme.atlassian.net/wiki/spaces/SHOP/pages/2201/Checkout+v2', label: 'Checkout v2 spec', kind: 'confluence' }, { ref: 'https://docs.google.com/spreadsheets/d/1CheckoutRolloutPlan0000/edit', label: 'Rollout plan', kind: 'gsheet' }], meetings: [{ match: 'Checkout' }, { match: 'Go/no-go', label: 'Thursday' }], repos: [] },
       tickets: {
         at: iso,
         tickets: [
