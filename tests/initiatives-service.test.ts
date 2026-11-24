@@ -38,7 +38,7 @@ const fakeHost = (): Host => {
   };
 };
 
-const setup = async (opts: { readonly commit?: boolean } = {}) => {
+const setup = async (opts: { readonly commit?: boolean; readonly now?: () => number } = {}) => {
   const store = new Store(initialState('room', 'auto'));
   store.dispatch({ type: 'identity', selfId: SELF, isHost: true, home: '/Users/k' });
   const root = path.join(tmp(), 'initiatives');
@@ -55,6 +55,7 @@ const setup = async (opts: { readonly commit?: boolean } = {}) => {
     },
     checkIns: () => host,
     commit: opts.commit ?? false,
+    ...(opts.now ? { now: opts.now } : {}),
     claudeDir: tmp(),
   });
   await service.start();
@@ -177,5 +178,26 @@ describe('Initiatives', () => {
     expect(items.map((i) => i.name)).toEqual(['Checkout v2', 'Mobile Onboarding']);
     expect(items[0]).toMatchObject({ progress: { total: 34, done: 21 }, openDecisions: [expect.stringContaining('Norway'), expect.stringContaining('guest checkout')] });
     expect(items.every((i) => i.suggestions.length > 0 && !i.trouble)).toBe(true);
+  });
+
+  it('shows a failing backup push until one goes through', async () => {
+    let at = 1_000;
+    const { store, root, service } = await setup({ commit: true, now: () => at });
+    const remote = path.join(tmp(), 'remote.git');
+    execFileSync('git', ['init', '--quiet', '--bare', remote]);
+    execFileSync('git', ['remote', 'add', 'origin', remote], { cwd: root });
+    execFileSync('git', ['push', '--quiet', '-u', 'origin', 'HEAD'], { cwd: root });
+    execFileSync('git', ['remote', 'set-url', 'origin', path.join(tmp(), 'missing.git')], { cwd: root });
+    const { slug } = await service.create({ name: 'Checkout v2', goal: 'Ship it' });
+    const first = store.getState().initiatives.backup;
+    expect(first).toMatchObject({ since: 1_000 });
+    expect(first?.error).toBeTruthy();
+    at = 5_000;
+    await service.update(slug, { goal: 'Ship it soon' });
+    expect(store.getState().initiatives.backup?.since).toBe(1_000);
+    execFileSync('git', ['remote', 'set-url', 'origin', remote], { cwd: root });
+    await service.update(slug, { goal: 'Ship it now' });
+    expect(store.getState().initiatives.backup).toBeUndefined();
+    expect(gitLog(remote)[0]).toBe(`${slug}: updated`);
   });
 });

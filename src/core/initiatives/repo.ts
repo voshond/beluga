@@ -53,15 +53,36 @@ export const ensureRepo = async (root: string): Promise<void> => {
   await git(root, [...(await commitArgs(root)), 'commit', '--quiet', '-m', 'Initiatives'], 60_000);
 };
 
-const pushIfTracked = async (root: string): Promise<void> => {
+export type PushResult = { readonly ok: true } | { readonly ok: false; readonly error: string };
+
+export type OnPush = (result: PushResult) => void;
+
+const PUSH_ERROR_MAX = 240;
+
+const pushError = (err: Error): string => {
+  const line = err.message.split('\n').map((l) => l.trim()).filter(Boolean).find((l) => /^(fatal|error|remote):/i.test(l)) ?? err.message.trim();
+  return line.slice(0, PUSH_ERROR_MAX) || 'git push failed';
+};
+
+export const pushIfTracked = async (root: string): Promise<PushResult | undefined> => {
   const upstream = await tryGit(root, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
-  if (!upstream?.trim()) return;
-  await tryGit(root, ['push', '--quiet']);
+  if (!upstream?.trim()) return undefined;
+  try {
+    await git(root, ['push', '--quiet'], 120_000);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: pushError(err instanceof Error ? err : new Error(String(err))) };
+  }
+};
+
+export const unpushedCount = async (root: string): Promise<number> => {
+  const count = await tryGit(root, ['rev-list', '--count', '@{u}..HEAD']);
+  return Number(count?.trim()) || 0;
 };
 
 const queues = new Map<string, Promise<boolean>>();
 
-export const commitFolder = (root: string, slug: string, message: string): Promise<boolean> => {
+export const commitFolder = (root: string, slug: string, message: string, onPush?: OnPush): Promise<boolean> => {
   if (!INITIATIVE_SLUG.test(slug)) return Promise.resolve(false);
   const commit = async (): Promise<boolean> => {
     if (!existsSync(path.join(root, slug))) return false;
@@ -69,7 +90,8 @@ export const commitFolder = (root: string, slug: string, message: string): Promi
     const changed = (await git(root, ['diff', '--cached', '--name-only', '--', slug])).trim();
     if (!changed) return false;
     await git(root, [...(await commitArgs(root)), 'commit', '--quiet', '-m', message, '--', slug]);
-    await pushIfTracked(root);
+    const pushed = await pushIfTracked(root);
+    if (pushed) onPush?.(pushed);
     return true;
   };
   const previous = queues.get(root) ?? Promise.resolve(false);

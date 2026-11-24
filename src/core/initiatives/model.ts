@@ -125,10 +125,16 @@ export type InitiativeView = {
   readonly trouble?: string;
 };
 
+export type BackupTrouble = {
+  readonly since: number;
+  readonly error: string;
+};
+
 export type InitiativesState = {
   readonly enabled: boolean;
   readonly root: string;
   readonly items: readonly InitiativeView[];
+  readonly backup?: BackupTrouble;
 };
 
 export type InitiativesSlice = {
@@ -143,11 +149,16 @@ export type InitiativesAction =
   | { type: 'initiatives_init'; state: InitiativesState }
   | { type: 'initiative_put'; item: InitiativeView }
   | { type: 'initiative_remove'; slug: string }
+  | { type: 'initiatives_backup'; backup?: BackupTrouble }
   | { type: 'initiatives_off' };
 
 export const reduceInitiatives = (state: InitiativesSlice, action: InitiativesAction): InitiativesSlice => {
   const current = state.initiatives;
-  if (action.type === 'initiatives_init') return { initiatives: action.state };
+  if (action.type === 'initiatives_init') return { initiatives: { ...action.state, ...(current.backup ? { backup: current.backup } : {}) } };
+  if (action.type === 'initiatives_backup') {
+    const { backup: _was, ...rest } = current;
+    return { initiatives: action.backup ? { ...rest, backup: action.backup } : rest };
+  }
   if (action.type === 'initiatives_off') return { initiatives: NO_INITIATIVES };
   if (action.type === 'initiative_remove') return { initiatives: { ...current, items: current.items.filter((i) => i.slug !== action.slug) } };
   const at = current.items.findIndex((i) => i.slug === action.item.slug);

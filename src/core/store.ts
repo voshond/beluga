@@ -1619,6 +1619,7 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
     case 'initiatives_init':
     case 'initiative_put':
     case 'initiative_remove':
+    case 'initiatives_backup':
     case 'initiatives_off':
       return { ...state, ...reduceInitiatives(state, action) };
     case 'plans_init':

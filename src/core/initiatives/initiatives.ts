@@ -22,7 +22,7 @@ import {
   uniqueSlug,
 } from './model.js';
 import { CHECK_IN_PROMPT, type LinkedRepo, initiativeBrief } from './prompt.js';
-import { commitFolder, dayOf, ensureRepo } from './repo.js';
+import { type PushResult, commitFolder, dayOf, ensureRepo, pushIfTracked, unpushedCount } from './repo.js';
 
 export type CheckInHost = {
   readonly create: (draft: SentinelDraft) => { readonly id: string };
@@ -88,6 +88,7 @@ export class Initiatives {
     if (this.stopped) return;
     const items = listSlugs(this.deps.root).map((slug) => this.view(slug));
     this.deps.store.dispatch({ type: 'initiatives_init', state: { enabled: true, root: this.deps.root, items } });
+    await this.pushPending().catch(() => undefined);
   }
 
   stop(): void {
@@ -172,10 +173,26 @@ export class Initiatives {
   private async commit(slug: string, message: string): Promise<void> {
     if (!this.deps.commit) return;
     try {
-      await commitFolder(this.deps.root, slug, message);
+      await commitFolder(this.deps.root, slug, message, (result) => this.pushed(result));
     } catch {
       return;
     }
+  }
+
+  private pushed(result: PushResult): void {
+    if (this.stopped) return;
+    const was = this.deps.store.getState().initiatives.backup;
+    if (result.ok) {
+      if (was) this.deps.store.dispatch({ type: 'initiatives_backup' });
+      return;
+    }
+    this.deps.store.dispatch({ type: 'initiatives_backup', backup: { since: was?.since ?? this.now, error: result.error } });
+  }
+
+  private async pushPending(): Promise<void> {
+    if (!this.deps.commit || !(await unpushedCount(this.deps.root))) return;
+    const result = await pushIfTracked(this.deps.root);
+    if (result) this.pushed(result);
   }
 
   private checkInDraft(slug: string, name: string): SentinelDraft {

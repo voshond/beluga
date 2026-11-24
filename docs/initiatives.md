@@ -6,7 +6,7 @@ The agent **suggests, the user approves**. It never writes to Jira, Slack or the
 
 ## 1. The memory repo
 
-One git repository, one folder per initiative. Its path is kept in `~/.beluga/initiatives.json` (`{ "root": "~/…" }`), `~/Documents/GitHub/initiatives` by default. Beluga runs `git init` on first use (with a `README.md` and a `.gitignore` that leaves out `.beluga/`). Without a remote it only commits. When the branch tracks one (`git push -u`), every commit is pushed right after; a push that fails (offline, no access) leaves the commit local and goes out with the next one.
+One git repository, one folder per initiative. Its path is kept in `~/.beluga/initiatives.json` (`{ "root": "~/…" }`), `~/Documents/GitHub/initiatives` by default. Beluga runs `git init` on first use (with a `README.md` and a `.gitignore` that leaves out `.beluga/`). Without a remote it only commits. When the branch tracks one (`git push -u`), every commit is pushed right after; a push that fails (offline, no access) leaves the commit local and goes out with the next one. A failing push shows as a warning on the Initiatives page (`backup`: when it first failed and git's last error) until a push goes through. When the daemon starts, it pushes commits still waiting.
 
 ```
 initiatives/
@@ -52,7 +52,7 @@ The prompt has the agent read the epics' tickets (Jira MCP), the linked Slack ch
 
 `src/ipc/initiatives-api.ts` (zod only) and `initiatives-handlers.ts`: `initiatives.create(draft)` → `{ slug }`, `update(slug, patch)`, `archive(slug)` (its check-in pauses), `setRepo(slug, repo, linked)`, `setCheckIn(slug, on)`, `checkInNow(slug)`, `chatNew(slug)`, `chatOpen(slug, id)`, `chatDelete(slug, id)`, `resolveSuggestion(slug, id, decision)`, `readFile(slug, path)` (a memory file, never outside its folder). All are `mac` for the phone (`src/companion/coverage.ts`), `drive` for your other computers, and refused to external agents. Messages go through `session.submit` with the chat's channel.
 
-The state's `initiatives` slice (`InitiativesState`: `enabled`, `root`, `items`) changes through `initiatives_init`, `initiative_put`, `initiative_remove` and `initiatives_off`. Each item is an `InitiativeView`: the config's fields, `progress`, `suggestions`, `openDecisions` (the bullets under "## Open" in `decisions.md`), `recent` (the first bullets of `timeline.md`), `files`, `checkIn` (its sentinel's id), `chats` and `trouble`. The views are `initiatives` (the list) and `initiative_page` (`slug`, and `chat`: its channel is the page's conversation).
+The state's `initiatives` slice (`InitiativesState`: `enabled`, `root`, `items`, and `backup` while pushes fail) changes through `initiatives_init`, `initiative_put`, `initiative_remove`, `initiatives_backup` and `initiatives_off`. Each item is an `InitiativeView`: the config's fields, `progress`, `suggestions`, `openDecisions` (the bullets under "## Open" in `decisions.md`), `recent` (the first bullets of `timeline.md`), `files`, `checkIn` (its sentinel's id), `chats` and `trouble`. The views are `initiatives` (the list) and `initiative_page` (`slug`, and `chat`: its channel is the page's conversation).
 
 ## 6. The window (`packages/mac/src/initiatives/`)
 

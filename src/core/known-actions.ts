@@ -77,6 +77,7 @@ const KNOWN = {
   identity: true,
   initiative_put: true,
   initiative_remove: true,
+  initiatives_backup: true,
   initiatives_init: true,
   initiatives_off: true,
   invite: true,

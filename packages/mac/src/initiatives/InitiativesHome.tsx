@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { type InitiativeView, openSuggestions } from '@beluga/core/initiatives/model.js';
+import { type BackupTrouble, type InitiativeView, openSuggestions } from '@beluga/core/initiatives/model.js';
 import { Icon } from '../components/Icon.js';
 import { Button, Empty } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
@@ -48,10 +48,18 @@ const InitiativeCard = ({ item, now }: { item: InitiativeView; now: number }) =>
   );
 };
 
+const BackupWarning = ({ backup, now }: { backup: BackupTrouble; now: number }) => (
+  <p className={s.trouble} role="alert" data-backup="failing">
+    <Icon name="alert" size={12} />
+    Backup to GitHub is failing. First failed: {ago(backup.since, now)}. Last error: {backup.error}. Changes are still committed here and go up with the next push that works.
+  </p>
+);
+
 export const InitiativesHome = () => {
   const enabled = useApp((st) => st.initiatives.enabled);
   const items = useApp((st) => sortedInitiatives(st.initiatives.items), sameDeep);
   const root = useApp((st) => st.initiatives.root);
+  const backup = useApp((st) => st.initiatives.backup, sameDeep);
   const now = useClock(true, 60_000);
   const [making, setMaking] = useState(false);
   const handleNew = (): void => setMaking(true);
@@ -69,6 +77,7 @@ export const InitiativesHome = () => {
             </Button>
           </div>
           <p className={s.lede}>Each drives one thing to ship: its Jira epics, Slack channels, meetings and decisions, with chats and a memory your agent keeps in {root || 'its repo'}.</p>
+          {backup ? <BackupWarning backup={backup} now={now} /> : null}
           {items.length ? (
             <div className={s.list} role="list" aria-label="Initiatives">
               {items.map((item) => (
