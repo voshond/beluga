@@ -15,6 +15,7 @@ import { gateTool } from '../../tool-gate.js';
 import type { AgentRunInput, RoomBridge, TerminalLaunch, TerminalSink } from '../../types.js';
 import { TerminalShelf } from '../../view-tools.js';
 import { claudeShellSetup, zshCompatEnv } from './zsh-compat.js';
+import { holdSignIn } from './sign-in-env.js';
 import { claudePlansDir } from './plan-text.js';
 
 /** Claude Code's own settings file (~/.claude.json, or in $CLAUDE_CONFIG_DIR). */
@@ -175,7 +176,8 @@ export async function claudeTerminal(input: AgentRunInput, sink: TerminalSink, o
     return {
       file: opts.claudePath ?? claudeCodeCommand(),
       args,
-      env: { ...compat, ...input.env, [GATE_URL_ENV]: mounted.hookUrl ?? '', [GATE_TOKEN_ENV]: mounted.token },
+      // A project's or chat's Anthropic key goes to its commands, never to how Claude Code signs in (sign-in-env.ts).
+      env: { ...(compat.CLAUDE_ENV_FILE ? holdSignIn({ ...compat, ...input.env }, input.env) : { ...compat, ...input.env }), [GATE_URL_ENV]: mounted.hookUrl ?? '', [GATE_TOKEN_ENV]: mounted.token },
       session: id,
       fresh,
       close,

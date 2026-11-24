@@ -2,6 +2,7 @@ import { accessSync, constants, mkdirSync, readFileSync, renameSync, writeFileSy
 import path from 'node:path';
 import { belugaHome } from '../../../core/home.js';
 import type { ShellSetup } from '../../prompt.js';
+import { SHELL_RESTORE } from './sign-in-env.js';
 
 /**
  * Claude Code runs its Bash tool in zsh on most Macs, and the model writes bash. In zsh that stops
@@ -14,8 +15,11 @@ import type { ShellSetup } from '../../prompt.js';
  * changes how working zsh code reads its variables or prints: no SH_WORD_SPLIT or KSH_ARRAYS (a
  * loop over `$path` saw one folder, `$#arr` gave 1), no BSD_ECHO (a function's `echo "\e[1m"`
  * printed the escape as text). The prompt covers those habits instead (prompt.ts).
+ *
+ * It also gives a command the sign-in variables a run's own variables held back from Claude Code
+ * itself (sign-in-env.ts, BLG-1027), in zsh and bash alike.
  */
-export const ZSH_COMPAT = 'if [ -n "$ZSH_VERSION" ]; then setopt NO_NOMATCH NO_BAD_PATTERN NO_EQUALS; fi\n';
+export const ZSH_COMPAT = `if [ -n "$ZSH_VERSION" ]; then setopt NO_NOMATCH NO_BAD_PATTERN NO_EQUALS; fi\n${SHELL_RESTORE}`;
 
 export const ZSH_COMPAT_FILE = 'zsh-compat.sh';
 

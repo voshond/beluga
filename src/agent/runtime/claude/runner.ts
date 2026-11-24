@@ -25,7 +25,9 @@ import { claudeComplete } from './complete.js';
 import { askBtw } from './btw.js';
 import { claudeTerminal } from './terminal.js';
 import { claudeLaunch } from './launch-args.js';
-import { chromeGate, isChromeTool } from '../../chrome.js';
+import { chromeGate, chromeOffByFlags, isChromeTool } from '../../chrome.js';
+import { chromeLaunch, chromeNote, withChrome } from './chrome-status.js';
+import { holdSignIn, signInChanges, signedInWith } from './sign-in-env.js';
 import { ViewShelf } from '../../view-tools.js';
 import { runToolSuites } from '../../run-tools.js';
 import { sdkServers } from './sdk-mount.js';
@@ -358,7 +360,14 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
       // zsh-compat.sh makes Claude Code's zsh take the bash it writes (zsh-compat.ts); the prompt says what's left.
       const baseLaunchEnv = claudeLaunchEnv(input);
       const compat = zshCompatEnv(baseLaunchEnv ?? process.env);
-      const launchEnv = withAppsHost(withZshCompat(baseLaunchEnv, compat), input);
+      // A project's or chat's Anthropic key is for its code: Claude Code keeps its own sign-in, and with it
+      // Claude in Chrome and the claude.ai connectors; its commands still get the key (sign-in-env.ts, BLG-1027).
+      const holds = Boolean(compat.CLAUDE_ENV_FILE) && inheritsDaemonEnv(input);
+      const launchEnv = withAppsHost(holds ? holdSignIn(withZshCompat(baseLaunchEnv, compat), input.env) : withZshCompat(baseLaunchEnv, compat), input);
+      const signIn = signedInWith(launchEnv ?? process.env);
+      const browser = chromeLaunch({ allowed: Boolean(input.chrome), noChromeFlag: chromeOffByFlags(input.launchArgs?.claude), ...(signIn ? { signIn, signInFromPlace: signInChanges(input.env).includes(signIn) } : {}) });
+      // mcp_servers lists Claude in Chrome as this session has it, and mcp_sign_in reconnects it here.
+      const tooled: AgentRunInput = input.mcpTools ? { ...input, mcpTools: withChrome(input.mcpTools, { launch: browser, servers: () => q.mcpServerStatus(), reconnect: (name) => q.reconnectMcpServer(name), enable: (name) => q.toggleMcpServer(name, true) }) } : input;
       const failure = (end: RunEnd): RunFailedError => new RunFailedError(withSignInHint(classifyRun(end), launchEnv, inheritsDaemonEnv(input)));
       const options: Options = {
         cwd,
@@ -371,7 +380,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
         ...(launch.allowDangerouslySkipPermissions ? { allowDangerouslySkipPermissions: true } : {}),
         ...(Object.keys(launch.extraArgs).length ? { extraArgs: launch.extraArgs } : {}),
         // Your own MCP servers first, so a name of Beluga's always means Beluga's.
-        mcpServers: { ...(input.ownerMcp && !input.guest ? ownerMcpServers(cwd, { ...process.env, ...input.env }) : {}), ...sdkServers(runToolSuites(input, bridge, shelf, cwd)) },
+        mcpServers: { ...(input.ownerMcp && !input.guest ? ownerMcpServers(cwd, { ...process.env, ...input.env }) : {}), ...sdkServers(runToolSuites(tooled, bridge, shelf, cwd)) },
         // The hook runs before Claude Code's own permission logic, even for commands it would
         // auto-approve, so the machine owner stays in control of every risky action.
         hooks: {
@@ -422,7 +431,7 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
             },
           ],
         },
-        systemPrompt: { type: 'preset', preset: 'claude_code', append: runInstructions(input, opts.bridge.selfName(), opts.agentOf?.(input) ?? input.place?.agent, claudeShellSetup(baseLaunchEnv ?? process.env, compat)) },
+        systemPrompt: { type: 'preset', preset: 'claude_code', append: runInstructions(input, opts.bridge.selfName(), opts.agentOf?.(input) ?? input.place?.agent, claudeShellSetup(baseLaunchEnv ?? process.env, compat)) + chromeNote(browser, Boolean(input.chrome)) },
         ...ownerSettings(input),
         ...skills,
         ...((input.model ?? opts.model) ? { model: input.model ?? opts.model } : {}),
