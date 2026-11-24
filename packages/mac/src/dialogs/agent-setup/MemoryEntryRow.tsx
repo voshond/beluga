@@ -7,11 +7,12 @@ type MemoryEntryRowProps = {
   readonly entry: MemoryEntry;
   readonly onSave: (entry: MemoryEntry, text: string) => Promise<boolean>;
   readonly onRemove: (entry: MemoryEntry) => void;
+  readonly onFile: (entry: MemoryEntry) => void;
 };
 
 const AUTHOR_WORDS: Record<MemoryEntry['by'], string> = { you: 'You', agent: 'An agent' };
 
-export const MemoryEntryRow = ({ entry, onSave, onRemove }: MemoryEntryRowProps) => {
+export const MemoryEntryRow = ({ entry, onSave, onRemove, onFile }: MemoryEntryRowProps) => {
   const [text, setText] = useState(entry.text);
 
   const handleBlur = async () => {
@@ -25,6 +26,7 @@ export const MemoryEntryRow = ({ entry, onSave, onRemove }: MemoryEntryRowProps)
       <span className={a.muted} title={new Date(entry.at).toLocaleString()}>
         {AUTHOR_WORDS[entry.by]}
       </span>
+      <IconButton icon="archive" label={entry.filed ? 'Bring Back Into Every Run' : 'File Away: Only When Relevant'} onClick={() => onFile(entry)} />
       <IconButton icon="trash" label="Forget This Entry" onClick={() => onRemove(entry)} />
     </div>
   );

@@ -114,9 +114,9 @@ export interface AgentHostDeps {
   /** Your shared skills (your own runs): read them and propose new ones or fixes behind a card (BLG-98); `agent` is who proposes ("Claude"), `learn` marks each proposal on the run's card (BLG-102). */
   readonly skills?: (agent: string, learn?: Learn) => import('../agent/types.js').SkillTools | undefined;
   /** Beluga's memory for one of your own runs (core/memory, BLG-95): the user's, and the project's when the run is in one. `learn` marks each write on the run's card (BLG-102). */
-  readonly memory?: (channel: string, cwd?: string, learn?: Learn) => import('./memory/run.js').MemoryRun | undefined;
-  /** Honcho's picture of you and its question tool for one of your own runs (core/honcho/run.ts, BLG-101); undefined when Honcho is off. */
-  readonly honcho?: () => Promise<import('./honcho/run.js').HonchoRun | undefined>;
+  readonly memory?: (channel: string, cwd?: string, learn?: Learn, request?: string) => import('./memory/run.js').MemoryRun | undefined;
+  /** Honcho's picture of you and its question tool for one of your own runs (core/honcho/run.ts, BLG-101), picked for what it is about (BLG-122); undefined when Honcho is off. */
+  readonly honcho?: (channel: string, cwd?: string, request?: string) => Promise<import('./honcho/run.js').HonchoRun | undefined>;
   /** Called when Claude runs a Bash command in a worktree: records it for Toolbox detection (BLG-75). */
   readonly onBashCommand?: (worktree: string, command: string) => void;
   /** A plan's home conversation (your own runs): its plan tools and what Claude is told about the plan (core/plans); `said` is what this run was asked, `chain` the chat chain it is in. */
@@ -1676,7 +1676,7 @@ export class AgentHost {
       // Beluga's secrets rules still apply), not only read like other main-folder chats.
       const runPlace = plans?.tools && place?.askOnly && !place.syncMain ? withoutAskOnly(place) : place;
       // Honcho's picture of you (BLG-101): your own runs only, never a friend's worktree or an external agent's. Waits a couple of seconds at most.
-      const honcho = from === this.selfId && !external && !guest ? await this.honchoFor() : {};
+      const honcho = from === this.selfId && !external && !guest ? await this.honchoFor(body.channel, runPlace?.cwd, body.prompt) : {};
       const final = await Promise.race([gone, exited, outsideYourHand(() => agent.run({
         ...(scratch ? { scratchDir: scratch } : {}),
         ...this.links.linkOf(body.channel),
@@ -1767,7 +1767,7 @@ export class AgentHost {
         ...(yours ? this.launchArgs() : {}),
         ...(yours ? this.machineBrief() : {}),
         // Beluga's memory (BLG-95): about you and this project. A friend's run never gets it.
-        ...(yours ? this.memoryFor(body.channel, place?.cwd, learn) : {}),
+        ...(yours ? this.memoryFor(body.channel, place?.cwd, learn, body.prompt) : {}),
         ...honcho,
         // Your variables can hold secrets: only runs you asked for get them, never a friend's.
         // Your own runs also get adb on PATH (and ANDROID_SERIAL) when a phone is set up, so Bash can drive it (BLG-174).
@@ -1866,8 +1866,8 @@ export class AgentHost {
         ownerMcp: true,
         ...this.launchArgs(),
         ...this.machineBrief(),
-        ...this.memoryFor(channel, place.cwd),
-        ...(await this.honchoFor()),
+        ...this.memoryFor(channel, place.cwd, undefined, prompt),
+        ...(await this.honchoFor(channel, place.cwd, prompt)),
         env: { ...this.deps.envFor?.(channel, place.cwd), ...(phone?.env ?? {}), ...tag },
       },
       sink,
@@ -1885,13 +1885,13 @@ export class AgentHost {
     const requesterName = peerName(this.store.getState(), this.selfId);
     this.deps.questions.track(requestId, this.selfId, channel);
     let tokens = 0;
-    const honcho = await this.honchoFor();
+    const honcho = await this.honchoFor(channel, opts.place?.cwd, input.prompt);
     const text = await backend.run({
       requesterName,
       viaAgent: false,
       context: [],
       ...this.machineBrief(),
-      ...this.memoryFor(channel, opts.place?.cwd),
+      ...this.memoryFor(channel, opts.place?.cwd, undefined, input.prompt),
       ...honcho,
       ...input,
       scope: input.scope ?? 'full',
@@ -1912,13 +1912,13 @@ export class AgentHost {
   }
 
   /** Honcho's picture of you and its question tool (BLG-101), when Honcho is on: never a friend's run. */
-  private async honchoFor(): Promise<Pick<AgentRunInput, 'honchoBrief' | 'honchoTools'>> {
-    const honcho = await this.deps.honcho?.().catch(() => undefined);
+  private async honchoFor(channel: string, cwd?: string, request?: string): Promise<Pick<AgentRunInput, 'honchoBrief' | 'honchoTools'>> {
+    const honcho = await this.deps.honcho?.(channel, cwd, request).catch(() => undefined);
     return honcho ? { ...(honcho.brief ? { honchoBrief: honcho.brief } : {}), honchoTools: honcho.tools } : {};
   }
 
-    private memoryFor(channel: string, cwd?: string, learn?: Learn): Pick<AgentRunInput, 'memoryBrief' | 'memoryTools'> {
-    const memory = this.deps.memory?.(channel, cwd, learn);
+    private memoryFor(channel: string, cwd?: string, learn?: Learn, request?: string): Pick<AgentRunInput, 'memoryBrief' | 'memoryTools'> {
+    const memory = this.deps.memory?.(channel, cwd, learn, request);
     return memory ? { memoryBrief: memory.brief, memoryTools: memory.tools } : {};
   }
 

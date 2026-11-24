@@ -217,6 +217,8 @@ export const PhoneCalls = {
   // BLG-96: Keep / Update or Discard on what the reflection pass proposed to remember.
   'memory.keepProposal': entry('memory.keepProposal', done),
   'memory.discardProposal': entry('memory.discardProposal', done),
+  // BLG-124: Wrong on a card for something Honcho noticed.
+  'memory.rejectProposal': entry('memory.rejectProposal', done),
   // 1.22 (BLG-244): a number over time (its points, oldest first), and pull to refresh a dashboard.
   'sentinel.metricRead': entry('sentinel.metricRead', z.object({ metric: z.object({ name: z.string(), label: z.string(), unit: z.string() }).passthrough(), lines: z.array(z.object({ at: z.number(), runId: z.string(), value: z.number().optional() }).passthrough()) })),
   'dashboard.refresh': entry('dashboard.refresh', z.object({ total: z.number() })),

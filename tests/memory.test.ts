@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -13,7 +13,7 @@ import { AgentHost } from '../src/core/agent-host.js';
 import { memoryForRun } from '../src/core/memory/run.js';
 import { MemoryError, MemoryStore, secretInMemory } from '../src/core/memory/store.js';
 import { Store, initialState } from '../src/core/store.js';
-import { PROJECT_MEMORY_MAX, USER_MEMORY_MAX } from '../src/shared/memory.js';
+import { FILED_MEMORY_MAX, PROJECT_MEMORY_MAX, USER_MEMORY_MAX, relevantEntries } from '../src/shared/memory.js';
 import { FakeCodex } from './fake-codex.js';
 import { waitFor } from './helpers.js';
 import { room } from './runtime-conformance.js';
@@ -61,6 +61,63 @@ describe('the memory store', () => {
     writeFileSync(path.join(home, 'memory', 'user.json'), JSON.stringify({ entries: [{ id, text: 'z'.repeat(USER_MEMORY_MAX + 50), at: 0, by: 'you' }] }));
     expect(store.replace(USER, id, 'z'.repeat(USER_MEMORY_MAX + 10), 'you').used).toBe(USER_MEMORY_MAX + 10);
     expect(store.remove(USER, id).used).toBe(0);
+  });
+
+  it('merges entries in one write, and refuses a merge that would leave a secret (BLG-120)', () => {
+    const store = new MemoryStore(tempHome());
+    const [a, b, c] = ['Uses Helium on arch.', 'Uses Chromium on m1arch.', 'Uses zsh.'].map((t) => store.add(USER, t, 'agent').entries.at(-1)!);
+    const merged = store.merge(USER, a!.id, [b!.id, a!.id], 'Uses Helium on arch, Chromium on m1arch.', 'you');
+    expect(merged.entries.map((e) => [e.id, e.text, e.by])).toEqual([
+      [a!.id, 'Uses Helium on arch, Chromium on m1arch.', 'you'],
+      [c!.id, 'Uses zsh.', 'agent'],
+    ]);
+    expect(() => store.merge(USER, a!.id, [c!.id], 'NAS password: hunter22', 'you')).toThrow(/Secrets/);
+    expect(() => store.merge(USER, a!.id, ['gone'], 'x', 'you')).toThrow(/No entry/);
+    expect(store.read(USER).entries).toHaveLength(2);
+  });
+
+  it('moves an entry between memories, and puts the target back when the source cannot be written (BLG-121)', () => {
+    const home = tempHome();
+    const store = new MemoryStore(home);
+    const id = store.add(USER, 'Landing deploys through the NAS.', 'agent').entries[0]!.id;
+    store.add(PROJECT, 'Uses pnpm.', 'you');
+    expect(store.move(USER, PROJECT, id, 'Deploys through the NAS.', 'you').entries.map((e) => e.text)).toEqual(['Uses pnpm.', 'Deploys through the NAS.']);
+    expect(store.read(USER).entries).toEqual([]);
+
+    const back = store.read(PROJECT).entries[1]!.id;
+    if (process.getuid?.() === 0) return;
+    const projects = path.join(home, 'memory', 'projects');
+    chmodSync(projects, 0o500);
+    try {
+      expect(() => store.move(PROJECT, USER, back, 'Deploys through the NAS.', 'you')).toThrow();
+    } finally {
+      chmodSync(projects, 0o700);
+    }
+    expect(store.read(PROJECT).entries.map((e) => e.text)).toEqual(['Uses pnpm.', 'Deploys through the NAS.']);
+    expect(store.read(USER).entries).toEqual([]);
+  });
+
+  it('files entries away beyond the cap, brings them back, and undoes a filing (BLG-123)', () => {
+    const store = new MemoryStore(tempHome());
+    store.add(USER, 'a'.repeat(USER_MEMORY_MAX - 5), 'agent');
+    const filed = store.write(USER, { op: 'add', text: 'The NAS runs Arcane on port 3552.', filed: true }, 'agent').view;
+    expect(filed).toMatchObject({ used: USER_MEMORY_MAX - 5, filedUsed: 33, filedCap: FILED_MEMORY_MAX });
+    const id = filed.entries[1]!.id;
+    expect(() => store.write(USER, { op: 'file', entry: id, filed: false }, 'you')).toThrow(/full.*memory_file/);
+    expect(() => store.write(USER, { op: 'file', entry: id, filed: true }, 'you')).toThrow(/filed away already/);
+
+    const big = store.read(USER).entries[0]!.id;
+    const { view, change } = store.write(USER, { op: 'file', entry: big, filed: true }, 'you');
+    expect(view).toMatchObject({ used: 0, filedUsed: USER_MEMORY_MAX - 5 + 33 });
+    expect(store.undo(change).used).toBe(USER_MEMORY_MAX - 5);
+    expect(() => store.write(USER, { op: 'add', text: 'x'.repeat(FILED_MEMORY_MAX), filed: true }, 'agent')).toThrow(/no room left to file away/);
+  });
+
+  it('finds the entries a request is about, by word starts, best first (BLG-123)', () => {
+    const entry = (id: string, text: string, at = 0) => ({ id, text, at, by: 'you' as const });
+    const entries = [entry('a', 'The NAS deploys run through Watchtower.'), entry('b', 'Helium is the browser on arch.'), entry('c', 'NAS stacks live in Arcane.', 5)];
+    expect(relevantEntries(entries, 'deploy the new NAS stack').map((e) => e.id)).toEqual(['c', 'a']);
+    expect(relevantEntries(entries, 'the and for')).toEqual([]);
   });
 
   it('refuses what looks like a secret, empty text and duplicates', () => {
@@ -118,6 +175,31 @@ describe('a run’s memory', () => {
     const result = await add.handler({ scope: 'user', text: 'one more' } as never, undefined);
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toMatch(/Merge related entries/);
+  });
+
+  it('gives a run only the filed-away entries its request is about, and the tools file, bring back and search (BLG-123)', async () => {
+    const home = tempHome();
+    const store = new MemoryStore(home);
+    const project = { root: '/work/landing', name: 'landing' };
+    const tools = memoryForRun(store, project).tools;
+    expect(tools.add('project', 'Deploys go through Watchtower on the NAS.', true)).toMatch(/^Filed away\. .*1 more filed away/);
+    tools.add('user', 'Helium is the browser on arch.', true);
+    tools.add('user', 'Prefers short answers.');
+
+    const about = memoryForRun(store, project, undefined, 'deploy the landing page to the NAS').brief;
+    expect(about).toContain('<filed');
+    expect(about).toContain('Deploys go through Watchtower');
+    expect(about).not.toContain('Helium');
+    expect(about).toContain('1 more filed away: look with mcp__beluga_memory__memory_search');
+    expect(about.split('<filed')[0]).not.toContain('Watchtower');
+    expect(memoryForRun(store, project, undefined, 'fix the css').brief).toContain('(none about this run)');
+
+    const search = createMemoryToolDefs(tools).find((t) => t.name === 'memory_search')!;
+    expect(JSON.stringify((await search.handler({ query: 'which browser on arch' } as never, undefined)).content)).toContain('(user, filed) Helium is the browser on arch.');
+    const helium = store.read(USER).entries.find((e) => e.text.startsWith('Helium'))!.id;
+    expect(tools.file('user', helium, false)).toMatch(/^Every run gets it again/);
+    expect(memoryForRun(store, project, undefined, 'fix the css').brief.split('<filed')[0]).toContain('Helium');
+    expect(tools.search('quantum')).toBe('Nothing in memory about "quantum".');
   });
 });
 

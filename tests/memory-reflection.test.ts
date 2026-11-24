@@ -7,7 +7,7 @@ import { waitingNeeds } from '../src/companion/needs-you.js';
 import { MAX_PENDING_MEMORY, REFLECTION_MIN_MESSAGES, Reflection, type ReflectionAsk, launchReflection, loadReflection, proposalsFrom, reflectionSource } from '../src/core/memory/reflection.js';
 import { COMMANDS, runCommand } from '../src/core/commands.js';
 import { Session } from '../src/core/session.js';
-import { lookBackWords } from '../src/shared/memory.js';
+import { FILED_MEMORY_MAX, lookBackWords, tidyWords } from '../src/shared/memory.js';
 import { MemoryStore } from '../src/core/memory/store.js';
 import { type Action, type MemoryProposal, Store, initialState } from '../src/core/store.js';
 import type { Project, Workspace } from '../src/workspaces/types.js';
@@ -51,7 +51,7 @@ const answering = (answer: string | (() => string)): Asked => {
   };
 };
 
-const answer = (proposals: ReadonlyArray<Record<string, string>>): string => `Here you go:\n${JSON.stringify({ proposals })}`;
+const answer = (proposals: ReadonlyArray<Record<string, string | readonly string[]>>): string => `Here you go:\n${JSON.stringify({ proposals })}`;
 
 const setup = (reply: string, file: string | null = null) => {
   const home = homeDir();
@@ -278,8 +278,8 @@ describe('the merge trigger', () => {
 
 const ctx = (more: Partial<Parameters<typeof proposalsFrom>[1]> = {}): Parameters<typeof proposalsFrom>[1] => ({
   source: { channel: 'ws:a', root: ROOT, project: 'app', lines: [], earlier: [], messages: 6, yours: 3, latest: 0 },
-  user: { scope: { kind: 'user' }, label: 'About you', entries: [{ id: 'u1', text: 'Writes in English.', at: 0, by: 'you' }], used: 18, cap: 1375 },
-  project: { scope: { kind: 'project', root: ROOT }, label: 'app', entries: [], used: 0, cap: 2200 },
+  user: { scope: { kind: 'user' }, label: 'About you', entries: [{ id: 'u1', text: 'Writes in English.', at: 0, by: 'you' }], used: 18, cap: 1375, filedUsed: 0, filedCap: FILED_MEMORY_MAX },
+  project: { scope: { kind: 'project', root: ROOT }, label: 'app', entries: [], used: 0, cap: 2200, filedUsed: 0, filedCap: FILED_MEMORY_MAX },
   discarded: [],
   pending: [],
   now: NOW,
@@ -365,6 +365,182 @@ describe('Keep, Update and Discard', () => {
     expect(PHONE['memory.keepProposal']).toBe('phone');
     expect(PHONE['memory.discardProposal']).toBe('phone');
     expect(PHONE['memory.reflect']).toBe('mac');
+  });
+});
+
+describe('tidying a memory (BLG-120, BLG-121)', () => {
+  const entry = (id: string, text: string) => ({ id, text, at: 0, by: 'you' as const });
+  const crowded = (): Parameters<typeof proposalsFrom>[1] =>
+    ctx({
+      user: { scope: { kind: 'user' }, label: 'About you', entries: [entry('u1', 'Uses Helium on arch.'), entry('u2', 'Uses Chromium on m1arch.'), entry('u3', 'Was in a meeting at 13:17.'), entry('u4', 'Tests in this app run with vitest.')], used: 100, cap: 1375, filedUsed: 0, filedCap: FILED_MEMORY_MAX },
+      project: { scope: { kind: 'project', root: ROOT }, label: 'app', entries: [entry('p1', 'Prefers German UI copy.')], used: 23, cap: 2200, filedUsed: 0, filedCap: FILED_MEMORY_MAX },
+    });
+
+  it('reads a merge, a forget and a move both ways', () => {
+    const out = proposalsFrom(
+      answer([
+        { scope: 'user', text: 'Uses Helium on arch, Chromium on m1arch.', replaces: 'u1', merges: ['u2', 'nope'] },
+        { forget: 'u3', why: 'One-off.' },
+        { move: 'u4', scope: 'project' },
+        { move: 'p1', scope: 'user', text: 'Prefers German UI copy everywhere.' },
+      ]),
+      crowded(),
+    );
+    expect(out).toHaveLength(3);
+    expect(out[0]).toMatchObject({ kind: 'user', entry: 'u1', previous: 'Uses Helium on arch.', merges: [{ id: 'u2', text: 'Uses Chromium on m1arch.' }] });
+    expect(out[1]).toMatchObject({ kind: 'user', entry: 'u3', text: 'Was in a meeting at 13:17.', drop: true, reason: 'One-off.' });
+    expect(out[2]).toMatchObject({ kind: 'project', root: ROOT, project: 'app', entry: 'u4', text: 'Tests in this app run with vitest.', from: { kind: 'user' } });
+    const back = proposalsFrom(answer([{ move: 'p1', scope: 'user', text: 'Prefers German UI copy everywhere.' }]), crowded());
+    expect(back[0]).toMatchObject({ kind: 'user', entry: 'p1', previous: 'Prefers German UI copy.', text: 'Prefers German UI copy everywhere.', from: { kind: 'project', root: ROOT, project: 'app' } });
+  });
+
+  it('drops a move to where it already is, to nowhere, or onto a twin, and never changes one entry twice', () => {
+    expect(proposalsFrom(answer([{ move: 'u1', scope: 'user' }, { move: 'u1', scope: 'mars' }, { forget: 'ghost' }]), crowded())).toEqual([]);
+    const twice = proposalsFrom(answer([{ forget: 'u1' }, { scope: 'user', text: 'Uses Helium.', replaces: 'u1' }]), crowded());
+    expect(twice.map((p) => p.drop)).toEqual([true]);
+    const waiting: MemoryProposal = { id: 'w', kind: 'user', text: 'x', entry: 'u3', previous: 'Was in a meeting at 13:17.', drop: true, channel: '', askedAt: NOW };
+    expect(proposalsFrom(answer([{ forget: 'u3' }]), { ...crowded(), pending: [waiting] })).toEqual([]);
+  });
+
+  it('a tidy pass never proposes a new fact', () => {
+    const out = proposalsFrom(answer([{ scope: 'user', text: 'Brand new fact.' }, { forget: 'u3' }]), { ...crowded(), tidy: true });
+    expect(out.map((p) => p.drop)).toEqual([true]);
+  });
+
+  it('a discarded forget is remembered as one, and not proposed again', async () => {
+    const { store, memory, asked, reflection } = setup(answer([]));
+    const id = memory.add({ kind: 'user' }, 'Was in a meeting at 13:17.', 'you').entries[0]!.id;
+    store.dispatch({ type: 'memory_proposal_add', proposal: { id: 'f', kind: 'user', text: 'Was in a meeting at 13:17.', entry: id, previous: 'Was in a meeting at 13:17.', drop: true, channel: '', askedAt: NOW } });
+    reflection.discard('f');
+    await reflection.tidy();
+    expect(asked.calls[0]?.prompt).toContain('- Forget: Was in a meeting at 13:17.');
+    expect(proposalsFrom(answer([{ forget: id }]), ctx({ user: memory.read({ kind: 'user' }), discarded: ['Forget: Was in a meeting at 13:17.'] }))).toEqual([]);
+  });
+
+  it('Merge folds the entries in one write, even when the memory is full', () => {
+    const { store, memory, reflection } = setup('');
+    const a = memory.add({ kind: 'user' }, 'A'.repeat(600), 'you').entries[0]!;
+    const b = memory.add({ kind: 'user' }, 'B'.repeat(600), 'you').entries[1]!;
+    const c = memory.add({ kind: 'user' }, 'C'.repeat(150), 'you').entries[2]!;
+    expect(memory.read({ kind: 'user' }).used).toBe(1350);
+    store.dispatch({ type: 'memory_proposal_add', proposal: { id: 'm', kind: 'user', text: 'AB'.repeat(350), entry: a.id, previous: a.text, merges: [{ id: b.id, text: b.text }], channel: '', askedAt: NOW } });
+    const card = waitingNeeds(store.getState()).find((i) => i.id === 'memory-propose:m');
+    expect(card).toMatchObject({ title: 'Merge 2 memories about you into one?' });
+    expect(card?.actions.map((x) => x.label)).toEqual(['Merge', 'Discard']);
+    reflection.keep('m');
+    expect(memory.read({ kind: 'user' }).entries.map((e) => e.id)).toEqual([a.id, c.id]);
+    expect(memory.read({ kind: 'user' }).entries[0]!.text).toBe('AB'.repeat(350));
+  });
+
+  it('Merge is refused, with nothing written, when a folded entry changed since', () => {
+    const { store, memory, reflection } = setup('');
+    const a = memory.add({ kind: 'user' }, 'Likes tabs.', 'you').entries[0]!;
+    const b = memory.add({ kind: 'user' }, 'Likes spaces.', 'you').entries[1]!;
+    store.dispatch({ type: 'memory_proposal_add', proposal: { id: 'm', kind: 'user', text: 'Likes both.', entry: a.id, previous: a.text, merges: [{ id: b.id, text: b.text }], channel: '', askedAt: NOW } });
+    memory.replace({ kind: 'user' }, b.id, 'Hates spaces.', 'you');
+    expect(() => reflection.keep('m')).toThrow('changed since');
+    expect(memory.read({ kind: 'user' }).entries.map((e) => e.text)).toEqual(['Likes tabs.', 'Hates spaces.']);
+  });
+
+  it('Forget removes the entry; its card says Forget or Keep It', () => {
+    const { store, memory, reflection } = setup('');
+    const id = memory.add({ kind: 'user' }, 'Was in a meeting at 13:17.', 'you').entries[0]!.id;
+    store.dispatch({ type: 'memory_proposal_add', proposal: { id: 'f', kind: 'user', text: 'Was in a meeting at 13:17.', entry: id, previous: 'Was in a meeting at 13:17.', drop: true, channel: '', askedAt: NOW } });
+    const card = waitingNeeds(store.getState()).find((i) => i.id === 'memory-propose:f');
+    expect(card).toMatchObject({ title: 'Forget this about you?' });
+    expect(card?.actions.map((x) => [x.label, x.tone])).toEqual([
+      ['Forget', 'main'],
+      ['Keep It', 'plain'],
+    ]);
+    reflection.keep('f');
+    expect(memory.read({ kind: 'user' }).entries).toEqual([]);
+  });
+
+  it('Move takes an entry from about you to a project and back', () => {
+    const { store, memory, reflection } = setup('');
+    const id = memory.add({ kind: 'user' }, 'Tests run with vitest.', 'you').entries[0]!.id;
+    store.dispatch({ type: 'memory_proposal_add', proposal: { id: 'mv', kind: 'project', root: ROOT, project: 'app', text: 'Tests run with vitest.', entry: id, previous: 'Tests run with vitest.', from: { kind: 'user' }, channel: '', askedAt: NOW } });
+    expect(waitingNeeds(store.getState()).find((i) => i.id === 'memory-propose:mv')).toMatchObject({ title: 'Remember this only for app?' });
+    reflection.keep('mv');
+    expect(memory.read({ kind: 'user' }).entries).toEqual([]);
+    const moved = memory.read({ kind: 'project', root: ROOT }).entries;
+    expect(moved.map((e) => e.text)).toEqual(['Tests run with vitest.']);
+
+    store.dispatch({ type: 'memory_proposal_add', proposal: { id: 'up', kind: 'user', text: 'Tests always run with vitest.', entry: moved[0]!.id, previous: 'Tests run with vitest.', from: { kind: 'project', root: ROOT, project: 'app' }, channel: '', askedAt: NOW } });
+    const card = waitingNeeds(store.getState()).find((i) => i.id === 'memory-propose:up');
+    expect(card).toMatchObject({ title: 'Remember this everywhere, not only for app?', detail: expect.stringContaining('New: Tests always run with vitest.') });
+    reflection.keep('up');
+    expect(memory.read({ kind: 'project', root: ROOT }).entries).toEqual([]);
+    expect(memory.read({ kind: 'user' }).entries.map((e) => e.text)).toEqual(['Tests always run with vitest.']);
+  });
+
+  it('Move into a full memory is refused, and the entry stays where it was', () => {
+    const { store, memory, reflection } = setup('');
+    memory.add({ kind: 'user' }, 'U'.repeat(1370), 'you');
+    const id = memory.add({ kind: 'project', root: ROOT }, 'Prefers German UI copy.', 'you').entries[0]!.id;
+    store.dispatch({ type: 'memory_proposal_add', proposal: { id: 'up', kind: 'user', text: 'Prefers German UI copy.', entry: id, previous: 'Prefers German UI copy.', from: { kind: 'project', root: ROOT }, channel: '', askedAt: NOW } });
+    expect(() => reflection.keep('up')).toThrow('full');
+    expect(memory.read({ kind: 'project', root: ROOT }).entries.map((e) => e.id)).toEqual([id]);
+    expect(memory.read({ kind: 'user' }).entries).toHaveLength(1);
+  });
+
+  it('File Away takes an entry out of every run, and is offered only for one not filed yet (BLG-123)', () => {
+    const { store, memory, reflection } = setup('');
+    const id = memory.add({ kind: 'user' }, 'Helium is the browser on arch.', 'you').entries[0]!.id;
+    const out = proposalsFrom(answer([{ file: id, why: 'Only matters for browser work.' }]), ctx({ user: memory.read({ kind: 'user' }) }));
+    expect(out[0]).toMatchObject({ kind: 'user', entry: id, file: true, text: 'Helium is the browser on arch.' });
+    store.dispatch({ type: 'memory_proposal_add', proposal: out[0]! });
+    const card = waitingNeeds(store.getState()).find((i) => i.id === `memory-propose:${out[0]!.id}`);
+    expect(card).toMatchObject({ title: 'File this away about you, for the work it’s about?' });
+    expect(card?.actions[0]?.label).toBe('File Away');
+    reflection.keep(out[0]!.id);
+    expect(memory.read({ kind: 'user' })).toMatchObject({ used: 0, filedUsed: 30 });
+    expect(proposalsFrom(answer([{ file: id }]), ctx({ user: memory.read({ kind: 'user' }) }))).toEqual([]);
+  });
+
+  it('a look back at a nearly full memory is told to make room first', async () => {
+    const { store, memory, asked, reflection } = setup(answer([]));
+    memory.add({ kind: 'user' }, 'x'.repeat(1200), 'you');
+    talk(store, 'ws:a', 3);
+    await reflection.reflect('ws:a', 'manual');
+    expect(asked.calls[0]?.prompt).toContain('Nearly full: the memory about the user (87%)');
+    expect(asked.calls[0]?.system).toContain('"forget"');
+  });
+
+  it('Tidy looks at every memory at once, with no conversation, and proposes what it found', async () => {
+    const store = storeWith();
+    const memory = new MemoryStore(homeDir());
+    const id = memory.add({ kind: 'user' }, 'Tests in app run with vitest.', 'you').entries[0]!.id;
+    memory.add({ kind: 'project', root: '/old/thing' }, 'Uses yarn.', 'you');
+    const asked = answering(answer([{ move: id, scope: 'project:1' }, { scope: 'user', text: 'New fact.' }]));
+    const reflection = new Reflection({ store, ask: asked.ask, sharedWith: () => false, memory, file: null, now: () => NOW });
+    expect(await reflection.tidy()).toEqual({ proposed: 1 });
+    expect(asked.calls[0]?.model).toBe('haiku');
+    expect(asked.calls[0]?.prompt).toContain('Memory "project:1" (the project app');
+    expect(asked.calls[0]?.prompt).toContain('Memory "project:2" (the project thing');
+    expect(asked.calls[0]?.prompt).toContain('Uses yarn.');
+    expect(store.getState().memoryProposals[0]).toMatchObject({ kind: 'project', root: ROOT, project: 'app', from: { kind: 'user' }, channel: '' });
+  });
+
+  it('Tidy says so when there is nothing to tidy, and the words fit each outcome', async () => {
+    const { reflection, asked } = setup(answer([]));
+    expect(await reflection.tidy()).toMatchObject({ skipped: 'empty' });
+    expect(asked.calls).toHaveLength(0);
+    expect(tidyWords({ proposed: 0 })).toBe('Your memory is tidy: nothing to merge, forget, move or file away.');
+    expect(tidyWords({ proposed: 1 })).toBe('1 way to tidy your memory: see Needs You.');
+    expect(PHONE['memory.tidy']).toBe('mac');
+  });
+
+  it('waiting merges, forgets and moves survive a restart', () => {
+    const file = path.join(homeDir(), 'memory-reflection.json');
+    const proposals: MemoryProposal[] = [
+      { id: 'a', kind: 'user', text: 'Merged.', entry: 'u1', previous: 'One.', merges: [{ id: 'u2', text: 'Two.' }], channel: '', askedAt: NOW },
+      { id: 'b', kind: 'user', text: 'Old.', entry: 'u3', previous: 'Old.', drop: true, channel: '', askedAt: NOW + 1 },
+      { id: 'c', kind: 'project', root: ROOT, text: 'Moved.', entry: 'u4', previous: 'Moved.', from: { kind: 'user' }, channel: '', askedAt: NOW + 2 },
+      { id: 'd', kind: 'user', text: 'Broken.', drop: true, channel: '', askedAt: NOW + 3 },
+    ];
+    writeFileSync(file, JSON.stringify({ proposals, discarded: [], ran: [] }));
+    expect(loadReflection(file).proposals).toEqual(proposals.slice(0, 3));
   });
 });
 

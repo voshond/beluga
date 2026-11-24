@@ -687,25 +687,42 @@ function skillProposalItems(state: DomainState): NeedsYou[] {
 }
 
 /** Where a proposed memory goes, in words: about you, or a project's. */
-const memoryPlace = (p: MemoryProposal): string => (p.kind === 'user' ? 'about you' : `for ${clip(p.project ?? p.root?.split('/').filter(Boolean).pop() ?? 'this project', 60)}`);
+const memoryPlace = (p: Pick<MemoryProposal, 'kind' | 'root' | 'project'>): string => (p.kind === 'user' ? 'about you' : `for ${clip(p.project ?? p.root?.split('/').filter(Boolean).pop() ?? 'this project', 60)}`);
 
-/** A memory card's words: why, then the entry it would write, or for a change the entry now and after. */
-const memoryDetail = (p: MemoryProposal): string => [p.reason ?? '', p.previous === undefined ? p.text : `Now: ${p.previous}\nNew: ${p.text}`].filter(Boolean).join('\n\n');
+const changeText = (before: readonly string[], after: string): string => `Now:\n${before.map((t) => `• ${t}`).join('\n')}\nNew: ${after}`;
 
-/** What the reflection pass proposes to remember (BLG-96): Keep / Discard, or Update / Discard for a change to an entry. */
+type MemoryCard = { readonly title: string; readonly body: string; readonly keep: string; readonly leave: string; readonly wrong?: boolean };
+
+/** A memory card's title, the entries before and after, and its two buttons: what kind of change it is decides them. */
+const memoryCard = (p: MemoryProposal): MemoryCard => {
+  const reworded = p.previous !== undefined && p.previous !== p.text;
+  if (p.drop) return { title: `Forget this ${memoryPlace(p)}?`, body: p.text, keep: 'Forget', leave: 'Keep It' };
+  if (p.honcho) return { title: `Remember what Honcho noticed ${memoryPlace(p)}?`, body: p.text, keep: 'Keep', leave: 'Discard', wrong: true };
+  if (p.file) return { title: `File this away ${memoryPlace(p)}, for the work it’s about?`, body: p.text, keep: 'File Away', leave: 'Discard' };
+  if (p.from) {
+    const title = p.kind === 'user' ? `Remember this everywhere, not only ${memoryPlace(p.from)}?` : `Remember this only ${memoryPlace(p)}?`;
+    return { title, body: reworded ? changeText([p.previous!], p.text) : p.text, keep: 'Move', leave: 'Discard' };
+  }
+  if (p.merges?.length) return { title: `Merge ${p.merges.length + 1} memories ${memoryPlace(p)} into one?`, body: changeText([p.previous ?? '', ...p.merges.map((m) => m.text)], p.text), keep: 'Merge', leave: 'Discard' };
+  if (p.entry !== undefined) return { title: `Update what your agents remember ${memoryPlace(p)}?`, body: `Now: ${p.previous}\nNew: ${p.text}`, keep: 'Update', leave: 'Discard' };
+  return { title: `Remember this ${memoryPlace(p)}?`, body: p.text, keep: 'Keep', leave: 'Discard' };
+};
+
+/** What the reflection pass proposes to remember (BLG-96), or to tidy (BLG-120): Keep, Update, Merge, Forget or Move, and Discard. */
 function memoryProposalItems(state: DomainState): NeedsYou[] {
   return (state.memoryProposals ?? []).map((p): NeedsYou => {
-    const change = p.entry !== undefined;
+    const card = memoryCard(p);
     return {
       id: `memory-propose:${p.id}`,
       kind: 'decision',
       from: 'Beluga',
-      title: change ? `Update what your agents remember ${memoryPlace(p)}?` : `Remember this ${memoryPlace(p)}?`,
-      detail: clip(memoryDetail(p), 4000),
+      title: card.title,
+      detail: clip([p.reason ?? '', card.body].filter(Boolean).join('\n\n'), 4000),
       askedAt: p.askedAt,
       actions: [
-        { label: change ? 'Update' : 'Keep', tone: 'main' as const, method: 'memory.keepProposal', args: [p.id] },
-        { label: 'Discard', tone: 'danger' as const, method: 'memory.discardProposal', args: [p.id] },
+        { label: card.keep, tone: 'main' as const, method: 'memory.keepProposal', args: [p.id] },
+        { label: card.leave, tone: p.drop || card.wrong ? ('plain' as const) : ('danger' as const), method: 'memory.discardProposal', args: [p.id] },
+        ...(card.wrong ? [{ label: 'Wrong', tone: 'danger' as const, method: 'memory.rejectProposal', args: [p.id] }] : []),
       ],
     };
   });

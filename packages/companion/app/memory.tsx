@@ -13,26 +13,45 @@ type MemoryViewResult = MemoryOverviewResult['user'];
 
 const AUTHOR_WORDS: Readonly<Record<string, string>> = { you: 'You', agent: 'An agent' };
 
-const MemoryCard = ({ view }: { readonly view: MemoryViewResult }) => (
-  <View style={{ gap: 8 }}>
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 6 }}>
-      <T v="eyebrow">{view.label}</T>
-      <T v="caption">
-        {view.used} / {view.cap}
-      </T>
-    </View>
-    <Card style={{ padding: 14, gap: 12 }}>
-      {view.entries.map((entry) => (
-        <View key={entry.id} style={{ gap: 2 }}>
-          <T selectable>{entry.text}</T>
-          <T v="caption">
-            {AUTHOR_WORDS[entry.by] ?? entry.by} · {new Date(entry.at).toLocaleDateString()}
-          </T>
-        </View>
-      ))}
-    </Card>
-  </View>
+type MemoryEntryResult = MemoryViewResult['entries'][number];
+
+const EntryList = ({ entries }: { readonly entries: readonly MemoryEntryResult[] }) => (
+  <Card style={{ padding: 14, gap: 12 }}>
+    {entries.map((entry) => (
+      <View key={entry.id} style={{ gap: 2 }}>
+        <T selectable>{entry.text}</T>
+        <T v="caption">
+          {AUTHOR_WORDS[entry.by] ?? entry.by} · {new Date(entry.at).toLocaleDateString()}
+        </T>
+      </View>
+    ))}
+  </Card>
 );
+
+/** One memory: the entries every run gets, then (BLG-123) the filed-away ones a run gets only when it is about them. */
+const MemoryCard = ({ view }: { readonly view: MemoryViewResult }) => {
+  const filed = view.entries.filter((e) => e.filed === true);
+  const always = view.entries.filter((e) => e.filed !== true);
+  return (
+    <View style={{ gap: 8 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 6 }}>
+        <T v="eyebrow">{view.label}</T>
+        <T v="caption">
+          {view.used} / {view.cap}
+        </T>
+      </View>
+      {always.length ? <EntryList entries={always} /> : null}
+      {filed.length ? (
+        <>
+          <T v="caption" style={{ paddingHorizontal: 6 }}>
+            Filed away: a run gets these only when it is about them
+          </T>
+          <EntryList entries={filed} />
+        </>
+      ) : null}
+    </View>
+  );
+};
 
 /** Honcho's picture of you (BLG-101): what it inferred, read-only. Shown only when Honcho is on. */
 const HonchoCard = ({ picture }: { readonly picture: HonchoPictureResult }) => (

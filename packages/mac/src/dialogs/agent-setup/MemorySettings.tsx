@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { MemoryEntry, MemoryOverview, MemoryScope, MemoryView } from '@beluga/shared/memory.js';
+import { type MemoryEntry, type MemoryOverview, type MemoryScope, type MemoryView, alwaysEntries, filedEntries, tidyWords } from '@beluga/shared/memory.js';
 import { Button } from '../../components/ui.js';
 import { toast, useBeluga } from '../../lib/beluga.js';
 import { Group, Row, Select } from '../settings-controls.js';
@@ -17,6 +17,7 @@ export const MemorySettings = () => {
   const [memory, setMemory] = useState<MemoryOverview>();
   const [picked, setPicked] = useState(USER_KEY);
   const [draft, setDraft] = useState('');
+  const [tidying, setTidying] = useState(false);
 
   const load = async () => setMemory(await client.api.memory.list());
 
@@ -51,6 +52,24 @@ export const MemorySettings = () => {
     void handleChange(() => client.api.memory.remove(current.scope, entry.id));
   };
 
+  const handleFile = (entry: MemoryEntry) => {
+    if (!current) return;
+    void handleChange(() => client.api.memory.file(current.scope, entry.id, !entry.filed));
+  };
+
+  const filed = current ? filedEntries(current) : [];
+
+  const handleTidy = async () => {
+    setTidying(true);
+    try {
+      toast(client, tidyWords(await client.api.memory.tidy()), 'info');
+    } catch (err) {
+      toast(client, errorText(err as Error), 'error');
+    } finally {
+      setTidying(false);
+    }
+  };
+
   return (
     <Group title="Memory">
       <Row label="What your agents remember" detail="Added to every run you start, on Claude Code, Codex, Copilot, OpenCode and local models. Never to a friend’s run. Agents keep it with their memory tools.">
@@ -58,8 +77,8 @@ export const MemorySettings = () => {
       </Row>
       {current ? (
         <div className={a.editor}>
-          {current.entries.map((entry) => (
-            <MemoryEntryRow key={`${entry.id}:${entry.text}`} entry={entry} onSave={handleSave} onRemove={handleRemove} />
+          {alwaysEntries(current).map((entry) => (
+            <MemoryEntryRow key={`${entry.id}:${entry.text}`} entry={entry} onSave={handleSave} onRemove={handleRemove} onFile={handleFile} />
           ))}
           <div className={a.bar}>
             <input
@@ -81,7 +100,24 @@ export const MemorySettings = () => {
             <span className={a.muted}>
               {current.used} / {current.cap}
             </span>
+            <Button size="small" icon="sparkles" disabled={tidying} onClick={() => void handleTidy()}>
+              {tidying ? 'Tidying…' : 'Tidy'}
+            </Button>
           </div>
+          {filed.length ? (
+            <>
+              <div className={a.bar}>
+                <span className={a.muted}>Filed away: a run gets these only when it is about them</span>
+                <span className={a.flex} />
+                <span className={a.muted}>
+                  {current.filedUsed} / {current.filedCap}
+                </span>
+              </div>
+              {filed.map((entry) => (
+                <MemoryEntryRow key={`${entry.id}:${entry.text}`} entry={entry} onSave={handleSave} onRemove={handleRemove} onFile={handleFile} />
+              ))}
+            </>
+          ) : null}
         </div>
       ) : null}
     </Group>

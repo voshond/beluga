@@ -41,7 +41,7 @@ import { launchFriendShares } from '../core/friend-share/launch.js';
 import { launchSupport } from '../core/merge-counter.js';
 import { launchAttachmentSweep } from '../core/attachment-sweep.js';
 import { launchStats } from '../core/stats/counter.js';
-import { launchHoncho } from '../core/honcho/feed.js';
+import { launchHoncho, maybeHonchoOf } from '../core/honcho/feed.js';
 import { launchReflection } from '../core/memory/reflection.js';
 import { runStepsFrom } from '../core/memory/reflection-skills.js';
 import { launchSkillProposals } from '../core/skill-proposal-file.js';
@@ -450,6 +450,7 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
         runSteps: runStepsFrom(session.host),
         sharedWith: (channel) => session.sharing.recipients(channel).length > 0,
         load: (channel) => void (channel.startsWith('ws:') && session.workspaces?.ensureLoaded(channel.slice(3))),
+        honcho: () => maybeHonchoOf(session),
       });
     if (opts.network && !demo) stopHoncho = launchHoncho({ session, store, sharedWith: (channel) => session.sharing.recipients(channel).length > 0 });
     // The leaderboard: friends swap three numbers a day (prompt characters, merged PRs, agent time) while the network is on.

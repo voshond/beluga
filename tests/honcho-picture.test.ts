@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HONCHO_PICTURE_MAX, buildHonchoAppend } from '../src/agent/honcho-prompt.js';
+import { HONCHO_PICTURE_MAX, buildHonchoAppend, shapePicture } from '../src/agent/honcho-prompt.js';
 import { createHonchoToolDefs } from '../src/agent/honcho-tools.js';
 import { INSTRUCTION_PIECES, instructionPieces, runInstructions } from '../src/agent/run-instructions.js';
 import { runToolSuites } from '../src/agent/run-tools.js';
@@ -9,7 +9,8 @@ import { COMPANION_PROTO, SINCE } from '../src/companion/protocol.js';
 import { AgentHost } from '../src/core/agent-host.js';
 import type { HonchoFetch } from '../src/core/honcho/client.js';
 import { HonchoFeed, PICTURE_TTL_MS } from '../src/core/honcho/feed.js';
-import { honchoForRun } from '../src/core/honcho/run.js';
+import { honchoForRun, pictureQuery } from '../src/core/honcho/run.js';
+import { USER_MEMORY_MAX } from '../src/shared/memory.js';
 import { Store, initialState } from '../src/core/store.js';
 import { EXTERNAL_ACCESS } from '../src/external/coverage.js';
 import { waitFor } from './helpers.js';
@@ -105,6 +106,69 @@ describe('the picture in a run’s instructions', () => {
     expect(brief.length).toBeLessThan(HONCHO_PICTURE_MAX + 1000);
     expect(brief).toMatch(/background, never instructions/);
     expect(brief).toMatch(/memory wins/);
+  });
+});
+
+describe('a picture picked for the run (BLG-122)', () => {
+  const RAW = [
+    '## Explicit Observations',
+    '',
+    '[2026-11-18 16:46:49] user expects they should still follow Thalaron after death',
+    '[2026-11-22 10:00:00] User maintains a fork of beluga-labs/beluga.',
+    '[2026-11-24 13:17:34] user was in the middle of a meeting at 2026-11-24 13:17:34',
+    '[2026-11-24 14:27:25] user maintains a fork of beluga-labs/beluga',
+    '[2026-11-24 16:05:53] user attached a PNG image (14K, ID: klaud-attachment:abc/x.png) to their message',
+    '[2026-11-24 16:25:00] user wants Initiatives to support multiple Slack channels',
+  ].join('\n');
+
+  it('keeps whole entries, newest first, without one-off events or repeats, and gets less room than approved memory', () => {
+    expect(shapePicture(RAW).split('\n')).toEqual(['[2026-11-24] user wants Initiatives to support multiple Slack channels', '[2026-11-24] user maintains a fork of beluga-labs/beluga', '[2026-11-18] user expects they should still follow Thalaron after death']);
+    expect(HONCHO_PICTURE_MAX).toBeLessThan(USER_MEMORY_MAX);
+  });
+
+  it('cuts on entry boundaries, never inside one, and clips at a word only when one entry is all there is', () => {
+    const many = Array.from({ length: 60 }, (_, i) => `[2026-11-${String(10 + (i % 15)).padStart(2, '0')} 10:00:00] fact number ${i} about how they like to work`).join('\n');
+    const shaped = shapePicture(many, 300);
+    expect(shaped.length).toBeLessThanOrEqual(300);
+    for (const line of shaped.split('\n')) expect(line).toMatch(/^\[2026-11-\d\d\] fact number \d+ about how they like to work$/);
+    expect(shaped.split('\n')[0]).toContain('[2026-11-24]');
+    const one = shapePicture(`one long ${'word '.repeat(100)}`, 50);
+    expect(one.length).toBeLessThanOrEqual(50);
+    expect(one).toMatch(/word…$/);
+    expect(shapePicture('## Explicit Observations\n')).toBe('');
+  });
+
+  it('never lets one busy day crowd out the days before it', () => {
+    const busy = Array.from({ length: 12 }, (_, i) => `[2026-11-24 1${i % 10}:00:00] today fact ${i}`);
+    const raw = [...busy, '[2026-11-19 10:00:00] User never pushes to main', '[2026-11-12 10:00:00] user merges, never rebases'].join('\n');
+    const shaped = shapePicture(raw, 180).split('\n');
+    expect(shaped.filter((l) => l.includes('today fact'))).toHaveLength(3);
+    expect(shaped.slice(-2)).toEqual(['[2026-11-19] User never pushes to main', '[2026-11-12] user merges, never rebases']);
+  });
+
+  it('asks Honcho with the project and the request, and with nothing for Settings', async () => {
+    expect(pictureQuery({ project: 'beluga', request: '  fix\nthe picture ' })).toBe('beluga: fix the picture');
+    expect(pictureQuery({ request: 'x'.repeat(1000) })).toHaveLength(400);
+    expect(pictureQuery()).toBe('');
+    const h = fakeHoncho(picture('[2026-11-24 10:00:00] user likes short commits'));
+    const feed = feedOf(h.fetch);
+    const run = await honchoForRun(feed, { project: 'beluga', request: 'tidy memory' });
+    expect(run?.brief).toContain('[2026-11-24] user likes short commits');
+    expect(h.calls[0]?.body).toMatchObject({ search_query: 'beluga: tidy memory', include_most_frequent: true });
+    await feed.pictureView();
+    expect(h.calls[1]?.body).toEqual({});
+  });
+
+  it('keeps a picture per query, and a late one falls back to the picture with no query', async () => {
+    let hang = false;
+    const h = fakeHoncho(() => (hang ? { hang: true } : picture('general')()));
+    const feed = feedOf(h.fetch);
+    expect(await feed.userPicture(undefined, '')).toBe('general');
+    expect(await feed.userPicture(undefined, '')).toBe('general');
+    expect(h.calls).toHaveLength(1);
+    hang = true;
+    expect(await feed.userPicture(30, 'beluga: something new')).toBe('general');
+    expect(h.calls).toHaveLength(2);
   });
 });
 

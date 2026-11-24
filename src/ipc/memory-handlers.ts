@@ -34,8 +34,11 @@ export const MEMORY_HANDLERS = {
   'memory.add': (_s, scope, text) => new MemoryStore().add(scope, text, 'you'),
   'memory.replace': (_s, scope, entry, text) => new MemoryStore().replace(scope, entry, text, 'you'),
   'memory.remove': (_s, scope, entry) => new MemoryStore().remove(scope, entry),
+  'memory.file': (_s, scope, entry, filed) => new MemoryStore().write(scope, { op: 'file', entry, filed }, 'you').view,
   'memory.undo': (s, channel, itemId, markId) => undoMemoryMark(s, channel, itemId, markId),
   'memory.keepProposal': (s, id) => reflectionOf(s).keep(id),
   'memory.discardProposal': (s, id) => reflectionOf(s).discard(id),
+  'memory.rejectProposal': (s, id) => reflectionOf(s).reject(id),
   'memory.reflect': (s, channel) => reflectionOf(s).reflect(channel, 'manual'),
+  'memory.tidy': (s) => reflectionOf(s).tidy(),
 } satisfies MemoryHandlers;
