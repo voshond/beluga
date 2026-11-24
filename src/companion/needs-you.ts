@@ -691,12 +691,13 @@ const memoryPlace = (p: Pick<MemoryProposal, 'kind' | 'root' | 'project'>): stri
 
 const changeText = (before: readonly string[], after: string): string => `Now:\n${before.map((t) => `• ${t}`).join('\n')}\nNew: ${after}`;
 
-type MemoryCard = { readonly title: string; readonly body: string; readonly keep: string; readonly leave: string };
+type MemoryCard = { readonly title: string; readonly body: string; readonly keep: string; readonly leave: string; readonly wrong?: boolean };
 
 /** A memory card's title, the entries before and after, and its two buttons: what kind of change it is decides them. */
 const memoryCard = (p: MemoryProposal): MemoryCard => {
   const reworded = p.previous !== undefined && p.previous !== p.text;
   if (p.drop) return { title: `Forget this ${memoryPlace(p)}?`, body: p.text, keep: 'Forget', leave: 'Keep It' };
+  if (p.honcho) return { title: `Remember what Honcho noticed ${memoryPlace(p)}?`, body: p.text, keep: 'Keep', leave: 'Discard', wrong: true };
   if (p.file) return { title: `File this away ${memoryPlace(p)}, for the work it’s about?`, body: p.text, keep: 'File Away', leave: 'Discard' };
   if (p.from) {
     const title = p.kind === 'user' ? `Remember this everywhere, not only ${memoryPlace(p.from)}?` : `Remember this only ${memoryPlace(p)}?`;
@@ -720,7 +721,8 @@ function memoryProposalItems(state: DomainState): NeedsYou[] {
       askedAt: p.askedAt,
       actions: [
         { label: card.keep, tone: 'main' as const, method: 'memory.keepProposal', args: [p.id] },
-        { label: card.leave, tone: p.drop ? ('plain' as const) : ('danger' as const), method: 'memory.discardProposal', args: [p.id] },
+        { label: card.leave, tone: p.drop || card.wrong ? ('plain' as const) : ('danger' as const), method: 'memory.discardProposal', args: [p.id] },
+        ...(card.wrong ? [{ label: 'Wrong', tone: 'danger' as const, method: 'memory.rejectProposal', args: [p.id] }] : []),
       ],
     };
   });

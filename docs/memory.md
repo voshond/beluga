@@ -84,7 +84,7 @@ Every entry goes into every run, so a memory has to stay small. Instead of refus
 
 Each is refused, with nothing written, when an entry it touches changed or was removed since it was proposed. A discarded one is remembered as "Forget: …" or "Move: …", so it isn't proposed again, and never blocks the fact itself.
 
-They come from two places. A look back at a memory that is 80% full or more is told to make room there first. And **Tidy** in Settings › Skills & instructions › Memory (`memory.tidy`) looks at the memory about you and every project's at once, with no conversation, on the same model as the look back: up to 6 merges, forgets and moves, never a new fact. Its toast says how many, or that the memory is tidy (`tidyWords`).
+They come from two places. A look back at a memory that is 80% full or more is told to make room there first. And **Tidy** in Settings › Skills & instructions › Memory (`memory.tidy`) looks at the memory about you and every project's at once, with no conversation, on the same model as the look back: up to 6 merges, forgets, moves and entries to file away, never a new fact, except one Honcho noticed about you that held up (BLG-124, see [Honcho](honcho.md)): that card has Keep, Discard and Wrong, and Wrong makes Honcho forget it. Its toast says how many, or that the memory is tidy (`tidyWords`).
 
 ### The skill look: a skill from the work, or a fix to one
 

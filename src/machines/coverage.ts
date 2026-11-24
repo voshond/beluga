@@ -761,6 +761,7 @@ export const MACHINE: Record<Method, MachineSide> = {
   'memory.undo': 'drive',
   'memory.keepProposal': 'drive',
   'memory.discardProposal': 'drive',
+  'memory.rejectProposal': 'drive',
   'memory.reflect': 'drive',
   'memory.tidy': 'drive',
 

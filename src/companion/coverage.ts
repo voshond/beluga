@@ -810,6 +810,8 @@ export const PHONE: Record<Method, Side> = {
   // BLG-96: Keep / Update or Discard on what the reflection pass proposed (a NeedsYou card); starting a pass is on the Mac
   'memory.keepProposal': 'phone',
   'memory.discardProposal': 'phone',
+  // BLG-124: the Wrong button on a card for something Honcho noticed
+  'memory.rejectProposal': 'phone',
   'memory.reflect': 'mac',
   // BLG-120: Tidy in Settings › Memory; its merge, forget and move cards are answered like the others
   'memory.tidy': 'mac',

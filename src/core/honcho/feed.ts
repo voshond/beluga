@@ -3,7 +3,9 @@ import type { Store } from '../store.js';
 import { HonchoClient, HonchoError, type HonchoFetch, type HonchoSessionPeer } from './client.js';
 import { type HonchoConfig, defaultHonchoConfig, honchoPath, loadHonchoConfig, saveHonchoConfig, statusOf, trimUrl } from './config.js';
 import { type Outgoing, pickOutgoing, sessionMetadata } from './filter.js';
+import { MemoryStore } from '../memory/store.js';
 import { HONCHO_USER_PEER } from './mapping.js';
+import { CONFIRMED, type SyncedMemory, honchoMemoryPath, loadSyncedMemory, saveSyncedMemory, syncMemory, syncedIds } from './memory-sync.js';
 import { HonchoQueue } from './queue.js';
 import { type QueueTarget, honchoQueuePath, loadHonchoQueue, removeHonchoQueue, saveHonchoQueue } from './queue-file.js';
 
@@ -15,7 +17,15 @@ export type HonchoFeedDeps = {
   readonly fetch?: HonchoFetch;
   readonly now?: () => number;
   readonly queue?: { readonly baseDelayMs?: number; readonly maxAttempts?: number };
+  /** BLG-124: the memory written to Honcho, and where what was written is kept (null: nowhere). */
+  readonly memory?: MemoryStore;
+  readonly memoryFile?: string | null;
 };
+
+/** BLG-124: something Honcho concluded about you that held up: dreamt over many conversations, or derived more than once. */
+export type HonchoNote = { readonly id: string; readonly text: string };
+
+const NOTES_MAX = 30;
 
 export type HonchoPatch = {
   readonly enabled?: boolean;
@@ -53,6 +63,9 @@ export class HonchoFeed {
   /** By query (BLG-122); '' is the picture with no query, the one Settings shows. */
   private readonly pictures = new Map<string, CachedPicture>();
   private readonly pictureLoads = new Map<string, Promise<CachedPicture>>();
+  private memorySync?: Promise<void>;
+  /** What the memory about you was when it was last written to Honcho, so an unchanged one costs no call. */
+  private memorySigned?: string;
 
   constructor(private readonly deps: HonchoFeedDeps) {
     this.config = deps.file === null ? defaultHonchoConfig() : loadHonchoConfig(this.file);
@@ -92,6 +105,7 @@ export class HonchoFeed {
       const item = pickOutgoing(a, { state: this.deps.store.getState(), excluded: this.config.excluded, since: this.config.since ?? Number.POSITIVE_INFINITY, sharedWith: this.deps.sharedWith });
       if (item) this.queue.push(item);
     });
+    if (this.config.enabled) void this.syncMemory();
   };
 
   stop = (): void => {
@@ -125,6 +139,7 @@ export class HonchoFeed {
     this.config = next;
     this.saveNow();
     this.saveQueueNow();
+    if (next.enabled) void this.syncMemory();
     return this.status();
   };
 
@@ -164,6 +179,7 @@ export class HonchoFeed {
    */
   userPicture = async (waitMs = PICTURE_WAIT_MS, query = ''): Promise<string | undefined> => {
     if (!this.clientFor()) return undefined;
+    void this.syncMemory();
     const cached = this.pictures.get(query);
     if (cached && this.now() - cached.at < (cached.error ? PICTURE_RETRY_MS : PICTURE_TTL_MS)) return cached.text;
     let timer: NodeJS.Timeout | undefined;
@@ -198,6 +214,62 @@ export class HonchoFeed {
     return text ? text.slice(0, ANSWER_MAX) : 'Honcho had no answer: it may not have learned enough about the user yet.';
   };
 
+  private get memoryFile(): string | null {
+    if (this.deps.memoryFile !== undefined) return this.deps.memoryFile;
+    return this.deps.file === null ? null : honchoMemoryPath();
+  }
+
+  private syncedMemory(): SyncedMemory {
+    const file = this.memoryFile;
+    return file ? loadSyncedMemory(file, this.target) : { ...this.target, entries: {} };
+  }
+
+  /**
+   * Write the memory about you to Honcho as what you said about yourself (BLG-124), when it changed since
+   * the last time. Quietly tried again next time when Honcho can't be reached.
+   */
+  syncMemory = (): Promise<void> => {
+    const client = this.clientFor();
+    const memory = this.deps.memory ?? (this.deps.file === null ? undefined : new MemoryStore());
+    if (!client || !memory) return Promise.resolve();
+    if (this.memorySync) return this.memorySync.then(() => this.syncMemory());
+    const { entries } = memory.read({ kind: 'user' });
+    const signed = JSON.stringify([this.target, entries.map((e) => [e.id, e.text])]);
+    if (signed === this.memorySigned) return Promise.resolve();
+    this.memorySync = syncMemory(client, entries, this.syncedMemory())
+      .then((synced) => {
+        const file = this.memoryFile;
+        if (file) saveSyncedMemory(file, synced);
+        this.memorySigned = signed;
+      })
+      .catch(() => undefined)
+      .finally(() => (this.memorySync = undefined));
+    return this.memorySync;
+  };
+
+  /** BLG-124: what Honcho concluded about you that held up, newest first, minus what Beluga wrote there itself. Empty when Honcho is off or can't be reached. */
+  noticed = async (): Promise<HonchoNote[]> => {
+    const client = this.clientFor();
+    if (!client) return [];
+    try {
+      const ours = syncedIds(this.syncedMemory());
+      const [inductive, deductive, explicit] = await Promise.all([client.conclusions(HONCHO_USER_PEER, { level: 'inductive' }), client.conclusions(HONCHO_USER_PEER, { level: 'deductive' }), client.conclusions(HONCHO_USER_PEER, { level: 'explicit' }, 100)]);
+      return [...inductive, ...deductive, ...explicit.filter((c) => c.timesDerived > 1)]
+        .filter((c) => !ours.has(c.id) && !c.text.startsWith(CONFIRMED))
+        .slice(0, NOTES_MAX)
+        .map((c) => ({ id: c.id, text: c.text }));
+    } catch {
+      return [];
+    }
+  };
+
+  /** BLG-124: Honcho forgets one of its conclusions about you (you said it is wrong). */
+  forgetNote = async (id: string): Promise<void> => {
+    const client = this.clientFor();
+    if (!client) throw new HonchoError('Honcho is off: turn it on in Settings › Advanced › Honcho.', false);
+    await client.forgetConclusion(id);
+  };
+
   private loadPicture(query: string): Promise<CachedPicture> {
     const client = this.clientFor();
     if (!client) return Promise.resolve({ text: '', at: this.now() });
@@ -223,6 +295,7 @@ export class HonchoFeed {
 
   private reset(): void {
     this.client = undefined;
+    this.memorySigned = undefined;
     this.pictures.clear();
     this.pictureLoads.clear();
     this.workspaceReady = false;

@@ -320,6 +320,8 @@ export interface MemoryProposal {
   readonly from?: MemoryPlace;
   /** BLG-123: file `entry` away: out of every run, given to one only when it is about it. */
   readonly file?: boolean;
+  /** BLG-124: the Honcho conclusion this fact comes from: Wrong makes Honcho forget it. */
+  readonly honcho?: string;
   /** The conversation it came from, or empty for a tidy pass. */
   readonly channel: string;
   readonly askedAt: number;

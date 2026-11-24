@@ -38,6 +38,7 @@ export const MEMORY_HANDLERS = {
   'memory.undo': (s, channel, itemId, markId) => undoMemoryMark(s, channel, itemId, markId),
   'memory.keepProposal': (s, id) => reflectionOf(s).keep(id),
   'memory.discardProposal': (s, id) => reflectionOf(s).discard(id),
+  'memory.rejectProposal': (s, id) => reflectionOf(s).reject(id),
   'memory.reflect': (s, channel) => reflectionOf(s).reflect(channel, 'manual'),
   'memory.tidy': (s) => reflectionOf(s).tidy(),
 } satisfies MemoryHandlers;

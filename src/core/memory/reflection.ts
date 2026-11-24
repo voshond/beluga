@@ -124,7 +124,9 @@ const REFLECTION_SYSTEM = [
 const TIDY_SYSTEM = [
   'You tidy the long-term memory of a person’s AI agents. The memory about the user is about the person, in every project; a project’s memory is about that project only.',
   TIDY_RULES,
-  'Only merge, forget, move or file away what is there: never propose a new fact. "scope" names a memory by its key, as given.',
+  'Only merge, forget, move or file away what is there: never propose a new fact, except from what Honcho noticed.',
+  'Honcho noticed things about the user from many conversations; it is often right and sometimes wrong. Propose one as a new fact only when it is lasting (how they work, what they prefer, who they are), not one-off, not already in memory, and true to everything in memory: {"scope":"user","text":"<it, short and in your words>","honcho":"<its id>","why":"…"}. Never one the memory contradicts.',
+  '"scope" names a memory by its key, as given.',
   `At most ${MAX_TIDY_PROPOSALS}, the ones that free the most room or fix the most misplaced entries first. A tidy memory needs nothing: then answer with an empty list.`,
   'Answer with JSON only: {"proposals":[{"scope":"user","text":"…","replaces":"<id>","merges":["<id>"],"why":"…"},{"forget":"<id>","why":"…"},{"move":"<id>","scope":"<key>","why":"…"},{"file":"<id>","why":"…"}]}',
 ].join('\n');
@@ -167,9 +169,19 @@ export const reflectionPrompt = (source: ReflectionSource, user: MemoryView, pro
 /** A memory a pass sees, by the key the model names it with ("user", "project", or "project:2" in a tidy pass). */
 export type KnownMemory = { readonly key: string; readonly view: MemoryView; readonly place: MemoryPlace };
 
-export const tidyPrompt = (memories: readonly KnownMemory[], discarded: readonly string[]): string =>
+/** BLG-124: something Honcho concluded about the user that held up, as a tidy pass sees it. */
+export type HonchoNote = { readonly id: string; readonly text: string };
+
+/** BLG-124: where a tidy pass reads Honcho's notes, and has it forget one you called wrong. */
+export type HonchoNotes = {
+  noticed(): Promise<readonly HonchoNote[]>;
+  forgetNote(id: string): Promise<void>;
+};
+
+export const tidyPrompt = (memories: readonly KnownMemory[], discarded: readonly string[], notes: readonly HonchoNote[] = []): string =>
   [
     ...memories.map((m) => entriesText(`Memory "${m.key}" (${m.place.kind === 'user' ? 'about the user' : `the project ${m.view.label}`})`, m.view)),
+    ...(notes.length ? [`What Honcho noticed about the user (inferred, may be wrong):\n${notes.map((n) => `- [${n.id}] ${n.text}`).join('\n')}`] : []),
     `Discarded before (never propose these again):\n${discarded.length ? discarded.map((d) => `- ${d}`).join('\n') : '(none)'}`,
   ].join('\n\n');
 
@@ -185,6 +197,7 @@ const Answer = z.object({
         forget: z.string().optional(),
         move: z.string().optional(),
         file: z.string().optional(),
+        honcho: z.string().optional(),
       }),
     )
     .max(20),
@@ -212,6 +225,8 @@ export type ProposalContext = {
   /** A tidy pass: every project's memory, each by its key; only merges, forgets and moves are taken. */
   readonly projects?: readonly KnownMemory[];
   readonly tidy?: boolean;
+  /** BLG-124: in a tidy pass, what Honcho noticed: the only new facts it may propose. */
+  readonly notes?: readonly HonchoNote[];
   readonly discarded: readonly string[];
   readonly pending: readonly MemoryProposal[];
   readonly now: number;
@@ -246,7 +261,7 @@ const locate = (memories: readonly KnownMemory[], ref: string): { readonly memor
   return undefined;
 };
 
-const draftOf = (draft: Draft, memories: readonly KnownMemory[], tidy: boolean): Drafted | undefined => {
+const draftOf = (draft: Draft, memories: readonly KnownMemory[], tidy: boolean, notes: readonly HonchoNote[]): Drafted | undefined => {
   const reason = draft.why ? oneLine(draft.why).slice(0, MAX_REASON_CHARS) : undefined;
   const why = reason ? { reason } : {};
   if (draft.forget) {
@@ -271,7 +286,8 @@ const draftOf = (draft: Draft, memories: readonly KnownMemory[], tidy: boolean):
     return { ...placeFields(target.place), text: moved, entry: found.entry.id, previous: found.entry.text, from: found.memory.place, ...why };
   }
   const entry = draft.replaces ? target.view.entries.find((e) => e.id === draft.replaces?.trim()) : undefined;
-  if (!text || (tidy && !entry)) return undefined;
+  const note = !entry && draft.honcho ? notes.find((n) => n.id === draft.honcho?.trim()) : undefined;
+  if (!text || (tidy && !entry && !note) || (draft.honcho && !entry && !note)) return undefined;
   const merges = entry ? target.view.entries.filter((e) => e.id !== entry.id && (draft.merges ?? []).some((m) => m.trim() === e.id)) : [];
   const folded = new Set([entry?.id, ...merges.map((m) => m.id)]);
   if (target.view.entries.some((e) => !folded.has(e.id) && normal(e.text) === normal(text))) return undefined;
@@ -281,6 +297,7 @@ const draftOf = (draft: Draft, memories: readonly KnownMemory[], tidy: boolean):
     text,
     ...(entry ? { entry: entry.id, previous: entry.text } : {}),
     ...(merges.length ? { merges: merges.map((m) => ({ id: m.id, text: m.text })) } : {}),
+    ...(note ? { honcho: note.id } : {}),
     ...why,
   };
 };
@@ -296,7 +313,7 @@ export const proposalsFrom = (raw: string, ctx: ProposalContext): MemoryProposal
   const out: MemoryProposal[] = [];
   for (const draft of parsed.data.proposals) {
     if (out.length >= limit) break;
-    const drafted = draftOf(draft, memories, Boolean(ctx.tidy));
+    const drafted = draftOf(draft, memories, Boolean(ctx.tidy), ctx.notes ?? []);
     if (!drafted || [drafted.text, drafted.reason ?? ''].some((t) => secretInMemory(t))) continue;
     const ids = touches(drafted);
     if (seen.has(normal(discardKey(drafted))) || ids.some((id) => touched.has(id))) continue;
@@ -324,6 +341,7 @@ const Saved = z.object({
         merges: z.array(z.object({ id: z.string().min(1).max(200), text: z.string().max(10_000) })).max(20).readonly().optional(),
         drop: z.boolean().optional(),
         file: z.boolean().optional(),
+        honcho: z.string().max(200).optional(),
         from: z.union([z.object({ kind: z.literal('user') }), z.object({ kind: z.literal('project'), root: z.string().min(1).max(4096), project: z.string().max(200).optional() })]).optional(),
         channel: z.string().max(400),
         askedAt: z.number(),
@@ -367,6 +385,8 @@ export type ReflectionDeps = {
   /** Where it is kept; null: nothing on disk. */
   readonly file?: string | null;
   readonly now?: () => number;
+  /** BLG-124: Honcho's notes for a tidy pass, when Honcho is on. */
+  readonly honcho?: () => HonchoNotes | undefined;
 };
 
 const scopeOf = (place: Pick<MemoryProposal, 'kind' | 'root'>): MemoryScope => (place.kind === 'user' ? { kind: 'user' } : { kind: 'project', root: place.root! });
@@ -535,13 +555,14 @@ export class Reflection {
     if (state.memoryProposals.length >= MAX_PENDING_MEMORY) return skip('full');
     const user = this.memory.read({ kind: 'user' });
     const projects = this.projectMemories(state);
-    if (!user.entries.length && projects.every((p) => !p.view.entries.length)) return skip('empty');
     this.running.add(TIDY);
     try {
+      const notes = (await this.deps.honcho?.()?.noticed()) ?? [];
+      if (!user.entries.length && projects.every((p) => !p.view.entries.length) && !notes.length) return skip('empty');
       const memories: KnownMemory[] = [{ key: 'user', view: user, place: { kind: 'user' } }, ...projects];
-      const raw = await this.deps.ask({ system: TIDY_SYSTEM, prompt: tidyPrompt(memories, this.discarded), model: state.prefs.reflectionModel || REFLECTION_MODEL_DEFAULT });
+      const raw = await this.deps.ask({ system: TIDY_SYSTEM, prompt: tidyPrompt(memories, this.discarded, notes), model: state.prefs.reflectionModel || REFLECTION_MODEL_DEFAULT });
       const source: ReflectionSource = { channel: '', lines: [], earlier: [], messages: 0, yours: 0, latest: 0 };
-      const proposals = proposalsFrom(raw, { source, user, projects, tidy: true, discarded: this.discarded, pending: this.deps.store.getState().memoryProposals, now: this.now() });
+      const proposals = proposalsFrom(raw, { source, user, projects, tidy: true, notes, discarded: this.discarded, pending: this.deps.store.getState().memoryProposals, now: this.now() });
       for (const proposal of proposals) this.deps.store.dispatch({ type: 'memory_proposal_add', proposal });
       return { proposed: proposals.length };
     } catch (err) {
@@ -591,6 +612,18 @@ export class Reflection {
     const now = this.memory.read(scope).entries.find((e) => e.id === id);
     if (!now) throw new MemoryError('That entry was removed since: discard this proposal.');
     if (now.text !== text) throw new MemoryError('That entry changed since: discard this proposal, or change the entry in Settings.');
+  }
+
+  /** BLG-124: Wrong, on a fact from Honcho: discarded, and Honcho forgets the conclusion it came from. */
+  async reject(id: string): Promise<void> {
+    const proposal = this.proposal(id);
+    if (!proposal.honcho) throw new MemoryError('Only something Honcho noticed can be called wrong: discard this one.');
+    const notes = this.deps.honcho?.();
+    if (!notes) throw new MemoryError('Honcho is off: turn it on in Settings › Advanced › Honcho, or discard this one.');
+    this.discard(id);
+    await notes.forgetNote(proposal.honcho).catch((err: Error) => {
+      throw new MemoryError(`Discarded, but Honcho couldn’t forget it: ${err.message}`);
+    });
   }
 
   /** Discard: nothing is written, and the same thing is not proposed again. */
