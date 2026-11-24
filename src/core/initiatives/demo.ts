@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { writeText } from './files.js';
 import type { Initiatives } from './initiatives.js';
-import type { EpicStatus, EpicTickets, InitiativeDraft, Suggestion } from './model.js';
+import type { EpicStatus, EpicTickets, InitiativeDraft, OutboxDraft, Suggestion } from './model.js';
 import { dayOf } from './repo.js';
 
 type DemoInitiative = {
@@ -12,6 +12,7 @@ type DemoInitiative = {
   readonly decisions: string;
   readonly timeline: readonly string[];
   readonly suggestions: readonly Suggestion[];
+  readonly outbox?: readonly OutboxDraft[];
 };
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -40,6 +41,10 @@ const demos = (now: number): DemoInitiative[] => {
         { id: 1, text: 'Ask in #checkout-v2 who owns SHOP-150 now that Ana is out', why: 'It has been blocked for 4 days with nobody assigned', kind: 'slack', state: 'open', createdAt: iso },
         { id: 2, text: 'Add the Norway tax question to Thursday’s go/no-go agenda', why: 'It is the last open decision before launch', kind: 'calendar', state: 'open', createdAt: iso },
         { id: 3, text: 'Launch in Norway with the old tax table, or wait for SHOP-141?', why: 'Finance answered both ways; the freeze is in 9 days', kind: 'decision', options: ['Launch with the old table', 'Wait for SHOP-141'], state: 'open', createdAt: iso },
+      ],
+      outbox: [
+        { id: 1, to: { kind: 'slack', channel: 'C0CHECKOUT', label: '#checkout-v2' }, text: 'Hey team, with Ana out, who can pick up SHOP-150 (the Safari payment bug)? It has been blocked for 4 days and it is on the launch path.', why: 'From suggestion 1', suggestion: 1, state: 'draft', createdAt: iso },
+        { id: 2, to: { kind: 'jira', issue: 'SHOP-150', label: 'Safari payment bug' }, text: 'Still blocked on Safari 17: the payment sheet closes before the token comes back. Looking for an owner in #checkout-v2.', state: 'draft', createdAt: iso },
       ],
     },
     {
@@ -71,6 +76,7 @@ export const seedDemoInitiatives = async (initiatives: Initiatives, root: string
     writeText(path.join(folder, 'decisions.md'), demo.decisions);
     writeText(path.join(folder, 'timeline.md'), `# Timeline\n\nNewest first.\n\n${demo.timeline.map((t) => `- ${t}`).join('\n')}\n`);
     writeText(path.join(folder, 'suggestions.json'), `${JSON.stringify(demo.suggestions, null, 2)}\n`);
+    if (demo.outbox) writeText(path.join(folder, 'outbox.json'), `${JSON.stringify(demo.outbox, null, 2)}\n`);
     writeText(path.join(folder, 'sources', 'jira.md'), `# Jira\n\n${demo.status.epics.map((e) => `- ${e.key} ${e.title ?? ''}: ${e.done}/${e.total} done`).join('\n')}\n`);
     initiatives.refresh(slug);
   }

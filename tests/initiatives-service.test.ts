@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { resolveChat } from '../src/core/chat-links/resolve.js';
-import { type CheckInHost, Initiatives } from '../src/core/initiatives/initiatives.js';
+import { type CheckInHost, Initiatives, OUTBOX_DENIED } from '../src/core/initiatives/initiatives.js';
 import { CHECK_IN_CHAT, type GoalRefine, initiativeChatChannel } from '../src/core/initiatives/model.js';
 import { CHECK_IN_PROMPT, TICKETS_PROMPT } from '../src/core/initiatives/prompt.js';
 import type { SentinelDraft } from '../src/core/sentinel/model.js';
@@ -272,6 +272,46 @@ describe('Initiatives', () => {
     expect(asked).toEqual([{ prompt: 'Decided suggestion 1: Are Sale Orders in scope?\nAnswer: Out of scope', channel: initiativeChatChannel(slug, 'main') }]);
     const saved = JSON.parse(readFileSync(path.join(root, slug, 'suggestions.json'), 'utf8')) as Array<{ state: string; answer?: string }>;
     expect(saved[0]).toMatchObject({ state: 'approved', answer: 'Out of scope' });
+  });
+
+  it('sends a draft from the outbox: only that exact call goes out, once, without a second card', async () => {
+    const { root, asked, store, service } = await setup();
+    const { slug } = await service.create({ name: 'A' });
+    const drafts = [
+      { id: 1, to: { kind: 'slack', channel: 'C042', label: '#checkout' }, text: 'Who owns SHOP-150 now?' },
+      { id: 2, to: { kind: 'jira', issue: 'SHOP-150' }, text: 'Blocked on Safari.' },
+    ];
+    writeFileSync(path.join(root, slug, 'outbox.json'), JSON.stringify(drafts));
+    service.refresh(slug);
+    expect(store.getState().initiatives.items[0]!.outbox.map((d) => d.state)).toEqual(['draft', 'draft']);
+    const run = service.chatRun(initiativeChatChannel(slug, 'main'), SELF)!;
+    const post = (message: string) => ({ channel_id: 'C042', message });
+    expect(run.vetTool('mcp__plugin_slack_slack__slack_send_message', post('Who owns SHOP-150 now?'))).toBe(OUTBOX_DENIED);
+    expect(run.vetTool('mcp__jira__jira_add_comment', { issue_key: 'SHOP-150', body: 'Blocked on Safari.' })).toBe(OUTBOX_DENIED);
+    expect(run.vetTool('mcp__jira__jira_search', { jql: 'x' })).toBeUndefined();
+
+    expect(await service.sendDraft(slug, 1, 'Who owns SHOP-150 now, Ana?')).toEqual({ channel: initiativeChatChannel(slug, 'main') });
+    expect(asked.at(-1)!.prompt).toContain('channel_id C042');
+    expect(asked.at(-1)!.prompt).toContain('Who owns SHOP-150 now, Ana?');
+    expect(run.vetTool('mcp__plugin_slack_slack__slack_send_message', post('Who owns SHOP-150 now?'))).toBe(OUTBOX_DENIED);
+    expect(run.vetTool('mcp__plugin_slack_slack__slack_send_message', { channel_id: 'C999', message: 'Who owns SHOP-150 now, Ana?' })).toBe(OUTBOX_DENIED);
+    expect(run.preApproved('mcp__plugin_slack_slack__slack_send_message', post('Who owns SHOP-150 now, Ana?'))).toBe(false);
+    expect(run.vetTool('mcp__plugin_slack_slack__slack_send_message', post('Who owns SHOP-150 now, Ana?'))).toBeUndefined();
+    expect(run.preApproved('mcp__plugin_slack_slack__slack_send_message', post('Who owns SHOP-150 now, Ana?'))).toBe(true);
+    expect(run.preApproved('mcp__plugin_slack_slack__slack_send_message', post('Who owns SHOP-150 now, Ana?'))).toBe(false);
+    expect(run.vetTool('mcp__plugin_slack_slack__slack_send_message', post('Who owns SHOP-150 now, Ana?'))).toBe(OUTBOX_DENIED);
+
+    await service.discardDraft(slug, 2);
+    const saved = JSON.parse(readFileSync(path.join(root, slug, 'outbox.json'), 'utf8')) as Array<{ state: string; text: string; sentText?: string; resolvedAt?: string }>;
+    expect(saved[0]).toMatchObject({ state: 'sent', text: 'Who owns SHOP-150 now?', sentText: 'Who owns SHOP-150 now, Ana?' });
+    expect(saved[1]).toMatchObject({ state: 'discarded' });
+    expect(saved.every((d) => Boolean(d.resolvedAt))).toBe(true);
+    const timeline = readFileSync(path.join(root, slug, 'timeline.md'), 'utf8');
+    expect(timeline).toMatch(/- \d{4}-\d{2}-\d{2}: discarded a draft to a comment on SHOP-150\n- \d{4}-\d{2}-\d{2}: sent a Slack message to #checkout\n/);
+    await expect(service.sendDraft(slug, 2, 'x')).rejects.toThrow(/already discarded/);
+    const other = (await service.create({ name: 'B' })).slug;
+    await service.sendDraft(slug, 1, 'x').catch(() => undefined);
+    expect(service.chatRun(initiativeChatChannel(other, 'main'), SELF)!.vetTool('mcp__plugin_slack_slack__slack_send_message', post('x'))).toBe(OUTBOX_DENIED);
   });
 
   it('shows a bad initiative.json as trouble and keeps the rest going', async () => {

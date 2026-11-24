@@ -1,9 +1,9 @@
 import { type Dirent, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { z } from 'zod';
-import { type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type Suggestion, SuggestionsSchema, openDecisionsOf, recentOf } from './model.js';
+import { type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type OutboxDraft, OutboxSchema, type Suggestion, SuggestionsSchema, openDecisionsOf, recentOf } from './model.js';
 
-export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'suggestions.json'] as const;
+export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'suggestions.json', 'outbox.json'] as const;
 
 const MAX_FILES = 200;
 const MAX_READ = 512 * 1024;
@@ -16,6 +16,7 @@ export type InitiativeFolder = {
   readonly progress?: EpicStatus;
   readonly tickets?: EpicTickets;
   readonly suggestions: readonly Suggestion[];
+  readonly outbox: readonly OutboxDraft[];
   readonly openDecisions: readonly string[];
   readonly recent: readonly string[];
   readonly files: readonly string[];
@@ -98,8 +99,9 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
   const status = parseJson(file('status.json'), EpicStatusSchema, 'status.json');
   const tickets = parseJson(file('tickets.json'), TicketsSchema, 'tickets.json');
   const suggestions = parseJson(file('suggestions.json'), SuggestionsSchema, 'suggestions.json');
+  const outbox = parseJson(file('outbox.json'), OutboxSchema, 'outbox.json');
   const missing = config.value || config.trouble ? undefined : 'initiative.json is missing';
-  const troubles = [config.trouble ?? missing, status.trouble, tickets.trouble, suggestions.trouble].filter((t): t is string => Boolean(t));
+  const troubles = [config.trouble ?? missing, status.trouble, tickets.trouble, suggestions.trouble, outbox.trouble].filter((t): t is string => Boolean(t));
   return {
     slug,
     folder,
@@ -108,6 +110,7 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
     ...(status.value ? { progress: status.value } : {}),
     ...(tickets.value ? { tickets: tickets.value } : {}),
     suggestions: suggestions.value ?? [],
+    outbox: outbox.value ?? [],
     openDecisions: openDecisionsOf(file('decisions.md') ?? ''),
     recent: recentOf(file('timeline.md') ?? ''),
     files: memoryFiles(folder),
@@ -118,6 +121,19 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
 export const writeConfig = (root: string, slug: string, config: InitiativeConfig): void => writeJsonFile(path.join(folderOf(root, slug), 'initiative.json'), config);
 
 export const writeSuggestions = (root: string, slug: string, suggestions: readonly Suggestion[]): void => writeText(path.join(folderOf(root, slug), 'suggestions.json'), `${JSON.stringify(suggestions, null, 2)}\n`);
+
+export const writeOutbox = (root: string, slug: string, outbox: readonly OutboxDraft[]): void => writeText(path.join(folderOf(root, slug), 'outbox.json'), `${JSON.stringify(outbox, null, 2)}\n`);
+
+/** One line on top of timeline.md's bullets (newest first), as the agent writes them. */
+export const addTimeline = (root: string, slug: string, line: string): void => {
+  const file = path.join(folderOf(root, slug), 'timeline.md');
+  const text = readText(file) ?? '# Timeline\n\nNewest first.\n';
+  const lines = text.split('\n');
+  const first = lines.findIndex((l) => l.startsWith('- '));
+  const at = first === -1 ? lines.length : first;
+  if (first === -1 && lines.at(-1) === '') lines.pop();
+  writeText(file, [...lines.slice(0, at), `- ${line}`, ...lines.slice(at)].join('\n') + (first === -1 ? '\n' : ''));
+};
 
 const list = (items: readonly string[], empty: string): string => (items.length ? items.map((i) => `- ${i}`).join('\n') : `- ${empty}`);
 
@@ -131,6 +147,7 @@ export const scaffoldFolder = (root: string, slug: string, config: InitiativeCon
   put('timeline.md', `# Timeline\n\nNewest first.\n\n- ${today}: initiative created\n`);
   put('people.md', `# People\n\nWho is involved and what they own.\n`);
   put('suggestions.json', '[]\n');
+  put('outbox.json', '[]\n');
   put('sources/README.md', `# Sources\n\nSnapshots the check-in keeps: jira.md, slack/, meetings/, docs/, prs.md.\n`);
 };
 

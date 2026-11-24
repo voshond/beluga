@@ -12,6 +12,7 @@ import { useActions } from '../lib/actions.js';
 import { useApp } from '../lib/beluga.js';
 import { openSheet } from '../lib/sheets.js';
 import { PickMenu } from '../tasks/PickMenu.js';
+import { OutboxCards } from './OutboxCards.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import v from '../views/views.module.css';
 import chat from '../sentinel/sentinel.module.css';
@@ -86,6 +87,7 @@ export const InitiativeChat = ({ item }: { item: InitiativeView }) => {
           <div className={v.chat} data-drop-zone>
             <ChatLog key={channel} channel={channel} empty={<Empty icon="claude" title="Ask about this initiative" detail="Your agent reads its memory first, and suggests before it acts outward." action={starters} />} />
             <Attention channel={channel} />
+            <OutboxCards item={item} />
             <Composer />
           </div>
         </div>
