@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { WsRole } from '@beluga/protocol.js';
+import { type ShareLevel, levelsFor } from '@beluga/shared/share-levels.js';
 import { Checkbox } from '../../components/Alert.js';
 import { Avatar, Button } from '../../components/ui.js';
 import { Select } from '../settings-controls.js';
@@ -14,22 +14,16 @@ export interface ShareCandidate {
   readonly detail?: string;
 }
 
-export type Access = WsRole | 'none';
+export type Access = ShareLevel | 'none';
 
-/** What someone you share with can do, as a row's pop-up offers it (removing them too). */
-export const ACCESS: ReadonlyArray<{ value: Access; label: string }> = [
-  { value: 'contribute', label: 'Can work here' },
-  { value: 'view', label: 'Can follow' },
-  { value: 'none', label: 'Remove access' },
-];
+/**
+ * What someone you share with can do, as a row's pop-up offers it (BLG-1019): see, chat, fork, fork
+ * with secrets (`forks`: where there's a project to fork and they're a friend over the network), or remove them.
+ */
+export const accessOptions = (forks: boolean): ReadonlyArray<{ value: Access; label: string; description?: string }> => [...levelsFor(forks), { value: 'none', label: 'Remove access' }];
 
-/** What the add row offers: work here, follow, or (a worktree, BLG-967) take it over on their own computer. */
-type Level = WsRole | 'takeover';
-
-const LEVELS: ReadonlyArray<{ value: Level; label: string; description: string }> = [
-  { value: 'contribute', label: 'Can work here', description: 'Chats and asks your agent' },
-  { value: 'view', label: 'Can follow', description: 'Reads along, read-only' },
-];
+/** What the add row offers: see, chat, fork, fork with secrets, or (a worktree, BLG-967) take it over on their own computer. */
+type Level = ShareLevel | 'takeover';
 
 const TAKE_OVER = { value: 'takeover' as const, label: 'Can take it over', description: 'Their agent continues on their computer' };
 
@@ -46,7 +40,9 @@ export interface TakeOver {
 interface SharePickerProps {
   readonly candidates: readonly ShareCandidate[];
   /** `note`: also have your agent write a handoff note for them. */
-  readonly onShare: (peerId: string, role: WsRole, note: boolean) => void;
+  readonly onShare: (peerId: string, level: ShareLevel, note: boolean) => void;
+  /** Offer "Can fork" and "Can fork with secrets" (a worktree or a project with a folder). */
+  readonly forks?: boolean;
   readonly none: string;
   /** A worktree can also be taken over; left out for a chat or a whole project. */
   readonly takeOver?: TakeOver;
@@ -61,7 +57,8 @@ interface SharePickerProps {
  * they can do, Share. For a worktree, "Can take it over" hands it to them instead (BLG-967), and a
  * handoff note can come with any of them. Who already has it is listed under it, each with their level.
  */
-export function SharePicker({ candidates, onShare, none, takeOver, startTakingOver, canNote }: SharePickerProps) {
+export function SharePicker({ candidates, onShare, none, takeOver, startTakingOver, canNote, forks = false }: SharePickerProps) {
+  const LEVELS: ReadonlyArray<{ value: Level; label: string; description: string }> = levelsFor(forks);
   const [who, setWho] = useState('');
   const [level, setLevel] = useState<Level>(startTakingOver && takeOver ? 'takeover' : 'contribute');
   const [note, setNote] = useState(false);
@@ -91,7 +88,7 @@ export function SharePicker({ candidates, onShare, none, takeOver, startTakingOv
   const go = (): void => {
     if (!picked || blocked) return;
     if (taking) takeOver?.onTakeOver(picked.peerId);
-    else onShare(picked.peerId, level as WsRole, canNote === true && note);
+    else onShare(picked.peerId, level as ShareLevel, canNote === true && note);
     setWho('');
   };
   const say = why ?? (check === 'checking' ? `Checking ${picked?.name} has this repository…` : taking && picked ? `${picked.name} gets the latest branch, this chat and the note in a worktree on their computer. You can follow along.` : undefined);

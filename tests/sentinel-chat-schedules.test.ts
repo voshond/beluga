@@ -9,8 +9,8 @@ const ME = 'me-me-me-me-me-me-me-me-me-me-me0';
 const daily = { kind: 'schedule' as const, every: 'day' as const, at: '09:00', missed: 'skip' as const };
 const wake = (to: string, text = 'Send the status') => ({ kind: 'chat' as const, name: 'Wake', to, text });
 
-function withSchedules(flags = { on: true }) {
-  const s = setup({ selfId: () => ME, wake: { on: () => flags.on, refusal: () => undefined, deliver: async () => 'm1', wait: async () => ({ state: 'answered', answer: 'ok' }) } });
+function withSchedules() {
+  const s = setup({ selfId: () => ME, wake: { refusal: () => undefined, deliver: async () => 'm1', wait: async () => ({ state: 'answered', answer: 'ok' }) } });
   const mine = s.sentinels.create({ name: 'Morning status', trigger: daily, steps: [wake(`${ME}/ws:w1`, 'Send XYZ')] });
   s.sentinels.create({ name: 'Other chat', trigger: daily, steps: [wake(`${ME}/ws:w2`)] });
   s.sentinels.create({ name: 'Someone else’s w1', trigger: daily, steps: [wake('someone-elses-id-000/ws:w1')] });
@@ -29,13 +29,6 @@ describe('sentinels.forChat', () => {
   it('takes the chat’s ref as well as its channel', () => {
     const { s, mine } = withSchedules();
     expect(s.sentinels.forChat(`${ME}/ws:w1`).map((x) => x.id)).toEqual([mine.id]);
-  });
-
-  it('the experiment off: none, on the Mac and the phone alike', () => {
-    const flags = { on: true };
-    const { s } = withSchedules(flags);
-    flags.on = false;
-    expect(s.sentinels.forChat('ws:w1')).toEqual([]);
   });
 
   it('a chat no sentinel wakes has none', () => {

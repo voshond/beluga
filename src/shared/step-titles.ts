@@ -109,6 +109,11 @@ function belugaTool(name: string, input: Readonly<Record<string, unknown>>): Hum
       return both(`Wrote the report${str(input.title) ? ` “${clip(str(input.title), 60)}”` : ''}`, 'Writing a report');
     case 'continue_in_worktree':
       return both('Moved this to a new worktree', 'Moving this to a new worktree');
+    // Beluga's, before the agent starts (core/before-run.ts): the worktree you wrote in, being made.
+    case 'make_worktree': {
+      const named = str(input.name) ? ` ${clip(str(input.name), 60)}` : '';
+      return both(`Made the worktree${named}`, `Making the worktree${named}`);
+    }
     case 'screenshot':
       return both(str(input.app) ? `Looked at ${str(input.app)}` : 'Took a screenshot', 'Taking a screenshot');
     case 'device_info':
@@ -244,6 +249,7 @@ const LINE_ARG: Readonly<Record<string, string>> = {
   wait_for: 'task',
   check: 'task',
   cancel: 'task',
+  make_worktree: 'name',
   write_report: 'title',
 };
 

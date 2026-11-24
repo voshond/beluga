@@ -67,6 +67,8 @@ export interface ControllerDeps {
   readonly planHere?: (channel: string) => void;
   /** Draw your first message in a conversation that isn't there yet (a worktree being made) → its request id. */
   readonly showAsk?: (prompt: string, channel: string) => string;
+  /** That message's card shows at once, with `step` (making its worktree) as its first step (core/before-run.ts). */
+  readonly beforeRun?: (channel: string, requestId: string, prompt: string, step: BeforeStep) => Preparing;
   /** Stop your Claude in a conversation, resolving once nothing runs there (editing a message cuts it there). */
   readonly stopHere?: (channel: string) => Promise<void>;
   /** A worktree is going: end your Claude's run and queue in its conversation, quietly, resolving once nothing runs there. */
@@ -150,6 +152,10 @@ import { FILE_MANAGER, THIS_COMPUTER } from '../shared/assistant.js';
 import { fallbackFor } from '../shared/runtime-fallbacks.js';
 import { SCRATCH_DIR, type ScratchFile, type ScratchTotal, ensureScratch, listScratch, scratchTotal } from '../workspaces/scratch.js';
 import { isUnder } from '../shared/path-inside.js';
+import { randomUUID } from 'node:crypto';
+import { type HeldAsk, HeldAsks } from './held-asks.js';
+import type { BeforeStep, Preparing } from './before-run.js';
+import { type ForkNote, forkNoteOf } from './friend-share/carry.js';
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
@@ -214,6 +220,8 @@ export class WorkspaceController {
   private readonly moving = new Map<string, Promise<Workspace | undefined>>();
   /** Pull requests being checked out in a worktree, by project and number (openPull). */
   private readonly pulling = new Map<string, Promise<Workspace | undefined>>();
+  /** What you wrote in worktrees still being made, asked of their agent once they are (held-asks.ts). */
+  private readonly heldAsks = new HeldAsks();
 
   /** Hear about worktrees opening, merging, going and coming back. */
   /**
@@ -679,6 +687,7 @@ export class WorkspaceController {
     const ws = await this.bringIn(project, dir, sessionId, name, id);
     const shown = this.ahead.making.delete(id);
     this.publish();
+    this.heldAsks.release(id, ws === id);
     if (ws === id) {
       // Its page is open already (you may have gone elsewhere since: you stay there).
       if (shown) this.ensureLoaded(id);
@@ -776,11 +785,18 @@ export class WorkspaceController {
       ...(ws.model ? { model: ws.model } : {}),
       ...(ws.effort !== undefined ? { effort: ws.effort } : {}),
       ...(ws.prShipped && ws.kind === 'worktree' ? { shipped: ws.prShipped } : {}),
+      ...this.forkedOf(ws),
       ...this.openPrOf(ws),
       ...this.landsOnOf(ws),
       ...(syncMain ? { syncMain } : {}),
       ...(ws.askOnly && this.fixups.has(ws.id) ? { fixup: this.fixups.get(ws.id)! } : {}),
     };
+  }
+
+  /** A worktree forked from a friend's (BLG-1017): what came with it and what stayed with them, for its agent. */
+  private forkedOf(ws: Workspace): { forked?: ForkNote } {
+    const note = ws.kind === 'worktree' ? forkNoteOf(ws.path) : undefined;
+    return note ? { forked: note } : {};
   }
 
   /**
@@ -957,6 +973,7 @@ export class WorkspaceController {
     } else if (shown) {
       this.deps.intend({ type: 'close_tab', id });
     }
+    this.heldAsks.release(id, ws?.id === id);
     return ws;
   }
 
@@ -1000,11 +1017,13 @@ export class WorkspaceController {
       return there;
     }
     const id = this.freeId(wanted);
+    const began = Date.now();
     this.ahead.making.set(id, pendingWorktree({ id, project, name: `pr-${number}`, ...(known?.base ? { base: `origin/${known.base}` } : {}) }));
     this.publish();
     this.deps.intend({ type: 'navigate', view: { kind: 'workspace', id, tab: 'chat' } });
     const leave = (): void => {
       if (this.ahead.making.delete(id)) this.publish();
+      this.heldAsks.release(id, false);
       this.deps.intend({ type: 'close_tab', id });
     };
     let pull: PullHead;
@@ -1028,15 +1047,17 @@ export class WorkspaceController {
     const shown = this.ahead.making.delete(id);
     this.publish();
     if (!ws) {
+      this.heldAsks.release(id, false);
       if (shown) this.deps.intend({ type: 'close_tab', id });
       return undefined;
     }
-    const pushes = pull.fork ? 'It’s from a fork, so pushing here doesn’t change it; git pull brings its new commits.' : 'Pushing here updates the pull request.';
-    this.deps.store.dispatch({ type: 'system', channel: `${WS_PREFIX}${ws.id}`, text: `Pull request #${pull.number}${pull.title ? ` “${pull.title}”` : ''}, checked out on ${ws.branch}. ${pushes}` });
+    const pushes =pull.fork ? 'It’s from a fork, so pushing here doesn’t change it; git pull brings its new commits.' : 'Pushing here updates the pull request.';
+    this.sayMade(`${WS_PREFIX}${ws.id}`, `Pull request #${pull.number}${pull.title ? ` “${pull.title}”` : ''}, checked out on ${ws.branch}. ${pushes}`, began);
     this.deps.toast(`#${pull.number} is checked out in ${ws.name}`, 'success');
     if (shown) this.ensureLoaded(ws.id);
     else this.open(ws.id);
     this.created(ws);
+    this.heldAsks.release(id, ws.id === id);
     return ws;
   }
 
@@ -1120,7 +1141,11 @@ export class WorkspaceController {
     // Your message shows at once on its page while git makes the folder (BLG-531); Claude gets it when that's done.
     const shown = text && this.deps.showAsk ? this.deps.showAsk(firstMessage, channel) : undefined;
     const ticket = ticketKey(text);
-    const ws = await this.newWorktree(projectId, named || (text ? slugify(text) : 'worktree'), { id, ...(opts.base ? { base: opts.base } : {}), ...(opts.quiet ? { quiet: true } : {}), ...(opts.agent ? { agent: opts.agent } : {}), ...(ticket ? { ticket } : {}), ...(opts.land ? { land: true } : {}) });
+    const quick = named || (text ? slugify(text) : 'worktree');
+    // Its agent's card shows under it too, making the worktree as its first step (BLG-1013); a terminal's first message has no card.
+    const step = shown && !opts.terminal ? this.deps.beforeRun?.(channel, shown, firstMessage, { tool: 'make_worktree', input: { name: slugify(quick) || quick } }) : undefined;
+    const ws = await this.newWorktree(projectId, quick, { id, ...(opts.base ? { base: opts.base } : {}), ...(opts.quiet ? { quiet: true } : {}), ...(opts.agent ? { agent: opts.agent } : {}), ...(ticket ? { ticket } : {}), ...(opts.land ? { land: true } : {}) });
+    if (!ws) step?.fail('The worktree couldn’t be made, so this wasn’t sent to your agent.');
     if (!ws && shown) this.deps.store.dispatch({ type: 'clear', channel });
     // Build With ▸ picked in the draft (BLG-982): set before the plan is made, so Plan with Tasks gets it too.
     if (ws && opts.builder && (opts.plan || opts.tasks)) this.deps.store.dispatch({ type: 'build_with', channel, agent: opts.builder });
@@ -1129,7 +1154,9 @@ export class WorkspaceController {
     if (ws && !tasks && (opts.plan || opts.tasks)) this.deps.store.dispatch({ type: 'plan_mode', channel, on: true });
     // Seen as its terminal (BLG-553): the terminal opens on the message, not a turn in the chat (a plan's stays in the chat).
     const terminal = opts.terminal && !opts.plan && !opts.tasks;
-    if (ws && text) this.deps.askClaude(firstMessage, channel, shown || terminal ? { ...(shown ? { shown } : {}), ...(terminal ? { terminal } : {}) } : undefined);
+    // Stopped from its card while git made it: its words went back in the box, nothing is asked.
+    const stopped = Boolean(ws && step && !step.finish());
+    if (ws && text && !stopped) this.deps.askClaude(firstMessage, channel, shown || terminal ? { ...(shown ? { shown } : {}), ...(terminal ? { terminal } : {}) } : undefined);
     if (ws && proper) {
       if (opts.nameLater) void this.renameWhenNamed(ws.id, proper);
       else await this.renameWhenNamed(ws.id, proper);
@@ -1288,6 +1315,7 @@ export class WorkspaceController {
     // The copy gets everything said so far, and shows it while it's made.
     this.ensureLoaded(id);
     this.saver.flush();
+    const began = Date.now();
     if (source && project) {
       this.ahead.making.set(newId, pendingWorktree({ id: newId, project, name: slugify(name) || 'fork', base: source.branch ?? source.base ?? project.base, forkedFrom: id }));
       const said = this.deps.store.getState().log.filter((l) => l.channel === from);
@@ -1299,6 +1327,7 @@ export class WorkspaceController {
     const shown = this.ahead.making.delete(newId);
     this.publish();
     if (!ws) {
+      this.heldAsks.release(newId, false);
       this.deps.store.dispatch({ type: 'history', channel: to, items: [] });
       if (shown) this.deps.intend({ type: 'close_tab', id: newId });
       return undefined;
@@ -1310,9 +1339,10 @@ export class WorkspaceController {
     if (shown && ws.id === newId) this.ensureLoaded(ws.id);
     else this.open(ws.id);
     const carried = source?.kind === 'worktree' ? 'its commits, uncommitted changes, Scratch and conversation' : 'its conversation';
-    this.deps.store.dispatch({ type: 'system', channel: `${WS_PREFIX}${ws.id}`, text: `Forked from “${source?.name ?? 'its parent'}” with ${carried}. “${source?.name ?? 'Its parent'}” stays as it was.` });
+    this.sayMade(`${WS_PREFIX}${ws.id}`, `Forked from “${source?.name ?? 'its parent'}” with ${carried}. “${source?.name ?? 'Its parent'}” stays as it was.`, began);
     this.deps.toast(`Forked into ${ws.name}, with the conversation so far`, 'success');
     this.created(ws, { from: id });
+    this.heldAsks.release(newId, ws.id === newId);
     return ws;
   }
 
@@ -1991,8 +2021,36 @@ export class WorkspaceController {
 
   /** A worktree whose row shows but git is still making (see newWorktree). */
   isMaking(channel: string): boolean {
+    return this.beingMade(channel) !== undefined;
+  }
+
+  /** The worktree a conversation is in while git still makes it (its row, as it shows). */
+  beingMade(channel: string): Workspace | undefined {
     const id = workspaceIdOf(channel);
-    return id !== undefined && this.ahead.making.has(id);
+    return id === undefined ? undefined : this.ahead.making.get(id);
+  }
+
+  /**
+   * A message written in a worktree still being made: `ask` waits until it's made (then goes),
+   * or until it can't be (then is dropped). False when `channel` isn't one being made.
+   */
+  holdAsk(channel: string, ask: HeldAsk): boolean {
+    const id = workspaceIdOf(channel);
+    if (id === undefined || !this.ahead.making.has(id)) return false;
+    this.heldAsks.hold(id, ask);
+    return true;
+  }
+
+  /**
+   * A line about a worktree just made (what it is, where it came from), said before anything
+   * written in it while git made it (since `began`): after, it would cut that message's card in two.
+   */
+  private sayMade(channel: string, text: string, began: number): void {
+    const here = this.deps.store.getState().log.filter((l) => l.channel === channel);
+    const at = here.findIndex((l) => l.ts >= began);
+    if (at < 0) return void this.deps.store.dispatch({ type: 'system', channel, text });
+    const line: LogItem = { id: `made-${randomUUID()}`, type: 'system', channel, text, ts: here[at]!.ts, level: 'info' };
+    this.deps.store.dispatch({ type: 'history', channel, items: [...here.slice(0, at), line, ...here.slice(at)] });
   }
 }
 

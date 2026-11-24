@@ -31,7 +31,7 @@ import { cmdReturn, returnName, thisComputer, upFirst, yourComputer } from '../l
 import { ModelPicker, myRuntime } from './ModelPicker.js';
 import { effortIn } from '@beluga/shared/agent-picker.js';
 import { AutopilotChip, useAutopilot } from './AutopilotChip.js';
-import { useBuildWith } from './BuildWith.js';
+import { BuildWithChip, useBuildWith } from './BuildWith.js';
 import { ContextMeter } from './ContextMeter.js';
 import { HonchoSign } from './HonchoSign.js';
 import { McpChip } from './McpChip.js';
@@ -65,8 +65,8 @@ import { isPlanHome, planForHome } from '@beluga/core/plans/model.js';
 import { MaxFire } from './MaxFire.js';
 import { effectsOn, fireVars } from './fire-look.js';
 import { handleInvite } from '../lib/invite-command.js';
-import { experimentOn } from '@beluga/shared/experiments.js';
 import { canSchedule, scheduleCommand } from './schedule-model.js';
+import { useScheduleMode } from './schedule-mode.js';
 import s from './composer.module.css';
 import m from './max.module.css';
 import d from './draft.module.css';
@@ -324,9 +324,12 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   // Only where its agent has one (it forks the conversation's session: Claude's, OpenCode's; not Codex's).
   const btwHere = useApp((st) => runtimeHas(runtimeHere(st.projects.flatMap((p) => p.workspaces).find((w) => `ws:${w.id}` === channel)?.agent, st.self), 'btw'));
   const canBtw = channel.startsWith('ws:') && !shared && btwHere;
-  // A schedule for this chat (BLG-400): '/schedule' opens its sheet, behind the chat-schedules experiment.
+  // A schedule for this chat (BLG-400, BLG-1023): '/schedule ' turns the box into one (schedule-mode.tsx).
   // Not in a Your Mac chat Beluga made for itself (a sentinel run's).
-  const canScheduleHere = useApp((st) => experimentOn(st.prefs.experiments, 'chat-schedules') && canSchedule(channel, Boolean(shared), st.assistant.chats));
+  const canScheduleHere = useApp((st) => canSchedule(channel, Boolean(shared), st.assistant.chats));
+  const sched = useScheduleMode({ channel, can: canScheduleHere, words: () => ui.get().buffer, clear: () => ui.patch({ buffer: '', cursor: 0 }) });
+  // Who builds a plan made here: only while planning, and only with someone else to pick (BLG-1023).
+  const builds = (channel.startsWith('ws:') || channel === 'draft') && mode !== 'act' && !sched.on && buildWith.show;
   const [asideIn, setAsideIn] = useState<string | undefined>(undefined);
   const aside = canBtw && asideIn === channel;
   const btwOpen = useApp((st) => Boolean(st.btw?.[channel]));
@@ -454,7 +457,11 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
   const set = (raw: string): void => {
     const btw = canBtw && !aside ? /^\/btw\s+/.exec(raw) : null;
     if (btw) setAsideIn(channel);
-    const text = btw ? raw.slice(btw[0].length) : raw;
+    // "/schedule " turns the box into a schedule (BLG-1023): the rest is the message it sends.
+    const later = !btw && canScheduleHere && !sched.on ? /^\/schedule\s+/.exec(raw) : null;
+    if (later) sched.enter();
+    const cut = btw ?? later;
+    const text = cut ? raw.slice(cut[0].length) : raw;
     ui.patch({ buffer: text, cursor: text.length });
     sug.reset();
   };
@@ -506,7 +513,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     // /invite adds a friend, or adds friends to what's on screen (BLG-203): done here, where the view is known.
     if (handleInvite(client, ui, text)) return;
     const scheduled = canScheduleHere ? scheduleCommand(text) : undefined;
-    if (scheduled !== undefined) return openSheet({ kind: 'schedule', channel, ...(scheduled ? { prompt: scheduled } : {}) });
+    if (scheduled !== undefined) return scheduleWith(scheduled);
     if (draftProject && !text.startsWith('/')) return createWorktree(draftProject, text);
     // A new chat (in a project, outside one, or in a folder), Runs on one of your computers (BLG-788,
     // BLG-841): started there; held, never here instead, when the computer named can't take it.
@@ -578,6 +585,14 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     // A long paste still being kept as a file (BLG-988): it's waited for (moments), then this Send goes.
     if (att.whenSaved(() => sendLatest.current(secondary, copied))) return;
     const typed = buffer.trim();
+    if (sched.on) {
+      if (!typed) return;
+      // Made: the words leave the box (the mode ends with them). Refused: they stay, the toast says why.
+      void sched.schedule(plainWords(typed, client.store.getState())).then((made) => {
+        if (made) ui.patch({ buffer: '', cursor: 0, history: [...ui.get().history, `/schedule ${typed}`].slice(-200), historyIndex: -1 });
+      });
+      return;
+    }
     if (aside) {
       if (!typed) return;
       askBtw(client, api, channel, plainWords(typed, client.store.getState()));
@@ -660,13 +675,18 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     ref.current?.focus();
   };
   const sendKeys = prefs.sendWith === 'enter' ? '↩' : chordLabel('Cmd+Enter');
+  /** The box as a schedule, with these words in it (what came after a sent '/schedule'). */
+  function scheduleWith(words: string): void {
+    sched.enter();
+    ui.patch({ buffer: words, cursor: words.length });
+  }
   function accept(picked: Suggestion): void {
     if (picked.enter === 'submit') {
       ui.patch({ buffer: '', cursor: 0 });
       // A friend picked for "/invite": handled here like a typed one (BLG-340), not by the daemon.
       if (handleInvite(client, ui, picked.value)) return;
       const scheduled = canScheduleHere ? scheduleCommand(picked.value) : undefined;
-      if (scheduled !== undefined) return openSheet({ kind: 'schedule', channel, ...(scheduled ? { prompt: scheduled } : {}) });
+      if (scheduled !== undefined) return scheduleWith(scheduled);
       actions.submit(picked.value);
       return;
     }
@@ -694,8 +714,15 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
       setAsideIn(undefined);
       return;
     }
+    // The same for a schedule.
+    if (sched.on && e.key === 'Backspace' && !buffer) {
+      e.preventDefault();
+      sched.leave();
+      return;
+    }
     if (e.key === 'Escape') {
-      if (aside) setAsideIn(undefined);
+      if (sched.on) sched.leave();
+      else if (aside) setAsideIn(undefined);
       else if (pending) ui.patch({ pending: undefined, buffer: '' });
       else if (to) ui.patch({ to: undefined });
       else if (btwOpen && !buffer) void api.session.btwDismiss(channel);
@@ -754,14 +781,16 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
         ref={boxRef}
         style={effects ? (fireVars(prefs.maxFire) as React.CSSProperties) : undefined}
         data-fire={burning ? prefs.maxFire.show : undefined}
-        className={cx(s.box, burning ? (prefs.maxFire.border ? m.max : m.maxPlain) : effects && m.fxOnly, pending && s.asking, readOnly && s.readOnly, att.dropping && s.dropping, (plan || tasksMode || aside || answering === 'plan') && s.planning)}
-        data-plan={plan || tasksMode || aside || answering === 'plan' || undefined}
-        data-mode={aside ? 'btw' : answering === 'plan' ? 'plan' : mode}
+        className={cx(s.box, burning ? (prefs.maxFire.border ? m.max : m.maxPlain) : effects && m.fxOnly, pending && s.asking, readOnly && s.readOnly, att.dropping && s.dropping, (plan || tasksMode || aside || sched.on || answering === 'plan') && s.planning)}
+        data-plan={plan || tasksMode || aside || sched.on || answering === 'plan' || undefined}
+        data-mode={sched.on ? 'schedule' : aside ? 'btw' : answering === 'plan' ? 'plan' : mode}
         data-chat-box={shared ? (readOnly ? undefined : draftKey) : (isAddressableChannel(channel) || state.view.kind === 'draft' || state.view.kind === 'draft_worktree') ? draftKey : undefined}
         {...att.dropProps}
       >
         {effects ? <MaxFire box={boxRef} input={ref} /> : null}
-        {aside ? (
+        {sched.on ? (
+          sched.banner
+        ) : aside ? (
           <div className={s.planBanner} role="status">
             <span className={s.planTag}>
               <Icon name="sparkles" size={11} />
@@ -835,7 +864,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
             rows={1}
             value={buffer}
             disabled={readOnly}
-            placeholder={aside ? `Ask ${agentHere} something on the side…` : to ? `Message ${recipientLabel(to)}` : mode === 'tasks' && !homePlan?.body && !homePlan?.draft?.milestones.length ? `Describe what to build: ${agent} plans it into milestones and tasks` : state.placeholder}
+            placeholder={sched.on ? 'What to send into this chat then…' : aside ? `Ask ${agentHere} something on the side…` : to ? `Message ${recipientLabel(to)}` : mode === 'tasks' && !homePlan?.body && !homePlan?.draft?.milestones.length ? `Describe what to build: ${agent} plans it into milestones and tasks` : state.placeholder}
             onChange={(e) => set(e.target.value)}
             onKeyDown={onKey}
             onPaste={(e) => {
@@ -854,7 +883,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
                 { label: 'Open the Plan', onSelect: () => actions.run({ type: 'view', view: { kind: 'plan', id: homePlan.id } }) },
                 // While it's a draft nothing is on the board: it can go (asked first when it has something in it).
                 ...(tasksMode ? [{ label: 'Discard the Draft', danger: true, separate: true, onSelect: () => setMode('act') }] : []),
-                buildWith.item,
+                ...(buildWith.show ? [buildWith.item] : []),
                 autopilot.item,
               ]}
             >
@@ -868,20 +897,35 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
             <ActionsDropdown
               align="start"
               items={[
+                // The modes (BLG-1023): how what you send is taken. One is picked; Schedule is one of them.
                 ...(['act', 'plan', 'tasks'] as const)
                   .filter((m) => m !== 'tasks' || canPlanTasks || tasksMode)
-                  .map((m) => ({ label: MODE_INFO[m].label, hint: MODE_INFO[m].hint, checked: mode === m, onSelect: () => setMode(m) })),
-                ...((channel.startsWith('ws:') || channel === 'draft') && mode !== 'act' ? [buildWith.item] : []),
-                ...(channel.startsWith('ws:') ? [autopilot.item] : []),
+                  .map((m) => ({ label: MODE_INFO[m].label, hint: MODE_INFO[m].hint, checked: !sched.on && mode === m, onSelect: () => { sched.leave(); setMode(m); } })),
+                ...(sched.item ? [sched.item] : []),
+                // Then this chat's switches, which hold in any mode: who builds a plan, and Full Autopilot.
+                ...(builds ? [buildWith.item] : []),
+                ...(channel.startsWith('ws:') ? [{ ...autopilot.item, separate: !builds }] : []),
               ]}
             >
-              <button type="button" className={cx(s.chip, mode !== 'act' && s.chipOn)} title={mode === 'tasks' ? MODE_INFO[mode].hint : `${MODE_INFO[mode].hint} (${shortcutKeys('composer-mode') ?? 'Settings › Keyboard'} switches acting and planning first)`} aria-label={`Mode: ${MODE_INFO[mode].label}`}>
-                <Icon name={mode === 'tasks' ? 'graph' : 'wand'} size={12} />
-                <span className={s.chipLabel}>{MODE_INFO[mode].label}</span>
-                <Icon name="chevronDown" size={9} />
-              </button>
+              {sched.on ? (
+                <button type="button" className={cx(s.chip, s.chipOn)} title="Scheduled: sent into this chat later, or again and again" aria-label="Mode: Schedule">
+                  <Icon name="clock" size={12} />
+                  <span className={s.chipLabel}>Schedule</span>
+                  <Icon name="chevronDown" size={9} />
+                </button>
+              ) : (
+                <button type="button" className={cx(s.chip, mode !== 'act' && s.chipOn)} title={mode === 'tasks' ? MODE_INFO[mode].hint : `${MODE_INFO[mode].hint} (${shortcutKeys('composer-mode') ?? 'Settings › Keyboard'} switches acting and planning first)`} aria-label={`Mode: ${MODE_INFO[mode].label}`}>
+                  <Icon name={mode === 'tasks' ? 'graph' : 'wand'} size={12} />
+                  <span className={s.chipLabel}>{MODE_INFO[mode].label}</span>
+                  <Icon name="chevronDown" size={9} />
+                </button>
+              )}
             </ActionsDropdown>
           ) : null}
+          {/* Scheduling: when it sends, beside the mode. */}
+          {sched.on ? sched.chip : null}
+          {/* Planning, built by another agent: who, beside the mode (× to have the agent here build it). */}
+          {builds && buildWith.builder ? <BuildWithChip builder={buildWith.builder} clear={buildWith.clear} /> : null}
           {!shared ? <AutopilotChip channel={channel} /> : null}
           {canRunHere && sharedWs ? <RunOnChip wsId={sharedWs.id} ownerName={state.sharedProjects.find((p) => p.owner === sharedWs.owner)?.ownerName ?? 'Their'} value={runOn} onChange={setRunOn} /> : null}
           {!shared ? <ModelPicker channel={channel} {...(draftProject ? { draft: worktree.agent, forWorktree: true, onDraft: (agent: AgentRef | undefined) => setWorktree({ ...worktree, agent }) } : state.view.kind === 'draft' ? { draft: newChatAgent, onDraft: setNewChatAgent } : {})} {...(newWorkAgent ? { projectAgent: newWorkAgent } : {})} /> : null}
@@ -919,6 +963,8 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
                 <span className={d.createKey}>{sendKeys}</span>
               </button>
             </Tip>
+          ) : sched.on ? (
+            sched.button(Boolean(buffer.trim()), () => send(false), sendKeys)
           ) : aside ? (
             <Tip label="Ask on the side: the answer shows above the box, the conversation never sees it" keys={sendKeys}>
               <button type="button" className={cx(s.send, buffer.trim() && s.sendReady)} onClick={() => send(false)} aria-label="Ask on the side" disabled={!buffer.trim()}>
@@ -956,7 +1002,7 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
         </div>
       </div>
       {/* Keys are shown only when they change what Return does (Mac apps don't keep a legend up). */}
-      {(queueing && !aside) || draftProject ? (
+      {(queueing && !aside && !sched.on) || draftProject ? (
       <div className={s.legend}>
         {queueing ? (
           <>

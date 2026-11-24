@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SentinelDraftSchema } from '../src/core/sentinel/schema.js';
 import type { ChatSchedule } from '../src/core/sentinel/model.js';
-import { canSchedule, isoLocal, nextWholeHour, onceAhead, onceIn, scheduleCommand, scheduleDraft, scheduleMark, scheduleName, scheduleSpent } from '../packages/mac/src/chat/schedule-model.js';
+import { canSchedule, isoLocal, nextWholeHour, onceAhead, onceIn, presetHint, presetLabel, presetRepeats, presetTrigger, scheduleCommand, scheduleDraft, scheduleMark, scheduleName, schedulePresets, scheduleSpent, whenWords } from '../packages/mac/src/chat/schedule-model.js';
 
 /** The /schedule sheet's model (BLG-400): 'in N hours', the name, and the sentinel it makes. */
 
@@ -116,5 +116,45 @@ describe('a one-time schedule that already ran', () => {
     expect(scheduleMark([row({})])).toEqual({ count: 1, paused: true });
     expect(scheduleMark([row({}), row({ id: 't', trigger: daily, nextAt: NOW + 1 })])).toEqual({ count: 2, paused: false });
     expect(scheduleMark([row({}), row({ id: 't', paused: true })])).toEqual({ count: 2, paused: true });
+  });
+});
+
+/** The message box's Schedule mode (BLG-1023): its When presets, worked out from now (Thu 12 Nov, 14:30). */
+describe('schedule presets', () => {
+  const at = (t: { kind: string; at: string }) => new Date(t.at).getTime();
+
+  it('offers This evening only before 5 PM', () => {
+    expect(schedulePresets(NOW)).toContain('evening');
+    expect(schedulePresets(new Date(2026, 10, 12, 17, 5).getTime())).not.toContain('evening');
+  });
+
+  it('once: in an hour, this evening at 18:00, tomorrow at 9:00, each a moment that runs if the Mac slept', () => {
+    expect(at(presetTrigger('in-1h', NOW))).toBe(new Date(2026, 10, 12, 15, 31).getTime());
+    expect(at(presetTrigger('evening', NOW))).toBe(new Date(2026, 10, 12, 18, 0).getTime());
+    expect(presetTrigger('tomorrow', NOW)).toMatchObject({ kind: 'once', missed: 'catch-up' });
+    expect(at(presetTrigger('tomorrow', NOW))).toBe(new Date(2026, 10, 13, 9, 0).getTime());
+  });
+
+  it('repeating: every morning, every weekday, every week on today', () => {
+    expect(presetTrigger('daily', NOW)).toEqual({ kind: 'schedule', every: 'day', at: '09:00', missed: 'catch-up' });
+    expect(presetTrigger('weekdays', NOW)).toMatchObject({ every: 'week', days: [1, 2, 3, 4, 5] });
+    expect(presetTrigger('weekly', NOW)).toMatchObject({ every: 'week', days: [4] });
+    expect(presetLabel('weekly', NOW)).toBe('Every Thursday');
+    expect(['in-1h', 'tomorrow', 'daily', 'weekly'].map((p) => presetRepeats(p as never))).toEqual([false, false, true, true]);
+  });
+
+  it('says when in words, for the banner and the toast', () => {
+    expect(whenWords(presetTrigger('in-1h', NOW), NOW)).toBe('today at 15:31');
+    expect(whenWords(presetTrigger('tomorrow', NOW), NOW)).toBe('tomorrow at 9:00');
+    expect(whenWords(presetTrigger('daily', NOW), NOW)).toBe('every day at 9:00');
+    expect(whenWords(presetTrigger('weekdays', NOW), NOW)).toBe('every weekday at 9:00');
+    expect(whenWords({ kind: 'once', at: isoLocal(new Date(2026, 10, 20, 9, 0).getTime()), missed: 'catch-up' }, NOW)).toMatch(/^on Fri 20 Nov at 9:00$/);
+  });
+
+  it('each preset makes a sentinel the daemon takes', () => {
+    for (const p of schedulePresets(NOW)) {
+      expect(SentinelDraftSchema.safeParse(scheduleDraft({ trigger: presetTrigger(p, NOW), prompt: 'Send XYZ', ref: REF })).success).toBe(true);
+      expect(presetHint(p, NOW)).toMatch(/\d:\d\d$/);
+    }
   });
 });

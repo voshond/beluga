@@ -49,6 +49,17 @@ describe('the core counts what you missed', () => {
     expect(s.unread['ws:auth']).toBe(1);
   });
 
+  it("doesn't count your own first message, nor the run it starts, in a new worktree you left", () => {
+    let s = apply(base(), overview, { type: 'chat', id: 'c1', from: 'me', text: 'Add auth', ts: 1, byAgent: false, channel: 'ws:auth' }, run('queued'), run('started'));
+    expect(s.unread['ws:auth']).toBeUndefined();
+    // Its answer is news.
+    s = apply(s, run('done'));
+    expect(s.unread['ws:auth']).toBe(1);
+    // A friend's message, or your agent posting, still counts.
+    s = apply(base(), overview, { type: 'chat', id: 'c2', from: 'bob', text: 'hi', ts: 2, byAgent: false, channel: 'ws:auth' }, { type: 'chat', id: 'c3', from: 'me', text: 'on it', ts: 3, byAgent: true, channel: 'ws:auth' });
+    expect(s.unread['ws:auth']).toBe(2);
+  });
+
   it('counts a Claude Code session in one of your worktrees ending its turn', () => {
     let s = apply(base(), overview, { type: 'claude_code', sessions: [session({})] });
     expect(s.unread['ws:hooks']).toBeUndefined();

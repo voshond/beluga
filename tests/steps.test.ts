@@ -345,6 +345,8 @@ describe('steps in words', () => {
 
   it('reads the one-line steps of older cards and other Claudes', () => {
     expect(humanizeLine('Bash npm test').done).toBe('Ran npm test');
+    // Beluga's step before the agent starts (core/before-run.ts), as a friend's or the phone's one-line step.
+    expect(humanizeLine('make_worktree pr-49')).toMatchObject({ done: 'Made the worktree pr-49', doing: 'Making the worktree pr-49' });
     expect(humanizeLine('Grep "TODO"').done).toBe('Searched for ‘TODO’');
     expect(humanizeLine('ask_person bob')).toMatchObject({ done: 'Asked bob’s agent', person: 'bob' });
     expect(humanizeLine('wait_for t_lbTQ6LYNbZrq')).toMatchObject({ doing: 'Waiting for an answer', task: 't_lbTQ6LYNbZrq', wait: true });

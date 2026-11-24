@@ -7,7 +7,7 @@ import { setup } from './sentinel-fakes.js';
 
 const ME = 'me-me-me-me-me-me-me-me-me-me-me0';
 type Handler = (a: unknown, e: unknown) => Promise<{ content: Array<{ text: string }>; isError?: boolean }>;
-const wake: SentinelWake = { on: () => true, refusal: () => undefined, deliver: async () => 'm1', wait: async () => ({ state: 'answered', answer: 'ok' }) };
+const wake: SentinelWake = { refusal: () => undefined, deliver: async () => 'm1', wait: async () => ({ state: 'answered', answer: 'ok' }) };
 const draft = (to = 'this chat') => ({ name: 'Daily nudge', trigger: { kind: 'schedule', every: 'day', at: '09:00', missed: 'skip' }, steps: [{ kind: 'chat', name: 'Wake', to, text: 'Send the status' }] });
 
 function toolsIn(channel: string) {

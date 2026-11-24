@@ -1,5 +1,5 @@
 import { type AssistantChat, assistantChatOf } from '../../../../src/shared/assistant.js';
-import type { ChatSchedule, OnceTrigger, SentinelDraft, Trigger } from '../../../../src/core/sentinel/model.js';
+import { type ChatSchedule, type OnceTrigger, type ScheduleTrigger, type SentinelDraft, type Trigger, clockText, scheduleSentence } from '../../../../src/core/sentinel/model.js';
 
 /**
  * The /schedule sheet's model (BLG-400): a sentinel with one trigger and one chat step that wakes
@@ -53,6 +53,109 @@ export function scheduleName(prompt: string): string {
   if (!line) return 'Chat schedule';
   return line.length > NAME_MAX ? `${line.slice(0, NAME_MAX - 1)}…` : line;
 }
+
+/**
+ * The message box's Schedule mode (BLG-1023): '/schedule' turns the box into one, and its When chip
+ * offers these, in plain words. Each is a trigger worked out from now; Custom… opens the full sheet.
+ */
+export const SCHEDULE_PRESETS = ['in-1h', 'in-3h', 'evening', 'tomorrow', 'daily', 'weekdays', 'weekly'] as const;
+export type SchedulePreset = (typeof SCHEDULE_PRESETS)[number];
+/** What the box picks when it turns into a schedule. */
+export const FIRST_PRESET: SchedulePreset = 'tomorrow';
+
+const MORNING = '09:00';
+const EVENING = 18;
+const WEEKDAYS = [1, 2, 3, 4, 5] as const;
+const DAY_WORDS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
+
+/** The presets that make sense now: 'This evening' only before 5 PM. */
+export function schedulePresets(now: number): SchedulePreset[] {
+  return SCHEDULE_PRESETS.filter((p) => p !== 'evening' || new Date(now).getHours() < EVENING - 1);
+}
+
+/** A preset's name in the When menu. */
+export function presetLabel(p: SchedulePreset, now: number): string {
+  switch (p) {
+    case 'in-1h':
+      return 'In an hour';
+    case 'in-3h':
+      return 'In 3 hours';
+    case 'evening':
+      return 'This evening';
+    case 'tomorrow':
+      return 'Tomorrow morning';
+    case 'daily':
+      return 'Every morning';
+    case 'weekdays':
+      return 'Every weekday morning';
+    case 'weekly':
+      return `Every ${DAY_WORDS[new Date(now).getDay()]}`;
+  }
+}
+
+/** Whether a preset sends once or again and again (the menu's two groups). */
+export const presetRepeats = (p: SchedulePreset): boolean => p === 'daily' || p === 'weekdays' || p === 'weekly';
+
+/** A preset as the trigger it makes, from now. A moment the Mac slept through still runs when it wakes. */
+export function presetTrigger(p: SchedulePreset, now: number): OnceTrigger | ScheduleTrigger {
+  switch (p) {
+    case 'in-1h':
+      return onceIn(1, now);
+    case 'in-3h':
+      return onceIn(3, now);
+    case 'evening':
+      return { kind: 'once', at: isoLocal(atHour(now, 0, EVENING)), missed: 'catch-up' };
+    case 'tomorrow':
+      return { kind: 'once', at: isoLocal(atHour(now, 1, 9)), missed: 'catch-up' };
+    case 'daily':
+      return { kind: 'schedule', every: 'day', at: MORNING, missed: 'catch-up' };
+    case 'weekdays':
+      return { kind: 'schedule', every: 'week', at: MORNING, days: [...WEEKDAYS], missed: 'catch-up' };
+    case 'weekly':
+      return { kind: 'schedule', every: 'week', at: MORNING, days: [new Date(now).getDay()], missed: 'catch-up' };
+  }
+}
+
+/**
+ * When a trigger sends, as the end of a sentence ("Sends this here …"): "today at 15:31",
+ * "tomorrow at 9:00", "on Fri 27 Nov at 9:00", or a repeating schedule's own words ("every day at 9:00").
+ */
+export function whenWords(t: OnceTrigger | ScheduleTrigger, now: number): string {
+  if (t.kind === 'schedule') {
+    const words = scheduleSentence(t);
+    return words.charAt(0).toLowerCase() + words.slice(1);
+  }
+  const d = new Date(t.at);
+  if (Number.isNaN(d.getTime())) return 'once';
+  const clock = clockText(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+  const days = Math.round((dayStart(d.getTime()) - dayStart(now)) / (24 * HOUR));
+  if (days === 0) return `today at ${clock}`;
+  if (days === 1) return `tomorrow at ${clock}`;
+  return `on ${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} at ${clock}`;
+}
+
+/** The clock time a preset lands on, for the menu's right side ("15:31", "Tue 9:00"). */
+export function presetHint(p: SchedulePreset, now: number): string {
+  const t = presetTrigger(p, now);
+  if (t.kind === 'schedule') return clockText(t.at);
+  const d = new Date(t.at);
+  const clock = clockText(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+  return dayStart(d.getTime()) === dayStart(now) ? clock : `${d.toLocaleDateString('en-GB', { weekday: 'short' })} ${clock}`;
+}
+
+/** `hour`:00 on the day `days` after now's, on the Mac's clock. */
+function atHour(now: number, days: number, hour: number): number {
+  const d = new Date(now);
+  d.setDate(d.getDate() + days);
+  d.setHours(hour, 0, 0, 0);
+  return d.getTime();
+}
+
+const dayStart = (ts: number): number => {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
 
 /** The prompt after '/schedule' ('' for none), or undefined when the words aren't that command. */
 export function scheduleCommand(text: string): string | undefined {

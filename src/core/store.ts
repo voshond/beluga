@@ -1179,9 +1179,12 @@ function reduceAgent(state: DomainState, raw: Extract<Action, { type: 'agent_eve
     ...(a.fromChat ? { origin: a.fromChat.origin, prompt: clean(a.fromChat.text) } : {}),
   } satisfies LogItem;
   const log = existing ? state.log.map((l, i) => (i === idx ? updated : l)) : appendLog(state.log, updated);
-  // A new message, or a run in a workspace finishing while no screen shows it (Claude's answer is news).
-  const finished = Boolean(existing) && updated.channel.startsWith('ws:') && (updated.status === 'done' || updated.status === 'error') && existing?.status !== 'done' && existing?.status !== 'error';
-  return bumpUnread({ ...state, log }, updated.channel, !existing || finished);
+  // Claude's answer is news when no screen shows it: a run ending (in a workspace, or one you asked for).
+  // A run you asked for starting isn't: you just sent it (e.g. a new worktree's first message), so only its end counts.
+  const mine = isSelf(state, a.requester);
+  const ended = (s: string | undefined): boolean => s === 'done' || s === 'error';
+  const finished = ended(updated.status) && !ended(existing?.status) && (updated.channel.startsWith('ws:') || mine);
+  return bumpUnread({ ...state, log }, updated.channel, finished || (!existing && !mine));
 }
 
 /** Context meter updates and compactions: the meter's numbers, and a divider where Claude compacted (see context-log.ts). */
@@ -1224,6 +1227,9 @@ function applySub(list: readonly SubAgent[], json: string, ts: number): readonly
     return s;
   });
 }
+
+/** You, on this computer (not your agent speaking for you). */
+const isSelf = (state: DomainState, peerId: string): boolean => peerId !== '' && (peerId === state.selfId || peerId === state.self?.peerId);
 
 /** Count new messages in conversations no screen is showing. */
 function bumpUnread(state: DomainState, channel: string, isNew: boolean): DomainState {
@@ -1307,7 +1313,7 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
           ...(action.fromApp ? { fromApp: action.fromApp.slice(0, 80) } : {}),
           ...(action.written ? { written: action.written } : {}),
         }),
-      }, action.channel ?? 'room', true);
+      }, action.channel ?? 'room', action.byAgent || !isSelf(state, action.from)); // What you wrote yourself is never news to you.
     case 'chat_react': {
       const log = reactOnLog(state.log, action);
       return log === state.log ? state : { ...state, log };

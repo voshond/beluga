@@ -21,7 +21,6 @@ import { demoGitHub, demoServices, demoTriggers, seedDemoSentinel } from './demo
 import type { FetchLike, TriggerDeps, WebhookTunnel } from './triggers/types.js';
 import { attachSentinel, detachSentinel } from './registry.js';
 import type { PrLook, PrPlace, SentinelChat, SentinelClaude, SentinelFriends, SentinelGitHub, SentinelPlaces, SentinelWake } from './runner.js';
-import { experimentGate } from '../../shared/experiments.js';
 import { wakeRefusal } from './wake.js';
 import { Sentinels } from './sentinels.js';
 import { keepWidgetSnapshot } from './widgets.js';
@@ -293,10 +292,9 @@ function chat(session: Session, store: Store): SentinelChat {
   };
 }
 
-/** Your own chats, woken by a sentinel (BLG-397): behind the Chat schedules experiment, yours alone. */
+/** Your own chats, woken by a sentinel (BLG-397): yours alone. */
 function wake(session: Session, store: Store): SentinelWake {
   return {
-    on: experimentGate(() => store.getState().prefs.experiments, 'chat-schedules'),
     refusal: (to) => wakeRefusal(store.getState(), to),
     deliver: async (input) => (await session.host.chatSends.deliverFromSentinel({ sentinel: input.sentinel, run: input.run, step: input.step, channel: input.to, text: input.text })).messageId,
     wait: (messageId, ms, signal) => session.host.chatSends.outcome(messageId, ms, signal),

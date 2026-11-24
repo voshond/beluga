@@ -104,6 +104,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
         intend: (intent) => session.intend(intent),
         askClaude: (prompt, channel, o) => (o?.terminal ? session.startInTerminal(prompt, channel, o.shown) : session.askOwnClaude(prompt, channel, false, o?.echo ?? true, o?.shown)),
         showAsk: (prompt, channel) => session.showAsk(prompt, channel),
+        beforeRun: (channel, requestId, prompt, step) => session.host.beforeRuns.start(channel, requestId, prompt, step),
         planHere: (channel) => void needPlans(session).here(channel),
         titleChat: (content) => session.titleChat(content),
         compact: (channel, instructions) => session.compact(channel, instructions),

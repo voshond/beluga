@@ -27,6 +27,7 @@ import { RemoteWorktreeForm } from './RemoteWorktreeSheet.js';
 import { TemplateEditorSheet } from './TemplatesSheet.js';
 import { ContinueSheet } from './ContinueSheet.js';
 import { ForkToMacSheet } from './ForkToMacSheet.js';
+import { ForkCarrySheet } from './ForkCarrySheet.js';
 import { ImportConversationSheet } from './ImportConversationSheet.js';
 import { CleanUpWorktreesAlert } from './CleanUpWorktrees.js';
 import { DeleteProjectAlert } from './DeleteProjectAlert.js';
@@ -178,6 +179,8 @@ export function NativeSheets() {
       return <ContinueSheet key={sheet.wsId} wsId={sheet.wsId} close={close} />;
     case 'fork_to_mac':
       return <ForkToMacSheet key={sheet.wsId} owner={sheet.owner} wsId={sheet.wsId} close={close} />;
+    case 'fork_carry':
+      return <ForkCarrySheet key={sheet.wsId} wsId={sheet.wsId} close={close} />;
     case 'peer_run':
       return <PeerRunSheet key={sheet.peerId ?? ''} {...(sheet.peerId ? { peerId: sheet.peerId } : {})} close={close} />;
     case 'template':
@@ -217,7 +220,7 @@ export function NativeSheets() {
     case 'new_sentinel':
       return <NewSentinelSheet {...(sheet.projectId ? { projectId: sheet.projectId } : {})} {...(sheet.way ? { way: sheet.way } : {})} close={close} />;
     case 'schedule':
-      return <ScheduleSheet channel={sheet.channel} {...(sheet.prompt ? { prompt: sheet.prompt } : {})} close={close} />;
+      return <ScheduleSheet channel={sheet.channel} {...(sheet.prompt ? { prompt: sheet.prompt } : {})} {...(sheet.onMade ? { onMade: sheet.onMade } : {})} close={close} />;
     case 'add_tile':
       return <AddTileSheet key={sheet.dashboardId} dashboardId={sheet.dashboardId} close={close} />;
     case 'sentinel_data':

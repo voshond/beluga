@@ -34,12 +34,15 @@ test('a chat on Full Autopilot: the stand-in approves the plan and says why; one
   await composer(page).press('Shift+Tab');
   await expect(page.getByRole('button', { name: 'Mode: Plan First' })).toBeVisible();
 
-  // The mode menu has it, under the modes.
+  // The mode menu has it, under the modes, as a switch (BLG-1023): it flips in place and the menu stays open.
   await page.getByRole('button', { name: 'Mode: Plan First' }).click();
-  const item = menu(page).getByRole('menuitem', { name: /Full Autopilot/ });
-  await expect(item).toBeVisible();
+  const item = menu(page).getByRole('menuitemcheckbox', { name: /Full Autopilot/ });
+  await expect(item).toHaveAttribute('aria-checked', 'false');
   await both(page, '01-mode-menu', () => page.locator('main'));
   await item.click();
+  await expect(item).toHaveAttribute('aria-checked', 'true');
+  await both(page, '01b-switch-on', () => page.locator('main'));
+  await page.keyboard.press('Escape');
   const chip = page.getByRole('button', { name: 'Turn off Full Autopilot' });
   await expect(chip).toBeVisible();
 
@@ -55,7 +58,7 @@ test('a chat on Full Autopilot: the stand-in approves the plan and says why; one
   await chip.click();
   await expect(chip).toHaveCount(0);
   await page.getByRole('button', { name: /^Mode: / }).click();
-  await expect(menu(page).getByRole('menuitem', { name: /Full Autopilot/ })).not.toHaveAttribute('data-checked', 'true');
+  await expect(menu(page).getByRole('menuitemcheckbox', { name: /Full Autopilot/ })).toHaveAttribute('aria-checked', 'false');
   await page.keyboard.press('Escape');
 });
 
@@ -111,15 +114,22 @@ test('Plan First, built by Codex: picked from the mode menu, Claude plans and Co
   const row = sidebar(page).getByRole('button', { name: 'add-auth', exact: true });
   if (!(await row.isVisible())) await sidebar(page).getByRole('button', { name: 'bob-api' }).first().click({ position: { x: 60, y: 10 } });
   await row.click();
-  // Act has no Build With: it's for planning.
+  // Act has no Builder: it's for planning.
   await page.getByRole('button', { name: /^Mode: / }).click();
-  await expect(menu(page).getByRole('menuitem', { name: /^Build With/ })).toHaveCount(0);
+  await expect(menu(page).getByRole('menuitem', { name: /^Builder/ })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await composer(page).press('Shift+Tab');
   await page.getByRole('button', { name: 'Mode: Plan First' }).click();
-  await menu(page).getByRole('menuitem', { name: /^Build With/ }).hover();
+  await menu(page).getByRole('menuitem', { name: /^Builder: Same Agent/ }).hover();
   await both(page, '06-build-with-menu', () => page.locator('main'));
-  await menu(page).getByRole('menuitem', { name: 'Codex', exact: true }).click();
+  // The pick shows where it was made (BLG-1023): the menu stays open and the row says who builds.
+  await page.getByRole('menuitem', { name: 'Codex', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: /^Builder: Codex/ })).toBeVisible();
+  await both(page, '06b-builder-picked', () => page.locator('main'));
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  // Closed, a chip beside the mode says it, and the banner too.
+  await expect(page.getByRole('button', { name: /^Built by Codex/ })).toBeVisible();
   await expect(page.getByRole('status').filter({ hasText: 'then Codex builds it' })).toBeVisible();
 
   await composer(page).fill('Add login to the API');

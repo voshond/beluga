@@ -94,15 +94,19 @@
   width: 1px;
   background: color-mix(in srgb, var(--on-accent) 35%, transparent);
 }
-.mainError {
-  background: var(--error);
+/* A tone is the button's own accent, so its every state (hover, pressed, its edge) takes it. Set as the
+   background alone, a pressed ▾ fell back to the accent blue: its Mac menu opens on the press, so the
+   web view never sees the release and the ▾ stays pressed while (and after) the menu shows. */
+.mainError,
+.mainMerged {
+  --control-accent: var(--tone);
+  --control-accent-hover: color-mix(in srgb, var(--tone) 88%, black);
+  --control-accent-press: color-mix(in srgb, var(--tone) 82%, black);
+  --control-accent-edge: color-mix(in srgb, var(--tone) 70%, var(--text));
 }
-.mainError:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--error) 88%, black);
+.mainError {
+  --tone: var(--error);
 }
 .mainMerged {
-  background: var(--merged);
-}
-.mainMerged:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--merged) 88%, black);
+  --tone: var(--merged);
 }

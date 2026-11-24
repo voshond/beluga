@@ -15,6 +15,23 @@ export const LOCAL_RUNTIME = 'local';
 export const OLLAMA_URL = 'http://localhost:11434';
 export const OLLAMA_ID = 'ollama';
 
+/**
+ * How an endpoint is spoken to. 'anthropic' (the default): Claude Code calls its /v1/messages
+ * itself. 'openai': it only has /v1/chat/completions (a gateway, vLLM, a provider's OpenAI API),
+ * so Beluga runs a translator on this computer between them (agent/runtime/openai-bridge.ts).
+ */
+export type EndpointFormat = 'anthropic' | 'openai';
+export const ENDPOINT_FORMATS: readonly EndpointFormat[] = ['anthropic', 'openai'];
+
+/**
+ * An OpenAI-format address for `path` ("chat/completions", "models"): an address that already ends
+ * in a version (…/v1, BigModel's …/api/paas/v4) takes it as it is, a bare one gets /v1.
+ */
+export function openaiUrl(baseUrl: string, path: string): string {
+  const base = baseUrl.replace(/\/+$/, '');
+  return /\/v\d+[a-z]*$/i.test(base) ? `${base}/${path}` : `${base}/v1/${path}`;
+}
+
 /** An endpoint id: short, no slash (it starts a model value). */
 export const ENDPOINT_ID = /^[a-z0-9][a-z0-9-]{0,19}$/;
 
@@ -23,6 +40,8 @@ export interface EndpointView {
   readonly id: string;
   readonly label: string;
   readonly baseUrl: string;
+  /** Unset: 'anthropic'. */
+  readonly format?: EndpointFormat;
   readonly hasKey: boolean;
   /** The models you listed (none: the ones it says it has). */
   readonly models: readonly string[];

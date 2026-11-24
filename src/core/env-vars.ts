@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { ENV_KEY, type EnvKeys, type EnvVar, MAX_ENV_VALUE, MAX_ENV_VARS, envProblems, envRecord, importEnv, mergeEnv, parseEnvText } from '../shared/env-vars.js';
 import { DEFAULT_EXAMPLE_FILE, EXAMPLE_FILES, exampleKeys, syncExample } from '../shared/env-example.js';
 import { type FoundKey, findKeys, mayHoldKey } from '../shared/key-detect.js';
-import { ENDPOINT_ID, endpointIdFor } from '../shared/local-endpoints.js';
+import { ENDPOINT_ID, type EndpointFormat, endpointIdFor } from '../shared/local-endpoints.js';
 import type { Project, Workspace } from '../workspaces/types.js';
 import { varsElsewhere } from './env-elsewhere.js';
 import { belugaHome } from './home.js';
@@ -24,6 +24,8 @@ export const Endpoint = z.object({
   baseUrl: z.string().url().max(500).refine((u) => /^https?:\/\//.test(u), 'Use an http:// or https:// address'),
   key: z.string().max(4000).optional(),
   models: z.array(z.string().min(1).max(40)).max(20).default([]),
+  /** Unset: Anthropic's format. 'openai': runs through the translator (agent/runtime/openai-bridge.ts). */
+  format: z.enum(['anthropic', 'openai']).optional(),
 });
 export type Endpoint = z.infer<typeof Endpoint>;
 const MAX_ENDPOINTS = 12;
@@ -721,14 +723,15 @@ export class EnvVars {
    * Add or change an endpoint. `key`: undefined keeps the one it has, '' removes it. A new one
    * (no id) gets an id from its label. → its id.
    */
-  saveEndpoint(change: { readonly id?: string; readonly label: string; readonly baseUrl: string; readonly key?: string; readonly models?: readonly string[] }): string {
+  saveEndpoint(change: { readonly id?: string; readonly label: string; readonly baseUrl: string; readonly key?: string; readonly models?: readonly string[]; readonly format?: EndpointFormat }): string {
     const list = this.data.endpoints;
     const before = change.id ? list.find((e) => e.id === change.id) : undefined;
     if (change.id && !before) throw new Error('That endpoint is gone');
     const id = before?.id ?? endpointIdFor(change.label, list.map((e) => e.id));
     const key = change.key === undefined ? before?.key : change.key || undefined;
     const models = [...new Set((change.models ?? before?.models ?? []).map((m) => m.trim()).filter(Boolean))];
-    const parsed = Endpoint.safeParse({ id, label: change.label.trim(), baseUrl: change.baseUrl.trim().replace(/\/+$/, ''), ...(key ? { key } : {}), models });
+    const format = change.format ?? before?.format;
+    const parsed = Endpoint.safeParse({ id, label: change.label.trim(), baseUrl: change.baseUrl.trim().replace(/\/+$/, ''), ...(key ? { key } : {}), models, ...(format === 'openai' ? { format } : {}) });
     if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? 'That endpoint doesn’t look right');
     if (!before && list.length >= MAX_ENDPOINTS) throw new Error(`Up to ${MAX_ENDPOINTS} endpoints`);
     this.data = { ...this.data, endpoints: before ? list.map((e) => (e.id === id ? parsed.data : e)) : [...list, parsed.data] };

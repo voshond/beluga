@@ -20,8 +20,12 @@ export type { NativeRow } from './native-menu-model.js';
  * web menus.
  */
 
-/** Native menus here: the app, on a Mac. */
-export const nativeMenus = (): boolean => inApp() && isMac();
+/**
+ * Native menus here: off (BLG-1023). The Mac's NSMenus didn't look like the rest of Beluga (the mode
+ * menu, the PR's •••), so every menu is the app's own again. The NSMenu path stays, behind this one switch.
+ */
+const NATIVE_MENUS = false;
+export const nativeMenus = (): boolean => NATIVE_MENUS && inApp() && isMac();
 
 const PX = 32; // 16 pt at 2×.
 const pictures = new Map<string, Made>();

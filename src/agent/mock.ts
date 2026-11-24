@@ -262,11 +262,22 @@ const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
     });
   });
 
+// Taller than the plan card, so Read in full has more to show (the e2e opens it).
 const MOCK_PLAN = `## Plan: add auth
 
+### Context
+\`src/server.ts\` has a \`TODO: add auth\` and no middleware. Sessions are signed cookies set by the login route.
+
+### Steps
 1. Add \`src/auth.ts\` with a \`requireUser()\` middleware
+   - read the session cookie and check its signature
+   - reject a missing or expired session with 401
 2. Protect \`/api/payments/*\`
 3. Cover it with 3 tests (missing, expired, valid session)
+
+### Not in this change
+- Admin bypass for support tools (an open question)
+- A server-side session store
 
 Nothing is changed until you approve.`;
 

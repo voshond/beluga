@@ -180,6 +180,8 @@ export const HANDLERS = {
   'sharing.earlier': (s, owner, wsId) => needFriendShares(s).earlier(owner, wsId),
   'sharing.runHere': (s, owner, wsId, prompt) => needFriendShares(s).runHere(owner, wsId, prompt),
   'sharing.fork': (s, owner, wsId, name) => needFriendShares(s).fork(owner, wsId, name),
+  'sharing.forkCarry': (s, wsId, picks) => needFriendShares(s).forkCarry(wsId, picks),
+  'sharing.setForkCarry': (s, wsId, picks) => needFriendShares(s).setForkCarry(wsId, picks),
   'sharing.scratch': (s, owner, wsId) => {
     if (!s.store.getState().shared.some((w) => w.owner === owner && w.id === wsId)) throw new Error('That worktree isn’t shared with you');
     return remoteScratch(owner, wsId, (at, o) => s.listFiles(at, o));

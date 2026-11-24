@@ -1,39 +1,36 @@
 import { CLAUDE_CHANGED, type ChatSchedule, chatSchedules, scheduleSentence } from '@beluga/core/sentinel/model.js';
 import { activeAssistantChannel, assistantChannel } from '@beluga/shared/assistant.js';
-import { experimentOn } from '@beluga/shared/experiments.js';
 import { Button, Dot, Tip } from '../components/ui.js';
 import { Switch } from '../dialogs/settings-controls.js';
 import { useApp } from '../lib/beluga.js';
-import { openSheet } from '../lib/sheets.js';
 import { sameDeep } from '../lib/stable.js';
 import { Panel } from '../layout/inspector-parts.js';
 import { nextText } from '../sentinel/sentinel-model.js';
 import { useSentinelActions } from '../sentinel/use-sentinel.js';
+import { askToSchedule } from './schedule-mode.js';
 import { scheduleSpent } from './schedule-model.js';
 import s from './chat-schedules.module.css';
 
 /**
  * A chat's schedules (BLG-399), in its Info panel: each sentinel whose chat step wakes this chat,
  * with its status dot, when it runs, Run Now and an on/off switch; a click opens its page. A
- * one-time schedule that already ran reads as done, with no switch. Only with the chat-schedules
- * experiment on, and only when the chat has one.
+ * one-time schedule that already ran reads as done, with no switch. Only when the chat has one.
  */
 
 type Tone = 'ok' | 'warn' | 'muted' | 'claude';
 
 /** The Schedules section for the chat a view shows: a worktree or project chat (`ws:<id>`), or a Your Mac chat. */
 export function ChatSchedules({ channel }: { channel: string }) {
-  const on = useApp((st) => experimentOn(st.prefs.experiments, 'chat-schedules'));
   const rows = useApp((st) => (st.selfId ? chatSchedules(st.sentinel, `${st.selfId}/${channel}`) : []), sameDeep);
   const names = useApp((st) => st.sentinel.items.map((i) => ({ id: i.id, name: i.name })), sameDeep);
-  if (!on || !rows.length) return null;
+  if (!rows.length) return null;
   const nameOf = (id: string): string | undefined => names.find((n) => n.id === id)?.name;
   return (
     <Panel
       title={rows.length > 1 ? `Schedules · ${rows.length}` : 'Schedules'}
       action={
         <Tip label="Schedule a message in this chat (/schedule)">
-          <Button size="small" variant="quiet" icon="plus" aria-label="New schedule" onClick={() => openSheet({ kind: 'schedule', channel })} />
+          <Button size="small" variant="quiet" icon="plus" aria-label="New schedule" onClick={() => askToSchedule(channel)} />
         </Tip>
       }
     >

@@ -81,7 +81,7 @@ import { agentLabel, agentName } from '../../shared/agent-label.js';
 import { defaultAgentOf } from '../../protocol.js';
 import { dashboardAskBrief, describeSentinels, sentinelAskBrief, sentinelChatBrief, sentinelMaterial, sentinelNote } from './prompt.js';
 import { RECIPES } from './recipes.js';
-import { type ActiveRun, CHAT_SCHEDULES_OFF, OUTPUT_KEPT, type SentinelChat, type SentinelClaude, type SentinelWake, type SentinelFriends, type SentinelGitHub, type SentinelPlaces, type SentinelShell, type SourceFetch, SentinelRunner, type YourAnswer, mergePinned, runSentinelShell } from './runner.js';
+import { type ActiveRun, NO_CHAT_WAKE, OUTPUT_KEPT, type SentinelChat, type SentinelClaude, type SentinelWake, type SentinelFriends, type SentinelGitHub, type SentinelPlaces, type SentinelShell, type SourceFetch, SentinelRunner, type YourAnswer, mergePinned, runSentinelShell } from './runner.js';
 import { MetricUnitSchema, StepInputSchema, pastOnce } from './schema.js';
 import { withThisChat } from './wake.js';
 import type { ToolDraft, ToolPatch, ToolStep } from './tool-draft.js';
@@ -370,8 +370,8 @@ export class Sentinels {
    * (one of yours) or its ref. In the order they were made.
    */
   forChat(chat: string): ChatSchedule[] {
-    // The Chat schedules experiment off: no chat has any (docs/sentinel.md §13).
-    if (!this.deps.wake?.on()) return [];
+    // Nothing can wake a chat here: no chat has any.
+    if (!this.deps.wake) return [];
     const ref = chat.includes('/') ? chat : `${this.deps.selfId()}/${chat}`;
     const nextAt: Record<string, number> = {};
     for (const s of this.items) {
@@ -450,19 +450,16 @@ export class Sentinels {
     return item;
   }
 
-  /**
-   * A sentinel that wakes a chat waits while the Chat schedules experiment is off: its trigger
-   * starts nothing and counts no failure, so turning it back on finds it as it was.
-   */
+  /** A sentinel that wakes a chat waits where nothing can wake one: its trigger starts nothing and counts no failure. */
   private chatsOff(s: Sentinel): boolean {
-    return s.steps.some((st) => st.kind === 'chat') && !this.deps.wake?.on();
+    return s.steps.some((st) => st.kind === 'chat') && !this.deps.wake;
   }
 
-  /** Wake one of your chats: refused while the experiment is off, and for a chat that is not yours alone. */
+  /** Wake one of your chats: refused where nothing can wake one, and for a chat that is not yours alone. */
   private checkChats(steps: readonly Step[]): void {
     for (const st of steps) {
       if (st.kind !== 'chat') continue;
-      if (!this.deps.wake?.on()) throw new Error(capitalFirst(CHAT_SCHEDULES_OFF));
+      if (!this.deps.wake) throw new Error(capitalFirst(NO_CHAT_WAKE));
       const refusal = st.to ? this.deps.wake.refusal(st.to) : undefined;
       if (refusal) throw new Error(capitalFirst(refusal));
     }

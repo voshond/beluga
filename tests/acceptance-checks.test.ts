@@ -210,13 +210,42 @@ describe('a merge moves it to Done only with every criterion met or explained (B
     expect(bare.board.need(bare.key).status).toBe('done');
   });
 
-  it('a merged pull request found later (the worktree gone) follows the same rule', () => {
-    const { board, tools, key } = setup();
-    const held = board.branchShipped(key, pr({ state: 'MERGED' }));
-    expect(held).toMatchObject({ status: 'in_review', needsChecks: true, mergedHeld: true });
-    expect(held.activity.at(-1)?.text).toContain('kept this out of Done: 2 criteria');
-    tools.editBrief(undefined, 'acceptance', SETTLED);
-    expect(board.need(key).status).toBe('done');
+  it('a merged pull request found later (the worktree gone): Done, naming the criteria nobody settled (BLG-1022)', () => {
+    const { board, key } = setup();
+    const done = board.branchShipped(key, pr({ state: 'MERGED' }));
+    expect(done).toMatchObject({ status: 'done', pr: { state: 'MERGED' } });
+    expect(done.needsChecks).toBeUndefined();
+    expect(done.mergedHeld).toBeUndefined();
+    expect(done.activity.at(-1)?.text).toBe(`its work is merged and its worktree is gone; 2 criteria are neither ticked nor explained (${OPEN_LINE}): moved this from In Progress to Done`);
+
+    const settled = setup();
+    settled.tools.editBrief(undefined, 'acceptance', SETTLED);
+    expect(settled.board.branchShipped(settled.key, pr({ state: 'MERGED' })).activity.at(-1)?.text).toBe('moved this from In Progress to Done');
+  });
+
+  it('held after its merge, its worktree deleted or archived: Done, since nobody is left to settle them (BLG-1022)', () => {
+    for (const how of ['deleted', 'archived'] as const) {
+      const { board, key } = setup();
+      board.prChanged('w1', pr({ state: 'MERGED' }));
+      expect(board.need(key)).toMatchObject({ status: 'in_review', mergedHeld: true });
+      board.worktreeGone('w1', true, how);
+      const done = board.need(key);
+      expect(done).toMatchObject({ status: 'done' });
+      expect(done.mergedHeld).toBeUndefined();
+      expect(done.needsChecks).toBeUndefined();
+      expect(done.worktreeGone).toBeUndefined();
+      expect(done.worktrees).toEqual(how === 'deleted' ? [] : ['w1']);
+      expect(done.activity.map((a) => a.text).slice(-2)).toEqual([
+        `its worktree was ${how}`,
+        `its work is merged and its worktree was ${how}; 2 criteria are neither ticked nor explained (${OPEN_LINE}): moved this from In Review to Done`,
+      ]);
+    }
+  });
+
+  it('not merged, its worktree deleted: still asks what to do, as before', () => {
+    const { board, key } = setup();
+    board.worktreeGone('w1', true, 'deleted');
+    expect(board.need(key)).toMatchObject({ status: 'in_progress', worktreeGone: true });
   });
 
   it('a worktree merged into main here follows the same rule', () => {

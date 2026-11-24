@@ -816,8 +816,11 @@ state), the Mac app's `layout/SharedProjects.tsx` and `dialogs/native/ShareProje
 the network is on (`launchFriendShares`), and says `share.project` and `share.folder` in its `hello`.
 
 **A project, shared with a friend.** You share it from the project's ••• menu (**Share with…**: each friend gets
-*Can work here*, *Can follow* or *No access*), or with `sharing.shareWithFriend({ peerId, projectId?, workspaceId?, role })`
-(`role`: `contribute` | `view`; a `workspaceId` alone shares that one worktree). Only friends; a friend whose Beluga said
+*Can see*, *Can chat*, *Can fork*, *Can fork with secrets* or *Remove access*: one ladder, `shared/share-levels.ts`,
+BLG-1019), or with `sharing.shareWithFriend({ peerId, projectId?, workspaceId?, role, fork? })` (`role`: `contribute` |
+`view`; `fork`: `code` | `secrets`, only with `contribute` and a project with a folder; a `workspaceId` alone shares that
+one worktree). The `project` message says `forks` (`none` | `code` | `secrets`) every time; a Mac from before says none,
+and then working there (`contribute`) may fork, as it could then. Only friends; a friend whose Beluga said
 it can't open shared projects is told at once ("Ata's Beluga 1.1.0 can't open shared projects yet. Ask Ata to update
 Beluga"). Nobody hosts: everything goes over the two Macs' Noise link in `share` frames.
 
@@ -878,7 +881,8 @@ message goes when it's back"; a message sent then shows "Waiting for ata's Mac" 
 Mac took it (`delivery` in the state). The phone lists the worktree in its work view under "ata · bob-api", chats there
 the same way, and its message box says the same (`ConvView.waiting`).
 
-**A fork on your own Mac** (`fork.ts`, BLG-312). In a friend's worktree you work in (*Can work here*), **Fork to My
+**A fork on your own Mac** (`fork.ts`, BLG-312). In a friend's worktree they let you fork (*Can fork*, or *Can fork
+with secrets*; without it you don't see the button, and their Mac refuses a `fork_request` anyway), **Fork to My
 Mac** in its header makes it a worktree of yours: the sheet says what comes over and what stays behind, and asks for a
 name. Your Mac finds the project in your Projects (your copy of a project shared whole, or your own clone of the same
 repository: the `project` message carries `repo`, its https address, for that) and sends `fork_request {ws, have}`,
@@ -889,7 +893,12 @@ answers `fork_ready {ws, share, size}` (or `fork_failed {ws, error}`); it says i
   so nothing in their worktree changes), without what `have` reaches. No bundle when you have all of it.
 - `history.json`: the whole conversation; `session.jsonl`: Claude Code's session, the values of the worktree's .env
   files replaced by `[secret]`; `scratch/`: its Scratch folder (files up to 50 MB, 120 MB in all).
-- Never what git ignores (node_modules, build output: the setup makes them again), nor a secret (`isDenied`).
+- `carry/` (BLG-1017): what git ignores that its owner picked in Share › What Forks Bring (`carry.ts`; never what the
+  setup makes again), at most 150 MB and 50 MB a file. A secret-looking file in a pick goes only when the owner ticked
+  it and you have *Can fork with secrets*. The meta's `carried` says what came and what stayed behind; your Mac places
+  them never over a file of yours, through a link, or into `.git`, `.beluga`, `.claude` and the like, and writes
+  `.beluga/fork.json`, which your agent's instructions include.
+- Nothing else git ignores, and no other secret (`isDenied`).
 
 Your Mac fetches it, makes your branch (`beluga/<name>`) at their tip, a worktree on it with the uncommitted work
 left uncommitted, Scratch in place and Claude's session where Claude Code looks, so the first turn resumes it as a fork

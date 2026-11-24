@@ -20,6 +20,7 @@ import { type ExternalLookup, externalRequester, isExternalRequester, requesterT
 import type { WorkspaceController } from './workspace-controller.js';
 import type { WorkspaceSharing } from './workspace-sharing.js';
 import { StepBook, importedKey, runKey } from './step-book.js';
+import { BeforeRuns } from './before-run.js';
 import { Compactor } from './compactor.js';
 import { BtwDesk } from './btw.js';
 import { SCRATCH_DIR, ensureScratch } from '../workspaces/scratch.js';
@@ -372,6 +373,8 @@ export class AgentHost {
 
   /** Every step of your Claude's runs in detail, for the screens on this computer (see step-book.ts). */
   readonly steps: StepBook;
+  /** Your messages whose worktree is still being made: their card's first step (see before-run.ts). */
+  readonly beforeRuns: BeforeRuns;
   /** Compacting conversations, by hand or when they're nearly full (see compactor.ts). */
   private readonly compactor: Compactor;
   /** Side questions (/btw), answered beside conversations (see btw.ts). */
@@ -381,6 +384,7 @@ export class AgentHost {
 
   constructor(private readonly deps: AgentHostDeps) {
     this.steps = deps.steps ?? new StepBook();
+    this.beforeRuns = new BeforeRuns({ emit: (requestId, event, text, channel) => this.emitAgent(requestId, this.selfId, event, text, channel), put: (requestId, record) => this.steps.put(runKey(requestId), record) });
     this.compactor = new Compactor({
       store: deps.store,
       agent: () => this.agent,
@@ -742,6 +746,13 @@ export class AgentHost {
     const lane = this.lanes.get(channel);
     const mine = lane?.waiting.filter((w) => w.from === this.selfId) ?? [];
     const threads = opts.threads ? `${opts.threads} thread${opts.threads === 1 ? '' : 's'}` : '';
+    // Messages still waiting for their worktree to be made (before-run.ts): taken back, nothing ran yet.
+    const early = this.beforeRuns.stop(channel);
+    if (early.length && (!lane || (!lane.current && !mine.length))) {
+      const back = `${early.length} message${early.length === 1 ? '' : 's'} back in the box`;
+      if (!opts.quiet) this.toast(`Stopped your agent here${threads ? ` and ${threads}` : ''} · ${back}`, 'success');
+      return { stopped: true, returned: early };
+    }
     if (!lane || (!lane.current && !mine.length)) {
       if (threads) this.toast(`Stopped ${threads}`, 'success');
       else if (!opts.quiet) this.toast([...this.lanes.values()].some((l) => l.current || l.waiting.length) ? "Your agent isn't working here" : 'Your agent is not running anything');
@@ -761,10 +772,10 @@ export class AgentHost {
     }
     // A message from another chat is dropped, never put in your box as your words.
     const yours = mine.filter((w) => !w.compact && !w.body.origin);
-    const n = yours.length;
+    const n = yours.length + early.length;
     const back = n ? ` · ${n} queued message${n === 1 ? '' : 's'} back in the box` : '';
     if (!opts.quiet) this.toast(`Stopped your agent here${threads ? ` and ${threads}` : ''}${back}`, 'success');
-    return { stopped: true, returned: yours.map((w) => w.body.prompt) };
+    return { stopped: true, returned: [...early, ...yours.map((w) => w.body.prompt)] };
   }
 
   /**
