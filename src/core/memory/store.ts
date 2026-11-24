@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { copyFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import { type MemoryAuthor, type MemoryChange, type MemoryEntry, type MemoryScope, type MemoryView, memoryCap, memoryUsed } from '../../shared/memory.js';
+import { FILED_MEMORY_MAX, type MemoryAuthor, type MemoryChange, type MemoryEntry, type MemoryScope, type MemoryView, filedUsed, memoryCap, memoryUsed } from '../../shared/memory.js';
 import { secretIn } from '../../shared/secret-text.js';
 import { writeJson } from '../../workspaces/store.js';
 import { belugaHome } from '../home.js';
@@ -19,8 +19,12 @@ type MemoryFile = {
 
 export class MemoryError extends Error {}
 
-/** One write: the text for an add, the entry (id or a piece of its text) for a replace or remove. */
-export type MemoryWriteOp = { readonly op: 'add'; readonly text: string } | { readonly op: 'replace'; readonly entry: string; readonly text: string } | { readonly op: 'remove'; readonly entry: string };
+/** One write: the text for an add, the entry (id or a piece of its text) for a replace or remove; `file` files an entry away or brings it back (BLG-123). */
+export type MemoryWriteOp =
+  | { readonly op: 'add'; readonly text: string; readonly filed?: boolean }
+  | { readonly op: 'replace'; readonly entry: string; readonly text: string }
+  | { readonly op: 'remove'; readonly entry: string }
+  | { readonly op: 'file'; readonly entry: string; readonly filed: boolean };
 
 /** The memory after a write, and what the write changed (BLG-102: what Undo needs). */
 export type MemoryWrite = { readonly view: MemoryView; readonly change: MemoryChange };
@@ -48,8 +52,12 @@ const checkText = (text: string): string => {
 const checkCap = (scope: MemoryScope, before: readonly MemoryEntry[], after: readonly MemoryEntry[]): void => {
   const cap = memoryCap(scope);
   const used = memoryUsed(after);
-  if (used <= cap || used <= memoryUsed(before)) return;
-  throw new MemoryError(`${scopeName(scope)} is full: this would use ${used} of ${cap} characters. Merge related entries into one with memory_replace, or drop stale ones with memory_remove, then try again.`);
+  if (used > cap && used > memoryUsed(before))
+    throw new MemoryError(
+      `${scopeName(scope)} is full: this would use ${used} of ${cap} characters. Merge related entries into one with memory_replace, drop stale ones with memory_remove, or file away what only matters sometimes with memory_file, then try again.`,
+    );
+  const filed = filedUsed(after);
+  if (filed > FILED_MEMORY_MAX && filed > filedUsed(before)) throw new MemoryError(`${scopeName(scope)} has no room left to file away: this would use ${filed} of ${FILED_MEMORY_MAX} characters. Forget stale filed entries first.`);
 };
 
 const sameEntry = (a: MemoryEntry | undefined, b: MemoryEntry | undefined): boolean => Boolean(a && b && a.id === b.id && a.text === b.text && a.at === b.at);
@@ -98,7 +106,7 @@ export class MemoryStore {
 
   read(scope: MemoryScope, label?: string): MemoryView {
     const { entries } = this.load(this.fileOf(scope));
-    return { scope, label: label ?? (scope.kind === 'user' ? 'About you' : path.basename(scope.root)), entries, used: memoryUsed(entries), cap: memoryCap(scope) };
+    return { scope, label: label ?? (scope.kind === 'user' ? 'About you' : path.basename(scope.root)), entries, used: memoryUsed(entries), cap: memoryCap(scope), filedUsed: filedUsed(entries), filedCap: FILED_MEMORY_MAX };
   }
 
   add(scope: MemoryScope, text: string, by: MemoryAuthor): MemoryView {
@@ -119,8 +127,15 @@ export class MemoryStore {
     if (op.op === 'add') {
       const clean = checkText(op.text);
       if (entries.some((e) => e.text.toLowerCase() === clean.toLowerCase())) throw new MemoryError('That is remembered already.');
-      const after: MemoryEntry = { id: newId(), text: clean, at: Date.now(), by };
+      const after: MemoryEntry = { id: newId(), text: clean, at: Date.now(), by, ...(op.filed ? { filed: true } : {}) };
       return { view: this.save(scope, entries, [...entries, after]), change: { scope, op: 'add', after, index: entries.length } };
+    }
+    if (op.op === 'file') {
+      const before = findEntry(entries, op.entry);
+      if (Boolean(before.filed) === op.filed) throw new MemoryError(op.filed ? 'That entry is filed away already.' : 'Every run gets that entry already.');
+      const { filed: _, ...rest } = before;
+      const after: MemoryEntry = { ...rest, at: Date.now(), by, ...(op.filed ? { filed: true } : {}) };
+      return { view: this.save(scope, entries, entries.map((e) => (e.id === before.id ? after : e))), change: { scope, op: 'replace', before, after, index: entries.indexOf(before) } };
     }
     if (op.op === 'replace') {
       const clean = checkText(op.text);
@@ -149,7 +164,7 @@ export class MemoryStore {
     const target = this.load(this.fileOf(to)).entries;
     const clean = checkText(text);
     const known = target.some((e) => e.text.toLowerCase() === clean.toLowerCase());
-    const view = known ? this.read(to) : this.save(to, target, [...target, { id: newId(), text: clean, at: Date.now(), by }]);
+    const view = known ? this.read(to) : this.save(to, target, [...target, { id: newId(), text: clean, at: Date.now(), by, ...(entry.filed ? { filed: true } : {}) }]);
     try {
       this.save(from, source, source.filter((e) => e.id !== entry.id));
     } catch (err) {
@@ -185,6 +200,8 @@ export class MemoryStore {
     const used = memoryUsed(after);
     const cap = memoryCap(scope);
     if (used > cap && used > memoryUsed(before)) throw new MemoryError(`${scopeName(scope)} is full: putting it back would use ${used} of ${cap} characters. Make room first, then undo again.`);
+    const filed = filedUsed(after);
+    if (filed > FILED_MEMORY_MAX && filed > filedUsed(before)) throw new MemoryError(`${scopeName(scope)} has no room left to file away: putting it back would use ${filed} of ${FILED_MEMORY_MAX} characters.`);
     return this.save(scope, before, after);
   }
 

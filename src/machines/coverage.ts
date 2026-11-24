@@ -757,6 +757,7 @@ export const MACHINE: Record<Method, MachineSide> = {
   'memory.add': 'drive',
   'memory.replace': 'drive',
   'memory.remove': 'drive',
+  'memory.file': 'drive',
   'memory.undo': 'drive',
   'memory.keepProposal': 'drive',
   'memory.discardProposal': 'drive',

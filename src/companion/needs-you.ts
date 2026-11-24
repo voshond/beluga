@@ -697,6 +697,7 @@ type MemoryCard = { readonly title: string; readonly body: string; readonly keep
 const memoryCard = (p: MemoryProposal): MemoryCard => {
   const reworded = p.previous !== undefined && p.previous !== p.text;
   if (p.drop) return { title: `Forget this ${memoryPlace(p)}?`, body: p.text, keep: 'Forget', leave: 'Keep It' };
+  if (p.file) return { title: `File this away ${memoryPlace(p)}, for the work it’s about?`, body: p.text, keep: 'File Away', leave: 'Discard' };
   if (p.from) {
     const title = p.kind === 'user' ? `Remember this everywhere, not only ${memoryPlace(p.from)}?` : `Remember this only ${memoryPlace(p)}?`;
     return { title, body: reworded ? changeText([p.previous!], p.text) : p.text, keep: 'Move', leave: 'Discard' };

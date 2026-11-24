@@ -69,7 +69,7 @@ const ALWAYS_OK = new Set([
   // Shared skills (core/skill-proposals, BLG-98): only your own runs have them. A proposal is a card you keep or discard; nothing is written before.
   ...['skill_read', 'skill_propose', 'skill_propose_change'].map((n) => `mcp__beluga_skills__${n}`),
   // Beluga's memory (core/memory, BLG-95): only your own runs have it. Each write is capped, refuses secrets, and you see and edit it all in Settings.
-  ...['memory_list', 'memory_add', 'memory_replace', 'memory_remove'].map((n) => `mcp__beluga_memory__${n}`),
+  ...['memory_list', 'memory_add', 'memory_replace', 'memory_remove', 'memory_file', 'memory_search'].map((n) => `mcp__beluga_memory__${n}`),
   // Honcho (core/honcho, BLG-101): only your own runs have it, with Honcho on. It only reads what Honcho inferred about you.
   'mcp__beluga_honcho__honcho_ask',
   // Child threads (core/threads): only your own runs have them, with the flag on. They start and follow your own chats, under limits; no tool archives or deletes one.

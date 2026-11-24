@@ -105,8 +105,9 @@ const TIDY_RULES = [
   'Every entry is added to every run, so a memory must stay small. To tidy one:',
   '- merge entries that say related things into one: the kept entry’s id in "replaces", the others’ ids in "merges", and the whole new text;',
   '- forget an entry that is one-off (a single event, a date, what one task was), stale, wrong, or said by another entry: {"forget":"<id>","why":"…"};',
-  '- move an entry about one project only out of the memory about the user, or one about the person out of a project’s: {"move":"<id>","scope":"<the memory it goes to>","why":"…"}, with "text" only to reword it.',
-  'Never forget a correction or a preference the person gave: merge it or move it instead.',
+  '- move an entry about one project only out of the memory about the user, or one about the person out of a project’s: {"move":"<id>","scope":"<the memory it goes to>","why":"…"}, with "text" only to reword it;',
+  '- file away an entry that only matters for some work (a machine, a tool, one feature): it leaves every run but a run about it still gets it: {"file":"<id>","why":"…"}. Entries marked (filed) are filed away already.',
+  'Never forget a correction or a preference the person gave: merge it, move it or file it away instead. Rather file away than forget what may matter again.',
 ].join('\n');
 
 const REFLECTION_SYSTEM = [
@@ -123,20 +124,20 @@ const REFLECTION_SYSTEM = [
 const TIDY_SYSTEM = [
   'You tidy the long-term memory of a person’s AI agents. The memory about the user is about the person, in every project; a project’s memory is about that project only.',
   TIDY_RULES,
-  'Only merge, forget or move what is there: never propose a new fact. "scope" names a memory by its key, as given.',
+  'Only merge, forget, move or file away what is there: never propose a new fact. "scope" names a memory by its key, as given.',
   `At most ${MAX_TIDY_PROPOSALS}, the ones that free the most room or fix the most misplaced entries first. A tidy memory needs nothing: then answer with an empty list.`,
-  'Answer with JSON only: {"proposals":[{"scope":"user","text":"…","replaces":"<id>","merges":["<id>"],"why":"…"},{"forget":"<id>","why":"…"},{"move":"<id>","scope":"<key>","why":"…"}]}',
+  'Answer with JSON only: {"proposals":[{"scope":"user","text":"…","replaces":"<id>","merges":["<id>"],"why":"…"},{"forget":"<id>","why":"…"},{"move":"<id>","scope":"<key>","why":"…"},{"file":"<id>","why":"…"}]}',
 ].join('\n');
 
 const fullness = (view: MemoryView): number => Math.round((view.used / view.cap) * 100);
 
 const entriesText = (title: string, view: MemoryView | undefined): string =>
-  view ? `${title} (${fullness(view)}% full):\n${view.entries.length ? view.entries.map((e) => `- [${e.id}] ${e.text}`).join('\n') : '(empty)'}` : `${title}: none (this conversation is not in a project, so propose only "user").`;
+  view ? `${title} (${fullness(view)}% full):\n${view.entries.length ? view.entries.map((e) => `- [${e.id}]${e.filed ? ' (filed)' : ''} ${e.text}`).join('\n') : '(empty)'}` : `${title}: none (this conversation is not in a project, so propose only "user").`;
 
 const crowdedText = (views: ReadonlyArray<MemoryView | undefined>): string[] => {
   const crowded = views.filter((v): v is MemoryView => Boolean(v && v.used >= v.cap * TIDY_AT));
   if (!crowded.length) return [];
-  return [`Nearly full: ${crowded.map((v) => `${v.scope.kind === 'user' ? 'the memory about the user' : `the memory of ${v.label}`} (${fullness(v)}%)`).join(', ')}. Make room there first: propose merges, forgets or moves before any new fact for it.`];
+  return [`Nearly full: ${crowded.map((v) => `${v.scope.kind === 'user' ? 'the memory about the user' : `the memory of ${v.label}`} (${fullness(v)}%)`).join(', ')}. Make room there first: propose merges, forgets, moves or entries to file away before any new fact for it.`];
 };
 
 /** The newest lines that fit the budget, oldest first. */
@@ -183,6 +184,7 @@ const Answer = z.object({
         merges: z.array(z.string()).max(20).optional(),
         forget: z.string().optional(),
         move: z.string().optional(),
+        file: z.string().optional(),
       }),
     )
     .max(20),
@@ -228,7 +230,7 @@ const placeKey = (place: MemoryPlace, id: string): string => `${place.kind === '
 const touches = (p: Drafted): string[] => [...(p.entry ? [placeKey(p.from ?? placeOf(p), p.entry)] : []), ...(p.merges ?? []).map((m) => placeKey(placeOf(p), m.id))];
 
 /** What a discarded proposal is remembered as, so the same one is not proposed again. */
-export const discardKey = (p: Pick<MemoryProposal, 'text' | 'drop' | 'from' | 'previous'>): string => (p.drop ? `Forget: ${p.text}` : p.from ? `Move: ${p.previous ?? p.text}` : p.text);
+export const discardKey = (p: Pick<MemoryProposal, 'text' | 'drop' | 'from' | 'previous' | 'file'>): string => (p.drop ? `Forget: ${p.text}` : p.file ? `File away: ${p.text}` : p.from ? `Move: ${p.previous ?? p.text}` : p.text);
 
 const memoriesOf = (ctx: ProposalContext): KnownMemory[] => [
   { key: 'user', view: ctx.user, place: { kind: 'user' } },
@@ -251,6 +253,11 @@ const draftOf = (draft: Draft, memories: readonly KnownMemory[], tidy: boolean):
     const found = locate(memories, draft.forget);
     if (!found) return undefined;
     return { ...placeFields(found.memory.place), text: found.entry.text, entry: found.entry.id, previous: found.entry.text, drop: true, ...why };
+  }
+  if (draft.file) {
+    const found = locate(memories, draft.file);
+    if (!found || found.entry.filed) return undefined;
+    return { ...placeFields(found.memory.place), text: found.entry.text, entry: found.entry.id, previous: found.entry.text, file: true, ...why };
   }
   const text = oneLine(draft.text ?? '');
   if (text.length > MAX_PROPOSAL_CHARS) return undefined;
@@ -316,6 +323,7 @@ const Saved = z.object({
         reason: z.string().max(MAX_REASON_CHARS).optional(),
         merges: z.array(z.object({ id: z.string().min(1).max(200), text: z.string().max(10_000) })).max(20).readonly().optional(),
         drop: z.boolean().optional(),
+        file: z.boolean().optional(),
         from: z.union([z.object({ kind: z.literal('user') }), z.object({ kind: z.literal('project'), root: z.string().min(1).max(4096), project: z.string().max(200).optional() })]).optional(),
         channel: z.string().max(400),
         askedAt: z.number(),
@@ -331,7 +339,7 @@ const Saved = z.object({
 type SavedReflection = z.infer<typeof Saved>;
 
 const safeToKeep = (p: MemoryProposal): boolean =>
-  [p.text, p.previous ?? '', p.reason ?? '', ...(p.merges ?? []).map((m) => m.text)].every((t) => !secretInMemory(t)) && (p.kind === 'user' || Boolean(p.root)) && (!(p.merges || p.drop || p.from) || Boolean(p.entry));
+  [p.text, p.previous ?? '', p.reason ?? '', ...(p.merges ?? []).map((m) => m.text)].every((t) => !secretInMemory(t)) && (p.kind === 'user' || Boolean(p.root)) && (!(p.merges || p.drop || p.from || p.file) || Boolean(p.entry));
 
 export const loadReflection = (file: string): SavedReflection => {
   const parsed = Saved.safeParse(readJson(file) ?? {});
@@ -574,6 +582,7 @@ export class Reflection {
     if (p.entry) this.unchanged(scope, p.entry, p.previous ?? '');
     for (const m of p.merges ?? []) this.unchanged(scope, m.id, m.text);
     if (p.drop) return this.memory.write(scope, { op: 'remove', entry: p.entry! }, 'you').view;
+    if (p.file) return this.memory.write(scope, { op: 'file', entry: p.entry!, filed: true }, 'you').view;
     if (p.merges?.length) return this.memory.merge(scope, p.entry!, p.merges.map((m) => m.id), p.text, 'you');
     return this.memory.write(scope, p.entry ? { op: 'replace', entry: p.entry, text: p.text } : { op: 'add', text: p.text }, 'you').view;
   }

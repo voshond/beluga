@@ -345,10 +345,10 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
           return `Proposed a change to "${draft.name}". It appears as an "Update / Discard" card; the file changes only when the user updates it.`;
         },
       }),
-      memory: (channel, cwd, learn) => {
+      memory: (channel, cwd, learn, request) => {
         const project = projectOfRun(channel, cwd);
         const onChange = learn ? (change: MemoryChange) => learn({ kind: 'memory', change, ...(change.scope.kind === 'project' && project ? { project: project.name } : {}) }) : undefined;
-        return memoryForRun(new MemoryStore(), project ? { root: project.root, name: project.name } : undefined, onChange);
+        return memoryForRun(new MemoryStore(), project ? { root: project.root, name: project.name } : undefined, onChange, request);
       },
       honcho: (channel, cwd, request) => {
         const project = projectOfRun(channel, cwd);

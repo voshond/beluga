@@ -8,6 +8,15 @@ export const USER_MEMORY_MAX = 1375;
 
 export const PROJECT_MEMORY_MAX = 2200;
 
+/**
+ * BLG-123: filed-away entries live beside the others but stay out of every run: a run gets the ones
+ * its request is about (FILED_PER_RUN characters at most), and agents search the rest. Their own cap
+ * keeps a memory from growing forever.
+ */
+export const FILED_MEMORY_MAX = 20_000;
+
+export const FILED_PER_RUN = 800;
+
 export type MemoryKind = 'user' | 'project';
 
 export type MemoryScope = { readonly kind: 'user' } | { readonly kind: 'project'; readonly root: string };
@@ -19,14 +28,20 @@ export type MemoryEntry = {
   readonly text: string;
   readonly at: number;
   readonly by: MemoryAuthor;
+  /** BLG-123: filed away: kept beyond the cap, given to a run only when relevant. */
+  readonly filed?: boolean;
 };
 
 export type MemoryView = {
   readonly scope: MemoryScope;
   readonly label: string;
   readonly entries: readonly MemoryEntry[];
+  /** The entries every run gets, against `cap`. */
   readonly used: number;
   readonly cap: number;
+  /** BLG-123: the filed-away entries, against `filedCap`. */
+  readonly filedUsed: number;
+  readonly filedCap: number;
 };
 
 export type MemoryOverview = {
@@ -36,7 +51,35 @@ export type MemoryOverview = {
 
 export const memoryCap = (scope: MemoryScope): number => (scope.kind === 'user' ? USER_MEMORY_MAX : PROJECT_MEMORY_MAX);
 
-export const memoryUsed = (entries: readonly MemoryEntry[]): number => entries.reduce((sum, e) => sum + e.text.length, 0);
+export const filedEntries = (view: Pick<MemoryView, 'entries'>): MemoryEntry[] => view.entries.filter((e) => e.filed);
+
+export const alwaysEntries = (view: Pick<MemoryView, 'entries'>): MemoryEntry[] => view.entries.filter((e) => !e.filed);
+
+export const memoryUsed = (entries: readonly MemoryEntry[]): number => entries.reduce((sum, e) => sum + (e.filed ? 0 : e.text.length), 0);
+
+export const filedUsed = (entries: readonly MemoryEntry[]): number => entries.reduce((sum, e) => sum + (e.filed ? e.text.length : 0), 0);
+
+const STOP_WORDS = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'are', 'was', 'were', 'has', 'have', 'not', 'but', 'you', 'your', 'they', 'their', 'them', 'its', 'into', 'when', 'what', 'which', 'who', 'how', 'all', 'any', 'can', 'use', 'uses', 'user', 'should', 'would', 'could', 'about', 'there', 'then', 'than', 'also', 'just', 'like', 'lets', 'let', 'please', 'want', 'wants', 'need', 'make']);
+
+/** The words a search matches on: three letters or more, lower case, without the commonest. */
+export const searchWords = (text: string): Set<string> => new Set((text.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}_-]{2,}/gu) ?? []).filter((w) => !STOP_WORDS.has(w)));
+
+/**
+ * BLG-123: the entries a query is about, best first: how many of its words each holds (a word matches
+ * the start of one in the entry, so "deploy" finds "deploys"), newest first on a tie. None when nothing matches.
+ */
+export const relevantEntries = (entries: readonly MemoryEntry[], query: string): MemoryEntry[] => {
+  const wanted = [...searchWords(query)];
+  if (!wanted.length) return [];
+  return entries
+    .map((entry) => {
+      const words = [...searchWords(entry.text)];
+      return { entry, score: wanted.filter((w) => words.some((x) => x.startsWith(w) || w.startsWith(x))).length };
+    })
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score || b.entry.at - a.entry.at)
+    .map((s) => s.entry);
+};
 
 export type MemoryOp = 'add' | 'replace' | 'remove';
 
@@ -74,6 +117,6 @@ export const lookBackWords = (outcome: ReflectionOutcome): string => {
 /** What a Tidy came to (BLG-120): how many merges, forgets and moves wait, or why none. */
 export const tidyWords = (outcome: ReflectionOutcome): string => {
   if ('skipped' in outcome) return outcome.why;
-  if (!outcome.proposed) return 'Your memory is tidy: nothing to merge, forget or move.';
+  if (!outcome.proposed) return 'Your memory is tidy: nothing to merge, forget, move or file away.';
   return `${outcome.proposed} way${outcome.proposed === 1 ? '' : 's'} to tidy your memory: see Needs You.`;
 };

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { type MemoryEntry, type MemoryOverview, type MemoryScope, type MemoryView, tidyWords } from '@beluga/shared/memory.js';
+import { type MemoryEntry, type MemoryOverview, type MemoryScope, type MemoryView, alwaysEntries, filedEntries, tidyWords } from '@beluga/shared/memory.js';
 import { Button } from '../../components/ui.js';
 import { toast, useBeluga } from '../../lib/beluga.js';
 import { Group, Row, Select } from '../settings-controls.js';
@@ -52,6 +52,13 @@ export const MemorySettings = () => {
     void handleChange(() => client.api.memory.remove(current.scope, entry.id));
   };
 
+  const handleFile = (entry: MemoryEntry) => {
+    if (!current) return;
+    void handleChange(() => client.api.memory.file(current.scope, entry.id, !entry.filed));
+  };
+
+  const filed = current ? filedEntries(current) : [];
+
   const handleTidy = async () => {
     setTidying(true);
     try {
@@ -70,8 +77,8 @@ export const MemorySettings = () => {
       </Row>
       {current ? (
         <div className={a.editor}>
-          {current.entries.map((entry) => (
-            <MemoryEntryRow key={`${entry.id}:${entry.text}`} entry={entry} onSave={handleSave} onRemove={handleRemove} />
+          {alwaysEntries(current).map((entry) => (
+            <MemoryEntryRow key={`${entry.id}:${entry.text}`} entry={entry} onSave={handleSave} onRemove={handleRemove} onFile={handleFile} />
           ))}
           <div className={a.bar}>
             <input
@@ -97,6 +104,20 @@ export const MemorySettings = () => {
               {tidying ? 'Tidying…' : 'Tidy'}
             </Button>
           </div>
+          {filed.length ? (
+            <>
+              <div className={a.bar}>
+                <span className={a.muted}>Filed away: a run gets these only when it is about them</span>
+                <span className={a.flex} />
+                <span className={a.muted}>
+                  {current.filedUsed} / {current.filedCap}
+                </span>
+              </div>
+              {filed.map((entry) => (
+                <MemoryEntryRow key={`${entry.id}:${entry.text}`} entry={entry} onSave={handleSave} onRemove={handleRemove} onFile={handleFile} />
+              ))}
+            </>
+          ) : null}
         </div>
       ) : null}
     </Group>

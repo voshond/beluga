@@ -768,9 +768,13 @@ export interface SkillTools {
 /** Beluga's memory as agent tools (agent/memory-tools.ts, server `beluga_memory`, BLG-95). Each answers the memory as it is now, or throws why not. */
 export interface MemoryTools {
   list(): string;
-  add(scope: MemoryKind, text: string): string;
+  add(scope: MemoryKind, text: string, filed?: boolean): string;
   replace(scope: MemoryKind, entry: string, text: string): string;
   remove(scope: MemoryKind, entry: string): string;
+  /** BLG-123: file an entry away (out of every run, kept beyond the cap) or bring it back. */
+  file(scope: MemoryKind, entry: string, filed: boolean): string;
+  /** BLG-123: the entries, filed away or not, a query is about. */
+  search(query: string): string;
 }
 
 /** Honcho's model of the user as an agent tool (agent/honcho-tools.ts, server `beluga_honcho`, BLG-101). Throws a message the agent can read. */

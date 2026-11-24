@@ -318,6 +318,8 @@ export interface MemoryProposal {
   readonly drop?: boolean;
   /** BLG-121: `entry` moves here from this memory. */
   readonly from?: MemoryPlace;
+  /** BLG-123: file `entry` away: out of every run, given to one only when it is about it. */
+  readonly file?: boolean;
   /** The conversation it came from, or empty for a tidy pass. */
   readonly channel: string;
   readonly askedAt: number;

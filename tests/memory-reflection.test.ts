@@ -7,7 +7,7 @@ import { waitingNeeds } from '../src/companion/needs-you.js';
 import { MAX_PENDING_MEMORY, REFLECTION_MIN_MESSAGES, Reflection, type ReflectionAsk, launchReflection, loadReflection, proposalsFrom, reflectionSource } from '../src/core/memory/reflection.js';
 import { COMMANDS, runCommand } from '../src/core/commands.js';
 import { Session } from '../src/core/session.js';
-import { lookBackWords, tidyWords } from '../src/shared/memory.js';
+import { FILED_MEMORY_MAX, lookBackWords, tidyWords } from '../src/shared/memory.js';
 import { MemoryStore } from '../src/core/memory/store.js';
 import { type Action, type MemoryProposal, Store, initialState } from '../src/core/store.js';
 import type { Project, Workspace } from '../src/workspaces/types.js';
@@ -278,8 +278,8 @@ describe('the merge trigger', () => {
 
 const ctx = (more: Partial<Parameters<typeof proposalsFrom>[1]> = {}): Parameters<typeof proposalsFrom>[1] => ({
   source: { channel: 'ws:a', root: ROOT, project: 'app', lines: [], earlier: [], messages: 6, yours: 3, latest: 0 },
-  user: { scope: { kind: 'user' }, label: 'About you', entries: [{ id: 'u1', text: 'Writes in English.', at: 0, by: 'you' }], used: 18, cap: 1375 },
-  project: { scope: { kind: 'project', root: ROOT }, label: 'app', entries: [], used: 0, cap: 2200 },
+  user: { scope: { kind: 'user' }, label: 'About you', entries: [{ id: 'u1', text: 'Writes in English.', at: 0, by: 'you' }], used: 18, cap: 1375, filedUsed: 0, filedCap: FILED_MEMORY_MAX },
+  project: { scope: { kind: 'project', root: ROOT }, label: 'app', entries: [], used: 0, cap: 2200, filedUsed: 0, filedCap: FILED_MEMORY_MAX },
   discarded: [],
   pending: [],
   now: NOW,
@@ -372,8 +372,8 @@ describe('tidying a memory (BLG-120, BLG-121)', () => {
   const entry = (id: string, text: string) => ({ id, text, at: 0, by: 'you' as const });
   const crowded = (): Parameters<typeof proposalsFrom>[1] =>
     ctx({
-      user: { scope: { kind: 'user' }, label: 'About you', entries: [entry('u1', 'Uses Helium on arch.'), entry('u2', 'Uses Chromium on m1arch.'), entry('u3', 'Was in a meeting at 13:17.'), entry('u4', 'Tests in this app run with vitest.')], used: 100, cap: 1375 },
-      project: { scope: { kind: 'project', root: ROOT }, label: 'app', entries: [entry('p1', 'Prefers German UI copy.')], used: 23, cap: 2200 },
+      user: { scope: { kind: 'user' }, label: 'About you', entries: [entry('u1', 'Uses Helium on arch.'), entry('u2', 'Uses Chromium on m1arch.'), entry('u3', 'Was in a meeting at 13:17.'), entry('u4', 'Tests in this app run with vitest.')], used: 100, cap: 1375, filedUsed: 0, filedCap: FILED_MEMORY_MAX },
+      project: { scope: { kind: 'project', root: ROOT }, label: 'app', entries: [entry('p1', 'Prefers German UI copy.')], used: 23, cap: 2200, filedUsed: 0, filedCap: FILED_MEMORY_MAX },
     });
 
   it('reads a merge, a forget and a move both ways', () => {
@@ -484,6 +484,20 @@ describe('tidying a memory (BLG-120, BLG-121)', () => {
     expect(memory.read({ kind: 'user' }).entries).toHaveLength(1);
   });
 
+  it('File Away takes an entry out of every run, and is offered only for one not filed yet (BLG-123)', () => {
+    const { store, memory, reflection } = setup('');
+    const id = memory.add({ kind: 'user' }, 'Helium is the browser on arch.', 'you').entries[0]!.id;
+    const out = proposalsFrom(answer([{ file: id, why: 'Only matters for browser work.' }]), ctx({ user: memory.read({ kind: 'user' }) }));
+    expect(out[0]).toMatchObject({ kind: 'user', entry: id, file: true, text: 'Helium is the browser on arch.' });
+    store.dispatch({ type: 'memory_proposal_add', proposal: out[0]! });
+    const card = waitingNeeds(store.getState()).find((i) => i.id === `memory-propose:${out[0]!.id}`);
+    expect(card).toMatchObject({ title: 'File this away about you, for the work it’s about?' });
+    expect(card?.actions[0]?.label).toBe('File Away');
+    reflection.keep(out[0]!.id);
+    expect(memory.read({ kind: 'user' })).toMatchObject({ used: 0, filedUsed: 30 });
+    expect(proposalsFrom(answer([{ file: id }]), ctx({ user: memory.read({ kind: 'user' }) }))).toEqual([]);
+  });
+
   it('a look back at a nearly full memory is told to make room first', async () => {
     const { store, memory, asked, reflection } = setup(answer([]));
     memory.add({ kind: 'user' }, 'x'.repeat(1200), 'you');
@@ -512,7 +526,7 @@ describe('tidying a memory (BLG-120, BLG-121)', () => {
     const { reflection, asked } = setup(answer([]));
     expect(await reflection.tidy()).toMatchObject({ skipped: 'empty' });
     expect(asked.calls).toHaveLength(0);
-    expect(tidyWords({ proposed: 0 })).toBe('Your memory is tidy: nothing to merge, forget or move.');
+    expect(tidyWords({ proposed: 0 })).toBe('Your memory is tidy: nothing to merge, forget, move or file away.');
     expect(tidyWords({ proposed: 1 })).toBe('1 way to tidy your memory: see Needs You.');
     expect(PHONE['memory.tidy']).toBe('mac');
   });

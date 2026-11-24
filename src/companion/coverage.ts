@@ -803,6 +803,8 @@ export const PHONE: Record<Method, Side> = {
   'memory.add': 'mac',
   'memory.replace': 'mac',
   'memory.remove': 'mac',
+  // BLG-123: filing away is changing memory, so Mac-only; the phone shows which entries are filed
+  'memory.file': 'mac',
   // BLG-102: Undo under an agent's answer; the phone shows the markers read-only
   'memory.undo': 'mac',
   // BLG-96: Keep / Update or Discard on what the reflection pass proposed (a NeedsYou card); starting a pass is on the Mac

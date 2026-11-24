@@ -29,6 +29,8 @@ export const MEMORY_API = {
   'memory.discardProposal': { args: z.tuple([proposalId]) },
   // BLG-96: look back at one of your own conversations now and propose what to remember → { proposed } or { skipped, why }.
   'memory.reflect': { args: z.tuple([z.string().min(1).max(400)]) },
+  // BLG-123: file an entry away (out of every run, kept beyond the cap, given to a run only when it is about it) or bring it back → MemoryView.
+  'memory.file': { args: z.tuple([scope, entry, z.boolean()]) },
   // BLG-120: tidy every memory now: propose merges, forgets and moves between about you and a project (BLG-121) → { proposed } or { skipped, why }.
   'memory.tidy': { args: z.tuple([]) },
 };

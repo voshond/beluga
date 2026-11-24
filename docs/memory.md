@@ -17,6 +17,12 @@ Every run you start on this computer gets both: your memory, and the memory of t
 
 A friend's run never gets any of it: not your memory, not the project's, and not the tools. A run outside a project (Your Mac, a friend's shared worktree) gets your memory only.
 
+### Filed away: memory beyond the cap
+
+An entry can be filed away (BLG-123, `filed` on the entry). It stays in the same file but leaves every run and the cap: a memory holds up to 20,000 characters of filed-away entries besides its cap (`FILED_MEMORY_MAX`). A run gets the filed-away entries of both memories its request is about, best first, 800 characters at most (`FILED_PER_RUN`, `pickFiled` in `src/agent/memory-prompt.ts`), in a `<filed>` block after the memories, and is told how many more there are. "About" is plain word matching (`relevantEntries` in `src/shared/memory.ts`): an entry scores one for each word of the request (three letters or more, common words left out) that starts one of its words or is started by one, so "deploy" finds "deploys"; newest first on a tie. No model and no index: the files stay what they are.
+
+So the cap holds only what matters in every run, and the rest is filed away rather than forgotten: an agent adds with `filed: true` or files an entry later with `memory_file`, Tidy proposes it (below), and Settings › Memory has a File Away button on every entry (Bring Back on a filed one). Filed entries are listed under **Filed away** there and on the phone.
+
 ## The tools
 
 Your own runs get the `beluga_memory` server, on every runtime:
@@ -27,12 +33,14 @@ Your own runs get the `beluga_memory` server, on every runtime:
 | `memory_add` | Adds one fact, to `user` or `project`. |
 | `memory_replace` | Rewrites one entry (by its id, or a piece of text only it has). Use it to merge entries. |
 | `memory_remove` | Forgets one entry. |
+| `memory_file` | Files one entry away, or (`filed: false`) brings it back into every run (BLG-123). Undo puts it back where it was. |
+| `memory_search` | Searches both memories, filed-away entries included, and answers the 15 best matches with their ids and whether each is filed. |
 
 An agent's write goes in directly, with no Keep / Discard card: you asked it to remember, or it saw something worth keeping. It is never silent, though: each write shows under the agent's answer with Undo (see below), and you can change or delete any entry in Settings at any time. The reflection pass (below) proposes entries for you to keep instead.
 
 A write is refused when:
 
-- it would take the memory over its cap. The error tells the agent to merge entries with `memory_replace` or drop stale ones with `memory_remove`, then try again. A write that makes the memory smaller always goes through.
+- it would take the memory over its cap. The error tells the agent to merge entries with `memory_replace`, drop stale ones with `memory_remove` or file some away with `memory_file`, then try again. A write that makes the memory smaller always goes through. Filed-away entries have their own cap, checked the same way.
 - it looks like a secret: a key, a token, a connection string with its password, a private key, or `password: …`, `token = …`. Say where access is, never what it is.
 - it is already there.
 
@@ -71,6 +79,7 @@ Every entry goes into every run, so a memory has to stay small. Instead of refus
 
 - **Merge** folds several entries of one memory into one (`merges` on the proposal): the kept entry is rewritten and the others go, in one write, so it works even when the memory is full.
 - **Forget** removes an entry that is one-off, stale, wrong or said by another (`drop`). Its card says **Forget** and **Keep It**.
+- **File Away** takes an entry out of every run, for the work it is about (`file`, BLG-123). The model is told to file away rather than forget what may matter again.
 - **Move** takes an entry from the memory about you to a project's ("Remember this only for beluga?") or back ("…everywhere, not only for beluga?") (`from`), reworded on the way if it reads better there. The target is written first; when the source then can't be, the target is put back, so nothing is half-moved. Refused when the target is full.
 
 Each is refused, with nothing written, when an entry it touches changed or was removed since it was proposed. A discarded one is remembered as "Forget: …" or "Move: …", so it isn't proposed again, and never blocks the fact itself.
