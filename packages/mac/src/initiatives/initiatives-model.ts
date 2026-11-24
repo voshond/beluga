@@ -15,7 +15,11 @@ export const progressDetail = (progress: EpicStatus | undefined): string[] => {
   return [progress.inProgress ? `${progress.inProgress} in progress` : '', progress.blocked ? `${progress.blocked} blocked` : '', progress.stale ? `${progress.stale} stale` : ''].filter(Boolean);
 };
 
-export const progressPercent = (progress: EpicStatus | undefined): number => Math.round((progressShare(progress) ?? 0) * 100);
+export const progressPercent = (progress: EpicStatus | undefined, part: 'done' | 'inProgress' = 'done'): number => {
+  if (part === 'done') return Math.round((progressShare(progress) ?? 0) * 100);
+  if (!progress || progress.total <= 0) return 0;
+  return Math.round(Math.min(1, progress.inProgress / progress.total) * 100);
+};
 
 export const splitList = (text: string): string[] =>
   text
