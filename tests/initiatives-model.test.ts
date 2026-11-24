@@ -29,6 +29,9 @@ import {
   suggestionMessage,
   decisionMessage,
   isDecision,
+  isSendingTool,
+  matchesDraft,
+  sendDraftMessage,
   uniqueSlug,
 } from '../src/core/initiatives/model.js';
 import { channelOf, initialState, reduceDomain, shownChannel } from '../src/core/store.js';
@@ -49,6 +52,7 @@ const item = (slug: string, name = slug): InitiativeView => ({
   meetings: [],
   people: [],
   suggestions: [],
+  outbox: [],
   openDecisions: [],
   recent: [],
   files: [],
@@ -122,6 +126,16 @@ describe('initiative schemas', () => {
 
   it('says an approved suggestion as a message', () => {
     expect(suggestionMessage({ id: 3, text: 'Comment on SHOP-150' })).toBe('Do suggestion 3: Comment on SHOP-150');
+  });
+
+  it('knows a sending tool and the one call a draft allows', () => {
+    expect(['mcp__plugin_slack_slack__slack_send_message', 'mcp__slack__slack_schedule_message', 'mcp__jira__jira_add_comment', 'slack_send_message'].map(isSendingTool)).toEqual([true, true, true, true]);
+    expect(['mcp__plugin_slack_slack__slack_send_message_draft', 'mcp__jira__jira_get_issue', 'Bash'].map(isSendingTool)).toEqual([false, false, false]);
+    const thread = { kind: 'slack', channel: 'D1', thread: '17.5' } as const;
+    expect(matchesDraft(thread, 'hi', 'mcp__x__slack_send_message', { channel_id: 'D1', thread_ts: '17.5', message: ' hi\n' })).toBe(true);
+    expect(matchesDraft(thread, 'hi', 'mcp__x__slack_send_message', { channel_id: 'D1', message: 'hi' })).toBe(false);
+    expect(matchesDraft({ kind: 'jira', issue: 'RUN-1' }, 'ok', 'mcp__x__slack_send_message', { channel_id: 'RUN-1', message: 'ok' })).toBe(false);
+    expect(sendDraftMessage({ id: 4, to: { kind: 'jira', issue: 'RUN-1' } }, 'ok')).toBe('Send draft 4 from the outbox now: jira_add_comment with issue_key RUN-1, and the body exactly as below, nothing added or changed.\n\nok');
   });
 
   it('tells a decision from a suggestion, and says what was decided', () => {

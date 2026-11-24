@@ -790,6 +790,8 @@ export const PHONE: Record<Method, Side> = {
   'initiatives.chatOpen': 'mac',
   'initiatives.chatDelete': 'mac',
   'initiatives.resolveSuggestion': 'mac',
+  'initiatives.sendDraft': 'mac',
+  'initiatives.discardDraft': 'mac',
   'initiatives.readFile': 'mac',
 
   // ---- project Toolbox (BLG-75): the phone lists tools and can run them; create/edit/delete are Mac-only

@@ -77,7 +77,7 @@ export const CHECK_IN_PROMPT = [
   TICKETS_HOW,
   DOCS_HOW,
   'For each meeting: one that is coming gets prep notes (what to raise, what is open, who to ask), one that happened gets its follow-ups (what was agreed, who owes what), both in sources/meetings/.',
-  'Then update the rest of the memory: snapshots in sources/ (jira.md, slack/, meetings/, docs/, prs.md), status.json (counts across the epics: total, done, inProgress, blocked, stale for open tickets untouched in 7 days, with "at" set to now as an ISO date), brief.md (where it stands, in a few lines), timeline.md (what happened since last time, newest first), decisions.md (new open questions under "## Open", settled ones moved to "## Decided" with the date and why) and suggestions.json (what you propose next; a question only the user can settle is a "decision" with its "options").',
+  'Then update the rest of the memory: snapshots in sources/ (jira.md, slack/, meetings/, docs/, prs.md), status.json (counts across the epics: total, done, inProgress, blocked, stale for open tickets untouched in 7 days, with "at" set to now as an ISO date), brief.md (where it stands, in a few lines), timeline.md (what happened since last time, newest first), decisions.md (new open questions under "## Open", settled ones moved to "## Decided" with the date and why) and suggestions.json (what you propose next; a question only the user can settle is a "decision" with its "options"; a message worth sending can be drafted straight into outbox.json).',
   'Do not post, comment, transition, invite or change anything outside this folder: write it as a suggestion instead. Answer with one line on how it stands, then what needs the user.',
 ].join(' ');
 
@@ -112,11 +112,13 @@ Your working folder is the initiative's memory, a folder in a git repository Bel
 - status.json: {"at", "total", "done", "inProgress", "blocked", "stale", "epics": [{"key", "title", "total", "done", "inProgress", "blocked", "stale"}]} from the epics.
 - tickets.json: every ticket under the epics with its pull requests, which the page shows as a table: ${TICKETS_SHAPE}. Rewrite it whole whenever you read the epics.
 - suggestions.json: an array of {"id" (a number, never reused), "text", "why", "kind" ("jira" | "slack" | "calendar" | "task" | "doc" | "decision" | "other"), "state": "open", "createdAt"}. When the next step is the user's call (in or out of scope, which way to go), make it a "decision" with "options": 2 to 4 short answers to pick from ("In scope", "Out of scope"); the page shows them as buttons, with Other… for an answer of their own. Keep the ones the user resolved as they are.
+- outbox.json: messages you prepared for the user to send, an array of {"id" (a number, never reused), "to", "text", "why", "suggestion" (the suggestion's id it comes from, if any), "state": "draft", "createdAt"}. "to" is {"kind": "slack", "channel" (the channel, DM or group DM id, C… or D…), "thread" (the parent's ts, only for a reply), "label" ("#checkout-v2", "DM with Julia")} or {"kind": "jira", "issue" ("RUN-12"), "label"}. Write the text exactly as it should go out, in the voice of the user. Leave the others as they are: the user sends, edits or discards each one from the chat.
 - sources/: snapshots of what you read (meetings/ holds each meeting’s prep notes before it and follow-ups after it).
 Other files here now: ${others.length ? others.join(', ') : 'none'}.
 
 Rules:
 - Suggest, never act outward on your own: no Jira comments or transitions, no Slack posts, no calendar changes unless the user asked in this chat or approved a suggestion ("Do suggestion N: …"). Then do exactly that one thing; its tool asks the user as usual.
+- A message (a Slack post or reply, a Jira comment) never goes out from you directly, even when asked or approved: draft it in outbox.json, one draft per message, and say in one line what you drafted. Beluga refuses a direct post. "Send draft N …" means the user sent it: make exactly that call, with exactly that text, then answer with the message's link if the tool gave one.
 - "Decided suggestion N: … Answer: …" is the user's decision: record it in decisions.md under "## Decided" with today's date (moving its question out of "## Open"), then do what follows from that answer; outward steps still ask as usual.
 - Record every decision the user makes here in decisions.md, and every notable event in timeline.md.
 - Linked repos, where code work happens (task_create with project set to the repo's name, then task_start when the user wants it started):

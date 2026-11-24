@@ -251,6 +251,37 @@ export type Suggestion = z.infer<typeof SuggestionSchema>;
 
 export const SuggestionsSchema = z.array(SuggestionSchema).max(500);
 
+export const OUTBOX_STATES = ['draft', 'approved', 'sent', 'discarded'] as const;
+export type OutboxState = (typeof OUTBOX_STATES)[number];
+
+const JIRA_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
+
+/** Where a draft goes: a Slack channel, DM or thread (by its ids), or a comment on a Jira ticket. */
+export const OutboxTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('slack'), channel: z.string().min(1).max(80), thread: z.string().max(40).optional(), label: z.string().max(200).optional() }),
+  z.object({ kind: z.literal('jira'), issue: z.string().regex(JIRA_KEY), label: z.string().max(200).optional() }),
+]);
+export type OutboxTarget = z.infer<typeof OutboxTargetSchema>;
+
+/**
+ * A message the agent prepared and the user sends (or discards) from the chat (outbox.json).
+ * `text` stays as the agent wrote it; `sentText` is what the user sent when they edited it.
+ */
+export const OutboxDraftSchema = z.object({
+  id: z.number().int().min(1),
+  to: OutboxTargetSchema,
+  text: z.string().min(1).max(5000),
+  why: z.string().max(2000).optional(),
+  suggestion: z.number().int().min(1).optional(),
+  state: z.enum(OUTBOX_STATES).default('draft'),
+  sentText: z.string().max(5000).optional(),
+  createdAt: z.string().max(40).optional(),
+  resolvedAt: z.string().max(40).optional(),
+});
+export type OutboxDraft = z.infer<typeof OutboxDraftSchema>;
+
+export const OutboxSchema = z.array(OutboxDraftSchema).max(500);
+
 export type InitiativeChat = {
   readonly id: string;
   readonly channel: string;
@@ -277,6 +308,7 @@ export type InitiativeView = {
   readonly progress?: EpicStatus;
   readonly tickets?: EpicTickets;
   readonly suggestions: readonly Suggestion[];
+  readonly outbox: readonly OutboxDraft[];
   readonly openDecisions: readonly string[];
   readonly recent: readonly string[];
   readonly files: readonly string[];
@@ -415,6 +447,43 @@ export const progressShare = (progress: EpicStatus | undefined): number | undefi
 };
 
 export const suggestionMessage = (suggestion: Pick<Suggestion, 'id' | 'text'>): string => `Do suggestion ${suggestion.id}: ${suggestion.text}`;
+
+/** Drafts still waiting for the user, and those on their way out. */
+export const pendingDrafts = (item: Pick<InitiativeView, 'outbox'>): OutboxDraft[] => item.outbox.filter((d) => d.state === 'draft' || d.state === 'approved');
+
+/** The tool that posts a draft: its name's last part, whatever the MCP server is called. */
+export const OUTBOX_TOOLS: Readonly<Record<OutboxTarget['kind'], string>> = { slack: 'slack_send_message', jira: 'jira_add_comment' };
+
+/** Tools that send a message outward, which an initiative's chat only uses for a draft the user sent. */
+const SENDING_TOOLS: readonly string[] = [...Object.values(OUTBOX_TOOLS), 'slack_schedule_message'];
+
+export const isSendingTool = (toolName: string): boolean => SENDING_TOOLS.some((t) => toolName === t || toolName.endsWith(`__${t}`));
+
+const toolIs = (toolName: string, kind: OutboxTarget['kind']): boolean => toolName === OUTBOX_TOOLS[kind] || toolName.endsWith(`__${OUTBOX_TOOLS[kind]}`);
+
+const same = (a: unknown, b: string | undefined): boolean => (typeof a === 'string' ? a.trim() : '') === (b ?? '').trim();
+
+/** Whether this tool call posts exactly that text to exactly that place. */
+export const matchesDraft = (to: OutboxTarget, text: string, toolName: string, input: Record<string, unknown>): boolean => {
+  if (!toolIs(toolName, to.kind)) return false;
+  if (to.kind === 'slack') return same(input.channel_id, to.channel) && same(input.thread_ts, to.thread) && same(input.message, text);
+  return same(input.issue_key, to.issue) && same(input.body, text);
+};
+
+export const targetWords = (to: OutboxTarget): string => {
+  if (to.kind === 'jira') return to.label ? `${to.issue}: ${to.label}` : `a comment on ${to.issue}`;
+  const where = to.label ?? to.channel;
+  return to.thread ? `${where} (in a thread)` : where;
+};
+
+/** What the chat is told when the user sends a draft: the call to make, word for word. */
+export const sendDraftMessage = (draft: Pick<OutboxDraft, 'id' | 'to'>, text: string): string => {
+  const call =
+    draft.to.kind === 'slack'
+      ? `${OUTBOX_TOOLS.slack} with channel_id ${draft.to.channel}${draft.to.thread ? ` and thread_ts ${draft.to.thread}` : ''}`
+      : `${OUTBOX_TOOLS.jira} with issue_key ${draft.to.issue}`;
+  return `Send draft ${draft.id} from the outbox now: ${call}, and the ${draft.to.kind === 'slack' ? 'message' : 'body'} exactly as below, nothing added or changed.\n\n${text}`;
+};
 
 /** A suggestion the user answers instead of approving: a decision kind, or one with answers to pick. */
 export const isDecision = (suggestion: Pick<Suggestion, 'kind' | 'options'>): boolean => suggestion.kind === 'decision' || Boolean(suggestion.options?.length);

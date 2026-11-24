@@ -4,7 +4,7 @@ import type { AgentPlace } from '../../agent/types.js';
 import type { SentinelDraft } from '../sentinel/model.js';
 import type { Action, Store } from '../store.js';
 import { InitiativeChats } from './chats.js';
-import { folderOf, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeConfig, writeSuggestions, writeText } from './files.js';
+import { addTimeline, folderOf, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeConfig, writeOutbox, writeSuggestions, writeText } from './files.js';
 import {
   CHECK_IN_CHAT,
   FIRST_INITIATIVE_CHAT,
@@ -20,7 +20,13 @@ import {
   INITIATIVE_SLUG,
   initiativeChatChannel,
   initiativeChatOf,
+  isSendingTool,
+  matchesDraft,
+  type OutboxDraft,
+  type OutboxTarget,
   sameKeys,
+  sendDraftMessage,
+  targetWords,
   decisionMessage,
   suggestionMessage,
   uniqueSlug,
@@ -53,7 +59,16 @@ export type InitiativesDeps = {
 export type InitiativeChatRun = {
   readonly place: AgentPlace;
   readonly brief: string;
+  /** Denies a message sent outward that isn't a draft the user sent; lets that one through. */
+  readonly vetTool: (toolName: string, input: Record<string, unknown>) => string | undefined;
+  /** The draft call vetTool just let through: the user already said Send, so no second card. */
+  readonly preApproved: (toolName: string, input: Record<string, unknown>) => boolean;
 };
+
+/** A draft the user sent: the one call it allows, kept here, never in a file the agent can write. */
+type Send = { readonly slug: string; readonly id: number; readonly to: OutboxTarget; readonly text: string };
+
+export const OUTBOX_DENIED = 'In an initiative, messages go out through its outbox: write this as a draft in outbox.json, and the user sends it from the chat.';
 
 type Local = {
   readonly checkIn?: string;
@@ -66,6 +81,8 @@ const CHECK_IN_TRIGGER = { kind: 'schedule', every: 'week', at: '08:00', days: [
 export class Initiatives {
   readonly chats: InitiativeChats;
   private readonly locals = new Map<string, Local>();
+  private readonly sends = new Map<string, Send>();
+  private cleared: Send[] = [];
   private readonly offAction: () => void;
   private stopped = false;
 
@@ -156,6 +173,7 @@ export class Initiatives {
       ...(folder.progress ? { progress: folder.progress } : {}),
       ...(folder.tickets ? { tickets: folder.tickets } : {}),
       suggestions: folder.suggestions,
+      outbox: folder.outbox,
       openDecisions: folder.openDecisions,
       recent: folder.recent,
       files: folder.files,
@@ -319,10 +337,78 @@ export class Initiatives {
     await this.commit(slug, `${slug}: suggestion ${id} ${decided ? 'decided' : state}`);
     this.refresh(slug);
     if (decision === 'dismiss') return {};
-    const active = item.chats.active === CHECK_IN_CHAT ? FIRST_INITIATIVE_CHAT : item.chats.active;
-    const channel = initiativeChatChannel(slug, active);
+    const channel = this.workChannel(item);
     if (this.deps.ask(decided ? decisionMessage(suggestion, decided) : suggestionMessage(suggestion), channel) === undefined) throw new Error('The chat could not take it now');
     return { channel };
+  }
+
+  /** The user sends a draft (edited or not): the chat is asked to post it, and only that call is allowed. */
+  async sendDraft(slug: string, id: number, text: string): Promise<{ readonly channel: string }> {
+    const item = this.need(slug);
+    const draft = this.openDraft(item, id);
+    const final = text.trim();
+    if (!final) throw new Error('Write the message first');
+    this.sends.set(`${slug}:${id}`, { slug, id, to: draft.to, text: final });
+    const edited = final !== draft.text.trim();
+    this.putDraft(slug, item.outbox, id, (d) => {
+      const { sentText: _sent, ...rest } = d;
+      return { ...rest, state: 'approved', ...(edited ? { sentText: final } : {}) };
+    });
+    await this.commit(slug, `${slug}: draft ${id} approved`);
+    this.refresh(slug);
+    const channel = this.workChannel(item);
+    if (this.deps.ask(sendDraftMessage(draft, final), channel) === undefined) throw new Error('The chat could not take it now');
+    return { channel };
+  }
+
+  async discardDraft(slug: string, id: number): Promise<void> {
+    const item = this.need(slug);
+    const draft = this.openDraft(item, id);
+    this.sends.delete(`${slug}:${id}`);
+    this.putDraft(slug, item.outbox, id, (d) => ({ ...d, state: 'discarded', resolvedAt: new Date(this.now).toISOString() }));
+    addTimeline(this.deps.root, slug, `${dayOf(this.now)}: discarded a draft to ${targetWords(draft.to)}`);
+    await this.commit(slug, `${slug}: draft ${id} discarded`);
+    this.refresh(slug);
+  }
+
+  private openDraft(item: InitiativeView, id: number): OutboxDraft {
+    const draft = item.outbox.find((d) => d.id === id);
+    if (!draft) throw new Error('That draft is gone');
+    if (draft.state === 'sent' || draft.state === 'discarded') throw new Error(`That draft was already ${draft.state}`);
+    return draft;
+  }
+
+  private putDraft(slug: string, outbox: readonly OutboxDraft[], id: number, change: (draft: OutboxDraft) => OutboxDraft): void {
+    writeOutbox(this.deps.root, slug, outbox.map((d) => (d.id === id ? change(d) : d)));
+  }
+
+  private workChannel(item: InitiativeView): string {
+    return initiativeChatChannel(item.slug, item.chats.active === CHECK_IN_CHAT ? FIRST_INITIATIVE_CHAT : item.chats.active);
+  }
+
+  private vetSend(slug: string, toolName: string, input: Record<string, unknown>): string | undefined {
+    if (!isSendingTool(toolName)) return undefined;
+    const send = [...this.sends.values()].find((s) => s.slug === slug && matchesDraft(s.to, s.text, toolName, input));
+    if (!send) return OUTBOX_DENIED;
+    this.sends.delete(`${slug}:${send.id}`);
+    this.cleared.push(send);
+    this.markSent(send);
+    return undefined;
+  }
+
+  private preApproved(slug: string, toolName: string, input: Record<string, unknown>): boolean {
+    const at = this.cleared.findIndex((s) => s.slug === slug && matchesDraft(s.to, s.text, toolName, input));
+    if (at === -1) return false;
+    this.cleared.splice(at, 1);
+    return true;
+  }
+
+  private markSent(send: Send): void {
+    const folder = readFolder(this.deps.root, send.slug);
+    if (!folder.outbox.some((d) => d.id === send.id)) return;
+    this.putDraft(send.slug, folder.outbox, send.id, (d) => ({ ...d, state: 'sent', resolvedAt: new Date(this.now).toISOString() }));
+    addTimeline(this.deps.root, send.slug, `${dayOf(this.now)}: sent ${send.to.kind === 'slack' ? 'a Slack message' : 'a Jira comment'} to ${targetWords(send.to)}`);
+    this.refresh(send.slug);
   }
 
   readFile(slug: string, rel: string): { readonly name: string; readonly text: string; readonly cut: boolean } {
@@ -362,7 +448,12 @@ export class Initiatives {
     if (!place) return undefined;
     const item = this.view(of.slug);
     const brief = readFolder(this.deps.root, of.slug).brief;
-    return { place, brief: initiativeBrief(item, brief, this.repos(item), of.chat) };
+    return {
+      place,
+      brief: initiativeBrief(item, brief, this.repos(item), of.chat),
+      vetTool: (toolName, input) => this.vetSend(of.slug, toolName, input),
+      preApproved: (toolName, input) => this.preApproved(of.slug, toolName, input),
+    };
   }
 
   private onAction(action: Action): void {

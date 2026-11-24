@@ -104,7 +104,10 @@ export interface AgentHostDeps {
   /** The Sentinel chat (core/sentinel/chat.ts, your own runs): where its Claude runs, its own folder and session. */
   readonly sentinelChat?: (channel: string, from: string) => AgentPlace | undefined;
   /** An initiative's chats (core/initiatives, your own runs): its folder as the place, and its brief. */
-  readonly initiativeChat?: (channel: string, from: string) => { readonly place: AgentPlace; readonly brief: string } | undefined;
+  readonly initiativeChat?: (
+    channel: string,
+    from: string,
+  ) => { readonly place: AgentPlace; readonly brief: string; readonly vetTool: (toolName: string, input: Record<string, unknown>) => string | undefined; readonly preApproved: (toolName: string, input: Record<string, unknown>) => boolean } | undefined;
   /** What a tool that always asks you (policy ALWAYS_ASK_YOU: deleting a sentinel or a dashboard) says on its card, in words. */
   readonly confirmTool?: (toolName: string, input: Record<string, unknown>) => { readonly title: string; readonly detail: string } | undefined;
   /** Sentinels (your own runs): their tools, and a sentinel run's brief in its Claude step's conversation (core/sentinel). */
@@ -1727,7 +1730,9 @@ export class AgentHost {
         // Another Claude asked: give it the answer now rather than after every background agent.
         ...(body.viaAgent && from !== this.selfId ? { onAnswered: (text: string) => this.emitAgent(body.requestId, from, 'answered', text, body.channel) } : {}),
         onFileTouched: (abs) => this.announceAgentFocus(abs),
-        canUseTool: (toolName, input) => this.authorizeTool(external ?? from, requesterName, toolName, input, body.channel, place?.cwd),
+        // An initiative's chat: a message goes out only as a draft the user sent from its outbox (that Send was the approval).
+        ...(initiative ? { vetTool: initiative.vetTool } : {}),
+        canUseTool: (toolName, input) => (initiative?.preApproved(toolName, input) ? Promise.resolve(true) : this.authorizeTool(external ?? from, requesterName, toolName, input, body.channel, place?.cwd)),
         // Only your own Claude may ask for a .env file; for anyone else it stays refused.
         ...(yours ? { canUseSecret: (toolName: string, input: Record<string, unknown>) => this.authorizeSecret(toolName, input, body.channel, place?.cwd, external) } : {}),
         // "My agent asks before commands": a runtime that doesn't ask per command on its own (Codex) asks for each.

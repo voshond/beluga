@@ -423,6 +423,8 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'initiatives.chatOpen': INITIATIVES,
   'initiatives.chatDelete': INITIATIVES,
   'initiatives.resolveSuggestion': INITIATIVES,
+  'initiatives.sendDraft': INITIATIVES,
+  'initiatives.discardDraft': INITIATIVES,
   'initiatives.readFile': INITIATIVES,
   'dashboard.create': 'covered',
   'dashboard.update': 'covered',

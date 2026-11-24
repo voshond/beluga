@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { type EpicStatus, type InitiativeView, type Suggestion, isDecision, openSuggestions } from '@beluga/core/initiatives/model.js';
+import { type EpicStatus, type InitiativeView, type Suggestion, isDecision, openSuggestions, pendingDrafts } from '@beluga/core/initiatives/model.js';
 import { Button } from '../components/ui.js';
 import { DecisionRow } from './DecisionRow.js';
 import { progressDetail, progressPercent, progressWords } from './initiatives-model.js';
@@ -59,8 +59,10 @@ const SuggestionRow = ({ slug, suggestion }: { slug: string; suggestion: Suggest
 
 export const Suggestions = ({ item }: { item: InitiativeView }) => {
   const open = openSuggestions(item);
+  const waiting = pendingDrafts(item).length;
   return (
     <Section title="Suggestions">
+      {waiting ? <span className={s.quiet}>{waiting === 1 ? 'A message is waiting for you in the chat’s outbox.' : `${waiting} messages are waiting for you in the chat’s outbox.`}</span> : null}
       {open.length ? (
         <div className={s.list}>
           {open.map((suggestion) =>
