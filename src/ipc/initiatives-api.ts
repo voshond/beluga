@@ -16,6 +16,6 @@ export const INITIATIVES_API = {
   'initiatives.chatNew': { args: z.tuple([slug]) },
   'initiatives.chatOpen': { args: z.tuple([slug, chat]) },
   'initiatives.chatDelete': { args: z.tuple([slug, chat]) },
-  'initiatives.resolveSuggestion': { args: z.tuple([slug, z.number().int().min(1), z.enum(['approve', 'dismiss'])]) },
+  'initiatives.resolveSuggestion': { args: z.tuple([slug, z.number().int().min(1), z.enum(['approve', 'dismiss']), z.string().trim().min(1).max(2000).optional()]) },
   'initiatives.readFile': { args: z.tuple([slug, z.string().min(1).max(400)]) },
 } as const;

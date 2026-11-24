@@ -238,7 +238,11 @@ export const SuggestionSchema = z.object({
   id: z.number().int().min(1),
   text: z.string().min(1).max(2000),
   why: z.string().max(2000).optional(),
-  kind: z.enum(['jira', 'slack', 'calendar', 'task', 'doc', 'other']).default('other'),
+  kind: z.enum(['jira', 'slack', 'calendar', 'task', 'doc', 'decision', 'other']).default('other'),
+  /** A decision's answers to pick from; Other… lets the user write their own. */
+  options: z.array(z.string().min(1).max(200)).max(6).optional(),
+  /** What the user decided, once they did. */
+  answer: z.string().max(2000).optional(),
   state: SuggestionStateSchema.default('open'),
   createdAt: z.string().max(40).optional(),
   resolvedAt: z.string().max(40).optional(),
@@ -411,6 +415,12 @@ export const progressShare = (progress: EpicStatus | undefined): number | undefi
 };
 
 export const suggestionMessage = (suggestion: Pick<Suggestion, 'id' | 'text'>): string => `Do suggestion ${suggestion.id}: ${suggestion.text}`;
+
+/** A suggestion the user answers instead of approving: a decision kind, or one with answers to pick. */
+export const isDecision = (suggestion: Pick<Suggestion, 'kind' | 'options'>): boolean => suggestion.kind === 'decision' || Boolean(suggestion.options?.length);
+
+export const decisionMessage = (suggestion: Pick<Suggestion, 'id' | 'text'>, answer: string): string =>
+  `Decided suggestion ${suggestion.id}: ${suggestion.text}\nAnswer: ${answer}`;
 
 export const lastCheckInAt = (item: Pick<InitiativeView, 'progress'>): number | undefined => {
   const at = item.progress ? Date.parse(item.progress.at) : NaN;

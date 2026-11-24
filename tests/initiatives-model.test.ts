@@ -27,6 +27,8 @@ import {
   reduceInitiatives,
   slugOf,
   suggestionMessage,
+  decisionMessage,
+  isDecision,
   uniqueSlug,
 } from '../src/core/initiatives/model.js';
 import { channelOf, initialState, reduceDomain, shownChannel } from '../src/core/store.js';
@@ -120,6 +122,11 @@ describe('initiative schemas', () => {
 
   it('says an approved suggestion as a message', () => {
     expect(suggestionMessage({ id: 3, text: 'Comment on SHOP-150' })).toBe('Do suggestion 3: Comment on SHOP-150');
+  });
+
+  it('tells a decision from a suggestion, and says what was decided', () => {
+    expect([isDecision({ kind: 'decision' }), isDecision({ kind: 'jira', options: ['Yes', 'No'] }), isDecision({ kind: 'jira', options: [] }), isDecision({ kind: 'slack' })]).toEqual([true, true, false, false]);
+    expect(decisionMessage({ id: 2, text: 'Are Sale Orders in scope?' }, 'Yes')).toBe('Decided suggestion 2: Are Sale Orders in scope?\nAnswer: Yes');
   });
 });
 
