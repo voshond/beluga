@@ -84,7 +84,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       if (id === (opts.runtime?.agent ?? 'claude')) return session.backend ? {} : undefined;
       if (id === LOCAL_RUNTIME) return opts.runtime?.runtimes('claude') && !localWhy(local.choices()) ? { models: localModels(local.choices()) } : undefined;
       return opts.runtime?.runtimes(id) || opts.alsoRuntimes?.some((r) => r.id === id) ? {} : undefined;
-    });
+    }, opts.runtime?.extra?.());
   // Listed again with what each runtime last said about itself (BLG-507: a local endpoint answering never wipes Codex's sign-in state and models).
   const local = new LocalEndpoints({ endpoints: () => env.endpoints(), onChange: () => (workbench ? workbench.runtimesChanged() : opts.store.dispatch({ type: 'runtimes', runtimes: listRuntimes() })) });
   if (opts.runtime) local.start();

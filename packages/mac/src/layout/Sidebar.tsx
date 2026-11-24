@@ -13,8 +13,7 @@ import { inApp } from '../lib/boot.js';
 import { useApi, useApp, useBeluga } from '../lib/beluga.js';
 import { sameDeep } from '../lib/stable.js';
 import { setPrefs, usePrefs } from '../lib/prefs.js';
-import { RoomStatus } from '../dialogs/native/RoomPopover.js';
-import { PhoneMark } from '../phone/Phone.js';
+import { RoomRow, RoomSection } from '../dialogs/native/RoomPopover.js';
 import { ChatsMenu } from './ChatsMenu.js';
 import { Projects, ProjectsAddMenu } from './ProjectTree.js';
 import { SharedProjects } from './SharedProjects.js';
@@ -138,8 +137,10 @@ export function Sidebar() {
             <WebBack />
           </span>
         )}
-        <UsageButton />
-        <IconButton size="large" icon="sidebar" label="Hide sidebar" keys={shortcutKeys('toggle-sidebar')} onClick={() => setPrefs({ sidebar: false })} />
+        {/* Only the sidebar's own toggle up here: Usage and Settings are in the card at the bottom. */}
+        <span className={s.titleEnd}>
+          <IconButton size="large" icon="sidebar" label="Hide sidebar" keys={shortcutKeys('toggle-sidebar')} onClick={() => setPrefs({ sidebar: false })} />
+        </span>
       </div>
       <SidebarSearch>
       <div className={s.scroll}>
@@ -220,15 +221,15 @@ export function Sidebar() {
       {/* The call you're in, while you look at something else (BLG-706). */}
       <CallPill />
       <UpdatePill />
-      <SidebarFooter />
-      {friendsSidebar && <SelfBar />}
+      {/* One card at the bottom: you (and the room, in your card) and Usage. Settings is ⌘, and the menu bar's. */}
+      <Dock />
     </nav>
     </SidebarChatSelection>
   );
 }
 
 /**
- * Usage as an icon above the sidebar: how much of your agent's plan you've used (BLG-507: your
+ * Usage as an icon in the sidebar's bottom card: how much of your agent's plan you've used (BLG-507: your
  * default agent's, Codex's when it's Codex: its week, else its tightest window), and the Usage page.
  */
 function UsageButton() {
@@ -242,28 +243,34 @@ function UsageButton() {
   const selected = useApp((st) => st.view.kind === 'usage');
   return (
     <span className={s.usage} data-level={week === undefined ? undefined : week >= 90 ? 'high' : week >= 70 ? 'mid' : 'low'}>
-      <IconButton size="large" icon="gauge" label="Usage" keys={shortcutKeys('go-usage')} active={selected} onClick={() => actions.run({ type: 'view', view: { kind: 'usage' } })} />
+      <IconButton size="large" icon="gauge" label="Usage" className={s.dockButton} keys={shortcutKeys('go-usage')} active={selected} onClick={() => actions.run({ type: 'view', view: { kind: 'usage' } })} />
     </span>
   );
 }
 
-function SidebarFooter() {
-  const status = useApp((st) => st.status);
-  const people = useApp((st) => st.peers.length);
-  const room = useApp((st) => st.room);
-  const ready = useApp((st) => st.hosting?.phase === 'ready');
-  const reconnecting = useApp((st) => st.connection?.state === 'reconnecting');
+/**
+ * The sidebar's bottom card: you (your card holds your status and the room) and Usage. While the
+ * Beluga network is off there's no you to click, so the room has a row of its own.
+ */
+function Dock() {
+  const netOn = useApp((st) => st.network.enabled && st.network.self !== undefined);
   const { friendsSidebar } = usePrefs();
-  const { label, tone } = footerStatus({ status, room, people, ready, reconnecting });
   return (
-    <div className={s.footer}>
-      {friendsSidebar && <RoomStatus label={label} tone={tone} />}
-      <PhoneMark />
-      {friendsSidebar && (
-        <button type="button" className={s.invite} onClick={() => document.dispatchEvent(new CustomEvent('beluga:invite'))}>
-          Invite
-        </button>
-      )}
+    <div className={s.dock}>
+      {friendsSidebar && (netOn ? <SelfBar extra={<RoomSection />} /> : <RoomFallback />)}
+      <span className={s.dockTools}>
+        <UsageButton />
+      </span>
     </div>
   );
+}
+
+function RoomFallback() {
+  const status = useApp((st) => st.status);
+  const people = useApp((st) => st.peers.length);
+  // Your own room is "your room" ("4 people in your room"), never your name back to you.
+  const room = useApp((st) => (st.self?.host ? 'your room' : st.room));
+  const ready = useApp((st) => st.hosting?.phase === 'ready');
+  const reconnecting = useApp((st) => st.connection?.state === 'reconnecting');
+  return <RoomRow label={footerStatus({ status, room, people, ready, reconnecting }).label} />;
 }

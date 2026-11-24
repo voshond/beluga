@@ -154,7 +154,11 @@ export const NOBODY_LIVE: Live = { busy: () => false, asking: () => false };
 
 function taskState(board: BoardState, issue: Issue | undefined, live: Live): { readonly state: TaskState; readonly worktree?: string; readonly step?: string } {
   if (!issue) return { state: 'missing' };
-  const worktree = issue.worktrees.at(-1);
+  const own = issue.worktrees.at(-1);
+  // Its own worktree, else one carrying its work (Claude moved it along from there before the plan
+  // linked it): without it, a task its agent is busy on read as stopped without finishing.
+  const worktree = own && !issue.worktreeGone ? own : (issue.carriedBy ?? own);
+  const gone = worktree === own && Boolean(issue.worktreeGone);
   switch (issue.status) {
     case 'done':
       return { state: 'done', ...(worktree ? { worktree } : {}) };
@@ -165,7 +169,7 @@ function taskState(board: BoardState, issue: Issue | undefined, live: Live): { r
     case 'in_plan':
       return { state: 'planned', ...(worktree ? { worktree } : {}) };
     case 'in_progress': {
-      if (!worktree || issue.worktreeGone) return { state: 'idle', ...(worktree ? { worktree } : {}) };
+      if (!worktree || gone) return { state: 'idle', ...(worktree ? { worktree } : {}) };
       const channel = `ws:${worktree}`;
       if (live.asking(channel)) return { state: 'asking', worktree };
       if (live.busy(channel)) {

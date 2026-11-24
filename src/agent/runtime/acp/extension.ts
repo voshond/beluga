@@ -5,19 +5,25 @@ import type { AcpDialect } from '../opencode/events.js';
 
 /**
  * What one ACP agent does past the protocol, for the core (runner.ts, complete.ts, status.ts) to
- * call. Every member but `instructions` and `tools` may be left out: the core then does without.
+ * call. Every member may be left out: the core then does what works for any ACP agent (its
+ * instructions ahead of a new conversation's first message, the generic tool dialect, Beluga's
+ * tools over HTTP when it takes them so, else stdio).
  * Methods, not function properties, so an agent's own narrower types fit.
  */
 export interface AcpExtension {
-  /** Beluga's instructions for a run as the `_meta` of session/new and session/load. */
-  instructions(text: string): Record<string, unknown>;
-  /** Its tools as Beluga's. */
-  readonly tools: {
+  /** Beluga's instructions for a run as the `_meta` of session/new and session/load (unset: ahead of a new conversation's first message). */
+  instructions?(text: string): Record<string, unknown>;
+  /** Its tools as Beluga's (unset: the generic dialect, acp/dialect.ts). */
+  readonly tools?: {
     /** Its calls in Beluga's names and fields; `known` is the tools mounted for this run (their Beluga names). */
     dialect(known: ReadonlySet<string>): AcpDialect;
     /** Beluga's MCP tool name for one of its tool names, or undefined: not one of Beluga's. */
     belugaToolOf(name: string, suites: readonly string[], known?: ReadonlySet<string>): string | undefined;
   };
+  /** How Beluga's tools reach it (unset: HTTP when it says it takes them so, else stdio). */
+  readonly mount?: 'http' | 'stdio';
+  /** True: its model list starts with Default, the model it's set to. */
+  readonly defaultModel?: boolean;
   /** A model it knows, or undefined for its own (default: acpModel). */
   model?(model: string | undefined): string | undefined;
   /** Beluga's effort as one of the session's options (its thinking level), or undefined: none. */
@@ -45,4 +51,11 @@ export interface AcpExtension {
   dropSession?(sessionId: string): Promise<unknown>;
   /** After a look's process stopped: what it left (its log). */
   afterLook?(pid: number): Promise<unknown>;
+  /**
+   * Flags it starts with after its spec's `args`, made ready first (Antigravity: a Gemini folder
+   * without your global rules). A version that says it doesn't know one ("flag provided but not
+   * defined") is started without them, and that executable goes on without them while the daemon
+   * runs. Failing to make them ready starts it without them too.
+   */
+  launch?(): Promise<readonly string[]>;
 }

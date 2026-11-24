@@ -103,7 +103,7 @@ export function UsageView() {
         <Chapter title="Right now" sub="Your plans and how much is left, and your agents this week.">
           <div className={s.summaryFit}>
             <div className={s.summary}>
-              <PlanCard state={state} now={now} />
+              <PlanCard state={state} now={now} stats={got.stats} />
               <ActivityCard state={state} stats={got.stats} now={got.at} />
               <SessionsCard windows={got.stats?.plan ?? []} limits={planLimits(state)} now={got.at} />
             </div>

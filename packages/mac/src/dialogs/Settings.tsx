@@ -39,6 +39,7 @@ import { ExternalAgentsSettings } from './ExternalAgentsSettings.js';
 import { LaunchFlagsSettings } from './LaunchFlagsSettings.js';
 import { SkillsPane } from './agent-setup/SkillsPane.js';
 import { LocalModelsSettings } from './LocalModelsSettings.js';
+import { AcpAgentsSettings } from './AcpAgentsSettings.js';
 import { NotificationSettings } from './NotificationSettings.js';
 import { VoiceSettings } from './VoiceSettings.js';
 import { KeyboardSettings } from './KeyboardSettings.js';
@@ -448,6 +449,7 @@ function AgentPane() {
       <div id={LOCAL_MODELS_ID}>
         <LocalModelsSettings />
       </div>
+      <AcpAgentsSettings />
       <Group title="In the chat">
         <Row label="Sub-agents">
           <Select

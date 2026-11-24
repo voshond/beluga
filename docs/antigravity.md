@@ -1,14 +1,16 @@
 # Antigravity
 
-Beluga can run [Antigravity](https://antigravity.google) as your agent, beside Claude, Codex, OpenCode, Copilot and local models. It runs the Antigravity CLI (`agy`) you have installed, signed in with your own Google account, on the models your Antigravity plan has: Gemini, and the Claude and GPT-OSS models Antigravity offers.
+Beluga can run [Antigravity](https://antigravity.google) as your agent, beside Claude, Codex, OpenCode, Copilot and local models. It's one of your [ACP agents](acp.md): you add it, and only then is it in the agent pickers. It runs the Antigravity CLI (`agy`) you have installed, signed in with your own Google account, on the models your Antigravity plan has: Gemini, and the Claude and GPT-OSS models Antigravity offers.
 
 ## Set it up
 
 1. Install the Antigravity CLI: `curl -fsSL https://antigravity.google/cli/install.sh | bash` (it puts `agy` in `~/.local/bin`). Version 1.5 or newer: an older `agy` has no ACP server (`agy update`).
 2. Sign in once in Terminal: run `agy`, and it opens Google's sign-in in your browser.
-3. Open **Settings › Agent** (or the "Your agents" step when you first open Beluga). Antigravity shows **Ready** once Beluga finds it signed in. **Sign In** beside it starts `agy` in Terminal for you, and **Check Again** looks again.
+3. Open **Settings › Agent › ACP agents** and press **Add** beside Antigravity (Add shows once `agy` is on this Mac; before that, the row has its install command to copy). It shows **Ready** once Beluga finds it signed in. **Sign In** beside it starts `agy` in Terminal for you, and **Check Again** (behind •••) looks again.
 
-Make it yours with the radio button, or pick it for one conversation in the agent picker above the message box.
+Make it yours in **Your agent** at the top of Settings › Agent, or pick it for one conversation in the agent picker above the message box. **Remove** (behind •••) takes it out of the pickers again.
+
+A Mac that ran Antigravity before it became an ACP agent (it was your agent, a project's, or a conversation's) has it added already, once.
 
 `BELUGA_AGY_PATH` points Beluga at another `agy`.
 
@@ -40,6 +42,7 @@ A model Google retires leaves the list on its own: Beluga asks Antigravity each 
 - **A declined step.** Antigravity ends its turn without a word when a step is turned down, so Beluga tells it why, once, and it answers.
 - **Gemini looks around a lot.** On Gemini 3.8 Flash, Antigravity often reads and searches well past what you asked (other folders, your home folder) before it answers. Its commands still come to you, but a Claude model on your plan keeps closer to the request.
 - **Your plan's quota.** Every message uses some of your Antigravity quota, and so do Beluga's small asks when Antigravity is your agent (naming a worktree, drafting a task). When it runs out, the card says so; the Usage tab shows what's left, per model family.
+- **Your project's rules, not Antigravity's global ones.** In Beluga, Antigravity follows your project's `AGENTS.md`, `GEMINI.md` and `.agents/` rules and Beluga's instructions, not your global rules (`~/.gemini/GEMINI.md`, `~/.gemini/AGENTS.md`, `~/.gemini/config/rules/` and the like). agy has no switch for that, so Beluga starts it on a Gemini folder of its own, `~/.beluga/agy-gemini` (`--gemini-dir`): everything of `~/.gemini` linked in (your sign-in, conversations, settings, skills, plugins, MCP servers) except those rules. A file agy saves there goes back to `~/.gemini` on its next start. Antigravity in your terminal still reads them. On Windows, and with no global rules, it reads `~/.gemini` as it is. A project with only a `CLAUDE.md` gives it nothing to read: Antigravity doesn't read that file.
 - **Your MCP servers**: the ones in your Antigravity config run in its conversations, as they do in Antigravity. Settings › MCP lists Claude Code's and Codex's.
 - **Deleting a chat** deletes Antigravity's own record of it too (its conversation file and notes in `~/.gemini/antigravity-cli`).
 

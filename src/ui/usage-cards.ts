@@ -1,4 +1,6 @@
 import { providersOf, usagesOf } from '../agent/usage.js';
+import { isFixedRuntime } from '../shared/agent-runtimes.js';
+import type { AgentWeek } from './agent-week.js';
 import { type AgentRef, CLAUDE_AGENT, type PeerInfo, type Profile, type ProviderUsage } from '../protocol.js';
 
 /** A plan window ready to draw: "5-hour", "Weekly", or the provider's own name for it. */
@@ -29,6 +31,8 @@ export interface ProviderCard {
   /** The agent that answers when nobody names one (the make-default chip's state). */
   readonly isDefault: boolean;
   readonly updatedAt?: number;
+  /** An ACP agent's week, as Beluga counted it (none for the fixed agents, or before your stats are here). */
+  readonly week?: AgentWeek;
 }
 
 /** A provider's quota windows in order: 5-hour, weekly, then its own. */
@@ -47,7 +51,7 @@ export function windowsOf(u: Pick<ProviderUsage, 'fiveHour' | 'week' | 'windows'
   return out;
 }
 
-function cardOf(agent: AgentRef, u: ProviderUsage | undefined, isDefault: boolean): ProviderCard {
+function cardOf(agent: AgentRef, u: ProviderUsage | undefined, isDefault: boolean, week?: AgentWeek): ProviderCard {
   const windows = windowsOf(u);
   const shape = windows.length ? 'quota' : u?.tokens || u?.tokensPerSec !== undefined ? 'tokens' : 'empty';
   return {
@@ -61,6 +65,7 @@ function cardOf(agent: AgentRef, u: ProviderUsage | undefined, isDefault: boolea
     signedIn: u?.signedIn !== false,
     isDefault,
     ...(u ? { updatedAt: u.updatedAt } : {}),
+    ...(week ? { week } : {}),
   };
 }
 
@@ -72,8 +77,9 @@ export type RuntimeReadiness = ReadonlyArray<{ readonly id: string; readonly sta
  * stable order (tapping make-default never moves them). `defaultAgent` is your setting's. With
  * `runtimes` (yours, as the pickers have them), a card shows only while its agent is ready here:
  * one that isn't installed or signed in has no card. One not asked about yet keeps its card.
+ * `weekOf`: an ACP agent's week (the Mac: the Usage tab's stats; the phone: the daemon's).
  */
-export function providerCards(self: Pick<Profile, 'usage' | 'usages' | 'agents'> | undefined, defaultAgent: AgentRef | undefined, runtimes?: RuntimeReadiness): ProviderCard[] {
+export function providerCards(self: Pick<Profile, 'usage' | 'usages' | 'agents'> | undefined, defaultAgent: AgentRef | undefined, runtimes?: RuntimeReadiness, weekOf?: (runtime: string) => AgentWeek | undefined): ProviderCard[] {
   const usages = usagesOf(self);
   const def = (defaultAgent ?? CLAUDE_AGENT).runtime;
   const ready = (runtime: string): boolean => {
@@ -82,7 +88,7 @@ export function providerCards(self: Pick<Profile, 'usage' | 'usages' | 'agents'>
   };
   return providersOf(self)
     .filter((a) => ready(a.runtime))
-    .map((a) => cardOf(a, usages.find((u) => u.agent.runtime === a.runtime), a.runtime === def));
+    .map((a) => cardOf(a, usages.find((u) => u.agent.runtime === a.runtime), a.runtime === def, isFixedRuntime(a.runtime) ? undefined : weekOf?.(a.runtime)));
 }
 
 /** One friend's provider with quota windows: whose agent has room left. */

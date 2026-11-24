@@ -1,6 +1,9 @@
 import path from 'node:path';
 import type { Config } from '../config.js';
-import { runtimeFor } from '../agent/runtime/registry.js';
+import { acpRuntimes, runtimeFor } from '../agent/runtime/registry.js';
+import { acpAgents } from '../agent/runtime/acp/agents.js';
+import { KNOWN_RUNTIMES } from '../shared/agent-runtimes.js';
+import type { Settings } from '../shared/settings-schema.js';
 import { claudeStatus } from '../agent/runtime/claude/status.js';
 import type { AgentRuntime, RuntimeId } from '../agent/runtime/types.js';
 import { createMockBackend } from '../agent/mock.js';
@@ -119,6 +122,11 @@ function demoAntigravity(): AgentRuntime {
 
 let claudeWithStatus: AgentRuntime | undefined;
 /** The runtimes, Claude's saying whether it's signed in (a local model's side calls go to Claude only then, BLG-503). */
+/** Whether you ran a runtime before: it's your agent, a project's, or a workspace's or chat's own. */
+function usedRuntime(saved: Pick<Settings, 'defaultAgent' | 'projectAgents'>, workspaces: Pick<WorkspaceManager, 'usesRuntime'>, runtime: string): boolean {
+  return saved.defaultAgent?.runtime === runtime || Object.values(saved.projectAgents ?? {}).some((a) => a.runtime === runtime) || workspaces.usesRuntime(runtime);
+}
+
 function withClaudeStatus(id?: RuntimeId): AgentRuntime | undefined {
   const rt = runtimeFor(id);
   if (!rt || rt.id !== 'claude' || rt.status) return rt;
@@ -332,6 +340,8 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
   let closing = false;
   let saveAsked = false;
   const workspaces = demo ? await createDemoWorkspaces() : new WorkspaceManager();
+  // Antigravity is one of your ACP agents now: a Mac that ran it before keeps it, added once (acp/agents.ts).
+  if (!demo) acpAgents.migrate(() => usedRuntime(saved, workspaces, 'antigravity'));
   // The demo reads Claude Code's conversations only from a pretend ~/.claude (BELUGA_CLAUDE_HOME, the e2e's), never yours.
   const readsClaude = !demo || Boolean(belugaEnv('CLAUDE_HOME'));
   if (demo && readsClaude) process.env.CLAUDE_CONFIG_DIR = claudeHome();
@@ -366,6 +376,8 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
           // Claude to fall back on; each run follows its place's agent, side calls your default (session.sideRoute).
           runtime: {
             runtimes: withClaudeStatus,
+            // Your ACP agents Beluga has no name of its own for (Cursor, a Registry agent, a command of yours): after the fixed ones.
+            extra: () => acpRuntimes().filter((rt) => !KNOWN_RUNTIMES.some((k) => k.id === rt.id)).map((rt) => ({ id: rt.id, label: rt.label })),
             options: {
               cwd: agentCwd,
               autoEdit: primary?.writable ?? false,
@@ -520,6 +532,8 @@ export async function buildCore(input: Config, hooks: CoreHooks, opts: { readonl
         },
         { runtime: 'antigravity', label: 'Antigravity' },
       );
+      // An ACP agent without a quota: its card shows its week from your stats.
+      session.updateUsage({ signedIn: true }, { runtime: 'cursor', label: 'Cursor' });
     }, 300);
     // bob "arrives" a moment later so you first see how inviting works (sooner at a faster pace: the e2e tests).
     const soon = (ms: number): number => ms * Math.min(1, Number(process.env.KLAUD_DEMO_PACE) || 1);

@@ -1455,6 +1455,11 @@ export class WorkspaceManager {
    * the workspace's model. The stored session stays filed under its runtime: a different runtime
    * starts its own conversation (see session-carry.ts resumeFor).
    */
+  /** Whether a workspace or chat runs on this runtime (its own agent; one that follows your default doesn't count). */
+  usesRuntime(runtime: string): boolean {
+    return this.records.some((r) => r.agent?.runtime === runtime);
+  }
+
   setAgent(id: string, agent: AgentPick | undefined): void {
     this.require(id);
     // Another agent's model may not take the effort picked for the last one: Settings' again, unless the pick brings its own.

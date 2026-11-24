@@ -378,35 +378,43 @@
   color: var(--claude);
 }
 
-.footer {
+/* The title row's end: the sidebar's own toggle, on the right. */
+.titleEnd {
+  margin-left: auto;
+  display: inline-flex;
+}
+/* The bottom card, one row: you on the left, the room and Usage on the right. */
+.dock {
+  flex: none;
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 38px;
-  padding: 0 12px 0 16px;
-  border-top: 0.5px solid var(--hairline);
-  flex: none;
-  color: var(--text-2);
-  font-size: 0.92rem;
-}
-.footer:empty {
-  display: none;
-}
-.footerLabel {
-  flex: 1;
+  gap: 6px;
+  min-height: 52px;
+  margin: 6px 8px 8px;
+  padding-right: 8px;
+  border: 0.5px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--bg-raised);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.invite {
-  height: 22px;
-  padding: 0 9px;
-  border-radius: 5px;
-  color: var(--accent);
-  font-weight: 600;
+.dockTools {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
-.invite:hover {
-  background: var(--bg-hover);
+/* Usage as a framed square button, like the window's own toolbar buttons (the room's beside it matches). */
+.dockButton {
+  width: 34px;
+  height: 30px;
+  border: 0.5px solid var(--hairline-strong);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.dockButton svg {
+  width: 17px;
+  height: 17px;
 }
 /* A folder dragged from Finder over the sidebar: dropping it adds it as a project. */
 .dropping {
@@ -414,9 +422,8 @@
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
-/* Usage, as an icon above the sidebar: it turns amber when most of the week is used. */
+/* Usage, in the bottom card: it turns amber when most of the week is used. */
 .usage {
-  margin-left: auto;
   display: inline-flex;
 }
 .usage[data-level='mid'] button {

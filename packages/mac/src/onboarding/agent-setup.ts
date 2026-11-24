@@ -1,5 +1,5 @@
 // Relative, not @beluga: tests at the repo's root import this file too.
-import type { RuntimeChoice, RuntimeState } from '../../../../src/shared/agent-runtimes.js';
+import { type RuntimeChoice, type RuntimeState, isFixedRuntime } from '../../../../src/shared/agent-runtimes.js';
 import { thisComputer } from '../lib/os-words.js';
 
 /**
@@ -97,7 +97,8 @@ function fixOf(id: string, state: RuntimeState | undefined): AgentFix | undefine
 
 /** The rows, in the pickers' order. `checked`: every runtime has been asked at least once. */
 export function agentRows(runtimes: readonly RuntimeChoice[], checked: boolean): AgentRow[] {
-  return runtimes.map((r) => {
+  // The fixed agents: your ACP agents (Antigravity, Cursor…) have their own rows, in Settings › Agent › ACP agents.
+  return runtimes.filter((r) => isFixedRuntime(r.id)).map((r) => {
     const state = stateOf(r, checked);
     const known = DETAIL[r.id];
     const detail = (state && known?.[state]) ?? (state === 'ready' || !state ? (known?.ready ?? '') : (r.fix ?? r.why ?? ''));

@@ -2,6 +2,7 @@ import type { RuntimeStatus } from '../types.js';
 import { ACP_AUTH_REQUIRED, ACP_SIGNED_OUT, acpSignedOut, modelRows } from '../acp/parts.js';
 import { acpStatus } from '../acp/status.js';
 import { type AgyConnect, dropAgyLog } from './connection.js';
+import { rulesFreeArgs } from './rules-free.js';
 import { dropAgySession } from './sessions.js';
 import { AGY_MISSING, AGY_SIGN_IN, ANTIGRAVITY } from './spec.js';
 
@@ -32,5 +33,5 @@ interface StatusDeps {
  * drops it. Kept a minute. Never signs in.
  */
 export function agyStatus(deps: StatusDeps & { readonly now?: number } = {}): Promise<RuntimeStatus> {
-  return acpStatus(ANTIGRAVITY, { dropSession: (id) => dropAgySession(id), afterLook: (pid) => dropAgyLog(pid) }, deps);
+  return acpStatus(ANTIGRAVITY, { dropSession: (id) => dropAgySession(id), afterLook: (pid) => dropAgyLog(pid), launch: () => rulesFreeArgs() }, deps);
 }

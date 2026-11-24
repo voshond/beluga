@@ -1,9 +1,8 @@
 import os from 'node:os';
-import type { SessionResponse } from '../opencode/acp.js';
 import type { RuntimeStatus } from '../types.js';
 import { findAcpCommand, spawnAcp } from './connection.js';
 import type { AcpExtension } from './extension.js';
-import { acpSignedOut, modelRows } from './parts.js';
+import { type AcpSession, acpSignedOut, sessionModelRows } from './parts.js';
 import type { AcpAgentSpec, AcpConnect } from './spec.js';
 
 export interface AcpStatusDeps {
@@ -22,7 +21,7 @@ const cached = new Map<string, { readonly at: number; readonly status: Promise<R
  * It opens a session to find out (no message is sent, so nothing of your quota is used), then drops
  * it. Kept a minute per agent. Never signs in.
  */
-export async function acpStatus(spec: AcpAgentSpec, ext: Pick<AcpExtension, 'dropSession' | 'afterLook'>, deps: AcpStatusDeps = {}): Promise<RuntimeStatus> {
+export async function acpStatus(spec: AcpAgentSpec, ext: Pick<AcpExtension, 'dropSession' | 'afterLook' | 'defaultModel' | 'launch'>, deps: AcpStatusDeps = {}): Promise<RuntimeStatus> {
   const now = deps.now ?? Date.now();
   const hit = cached.get(spec.id);
   if (!deps.connect && hit && now - hit.at < CACHE_MS) return hit.status;
@@ -31,7 +30,7 @@ export async function acpStatus(spec: AcpAgentSpec, ext: Pick<AcpExtension, 'dro
   return status;
 }
 
-async function check(spec: AcpAgentSpec, ext: Pick<AcpExtension, 'dropSession' | 'afterLook'>, deps: AcpStatusDeps): Promise<RuntimeStatus> {
+async function check(spec: AcpAgentSpec, ext: Pick<AcpExtension, 'dropSession' | 'afterLook' | 'defaultModel' | 'launch'>, deps: AcpStatusDeps): Promise<RuntimeStatus> {
   const bin = deps.bin ?? (deps.connect ? undefined : findAcpCommand(spec));
   if (!bin && !deps.connect) return { state: 'missing', fix: spec.installFix, models: [] };
   const cwd = os.tmpdir();
@@ -41,15 +40,20 @@ async function check(spec: AcpAgentSpec, ext: Pick<AcpExtension, 'dropSession' |
   let opened: string | undefined;
   const drop = deps.drop ?? (deps.connect || !ext.dropSession ? undefined : (id: string) => ext.dropSession!(id));
   try {
-    const s = await conn.rpc.request<SessionResponse>('session/new', { cwd, mcpServers: [] }, 60_000);
+    const s = await conn.rpc.request<AcpSession>('session/new', { cwd, mcpServers: [] }, 60_000);
     opened = s.sessionId;
-    return { state: 'ready', models: modelRows(s.configOptions) };
+    return { state: 'ready', models: sessionModelRows(s, ext.defaultModel) };
   } catch (err) {
     if (acpSignedOut(err)) return { state: 'signed_out', fix: spec.signInFix, models: [] };
     // Anything else (no network, a timeout): it's there and signed in as far as Beluga can tell; a run says what's wrong.
-    return { state: 'ready', models: [] };
+    return { state: 'ready', models: ext.defaultModel ? sessionModelRows(undefined, true) : [] };
   } finally {
     await conn.proc.kill();
     if (opened && drop) void drop(opened).catch(() => false);
   }
+}
+
+/** Forget what was found (an agent just added, installed or removed): the next look asks again. */
+export function forgetAcpStatus(): void {
+  cached.clear();
 }

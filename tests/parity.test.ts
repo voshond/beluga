@@ -6,6 +6,7 @@ import { CODEX_CAPABILITIES } from '../src/agent/runtime/codex/index.js';
 import { OPENCODE_CAPABILITIES } from '../src/agent/runtime/opencode/index.js';
 import { COPILOT_CAPABILITIES } from '../src/agent/runtime/copilot/index.js';
 import { ANTIGRAVITY_CAPABILITIES } from '../src/agent/runtime/antigravity/index.js';
+import { ACP_CAPABILITIES } from '../src/agent/runtime/acp/entry.js';
 import type { RuntimeCapabilities } from '../src/agent/runtime/types.js';
 import { COMMANDS } from '../src/core/commands.js';
 import { METHODS } from '../src/ipc/api.js';
@@ -69,15 +70,17 @@ describe('docs/parity.md, per runtime', () => {
     { id: 'opencode', column: 4, caps: OPENCODE_CAPABILITIES },
     { id: 'copilot', column: 5, caps: COPILOT_CAPABILITIES },
     { id: 'antigravity', column: 6, caps: ANTIGRAVITY_CAPABILITIES },
+    // Any other ACP agent of yours (Cursor, Gemini CLI, a Registry agent, a command of yours).
+    { id: 'acp', column: 7, caps: ACP_CAPABILITIES },
   ];
 
-  it('has a column for Claude, Codex, OpenCode, Copilot and Antigravity', () => {
-    expect(header).toEqual(['What', 'Ways in', 'Claude', 'Codex', 'OpenCode', 'Copilot', 'Antigravity']);
+  it('has a column for Claude, Codex, OpenCode, Copilot, Antigravity and any other ACP agent', () => {
+    expect(header).toEqual(['What', 'Ways in', 'Claude', 'Codex', 'OpenCode', 'Copilot', 'Antigravity', 'ACP agent']);
     expect(rows.length).toBeGreaterThan(10);
   });
 
   it('leaves no cell blank: each is pass, a fallback or n/a', () => {
-    const bad = rows.flatMap((r) => [2, 3, 4, 5, 6].filter((i) => r.length !== 7 || !/^(pass|fallback|n\/a)\b/.test(r[i] ?? '')).map((i) => `${r[0]} › ${header[i]}: "${r[i] ?? ''}"`));
+    const bad = rows.flatMap((r) => [2, 3, 4, 5, 6, 7].filter((i) => r.length !== 8 || !/^(pass|fallback|n\/a)\b/.test(r[i] ?? '')).map((i) => `${r[0]} › ${header[i]}: "${r[i] ?? ''}"`));
     expect(bad).toEqual([]);
   });
 

@@ -19,11 +19,12 @@ test('start a worktree on Antigravity, approve a command, answer its question, s
   await page.goto('/');
   await expect(sidebar(page)).toBeVisible();
 
-  // Settings › Agent lists Antigravity, ready; and your agent asks before commands.
+  // Settings › Agent lists Antigravity among your ACP agents, ready; and your agent asks before commands.
   await page.keyboard.press('Meta+,');
   const settings = page.getByRole('dialog');
   await settings.getByRole('button', { name: 'Agent', exact: true }).click();
-  await expect(settings.getByTestId('settings-agent-antigravity')).toContainText('Ready', { timeout: 15_000 });
+  await expect(settings.getByTestId('settings-agent-antigravity')).toHaveCount(0);
+  await expect(settings.getByTestId('acp-agent-antigravity')).toContainText('Ready', { timeout: 15_000 });
   if (shots) await page.screenshot({ path: `${shots}/antigravity-01-settings-agent.png` });
   const ask = settings.getByRole('switch', { name: 'Self approval' });
   if ((await ask.getAttribute('aria-checked')) !== 'true') await ask.click();

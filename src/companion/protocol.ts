@@ -9,7 +9,7 @@ import { z } from 'zod';
  * ignores what it doesn't know. A breaking change bumps the major, and the Mac keeps answering the
  * previous major for a release.
  */
-export const COMPANION_PROTO = { major: 1, minor: 65 } as const;
+export const COMPANION_PROTO = { major: 1, minor: 66 } as const;
 
 /**
  * What came in which minor, for a phone talking to an older Mac: it subscribes to a topic (and
@@ -173,6 +173,9 @@ export const COMPANION_PROTO = { major: 1, minor: 65 } as const;
  * 1.65 (upstream's 1.59): when a plan's task reached the state it's in and when it last changed
  * (`PlanTaskView.since` / `updatedAt`), so every task says how fresh it is, not only those at work.
  * An older Mac sends neither; an older phone shows neither.
+ * 1.66 (upstream's 1.60): an ACP agent's usage card says its week on your Mac (`UsageView.week`): runs, agent time,
+ * tokens, what it said it cost, and its agent time on each of the last 7 days. An older Mac sends
+ * none; an older phone shows the card as before.
  */
 export const SINCE = { tasks: 4, openOnMac: 4, icon: 4, merge: 4, draftTask: 4, viewFetch: 4, assistant: 5, askModes: 5, files: 7, terminal: 7, branchSteps: 8, subAgent: 10, gone: 11, worktreePhotos: 12, keepAwake: 13, awayBeat: 13, macChats: 14, voice: 16, control: 17, video: 18, proof: 19, sentinel: 21, dashboard: 22, sentinelChat: 23, severalTasks: 24, documents: 25, widgets: 26, forget: 27, dismiss: 27, editPrompt: 28, docRefs: 29, keptData: 29, chatEdits: 30, agentPicker: 32, providers: 33, dialogues: 34, workAgents: 35, terminalView: 36, reactions: 41, cancelSteer: 47, triage: 48, draftReview: 49, threads: 50, threadAgents: 50, seen: 51, computers: 52, externalAgents: 53, chatLinks: 55, chatOrigin: 56, queuedOrigin: 57, sharedMark: 58, chatSchedules: 60, autopilot: 61, planRoles: 61, memory: 62, learned: 63, honchoPicture: 64 } as const;
 
@@ -288,6 +291,10 @@ export const UsageView = z.object({
   tokensPerSec: z.number().min(0).optional(),
   /** 1.33: false when it's installed on the Mac but not signed in. */
   signedIn: z.boolean().optional(),
+  /** 1.66: an ACP agent's week on your Mac (yours only: friends' cards never have it). */
+  week: z
+    .object({ runs: z.number().int().min(0), agentMs: z.number().min(0), tokens: z.number().min(0), cost: z.number().min(0).optional(), days: z.array(z.number().min(0)).length(7) })
+    .optional(),
 });
 export type UsageView = z.infer<typeof UsageView>;
 

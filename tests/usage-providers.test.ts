@@ -21,6 +21,24 @@ const codex = { runtime: 'codex', label: 'Codex' };
 const local = { runtime: 'local', model: 'qwen3', label: 'Qwen' };
 
 describe('usage per provider', () => {
+  it('sends the phone an ACP agent’s week, its quiet week too', () => {
+    const p = { agents: [{ runtime: 'cursor', label: 'Cursor' }] };
+    const zero = { runs: 0, agentMs: 0, tokens: 0, cost: 0, days: [0, 0, 0, 0, 0, 0, 0] };
+    expect(usageViews(p, undefined, undefined, () => zero).find((v) => v.runtime === 'cursor')?.week).toEqual({ runs: 0, agentMs: 0, tokens: 0, days: [0, 0, 0, 0, 0, 0, 0] });
+    // A friend's card (no week passed) never has one.
+    expect(usageViews(p, undefined).find((v) => v.runtime === 'cursor')).toBeUndefined();
+  });
+
+  it('gives an ACP agent’s card its week, and never a fixed agent’s', () => {
+    const p = { agents: [{ runtime: 'cursor', label: 'Cursor' }, { runtime: 'codex', label: 'Codex' }] };
+    const week = { runs: 3, agentMs: 1, tokens: 2, cost: 0, days: [0, 0, 0, 0, 0, 0, 1] };
+    expect(providerCards(p, undefined, undefined, () => week).map((c) => [c.key, c.week?.runs])).toEqual([
+      ['claude', undefined],
+      ['cursor', 3],
+      ['codex', undefined],
+    ]);
+  });
+
   const base = { name: 'kay', shares: [], agent: true };
 
   it('merges each update into its own provider and keeps the old field Claude’s', () => {
