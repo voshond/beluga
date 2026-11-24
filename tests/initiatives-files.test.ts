@@ -47,6 +47,31 @@ describe('an initiative’s folder', () => {
     expect(readFolder(root, 'empty').trouble).toBe('initiative.json is missing');
   });
 
+  it('reads tickets.json, and shows a bad one as trouble', () => {
+    const root = tmp();
+    scaffoldFolder(root, 'one', config, '2026-11-24');
+    expect(readFolder(root, 'one').tickets).toBeUndefined();
+    writeFileSync(path.join(root, 'one', 'tickets.json'), JSON.stringify({ at: '2026-11-24T08:00:00Z', tickets: [{ key: 'SHOP-1', summary: 'A', status: 'To Do', statusCategory: 'todo', prs: [{ url: 'https://github.com/a/b/pull/1', number: 1, state: 'open' }] }] }));
+    const folder = readFolder(root, 'one');
+    expect(folder.trouble).toBeUndefined();
+    expect(folder.tickets?.tickets[0]).toMatchObject({ key: 'SHOP-1', statusCategory: 'todo', prs: [{ number: 1, state: 'open' }] });
+    expect(folder.files).toContain('tickets.json');
+    writeFileSync(path.join(root, 'one', 'tickets.json'), '[{ "key": "SHOP-1" }]');
+    const bad = readFolder(root, 'one');
+    expect(bad.trouble).toMatch(/tickets\.json/);
+    expect(bad.tickets).toBeUndefined();
+    expect(bad.config).toMatchObject({ name: 'Checkout v2' });
+  });
+
+  it('reads an old initiative.json with slackChannels and calendarMatch', () => {
+    const root = tmp();
+    scaffoldFolder(root, 'old', config, '2026-11-24');
+    writeFileSync(path.join(root, 'old', 'initiative.json'), JSON.stringify({ name: 'Old', goal: 'g', status: 'active', epics: [], slackChannels: ['#old'], people: [], calendarMatch: 'Old sync', docs: [], repos: [] }));
+    const folder = readFolder(root, 'old');
+    expect(folder.trouble).toBeUndefined();
+    expect(folder.config).toMatchObject({ slack: [{ ref: '#old' }], meetings: [{ match: 'Old sync' }] });
+  });
+
   it('reads a memory file, and nothing outside the folder', () => {
     const root = tmp();
     scaffoldFolder(root, 'a', config, '2026-11-24');

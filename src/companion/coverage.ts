@@ -781,6 +781,8 @@ export const PHONE: Record<Method, Side> = {
   'initiatives.setRepo': 'mac',
   'initiatives.setCheckIn': 'mac',
   'initiatives.checkInNow': 'mac',
+  'initiatives.refreshTickets': 'mac',
+  'initiatives.refineGoal': 'mac',
   'initiatives.chatNew': 'mac',
   'initiatives.chatOpen': 'mac',
   'initiatives.chatDelete': 'mac',

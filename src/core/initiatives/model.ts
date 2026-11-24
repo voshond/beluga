@@ -20,28 +20,58 @@ export const PersonSchema = z.object({
 });
 export type InitiativePerson = z.infer<typeof PersonSchema>;
 
-export const InitiativeConfigSchema = z.object({
-  name: z.string().trim().min(1).max(120),
-  goal: z.string().max(4000).default(''),
-  status: InitiativeStatusSchema.default('active'),
-  epics: z.array(z.string().regex(EPIC_KEY)).max(20).default([]),
-  slackChannels: z.array(z.string().min(1).max(80)).max(40).default([]),
-  people: z.array(PersonSchema).max(100).default([]),
-  calendarMatch: z.string().max(200).default(''),
-  docs: z.array(z.string().min(1).max(500)).max(50).default([]),
-  repos: z.array(z.string().min(1).max(120)).max(30).default([]),
-  createdAt: z.string().max(40).optional(),
+export const GOAL_MAX = 12_000;
+
+export const SlackRefSchema = z.object({
+  ref: z.string().trim().min(1).max(500),
+  label: z.string().trim().max(120).optional(),
 });
+export type SlackRef = z.infer<typeof SlackRefSchema>;
+
+export const MeetingRefSchema = z.object({
+  match: z.string().trim().min(1).max(500),
+  label: z.string().trim().max(120).optional(),
+});
+export type MeetingRef = z.infer<typeof MeetingRefSchema>;
+
+const slackRefs = z.array(SlackRefSchema).max(40);
+const meetingRefs = z.array(MeetingRefSchema).max(40);
+
+export const InitiativeConfigSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    goal: z.string().max(GOAL_MAX).default(''),
+    status: InitiativeStatusSchema.default('active'),
+    epics: z.array(z.string().regex(EPIC_KEY)).max(20).default([]),
+    slack: slackRefs.optional(),
+    slackChannels: z.array(z.string().max(500)).max(40).optional(),
+    people: z.array(PersonSchema).max(100).default([]),
+    meetings: meetingRefs.optional(),
+    calendarMatch: z.string().max(500).optional(),
+    docs: z.array(z.string().min(1).max(500)).max(50).default([]),
+    repos: z.array(z.string().min(1).max(120)).max(30).default([]),
+    createdAt: z.string().max(40).optional(),
+  })
+  .transform(({ slackChannels, calendarMatch, slack, meetings, ...rest }) => ({
+    ...rest,
+    slack:
+      slack ??
+      (slackChannels ?? [])
+        .map((ref) => ref.trim())
+        .filter(Boolean)
+        .map((ref): SlackRef => ({ ref })),
+    meetings: meetings ?? (calendarMatch?.trim() ? [{ match: calendarMatch.trim() } satisfies MeetingRef] : []),
+  }));
 export type InitiativeConfig = z.infer<typeof InitiativeConfigSchema>;
 
 export const InitiativeDraftSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  goal: z.string().max(4000).optional(),
+  goal: z.string().max(GOAL_MAX).optional(),
   epics: z.array(z.string().regex(EPIC_KEY)).max(20).optional(),
-  slackChannels: z.array(z.string().min(1).max(80)).max(40).optional(),
+  slack: slackRefs.optional(),
   docs: z.array(z.string().min(1).max(500)).max(50).optional(),
   repos: z.array(z.string().min(1).max(120)).max(30).optional(),
-  calendarMatch: z.string().max(200).optional(),
+  meetings: meetingRefs.optional(),
 });
 export type InitiativeDraft = z.infer<typeof InitiativeDraftSchema>;
 
@@ -50,6 +80,13 @@ export const InitiativePatchSchema = InitiativeDraftSchema.partial().extend({
   people: z.array(PersonSchema).max(100).optional(),
 });
 export type InitiativePatch = z.infer<typeof InitiativePatchSchema>;
+
+export const GoalRefineSchema = z.object({
+  name: z.string().trim().max(120).default(''),
+  goal: z.string().max(GOAL_MAX).default(''),
+  epics: z.array(z.string().regex(EPIC_KEY)).max(20).default([]),
+});
+export type GoalRefine = z.infer<typeof GoalRefineSchema>;
 
 const count = z.number().int().min(0).max(100_000);
 
@@ -74,6 +111,69 @@ export const EpicStatusSchema = z.object({
   epics: z.array(EpicProgressSchema).max(20).default([]),
 });
 export type EpicStatus = z.infer<typeof EpicStatusSchema>;
+
+export const TICKET_CATEGORIES = ['todo', 'inProgress', 'done'] as const;
+export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
+
+export const PR_STATES = ['open', 'draft', 'merged', 'closed'] as const;
+export type PrState = (typeof PR_STATES)[number];
+
+const squashed = (said: string): string => said.toLowerCase().replace(/[^a-z]/g, '');
+
+export const ticketCategoryOf = (said: string): TicketCategory => {
+  const word = squashed(said);
+  if (word === 'done' || word === 'complete' || word === 'completed') return 'done';
+  if (word === 'inprogress' || word === 'indeterminate') return 'inProgress';
+  return 'todo';
+};
+
+export const prStateOf = (said: string): PrState => {
+  const word = squashed(said);
+  if (word === 'merged') return 'merged';
+  if (word === 'draft') return 'draft';
+  if (word === 'closed' || word === 'declined') return 'closed';
+  return 'open';
+};
+
+const maybe = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .nullish()
+    .transform((value) => value?.trim() || undefined);
+
+export const TicketPrSchema = z.object({
+  url: z.string().min(1).max(500),
+  number: z
+    .number()
+    .int()
+    .min(1)
+    .nullish()
+    .transform((value) => value ?? undefined),
+  state: z.string().max(40).default('open').transform(prStateOf),
+  repo: maybe(200),
+  title: maybe(300),
+});
+export type TicketPr = z.infer<typeof TicketPrSchema>;
+
+export const TicketSchema = z.object({
+  key: z.string().min(1).max(40),
+  url: maybe(500),
+  summary: z.string().max(500).default(''),
+  status: z.string().max(80).default(''),
+  statusCategory: z.string().max(40).default('todo').transform(ticketCategoryOf),
+  assignee: maybe(120),
+  updated: maybe(40),
+  epic: maybe(40),
+  prs: z.array(TicketPrSchema).max(30).default([]),
+});
+export type Ticket = z.infer<typeof TicketSchema>;
+
+export const TicketsSchema = z.object({
+  at: z.string().max(40),
+  tickets: z.array(TicketSchema).max(1000).default([]),
+});
+export type EpicTickets = z.infer<typeof TicketsSchema>;
 
 export const SUGGESTION_STATES = ['open', 'approved', 'dismissed'] as const;
 export const SuggestionStateSchema = z.enum(SUGGESTION_STATES);
@@ -110,12 +210,13 @@ export type InitiativeView = {
   readonly goal: string;
   readonly status: InitiativeStatus;
   readonly epics: readonly string[];
-  readonly slackChannels: readonly string[];
+  readonly slack: readonly SlackRef[];
   readonly docs: readonly string[];
   readonly repos: readonly string[];
-  readonly calendarMatch: string;
+  readonly meetings: readonly MeetingRef[];
   readonly people: readonly InitiativePerson[];
   readonly progress?: EpicStatus;
+  readonly tickets?: EpicTickets;
   readonly suggestions: readonly Suggestion[];
   readonly openDecisions: readonly string[];
   readonly recent: readonly string[];
@@ -260,3 +361,40 @@ export const lastCheckInAt = (item: Pick<InitiativeView, 'progress'>): number | 
   const at = item.progress ? Date.parse(item.progress.at) : NaN;
   return Number.isFinite(at) ? at : undefined;
 };
+
+export const linkOf = (ref: string): string | undefined => (/^https?:\/\/\S+$/i.test(ref.trim()) ? ref.trim() : undefined);
+
+export type SlackKind = 'channel' | 'thread' | 'conversation';
+
+export const slackKindOf = (ref: string): SlackKind => {
+  const link = linkOf(ref);
+  if (!link) return 'channel';
+  return /\/p\d{10,}|[?&]thread_ts=/.test(link) ? 'thread' : 'conversation';
+};
+
+export const meetingKindOf = (match: string): 'event' | 'title' => (linkOf(match) ? 'event' : 'title');
+
+const CATEGORY_RANK: Readonly<Record<TicketCategory, number>> = { inProgress: 0, todo: 1, done: 2 };
+
+const updatedAt = (ticket: Pick<Ticket, 'updated'>): number => {
+  const at = ticket.updated ? Date.parse(ticket.updated) : NaN;
+  return Number.isFinite(at) ? at : 0;
+};
+
+export const sortedTickets = (tickets: readonly Ticket[]): Ticket[] =>
+  [...tickets].sort((a, b) => CATEGORY_RANK[a.statusCategory] - CATEGORY_RANK[b.statusCategory] || updatedAt(b) - updatedAt(a) || a.key.localeCompare(b.key, undefined, { numeric: true }));
+
+export type TicketGroup = {
+  readonly epic?: string;
+  readonly tickets: readonly Ticket[];
+};
+
+export const ticketGroups = (tickets: readonly Ticket[], epics: readonly string[]): TicketGroup[] => {
+  const sorted = sortedTickets(tickets);
+  if (epics.length < 2) return sorted.length ? [{ tickets: sorted }] : [];
+  const known = epics.map((epic): TicketGroup => ({ epic, tickets: sorted.filter((t) => t.epic === epic) }));
+  const rest = sorted.filter((t) => !t.epic || !epics.includes(t.epic));
+  return [...known, ...(rest.length ? [{ tickets: rest }] : [])].filter((g) => g.tickets.length);
+};
+
+export const sameKeys = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((key) => b.includes(key));

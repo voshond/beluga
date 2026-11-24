@@ -1,9 +1,9 @@
 import { type Dirent, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { z } from 'zod';
-import { type EpicStatus, EpicStatusSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type Suggestion, SuggestionsSchema, openDecisionsOf, recentOf } from './model.js';
+import { type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type Suggestion, SuggestionsSchema, openDecisionsOf, recentOf } from './model.js';
 
-export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'suggestions.json'] as const;
+export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'suggestions.json'] as const;
 
 const MAX_FILES = 200;
 const MAX_READ = 512 * 1024;
@@ -14,6 +14,7 @@ export type InitiativeFolder = {
   readonly config?: InitiativeConfig;
   readonly brief: string;
   readonly progress?: EpicStatus;
+  readonly tickets?: EpicTickets;
   readonly suggestions: readonly Suggestion[];
   readonly openDecisions: readonly string[];
   readonly recent: readonly string[];
@@ -95,15 +96,17 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
   const file = (name: string): string | undefined => readText(path.join(folder, name));
   const config = parseJson(file('initiative.json'), InitiativeConfigSchema, 'initiative.json');
   const status = parseJson(file('status.json'), EpicStatusSchema, 'status.json');
+  const tickets = parseJson(file('tickets.json'), TicketsSchema, 'tickets.json');
   const suggestions = parseJson(file('suggestions.json'), SuggestionsSchema, 'suggestions.json');
   const missing = config.value || config.trouble ? undefined : 'initiative.json is missing';
-  const troubles = [config.trouble ?? missing, status.trouble, suggestions.trouble].filter((t): t is string => Boolean(t));
+  const troubles = [config.trouble ?? missing, status.trouble, tickets.trouble, suggestions.trouble].filter((t): t is string => Boolean(t));
   return {
     slug,
     folder,
     ...(config.value ? { config: config.value } : {}),
     brief: file('brief.md') ?? '',
     ...(status.value ? { progress: status.value } : {}),
+    ...(tickets.value ? { tickets: tickets.value } : {}),
     suggestions: suggestions.value ?? [],
     openDecisions: openDecisionsOf(file('decisions.md') ?? ''),
     recent: recentOf(file('timeline.md') ?? ''),

@@ -1091,6 +1091,11 @@ export class Session {
     return routeSideCall(this.sideRoute(), (on) => on.describeProject?.(dir, project), undefined);
   }
 
+  /** An initiative's goal as Markdown, drafted by your agent from what you typed and its epics (undefined without an agent, or on trouble). */
+  async refineGoal(req: import('../agent/goal-refiner.js').GoalRefineRequest): Promise<string | undefined> {
+    return routeSideCall(this.sideRoute(), (on) => on.refineGoal?.(req), undefined);
+  }
+
   /** A pull request reviewed before a sentinel merges it (undefined without an agent to ask, or on trouble). */
   async reviewPr(input: import('../agent/pr-reviewer.js').PrReviewInput): Promise<import('../agent/pr-reviewer.js').PrReview | undefined> {
     return routeSideCall(this.sideRoute(), (on) => on.reviewPr?.(input), undefined);
