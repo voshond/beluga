@@ -123,6 +123,16 @@ function stillWorking(m: MilestoneView): string | undefined {
 /** pass() said no because a task is still being worked on: Autopilot waits for it instead of reporting a problem. */
 class StillWorkingError extends Error {}
 
+/** The plan's limit of tasks (or milestones) at work at once is reached: a slot frees by itself. */
+class PlanLimitError extends Error {}
+
+/** Started: someone (an agent, Beluga) is on it, or it waits for them. */
+const STARTED: ReadonlySet<TaskState> = new Set(['running', 'asking', 'idle', 'stalled']);
+/** Not yet: it waits on other tasks, or its milestone hasn't opened. */
+const WAITING: ReadonlySet<TaskState> = new Set(['blocked', 'later']);
+/** What an agent is told when a call changes nothing: so it doesn't try again. */
+const NO_AGAIN = 'Don’t call plan_start_task for it again.';
+
 /** What changes can move a plan along. */
 const WAKES = new Set(['board_issue', 'board_remove', 'plan_put', 'agent_event', 'question_add', 'question_remove', 'approval_add', 'approval_remove', 'projects']);
 const EVENT_MS = 1000;
@@ -420,16 +430,48 @@ export class PlanPilot {
     if (t.forYou) throw new Error(`${t.issue?.key ?? t.task.id} “${t.task.title}” is the user’s: it’s answered in the plan’s conversation, not started in a worktree`);
     // Claude starts nothing on a paused plan, nor on one you run step by step (you do).
     const autonomy = view.milestones.find((m) => m.milestone.id === t.milestoneId)?.autonomy ?? plan.autonomy;
-    if (by.kind === 'claude' && (plan.paused || autonomy === 'step')) throw new Error(plan.paused ? 'The plan is paused: the user resumes it' : 'This plan runs step by step: the user starts each task');
+    if (by.kind === 'claude' && (plan.paused || autonomy === 'step')) throw new Error(`${plan.paused ? 'The plan is paused: the user resumes it' : 'This plan runs step by step: the user starts each task'}. ${NO_AGAIN}`);
     // A combine that stopped at a conflict: Start tries it again (fixed since, or asks anew).
     if (t.combining && t.issue) {
       this.fixAsked.delete(t.issue.id);
       this.deps.plans.setCombining(plan.id, t.task.id, { ...t.combining, ...(t.combining.conflict ? { conflict: { ...t.combining.conflict, stuck: false } } : {}) });
     } else if (t.state !== 'ready') throw new Error(`“${t.task.title}” can’t start: ${t.why ?? t.state}`);
     if (this.byMilestone) return this.startInMilestone(plan, view, t, by, agent);
-    if (view.active.length + this.startingIn(plan) >= plan.maxParallel) throw new Error(`${plan.maxParallel} tasks are already running (the plan’s limit)`);
+    if (view.active.length + this.startingIn(plan) >= plan.maxParallel) throw new PlanLimitError(`${plan.maxParallel} tasks are already running (the plan’s limit)`);
     this.failed.delete(t.issue!.id);
     return this.start(plan, t, by, agent);
+  }
+
+  /**
+   * plan_start_task: an agent asking to start a task (BLG-1029: half these calls failed, on tasks
+   * Beluga had started or would start by itself). What changes nothing isn't an error: a task already
+   * started, finished, waiting on others, or over the plan's limit is said plainly, with "don't call
+   * again", and Beluga goes on starting it by itself. What only the user can change still refuses,
+   * saying so.
+   */
+  async startForAgent(planId: string, taskId: string, by: Actor): Promise<string> {
+    const plan = this.deps.plans.need(planId);
+    if (plan.movedTo) throw new Error(`This plan moved to ${plan.movedTo.name}: it runs there now. ${NO_AGAIN}`);
+    if (plan.status !== 'active' || !plan.body) throw new Error(`The plan isn’t approved yet: nothing starts until the user approves it, and then Beluga starts ready tasks by itself. ${NO_AGAIN}`);
+    if (plan.draft) throw new Error(`Changes to the plan wait for the user’s approval: nothing starts until they approve or discard them, and then Beluga starts ready tasks by itself. ${NO_AGAIN}`);
+    const view = this.view(plan);
+    const tasks = view.milestones.flatMap((m) => m.tasks);
+    const t = tasks.find((x) => x.task.id === taskId || x.issue?.key === taskId.toUpperCase());
+    if (!t) throw new Error(`There's no task "${taskId}" in this plan (its tasks: ${tasks.map((x) => x.task.id).slice(0, 30).join(', ')}). Use an id from plan_get, or its board key.`);
+    const name = `${t.issue?.key ?? t.task.id} “${t.task.title}”`;
+    if (t.forYou) throw new Error(`${name} is the user’s: it’s answered in the plan’s conversation, never started in a worktree. ${NO_AGAIN}`);
+    if (t.combining) return this.startNow(planId, taskId, by);
+    if (STARTED.has(t.state)) return `${name} is already started (${t.state}): nothing to do. To tell its agent something, use plan_message_task. ${NO_AGAIN}`;
+    if (FINISHED.has(t.state)) return `${name} is ${t.state}: nothing to start. ${NO_AGAIN}`;
+    const autonomy = view.milestones.find((m) => m.milestone.id === t.milestoneId)?.autonomy ?? plan.autonomy;
+    const byItself = !plan.paused && autonomy !== 'step';
+    if (WAITING.has(t.state)) return `${name} can’t start yet: ${t.why ?? (t.state === 'later' ? 'its milestone hasn’t opened' : 'it waits on other tasks')}. ${byItself ? 'Beluga starts it by itself once that’s done' : 'The user starts it once that’s done'}: nothing to do now. ${NO_AGAIN}`;
+    try {
+      return await this.startNow(planId, taskId, by);
+    } catch (err) {
+      if (err instanceof PlanLimitError) return `Not started yet: ${err.message}. Beluga starts it by itself when one finishes: nothing to do now. ${NO_AGAIN}`;
+      throw err;
+    }
   }
 
   /** One milestone, one Claude (see the top): unless the plan says a worktree per task. */
@@ -455,7 +497,7 @@ export class PlanPilot {
       const keeps = agent ? ' (a milestone already at work keeps its agent)' : '';
       return `Gave ${issue.key} “${t.task.title}” to the agent doing “${m.milestone.title}”, in its worktree: it does it ${liveFrom(this.deps.store.getState()).busy(channel) ? 'once its current turn ends' : 'now'}${keeps}`;
     }
-    if (agentsAtWork(view).length + this.launchingIn(plan) >= plan.maxParallel) throw new Error(`${plan.maxParallel} milestones are already at work (the plan’s limit)`);
+    if (agentsAtWork(view).length + this.launchingIn(plan) >= plan.maxParallel) throw new PlanLimitError(`${plan.maxParallel} milestones are already at work (the plan’s limit)`);
     // A task of yours you start yourself: that one, for its Claude (it never takes yours on its own).
     return this.launch(plan, m.milestone.id, by, m.autonomy === 'step' || t.forYou ? [t.task.id] : undefined, agent);
   }

@@ -17,6 +17,8 @@ const STATUS = z.enum(['backlog', 'todo', 'in_progress', 'in_review', 'done', 'c
 const PRIORITY = z.enum(['urgent', 'high', 'medium', 'low', 'none']);
 const SECTION = z.enum(['goal', 'context', 'acceptance', 'decisions', 'questions', 'handoff']);
 const ESTIMATE = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(5), z.literal(8)]).describe('Points: 1 an hour or so, 2 half a day, 3 a day, 5 a few days, 8 a week (split it)');
+/** Reads only: Claude Code may run it beside other reads, instead of queued behind the calls before it (BLG-1029). */
+const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const items = (max: number) => z.array(z.string().min(1).max(400)).max(max);
 
 async function guarded(fn: () => string | Promise<string>): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
@@ -66,12 +68,13 @@ export function createBoardToolDefs(board: BoardTools) {
           }),
         ),
     ),
-    tool('task_get', 'A task in full: status, priority, who it’s for, its parent, sub-tasks, blockers, pull request, its brief and recent activity.', { key }, (a) => guarded(() => board.get(a.key))),
+    tool('task_get', 'A task in full: status, priority, who it’s for, its parent, sub-tasks, blockers, pull request, its brief and recent activity.', { key }, (a) => guarded(() => board.get(a.key)), { annotations: READ_ONLY }),
     tool(
       'task_list',
       'Tasks, one per line (key · status · priority · title, and the repo when its board covers several). scope: open (default: every unfinished task), mine (yours and your Claude’s), all (recently finished too). Without project: this task’s board and this repo’s tasks.',
       { scope: z.enum(['open', 'mine', 'all']).optional(), project: z.string().max(80).optional().describe('A board’s or a repo’s name (or a board’s key prefix, like BOB)'), query: z.string().max(200).optional().describe('Words in the title, key, labels or brief') },
       (a) => guarded(() => board.list({ ...(a.scope ? { scope: a.scope } : {}), ...(a.project ? { project: a.project } : {}), ...(a.query ? { query: a.query } : {}) })),
+      { annotations: READ_ONLY },
     ),
     tool(
       'task_create',

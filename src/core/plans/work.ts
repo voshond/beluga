@@ -18,7 +18,7 @@ import { coherenceWarnings, warningsText } from './coherence.js';
 import { DraftReviewer } from './draft-review.js';
 import { dropEpics, syncEpics } from './epics.js';
 import type { BodyInput, PlanOp, RepoChangeInput, TaskInput } from './edit.js';
-import { type Autonomy, MAX_PLAN_REPOS, type Plan, type PlanRole, type TestsAt, activeDecisions, allTasks, autonomyOf, checkerOf, decisionText, isMultiRepo, milestoneRepos, planAutonomy, planForHome, planRepos, planTaskOfIssue, planTitle, proposedRepos, reviewerOf, roleAgent, runOf } from './model.js';
+import { type Autonomy, MAX_PLAN_REPOS, type Plan, type PlanRole, type TestsAt, activeDecisions, allTasks, autonomyOf, checkerOf, decisionText, findMilestone, isMultiRepo, milestoneRepos, planAutonomy, planForHome, planRepos, planTaskOfIssue, planTitle, proposedRepos, reviewerOf, roleAgent, runOf } from './model.js';
 import { PlanMover } from './move-work.js';
 import { issueForWorkspace } from '../board/model.js';
 import { type PilotDeps, PlanPilot } from './pilot.js';
@@ -943,7 +943,7 @@ export class PlansWork {
         const plan = this.plans.need(planId);
         const m = plan.body?.milestones.find((x) => x.id === milestoneId);
         if (!m) throw new Error('That milestone isn’t in the approved plan any more: nothing to record');
-        if (milestone !== m.id && milestone.toLowerCase() !== m.title.toLowerCase()) throw new Error(`You check “${m.title}” only (id ${m.id})`);
+        if (findMilestone([m], milestone) !== m) throw new Error(`milestone: you check “${m.title}” only: call plan_gate again with milestone "${m.id}"`);
         const said = full.gate(m.id, verdict, notes);
         if (!said.startsWith('Recorded')) return said;
         const first = notes.trim().split('\n')[0]!.slice(0, 200);
@@ -1027,8 +1027,8 @@ export class PlansWork {
         ),
       gate: (milestone, verdict, notes) => {
         const plan = plans.need(planId);
-        const m = plan.body?.milestones.find((x) => x.id === milestone || x.title.toLowerCase() === milestone.toLowerCase());
-        if (!m) throw new Error(`There's no milestone "${milestone}" in the approved plan (milestones: ${(plan.body?.milestones ?? []).map((x) => x.id).join(', ')})`);
+        const m = findMilestone(plan.body?.milestones ?? [], milestone);
+        if (!m) throw new Error(`milestone: there's no milestone "${milestone.slice(0, 80)}" in the approved plan: use one of its ids (${(plan.body?.milestones ?? []).map((x) => x.id).join(', ')})`);
         // The user passed it while you checked: your verdict isn't needed any more.
         if (plan.runs[m.id]?.passedAt || (plan.merging?.[m.id] && !plan.merging[m.id]!.catchUp)) return 'The user already passed this milestone: nothing to record. Stop checking it and end your turn.';
         plans.recordCheck(planId, m.id, { by: actor ?? this.claude(), verdict, notes });
@@ -1036,7 +1036,8 @@ export class PlansWork {
         const auto = autonomyOf(plan, m) === 'autopilot';
         return verdict === 'pass' ? (auto ? 'Recorded: the milestone passes and the plan moves on.' : 'Recorded: the user passes the milestone.') : 'Recorded as failed. Add the fix tasks with plan_update.';
       },
-      start: (task) => this.pilot.startNow(planId, task, by()),
+      // An agent's call: what changes nothing (started already, or Beluga starts it by itself) is said, not refused.
+      start: (task) => this.pilot.startForAgent(planId, task, by()),
       message: (task, text, mode = 'queue') => {
         const plan = plans.need(planId);
         const hit = allTasks(plan.body).find((t) => t.task.id === task || (t.task.issueId && this.deps.board.board.get(t.task.issueId)?.key === task.toUpperCase()));
