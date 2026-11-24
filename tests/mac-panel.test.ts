@@ -185,6 +185,11 @@ describe('the right panel’s tabs', () => {
     expect(panelFits({ kind: 'tasks' })).toBe(false);
     expect(panelTabsFor({ kind: 'tasks' })).toEqual([]);
   });
+  it('the initiatives and an initiative’s page have the whole window, as Sentinel does', () => {
+    expect(panelFits({ kind: 'initiatives' })).toBe(false);
+    expect(panelFits({ kind: 'initiative_page', slug: 'device-enrollment' })).toBe(false);
+    expect(panelTabsFor({ kind: 'initiative_page', slug: 'device-enrollment' })).toEqual([]);
+  });
   it('a workspace has every tab; a chat has no Changes; a friend’s workspace Info and its Scratch; the Terminal view only Info', () => {
     expect(panelTabsFor(ws, 'worktree')).toEqual(['changes', 'files', 'terminal', 'info', 'history', 'scratch', 'background']);
     expect(panelTabsFor({ kind: 'project', id: 'p' })).toEqual(['files', 'terminal', 'info', 'history']);

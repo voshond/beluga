@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { type EpicStatus, type InitiativeView, type Suggestion, openSuggestions } from '@beluga/core/initiatives/model.js';
+import { type EpicStatus, type InitiativeView, type Suggestion, isDecision, openSuggestions } from '@beluga/core/initiatives/model.js';
 import { Button } from '../components/ui.js';
+import { DecisionRow } from './DecisionRow.js';
 import { progressDetail, progressPercent, progressWords } from './initiatives-model.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import s from './initiatives.module.css';
@@ -28,7 +29,7 @@ export const Section = ({ title, children, aside }: { title: string; children: R
     <div className={s.sectionHead}>
       <span>{title}</span>
       <span className={s.grow} />
-      {aside}
+      {aside ? <span className={s.sectionAside}>{aside}</span> : null}
     </div>
     {children}
   </section>
@@ -62,12 +63,12 @@ export const Suggestions = ({ item }: { item: InitiativeView }) => {
     <Section title="Suggestions">
       {open.length ? (
         <div className={s.list}>
-          {open.map((suggestion) => (
-            <SuggestionRow key={suggestion.id} slug={item.slug} suggestion={suggestion} />
-          ))}
+          {open.map((suggestion) =>
+            isDecision(suggestion) ? <DecisionRow key={suggestion.id} slug={item.slug} suggestion={suggestion} /> : <SuggestionRow key={suggestion.id} slug={item.slug} suggestion={suggestion} />,
+          )}
         </div>
       ) : (
-        <span className={s.quiet}>Nothing to approve. The next check-in may suggest something.</span>
+        <span className={s.quiet}>Nothing to approve or decide. The next check-in may suggest something.</span>
       )}
     </Section>
   );

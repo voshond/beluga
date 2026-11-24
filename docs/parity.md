@@ -671,7 +671,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `initiatives.chatNew` | ✓ an initiative's chat › New Chat (the bar, and the picker) |
 | `initiatives.chatOpen` | ✓ an initiative's chat: the chat's name, a picker of its chats (Check-in among them) |
 | `initiatives.chatDelete` | ✓ an initiative's chat › ⋯ › Delete Chat… (confirms; the Check-in chat stays) |
-| `initiatives.resolveSuggestion` | ✓ an initiative's page › Suggestions › Approve (sends “Do suggestion N: …” into its chat, where outward steps ask as usual) · Dismiss |
+| `initiatives.resolveSuggestion` | ✓ an initiative's page › Suggestions › Approve (sends “Do suggestion N: …” into its chat, where outward steps ask as usual) · Dismiss · a decision's answers or Other… (keeps the answer, sends “Decided suggestion N: … Answer: …”) |
 | `initiatives.readFile` | ✓ an initiative's page › Memory: a file opens in a sheet (Markdown drawn, JSON as code) |
 | `toolbox.list` | ✓ Project › Toolbox: all tools (personal + team) for the project, first on Project Home: each tool's name with its {{params}} and the last line it printed; the phone lists them read-only (BLG-75) |
 | `toolbox.create` | ✓ Project Settings › Toolbox › New Tool: name, command with {{params}}, personal or Share with team (saves to beluga.json) · Mac only |

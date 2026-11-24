@@ -25,6 +25,6 @@ export const INITIATIVES_HANDLERS = {
     s.host.forgetContext(channel);
     await needInitiatives(s).chatDelete(slug, id);
   },
-  'initiatives.resolveSuggestion': (s, slug, id, decision) => needInitiatives(s).resolveSuggestion(slug, id, decision),
+  'initiatives.resolveSuggestion': (s, slug, id, decision, answer) => needInitiatives(s).resolveSuggestion(slug, id, decision, answer),
   'initiatives.readFile': (s, slug, rel) => needInitiatives(s).readFile(slug, rel),
 } satisfies InitiativesHandlers;

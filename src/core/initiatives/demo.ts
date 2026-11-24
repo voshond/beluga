@@ -39,6 +39,7 @@ const demos = (now: number): DemoInitiative[] => {
       suggestions: [
         { id: 1, text: 'Ask in #checkout-v2 who owns SHOP-150 now that Ana is out', why: 'It has been blocked for 4 days with nobody assigned', kind: 'slack', state: 'open', createdAt: iso },
         { id: 2, text: 'Add the Norway tax question to Thursday’s go/no-go agenda', why: 'It is the last open decision before launch', kind: 'calendar', state: 'open', createdAt: iso },
+        { id: 3, text: 'Launch in Norway with the old tax table, or wait for SHOP-141?', why: 'Finance answered both ways; the freeze is in 9 days', kind: 'decision', options: ['Launch with the old table', 'Wait for SHOP-141'], state: 'open', createdAt: iso },
       ],
     },
     {

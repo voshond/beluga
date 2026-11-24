@@ -261,6 +261,19 @@ describe('Initiatives', () => {
     await expect(service.resolveSuggestion(slug, 1, 'approve')).rejects.toThrow(/already approved/);
   });
 
+  it('decides a decision with the user’s answer, kept and sent to the chat', async () => {
+    const { root, asked, store, service } = await setup();
+    const { slug } = await service.create({ name: 'A' });
+    const decision = { id: 1, text: 'Are Sale Orders in scope?', kind: 'decision', options: ['In scope', 'Out of scope'] };
+    writeFileSync(path.join(root, slug, 'suggestions.json'), JSON.stringify([decision]));
+    service.refresh(slug);
+    expect(store.getState().initiatives.items[0]!.suggestions[0]!.options).toEqual(['In scope', 'Out of scope']);
+    expect(await service.resolveSuggestion(slug, 1, 'approve', ' Out of scope ')).toEqual({ channel: initiativeChatChannel(slug, 'main') });
+    expect(asked).toEqual([{ prompt: 'Decided suggestion 1: Are Sale Orders in scope?\nAnswer: Out of scope', channel: initiativeChatChannel(slug, 'main') }]);
+    const saved = JSON.parse(readFileSync(path.join(root, slug, 'suggestions.json'), 'utf8')) as Array<{ state: string; answer?: string }>;
+    expect(saved[0]).toMatchObject({ state: 'approved', answer: 'Out of scope' });
+  });
+
   it('shows a bad initiative.json as trouble and keeps the rest going', async () => {
     const { root, store, service } = await setup();
     const { slug } = await service.create({ name: 'Broken' });

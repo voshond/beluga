@@ -21,6 +21,7 @@ import {
   initiativeChatChannel,
   initiativeChatOf,
   sameKeys,
+  decisionMessage,
   suggestionMessage,
   uniqueSlug,
 } from './model.js';
@@ -305,20 +306,22 @@ export class Initiatives {
     return { channel };
   }
 
-  async resolveSuggestion(slug: string, id: number, decision: 'approve' | 'dismiss'): Promise<{ readonly channel?: string }> {
+  /** Approve or dismiss a suggestion; `answer` is what the user decided, for a decision. */
+  async resolveSuggestion(slug: string, id: number, decision: 'approve' | 'dismiss', answer?: string): Promise<{ readonly channel?: string }> {
     const item = this.need(slug);
     const suggestion = item.suggestions.find((s) => s.id === id);
     if (!suggestion) throw new Error('That suggestion is gone');
     if (suggestion.state !== 'open') throw new Error(`That suggestion was already ${suggestion.state}`);
     const resolvedAt = new Date(this.now).toISOString();
     const state = decision === 'approve' ? 'approved' : 'dismissed';
-    writeSuggestions(this.deps.root, slug, item.suggestions.map((s) => (s.id === id ? { ...s, state, resolvedAt } : s)));
-    await this.commit(slug, `${slug}: suggestion ${id} ${state}`);
+    const decided = decision === 'approve' && answer ? answer.trim() : undefined;
+    writeSuggestions(this.deps.root, slug, item.suggestions.map((s) => (s.id === id ? { ...s, state, resolvedAt, ...(decided ? { answer: decided } : {}) } : s)));
+    await this.commit(slug, `${slug}: suggestion ${id} ${decided ? 'decided' : state}`);
     this.refresh(slug);
     if (decision === 'dismiss') return {};
     const active = item.chats.active === CHECK_IN_CHAT ? FIRST_INITIATIVE_CHAT : item.chats.active;
     const channel = initiativeChatChannel(slug, active);
-    if (this.deps.ask(suggestionMessage(suggestion), channel) === undefined) throw new Error('The chat could not take it now');
+    if (this.deps.ask(decided ? decisionMessage(suggestion, decided) : suggestionMessage(suggestion), channel) === undefined) throw new Error('The chat could not take it now');
     return { channel };
   }
 
