@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { channelOf } from '@beluga/core/store.js';
 import { FIRST_SENTINEL_CHAT, sentinelChatOf, sentinelChatTitle } from '@beluga/core/sentinel/model.js';
 import { activityOf } from '@beluga/ui/workspace-models.js';
@@ -13,7 +13,8 @@ import { useApi, useApp } from '../lib/beluga.js';
 import { sameDeep } from '../lib/stable.js';
 import { openSheet } from '../lib/sheets.js';
 import { PickMenu } from '../tasks/PickMenu.js';
-import { ResizeHandle, useWindowWidth } from '../layout/panel/ResizeHandle.js';
+import { ResizeHandle } from '../layout/panel/ResizeHandle.js';
+import { useDockWidth } from '../layout/panel/use-dock-width.js';
 import { useSentinelActions } from './use-sentinel.js';
 import v from '../views/views.module.css';
 import s from './sentinel.module.css';
@@ -97,22 +98,6 @@ function Starts({ projects, has, send }: { projects: readonly string[]; has: boo
   );
 }
 
-/** Ask Sentinel's width beside the page: dragged by its left edge, kept on this Mac. */
-const WIDTH = 'sentinel.ask.width';
-const WIDTH_DEFAULT = 380;
-const WIDTH_MIN = 320;
-const WIDTH_STEP = 24;
-const readWidth = (): number => {
-  try {
-    const w = Number(localStorage.getItem(WIDTH));
-    return Number.isFinite(w) && w > 0 ? w : WIDTH_DEFAULT;
-  } catch {
-    return WIDTH_DEFAULT;
-  }
-};
-/** At most 60% of the window (and 760 pt), so the page beside it keeps room. */
-const fitWidth = (w: number, windowWidth: number): number => Math.round(Math.max(WIDTH_MIN, Math.min(w, Math.min(760, windowWidth * 0.6))));
-
 /**
  * When the panel last went: going from Sentinel's page to a sentinel's (it docks again at once)
  * doesn't slide it in again; opening it after it was closed does.
@@ -126,46 +111,14 @@ const REDOCK_MS = 600;
  * page making room, and the conversation goes on there.
  */
 export function AskPanel({ children }: { children: React.ReactNode }) {
-  const panel = useRef<HTMLElement>(null);
   const [opening, setOpening] = useState(() => Date.now() - closedAt > REDOCK_MS);
   useEffect(() => () => void (closedAt = Date.now()), []);
-  const windowWidth = useWindowWidth();
-  const [width, setWidth] = useState(readWidth);
-  const latest = useRef(width);
-  const set = (w: number): void => {
-    latest.current = w;
-    setWidth(w);
-  };
-  const keep = (w: number = latest.current): void => {
-    try {
-      localStorage.setItem(WIDTH, String(fitWidth(w, window.innerWidth)));
-    } catch {
-      // Not kept: it still has this width now.
-    }
-  };
+  const dock = useDockWidth('sentinel.ask.width', 380);
   return (
-    <aside ref={panel} className={home.panel} data-opening={opening || undefined} onAnimationEnd={(e) => e.target === e.currentTarget && setOpening(false)} style={{ width: fitWidth(width, windowWidth) }} aria-label="Ask Sentinel">
-      <ResizeHandle
-        axis="x"
-        label="Resize Ask Sentinel"
-        className={home.panelEdge}
-        onMove={(x) => {
-          const r = panel.current?.getBoundingClientRect();
-          if (r) set(fitWidth(r.right - x, window.innerWidth));
-        }}
-        onEnd={() => keep()}
-        onReset={() => {
-          set(WIDTH_DEFAULT);
-          keep(WIDTH_DEFAULT);
-        }}
-        onStep={(dir) => {
-          const w = fitWidth(latest.current + dir * WIDTH_STEP, window.innerWidth);
-          set(w);
-          keep(w);
-        }}
-      />
+    <aside ref={dock.ref} className={home.panel} data-opening={opening || undefined} onAnimationEnd={(e) => e.target === e.currentTarget && setOpening(false)} style={{ width: dock.width }} aria-label="Ask Sentinel">
+      <ResizeHandle label="Resize Ask Sentinel" className={home.panelEdge} {...dock.handle} />
       {/* Its own width while it slides in, so the chat doesn't squeeze and re-wrap on the way. */}
-      <div className={home.panelInner} style={{ width: fitWidth(width, windowWidth) }}>
+      <div className={home.panelInner} style={{ width: dock.width }}>
         {children}
       </div>
     </aside>
