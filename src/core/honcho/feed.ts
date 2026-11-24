@@ -31,6 +31,8 @@ export const PICTURE_WAIT_MS = 2000;
 export const PICTURE_TTL_MS = 5 * 60_000;
 const PICTURE_RETRY_MS = 60_000;
 const PICTURE_FETCH_MS = 15_000;
+/** BLG-122: pictures kept by query, the oldest let go first. */
+const PICTURES_KEPT = 20;
 const ASK_TIMEOUT_MS = 90_000;
 const ANSWER_MAX = 4000;
 
@@ -48,8 +50,9 @@ export class HonchoFeed {
   private saveTimer?: ReturnType<typeof setTimeout>;
   private queueTimer?: ReturnType<typeof setTimeout>;
   private stopped = false;
-  private picture?: CachedPicture;
-  private pictureLoad?: Promise<CachedPicture>;
+  /** By query (BLG-122); '' is the picture with no query, the one Settings shows. */
+  private readonly pictures = new Map<string, CachedPicture>();
+  private readonly pictureLoads = new Map<string, Promise<CachedPicture>>();
 
   constructor(private readonly deps: HonchoFeedDeps) {
     this.config = deps.file === null ? defaultHonchoConfig() : loadHonchoConfig(this.file);
@@ -155,27 +158,28 @@ export class HonchoFeed {
 
   /**
    * Honcho's picture of the user for a run (BLG-101): from the cache when fresh, otherwise fetched,
-   * waiting `waitMs` at most (the fetch goes on and fills the cache for the next run). Undefined when
-   * Honcho is off; empty when it holds nothing yet or can't be reached.
+   * waiting `waitMs` at most (the fetch goes on and fills the cache for the next run). With a query
+   * (BLG-122), curated around what the run is about; late, the picture with no query stands in.
+   * Undefined when Honcho is off; empty when it holds nothing yet or can't be reached.
    */
-  userPicture = async (waitMs = PICTURE_WAIT_MS): Promise<string | undefined> => {
+  userPicture = async (waitMs = PICTURE_WAIT_MS, query = ''): Promise<string | undefined> => {
     if (!this.clientFor()) return undefined;
-    const cached = this.picture;
+    const cached = this.pictures.get(query);
     if (cached && this.now() - cached.at < (cached.error ? PICTURE_RETRY_MS : PICTURE_TTL_MS)) return cached.text;
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<undefined>((resolve) => {
       timer = setTimeout(() => resolve(undefined), waitMs);
       timer.unref();
     });
-    const fresh = await Promise.race([this.loadPicture(), late]);
+    const fresh = await Promise.race([this.loadPicture(query), late]);
     clearTimeout(timer);
-    return (fresh ?? cached)?.text ?? '';
+    return (fresh ?? cached ?? this.pictures.get(''))?.text ?? '';
   };
 
   /** Settings and the phone (`honcho.picture`): the picture fetched now, or why it couldn't be. */
   pictureView = async (): Promise<HonchoPicture> => {
     if (!this.clientFor()) return { enabled: false, text: '' };
-    const p = await this.loadPicture();
+    const p = await this.loadPicture('');
     return { enabled: true, text: p.text, at: p.at, ...(p.error ? { error: p.error } : {}) };
   };
 
@@ -194,27 +198,33 @@ export class HonchoFeed {
     return text ? text.slice(0, ANSWER_MAX) : 'Honcho had no answer: it may not have learned enough about the user yet.';
   };
 
-  private loadPicture(): Promise<CachedPicture> {
+  private loadPicture(query: string): Promise<CachedPicture> {
     const client = this.clientFor();
     if (!client) return Promise.resolve({ text: '', at: this.now() });
-    if (this.pictureLoad) return this.pictureLoad;
-    const load = client.representation(HONCHO_USER_PEER, PICTURE_FETCH_MS).then(
+    const loading = this.pictureLoads.get(query);
+    if (loading) return loading;
+    const load = client.representation(HONCHO_USER_PEER, query || undefined, PICTURE_FETCH_MS).then(
       (text): CachedPicture => ({ text: text.trim(), at: this.now() }),
-      (err): CachedPicture => ({ text: this.picture?.text ?? '', at: this.now(), error: err instanceof HonchoError ? err.message : 'Couldn’t reach Honcho' }),
+      (err): CachedPicture => ({ text: this.pictures.get(query)?.text ?? '', at: this.now(), error: err instanceof HonchoError ? err.message : 'Couldn’t reach Honcho' }),
     );
-    this.pictureLoad = load;
+    this.pictureLoads.set(query, load);
     return load.then((p) => {
-      if (this.pictureLoad !== load) return p;
-      this.pictureLoad = undefined;
-      this.picture = p;
+      if (this.pictureLoads.get(query) !== load) return p;
+      this.pictureLoads.delete(query);
+      this.pictures.delete(query);
+      this.pictures.set(query, p);
+      for (const old of this.pictures.keys()) {
+        if (this.pictures.size <= PICTURES_KEPT) break;
+        this.pictures.delete(old);
+      }
       return p;
     });
   }
 
   private reset(): void {
     this.client = undefined;
-    this.picture = undefined;
-    this.pictureLoad = undefined;
+    this.pictures.clear();
+    this.pictureLoads.clear();
     this.workspaceReady = false;
     this.peersReady.clear();
     this.sessions.clear();

@@ -32,6 +32,8 @@ export class HonchoError extends Error {
 const TIMEOUT_MS = 15_000;
 const MAX_CONTENT = 25_000;
 const MAX_BATCH = 100;
+const SEARCH_TOP_K = 20;
+const SEARCH_MAX_CONCLUSIONS = 40;
 
 const retryable = (status: number): boolean => status === 408 || status === 425 || status === 429 || status >= 500;
 
@@ -88,8 +90,17 @@ export class HonchoClient {
 
   ensurePeer = async (id: string, role: PeerRole): Promise<void> => void (await this.post(`${this.ws()}/peers`, { id, metadata: { app: 'beluga', role } }));
 
-  /** BLG-101: what Honcho holds about a peer now, as text (no model call; empty until it has processed conversations). */
-  representation = (peer: string, timeoutMs?: number): Promise<string> => this.field(`${this.ws()}/peers/${encodeURIComponent(peer)}/representation`, {}, 'representation', timeoutMs);
+  /**
+   * BLG-101: what Honcho holds about a peer now, as text (no model call; empty until it has processed conversations).
+   * BLG-122: with a query, curated around the conclusions closest to it, with the most frequent ones too.
+   */
+  representation = (peer: string, query?: string, timeoutMs?: number): Promise<string> =>
+    this.field(
+      `${this.ws()}/peers/${encodeURIComponent(peer)}/representation`,
+      query ? { search_query: query, search_top_k: SEARCH_TOP_K, max_conclusions: SEARCH_MAX_CONCLUSIONS, include_most_frequent: true } : {},
+      'representation',
+      timeoutMs,
+    );
 
   /** BLG-101: a question about a peer, answered by Honcho's own model (slow: seconds to a minute). */
   chat = (peer: string, query: string, reasoningLevel: HonchoReasoning, timeoutMs?: number): Promise<string> =>

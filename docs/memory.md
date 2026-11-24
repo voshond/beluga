@@ -65,6 +65,18 @@ When a piece of work ends, or whenever you ask, Beluga looks back at the convers
 - **The card.** Each proposal is a `decision` card in Needs You, on the Mac and the phone, with the bell's notice: **Keep** (or **Update** for a change) and **Discard**. Review shows why it is worth keeping and the entry, or for a change the entry now and after. Keep writes it through `MemoryStore` as yours (`memory.keepProposal`, the cap applies); an Update is refused when the entry changed or was removed since. Discard (`memory.discardProposal`) writes nothing, and its text is remembered so it isn't proposed again.
 - **A restart.** Waiting proposals, the last 200 discarded texts, which merges were looked back at and how far each conversation was covered live in `~/.beluga/memory-reflection.json` (0600). A proposal that would hold a secret is never written there.
 
+### Tidying: merge, forget and move
+
+Every entry goes into every run, so a memory has to stay small. Instead of refusing writes once it fills, Beluga proposes how to make room (BLG-120, BLG-121), as cards like the others:
+
+- **Merge** folds several entries of one memory into one (`merges` on the proposal): the kept entry is rewritten and the others go, in one write, so it works even when the memory is full.
+- **Forget** removes an entry that is one-off, stale, wrong or said by another (`drop`). Its card says **Forget** and **Keep It**.
+- **Move** takes an entry from the memory about you to a project's ("Remember this only for beluga?") or back ("…everywhere, not only for beluga?") (`from`), reworded on the way if it reads better there. The target is written first; when the source then can't be, the target is put back, so nothing is half-moved. Refused when the target is full.
+
+Each is refused, with nothing written, when an entry it touches changed or was removed since it was proposed. A discarded one is remembered as "Forget: …" or "Move: …", so it isn't proposed again, and never blocks the fact itself.
+
+They come from two places. A look back at a memory that is 80% full or more is told to make room there first. And **Tidy** in Settings › Skills & instructions › Memory (`memory.tidy`) looks at the memory about you and every project's at once, with no conversation, on the same model as the look back: up to 6 merges, forgets and moves, never a new fact. Its toast says how many, or that the memory is tidy (`tidyWords`).
+
 ### The skill look: a skill from the work, or a fix to one
 
 The same pass then asks a second question (BLG-106, `src/core/memory/reflection-skills.ts`): should this work have left a shared skill behind, and did a skill the run used turn out wrong? An agent only proposes a skill when it remembers to (docs/agent-setup.md); this catches the rest. It only proposes, like everything here.

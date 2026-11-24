@@ -235,6 +235,10 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       requestTimeoutMs: opts.requestTimeoutMs,
       downloadDir: opts.downloadDir,
     });
+    const projectOfRun = (channel: string, cwd?: string) => {
+      const wsId = channel.startsWith('ws:') ? channel.slice(3) : undefined;
+      return opts.store.getState().projects.find((p) => p.root && ((wsId && (p.id === wsId || p.workspaces?.some((w) => w.id === wsId))) || (cwd && (p.root === cwd || p.workspaces?.some((w) => w.path === cwd)))));
+    };
     const host = new AgentHost({
       store: opts.store,
       selfId: () => session.selfId,
@@ -342,12 +346,14 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
         },
       }),
       memory: (channel, cwd, learn) => {
-        const wsId = channel.startsWith('ws:') ? channel.slice(3) : undefined;
-        const project = opts.store.getState().projects.find((p) => p.root && ((wsId && (p.id === wsId || p.workspaces?.some((w) => w.id === wsId))) || (cwd && (p.root === cwd || p.workspaces?.some((w) => w.path === cwd)))));
+        const project = projectOfRun(channel, cwd);
         const onChange = learn ? (change: MemoryChange) => learn({ kind: 'memory', change, ...(change.scope.kind === 'project' && project ? { project: project.name } : {}) }) : undefined;
         return memoryForRun(new MemoryStore(), project ? { root: project.root, name: project.name } : undefined, onChange);
       },
-      honcho: () => honchoForRun(maybeHonchoOf(session)),
+      honcho: (channel, cwd, request) => {
+        const project = projectOfRun(channel, cwd);
+        return honchoForRun(maybeHonchoOf(session), { ...(request ? { request } : {}), ...(project ? { project: project.name } : {}) });
+      },
       onBashCommand: (cwd, command) => {
         const service = toolboxOf(session);
         if (!service) return;
