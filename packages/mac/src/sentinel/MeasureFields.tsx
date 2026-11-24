@@ -42,6 +42,7 @@ const BETTER: ReadonlyArray<{ readonly value: Better; readonly label: string; re
 ];
 const SOURCE_KINDS: ReadonlyArray<{ readonly value: Source['kind']; readonly label: string }> = [
   { value: 'postgres', label: 'Postgres query' },
+  { value: 'bigquery', label: 'BigQuery query' },
   { value: 'sqlite', label: 'SQLite query' },
   { value: 'command', label: 'A command' },
   { value: 'http', label: 'A web request' },
@@ -55,6 +56,8 @@ function newSource(kind: Source['kind']): Source {
   switch (kind) {
     case 'postgres':
       return { kind, env: 'DATABASE_URL', query: 'select count(*) as count from customers' };
+    case 'bigquery':
+      return { kind, query: 'select count(*) as count from `project.dataset.customers` where date(created_at) = current_date()' };
     case 'sqlite':
       return { kind, path: 'data.db', query: 'select count(*) as count from customers' };
     case 'command':
@@ -156,17 +159,28 @@ function MetricRow({ m, index, from, change, remove }: { m: MetricSpec; index: n
   );
 }
 
+const isQuery = (source: Source): source is Extract<Source, { kind: 'postgres' | 'sqlite' | 'bigquery' }> => source.kind === 'postgres' || source.kind === 'sqlite' || source.kind === 'bigquery';
+
 function SourceFields({ source, change }: { source: Source; change: (s: Source) => void }) {
-  const text = source.kind === 'postgres' || source.kind === 'sqlite' ? source.query : source.kind === 'command' ? source.command : source.kind === 'http' ? source.url : source.path;
+  const text = isQuery(source) ? source.query : source.kind === 'command' ? source.command : source.kind === 'http' ? source.url : source.path;
   const main = useDraft(text, (v) => {
     if (v === text || !v.trim()) return;
-    change(source.kind === 'postgres' || source.kind === 'sqlite' ? { ...source, query: v } : source.kind === 'command' ? { ...source, command: v } : source.kind === 'http' ? { ...source, url: v } : { ...source, path: v });
+    change(isQuery(source) ? { ...source, query: v } : source.kind === 'command' ? { ...source, command: v } : source.kind === 'http' ? { ...source, url: v } : { ...source, path: v });
   });
-  const second = source.kind === 'postgres' ? (source.env ?? '') : source.kind === 'sqlite' ? source.path : undefined;
+  const second = source.kind === 'postgres' || source.kind === 'bigquery' ? (source.env ?? '') : source.kind === 'sqlite' ? source.path : undefined;
   const other = useDraft(second ?? '', (v) => {
-    if (second === undefined || v === second || !v.trim()) return;
+    if (second === undefined || v === second) return;
+    if (source.kind === 'bigquery') {
+      const { env: _env, ...rest } = source;
+      const name = v.trim().replace(/^\$/, '');
+      return change(name ? { ...rest, env: name } : rest);
+    }
+    if (!v.trim()) return;
     change(source.kind === 'postgres' ? { ...source, env: v.trim().replace(/^\$/, '') } : source.kind === 'sqlite' ? { ...source, path: v.trim() } : source);
   });
+  const secondLabel = source.kind === 'postgres' ? 'Connection in' : source.kind === 'bigquery' ? 'Key in' : 'Database file';
+  const secondPlaceholder = source.kind === 'postgres' ? 'DATABASE_URL' : source.kind === 'bigquery' ? 'GOOGLE_APPLICATION_CREDENTIALS_JSON' : 'data.db';
+  const secondAria = source.kind === 'postgres' ? 'The variable with the connection string' : source.kind === 'bigquery' ? 'The variable with the service account key' : 'The database file';
   return (
     <>
       <div className={s.controlRow}>
@@ -175,20 +189,20 @@ function SourceFields({ source, change }: { source: Source; change: (s: Source) 
       </div>
       {second !== undefined ? (
         <div className={s.controlRow}>
-          <span className={s.controlLabel}>{source.kind === 'postgres' ? 'Connection in' : 'Database file'}</span>
-          <TextInput value={other.text} onChange={other.change} onBlur={other.flush} mono placeholder={source.kind === 'postgres' ? 'DATABASE_URL' : 'data.db'} aria-label={source.kind === 'postgres' ? 'The variable with the connection string' : 'The database file'} />
+          <span className={s.controlLabel}>{secondLabel}</span>
+          <TextInput value={other.text} onChange={other.change} onBlur={other.flush} mono placeholder={secondPlaceholder} aria-label={secondAria} />
         </div>
       ) : null}
       <div className={s.field}>
-        <span className={s.fieldLabel}>{source.kind === 'postgres' || source.kind === 'sqlite' ? 'Query' : source.kind === 'command' ? 'Command' : source.kind === 'http' ? 'Address' : 'Path'}</span>
-        {source.kind === 'postgres' || source.kind === 'sqlite' ? (
+        <span className={s.fieldLabel}>{isQuery(source) ? 'Query' : source.kind === 'command' ? 'Command' : source.kind === 'http' ? 'Address' : 'Path'}</span>
+        {isQuery(source) ? (
           <CodeEditor value={main.text} onChange={main.change} onBlur={main.flush} lang="sql" minRows={4} aria-label="Query" />
         ) : source.kind === 'command' ? (
           <CodeEditor value={main.text} onChange={main.change} onBlur={main.flush} lang="bash" single aria-label="Source" />
         ) : (
           <TextInput value={main.text} onChange={main.change} onBlur={main.flush} mono aria-label="Source" />
         )}
-        <span className={s.help}>{source.kind === 'postgres' ? 'The connection string stays in Settings › Environment or the project’s .env, never here; ' : ''}Run as you, with your environment, each run. A query that returns rows keeps them too.</span>
+        <span className={s.help}>{source.kind === 'postgres' ? 'The connection string stays in Settings › Environment or the project’s .env, never here; ' : source.kind === 'bigquery' ? 'The service account’s key stays in Settings › Environment, never here; each query only reads and bills at most 1 GB; ' : ''}Run as you, with your environment, each run. A query that returns rows keeps them too.</span>
       </div>
     </>
   );

@@ -29,7 +29,7 @@ export type ColumnType = (typeof COLUMN_TYPES)[number];
 export const CHART_KINDS = ['line', 'area', 'bar', 'pie', 'donut', 'scatter'] as const;
 export type ChartKind = (typeof CHART_KINDS)[number];
 export const CURVES = ['smooth', 'linear', 'step'] as const;
-export const SOURCE_KINDS = ['file', 'folder', 'sqlite', 'postgres', 'http', 'command'] as const;
+export const SOURCE_KINDS = ['file', 'folder', 'sqlite', 'postgres', 'bigquery', 'http', 'command'] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 export const DATA_FORMATS = ['auto', 'json', 'jsonl', 'csv', 'tsv', 'lines', 'text'] as const;
 export type DataFormat = (typeof DATA_FORMATS)[number];
@@ -125,6 +125,20 @@ const sourceSchema = z.discriminatedUnion('kind', [
     url: z.string().max(2000).optional(),
     query: z.string().trim().min(1).max(20_000),
     /** The folder whose project's variables (and .env) hold the connection string. Neither env nor url: found there. */
+    cwd: z.string().max(4096).optional(),
+  }),
+  z.object({
+    kind: z.literal('bigquery'),
+    /** The name of an environment variable holding a service account's key (JSON). Unset: GOOGLE_APPLICATION_CREDENTIALS_JSON, then BIGQUERY_CREDENTIALS. */
+    env: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/).max(200).optional(),
+    query: z.string().trim().min(1).max(20_000),
+    /** The project the job runs (and is billed) in. Unset: the key's own. */
+    project: z.string().regex(/^[a-z][a-z0-9.:-]{3,100}$/).optional(),
+    /** Where the data is ("EU", "US", "europe-west3"). Unset: BigQuery finds it from the tables. */
+    location: z.string().regex(/^[A-Za-z0-9-]{2,40}$/).optional(),
+    /** The most a query may bill, in GB (1 when unset). */
+    maxGb: z.number().positive().max(1000).optional(),
+    /** The folder whose project's variables (and .env) hold the key. */
     cwd: z.string().max(4096).optional(),
   }),
   z.object({
@@ -848,6 +862,8 @@ export function describeSource(s: Source): string {
       return `${s.path.split('/').pop()}: ${s.query}`;
     case 'postgres':
       return `${s.env ? `$${s.env}` : 'Postgres'}: ${s.query}`;
+    case 'bigquery':
+      return `${s.env ? `$${s.env}` : 'BigQuery'}: ${s.query}`;
     case 'http':
       return `${s.method} ${s.url}`;
     case 'command':

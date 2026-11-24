@@ -25,7 +25,7 @@ async function guarded(fn: () => string | Promise<string>): Promise<{ content: A
 
 /** What every sentinel with a database source needs from Claude before its query is written (BLG-304). */
 const READ_FIRST =
-  'Before writing a source’s query, read the schema with sentinel_try_source: the columns of every table you join, how the foreign keys actually link (which column holds which id), and child rows that would double-count (chunks or retries pointing at a parent). For a table of events, include who did it when there is a user. Ask the user about columns whose meaning isn’t obvious instead of guessing. Leave a postgres source without url or env: it uses the project’s own variables (DATABASE_URL, or Supabase’s).';
+  'Before writing a source’s query, read the schema with sentinel_try_source: the columns of every table you join, how the foreign keys actually link (which column holds which id), and child rows that would double-count (chunks or retries pointing at a parent). For a table of events, include who did it when there is a user. Ask the user about columns whose meaning isn’t obvious instead of guessing. Leave a postgres source without url or env: it uses the project’s own variables (DATABASE_URL, or Supabase’s). A bigquery source without env uses the service account key in GOOGLE_APPLICATION_CREDENTIALS_JSON; name tables in full (project.dataset.table in backticks), filter on the partition column, and know a query billing over 1 GB is refused unless the source sets maxGb.';
 
 export function createSentinelToolDefs(sentinel: SentinelTools) {
   const stop = sentinel.stop;
@@ -57,9 +57,9 @@ export function createSentinelToolDefs(sentinel: SentinelTools) {
     ),
     tool(
       'sentinel_try_source',
-      `Run a view source once, read-only, and see its first rows, before you put it in a sentinel: read the schema (postgres: SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' ORDER BY 1, ordinal_position; the foreign keys from information_schema.key_column_usage), look at a few real rows, then try the query you mean to keep. It uses the project’s variables (a postgres source without url or env finds DATABASE_URL, or Supabase’s), never writes, and a command source waits for the user’s yes. ${READ_FIRST}`,
+      `Run a view source once, read-only, and see its first rows, before you put it in a sentinel: read the schema (postgres: SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' ORDER BY 1, ordinal_position; the foreign keys from information_schema.key_column_usage; bigquery: SELECT table_name, column_name, data_type FROM \`project.dataset.INFORMATION_SCHEMA.COLUMNS\`), look at a few real rows, then try the query you mean to keep. It uses the project’s variables (a postgres source without url or env finds DATABASE_URL, or Supabase’s), never writes, and a command source waits for the user’s yes. ${READ_FIRST}`,
       {
-        source: z.looseObject({ kind: z.enum(SOURCE_KINDS) }).describe('The same JSON a view’s source takes: { kind: "postgres", query: "SELECT …" }, { kind: "sqlite", path, query }, { kind: "http", url, headers? }'),
+        source: z.looseObject({ kind: z.enum(SOURCE_KINDS) }).describe('The same JSON a view’s source takes: { kind: "postgres", query: "SELECT …" }, { kind: "bigquery", query: "SELECT …", maxGb? }, { kind: "sqlite", path, query }, { kind: "http", url, headers? }'),
         project: z.string().max(200).optional().describe(`The project whose variables and folder it uses (its name); leave out for ${ASSISTANT_TITLE}`),
       },
       (a) => guarded(() => sentinel.trySource(a.source, a.project)),

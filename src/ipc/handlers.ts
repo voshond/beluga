@@ -11,6 +11,7 @@ import { browseDir, listLocalDirs, localDirKey, openWithSystem } from '../core/l
 import { ATTACHMENT_SHARE, type FetchShared, attachmentOnDisk, chipText, expandChips, importImageFitting, mediaTypeOf, pathInfo, publishForRoom, reattach, readAttachment, registerAttachment, roomAttachmentsDir, saveImageBytes, savePastedText } from '../core/attachments.js';
 import { fetchBytes } from '../core/downloads.js';
 import { testDatabase } from '../core/views/sources.js';
+import { testBigquery } from '../core/views/bigquery.js';
 import { existsSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -383,6 +384,7 @@ export const HANDLERS = {
   'env.set': (s, projectId, rows, dotenv) => s.env.set(projectId, rows, dotenv),
   'env.claudeDotenv': (s, projectId, on) => s.env.setClaudeDotenv(projectId, on),
   'env.testDatabase': (s, projectId) => testDatabase(s.env.viewEnvOf(projectId)),
+  'env.testBigquery': (s, projectId) => testBigquery(s.env.viewEnvOf(projectId)),
   'env.importDotenv': (s, projectId) => s.env.importDotenv(projectId),
   'env.newKeysBack': (s, projectId, on) => s.env.setNewKeysBack(projectId, on),
   'env.worktree': (s, id) => s.env.worktree(id),

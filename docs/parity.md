@@ -479,6 +479,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `env.removeEndpoint` | ✓ Settings › Claude › Local models › Remove |
 | `env.checkEndpoints` | ✓ Settings › Claude › Local models › Check Again |
 | `env.testDatabase` | ✓ Settings › Environment › Database (Test Connection) |
+| `env.testBigquery` | ✓ Settings › Environment › Database (BigQuery: Test Connection) |
 | `env.claudeDotenv` | ✓ Settings › Environment › Your agent (and a .env approval's Always) |
 | `attachments.add` | ✓ |
 | `attachments.addFile` | ✓ a pasted path of an image becomes a waiting thumbnail |

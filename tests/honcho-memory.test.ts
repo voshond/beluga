@@ -59,7 +59,9 @@ describe('memory about you, written to Honcho (BLG-124)', () => {
       { content: `${CONFIRMED}Helium is the browser on arch.`, observer_id: 'user', observed_id: 'user' },
     ]);
     expect(statSync(memoryFile).mode & 0o777).toBe(0o600);
-    expect(Object.values(loadSyncedMemory(memoryFile, { url: URL, workspace: 'beluga' }).entries).map((e) => e.conclusion)).toEqual(['c1', 'c2']);
+    // By entry id: an id that is all digits (randomBytes(3) as hex) would sort first in Object.values.
+    const synced = loadSyncedMemory(memoryFile, { url: URL, workspace: 'beluga' }).entries;
+    expect(memory.read({ kind: 'user' }).entries.map((e) => synced[e.id]?.conclusion)).toEqual(['c1', 'c2']);
 
     const before = honcho.calls.length;
     await feed.syncMemory();
