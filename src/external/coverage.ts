@@ -12,6 +12,8 @@ import type { Method } from '../ipc/api.js';
  */
 export type ExternalAccess = 'covered' | 'gated' | 'ui_only' | { readonly refused: string };
 
+/** Adding an ACP agent runs (or downloads) a program on this computer. */
+const INSTALLS = 'It downloads or runs a program on this computer: a person adds agents, in Settings.';
 const APPROVALS = 'An approval is a person\'s answer: no agent says yes to a step or a request.';
 const AUTOPILOT = 'Full Autopilot answers approvals for the person (BLG-981): only the person turns it on.';
 const GRANTS = 'An agent never reads or changes a grant, its own or another agent\'s.';
@@ -298,6 +300,13 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'network.clear': 'covered',
   'network.read': 'covered',
   'support.answer': 'gated',
+  'acp.agents': 'ui_only',
+  'acp.catalog': 'ui_only',
+  'acp.search': 'ui_only',
+  'acp.add': { refused: INSTALLS },
+  'acp.addCommand': { refused: INSTALLS },
+  'acp.remove': { refused: INSTALLS },
+  'acp.install': { refused: INSTALLS },
   'claudeCode.steps': 'gated',
   'claudeCode.step': 'gated',
   'claudeCode.findAgent': 'gated',

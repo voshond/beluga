@@ -25,19 +25,18 @@ function state(workspaces: PickerState['projects'][number]['workspaces'] = [], c
 describe('agentPicker', () => {
   it('groups by runtime, your default first, and keeps one this Mac does not run, saying why', () => {
     const p = agentPicker(state([], false), 'ws:a');
+    // The fixed agents; Antigravity is one of your ACP agents, listed only once you added it.
     expect(p.groups.map((g) => [g.runtime, g.available, g.isDefault])).toEqual([
       ['claude', true, true],
       ['codex', false, false],
       ['opencode', false, false],
       ['copilot', false, false],
-      ['antigravity', false, false],
       ['local', false, false],
     ]);
     expect(p.groups[1]).toMatchObject({ why: "Codex isn't set up on this Mac yet", models: [] });
     expect(p.groups[2]).toMatchObject({ why: "OpenCode isn't set up on this Mac yet", models: [] });
     expect(p.groups[3]).toMatchObject({ why: "GitHub Copilot CLI isn't set up on this Mac yet", models: [] });
-    expect(p.groups[4]).toMatchObject({ why: "The Antigravity CLI isn't set up on this Mac yet", models: [] });
-    expect(p.groups[5]?.why).toBe('No local model endpoint is set');
+    expect(p.groups[4]?.why).toBe('No local model endpoint is set');
     expect(p.groups[0]?.models.map((m) => m.label)).toEqual(['Default', 'Opus', 'Haiku']);
   });
 
@@ -106,7 +105,7 @@ describe('/model', () => {
     const st = { ...state([{ id: 'a', model: 'opus' }], false), inbox: [] } as unknown as AppState;
     const menu = modelMenu(st, 'ws:a', 'this conversation');
     const ids = menu.options.map((o) => o.id);
-    expect(ids).toEqual(['runtime:claude', 'model:', 'model:opus', 'model:haiku', 'runtime:codex', 'runtime:opencode', 'runtime:copilot', 'runtime:antigravity', 'runtime:local', 'close']);
+    expect(ids).toEqual(['runtime:claude', 'model:', 'model:opus', 'model:haiku', 'runtime:codex', 'runtime:opencode', 'runtime:copilot', 'runtime:local', 'close']);
     expect(menu.options.find((o) => o.id === 'model:opus')?.label).toContain('◉');
     expect(menu.options.find((o) => o.id === 'runtime:codex')?.hint).toBe("Codex isn't set up on this Mac yet");
     const withCodex = modelMenu({ ...st, ...state([{ id: 'a' }]) } as unknown as AppState, 'ws:a', 'this conversation');

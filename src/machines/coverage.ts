@@ -242,6 +242,14 @@ export const MACHINE: Record<Method, MachineSide> = {
   'terminals.sshHosts': 'drive',
   'terminals.ssh': 'drive',
   // ---- env
+  // Your ACP agents on that computer: each computer runs the agents and models set up on it.
+  'acp.agents': 'drive',
+  'acp.catalog': 'drive',
+  'acp.add': 'drive',
+  'acp.addCommand': 'drive',
+  'acp.remove': 'drive',
+  'acp.search': 'drive',
+  'acp.install': 'drive',
   'env.get': 'drive',
   'env.set': 'drive',
   'env.claudeDotenv': 'drive',

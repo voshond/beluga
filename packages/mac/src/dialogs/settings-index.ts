@@ -107,6 +107,13 @@ export const SETTINGS: readonly Entry[] = [
   ]),
   group('claude', 'MCP servers', 'The servers your agent uses.', 'mcp tools servers connectors'),
   ...rows('claude', 'Local models', [['Run on your own models', 'Ollama or another server on your computer.', 'ollama lm studio local llm offline']]),
+  group('claude', 'ACP agents', 'Antigravity, Cursor, Gemini CLI and other Agent Client Protocol agents, added by you.', 'acp agent client protocol antigravity cursor gemini qwen kimi goose grok kiro registry'),
+  ...rows('claude', 'ACP agents', [
+    ['Agents that speak ACP', 'One you add is in the agent box you type in.', 'acp antigravity cursor gemini add'],
+    ['Add an agent', 'Beluga’s own list: Antigravity, Cursor, Gemini CLI, Qwen Code…', 'add antigravity cursor gemini qwen kimi goose install'],
+    ['ACP Registry', 'Search and install an agent from agentclientprotocol.com.', 'registry install download search browse'],
+    ['A command of yours', 'Any program that speaks ACP, by its command.', 'command custom local own add'],
+  ]),
   ...rows('claude', 'In the chat', [['Sub-agents', 'Every step, one line each, or just a count.', 'subagents task tool agents']]),
   ...rows('claude', 'Context', [
     ['Context meter', 'How full each conversation is, beside the send button.', 'context window tokens usage'],

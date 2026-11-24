@@ -2,7 +2,7 @@ import { expect, test } from './fixtures.js';
 
 /**
  * Onboarding finds your agents (BLG-507): right after the welcome, every agent Beluga can run with
- * where it stands here (the demo: Claude and its scripted Codex, OpenCode, Copilot and Antigravity ready, no local endpoint), the first
+ * where it stands here (the demo: Claude and its scripted Codex, OpenCode and Copilot ready, no local endpoint), the first
  * ready one already yours, another a click away, Check Again, and Set Up… opening Settings › Agent
  * over the welcome, where the same rows show.
  */
@@ -30,7 +30,8 @@ test('the welcome finds your agents, picks the first ready one, and lets you pic
   await expect(welcome.getByTestId('agent-state-codex')).toHaveText('Ready', { timeout: 15_000 });
   await expect(welcome.getByTestId('agent-state-opencode')).toHaveText('Ready', { timeout: 15_000 });
   await expect(welcome.getByTestId('agent-state-copilot')).toHaveText('Ready', { timeout: 15_000 });
-  await expect(welcome.getByTestId('agent-state-antigravity')).toHaveText('Ready', { timeout: 15_000 });
+  // Antigravity is one of your ACP agents: added in Settings › Agent › ACP agents, not a row here.
+  await expect(welcome.getByTestId('agent-state-antigravity')).toHaveCount(0);
   await expect(welcome.getByTestId('agent-state-local')).toHaveText('No endpoint');
   await expect(welcome.getByText('Change it any time in Settings › Agent.')).toBeVisible();
   // The first ready one is yours already; a local model with no endpoint can't be picked.

@@ -347,6 +347,14 @@ export const PHONE: Record<Method, Side> = {
 
   // ---- supporting Beluga: the star ask is the Mac's (it opens GitHub there)
   'support.answer': 'mac',
+  // Your ACP agents: added, removed and installed in Settings on the Mac (settings stay off the phone); the phone's pickers list the ones you added.
+  'acp.agents': 'mac',
+  'acp.catalog': 'mac',
+  'acp.add': 'mac',
+  'acp.addCommand': 'mac',
+  'acp.remove': 'mac',
+  'acp.search': 'mac',
+  'acp.install': 'mac',
   // ---- your stats: the Usage tab's charts and what the composer saw (the phone keeps its plan meters)
   'stats.get': 'mac',
   'stats.leaderboard': 'mac',

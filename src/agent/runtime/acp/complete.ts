@@ -2,9 +2,9 @@ import { ToolHost } from '../../tool-host.js';
 import { CompletionError, type CompletionRequest } from '../types.js';
 import { type ConfigOption, type PermissionRequest, type PromptResponse, type SessionResponse, type SessionUpdate, permissionAnswer } from '../opencode/acp.js';
 import { sidePrompt } from '../opencode/complete.js';
-import { httpServers } from '../copilot/run-parts.js';
 import { spawnAcp } from './connection.js';
 import type { AcpExtension } from './extension.js';
+import { GENERIC_TOOLS, mcpServersFor } from './dialect.js';
 import { acpModel, declinedNote } from './parts.js';
 import type { AcpAgentSpec, AcpConnect } from './spec.js';
 
@@ -35,7 +35,8 @@ export async function acpComplete(spec: AcpAgentSpec, ext: AcpExtension, req: Co
     : undefined;
   const suites = Object.keys(mounted?.http ?? {});
   const ours = mounted?.tools ?? new Set<string>();
-  const dialect = ext.tools.dialect(ours);
+  const tools = ext.tools ?? GENERIC_TOOLS;
+  const dialect = tools.dialect(ours);
   const conn = await (deps.connect ?? spawnAcp(spec, ext))({ cwd: req.cwd, look: true, ...(deps.bin ? { bin: deps.bin } : {}) }).catch(() => undefined);
   if (!conn) {
     mounted?.close();
@@ -68,7 +69,7 @@ export async function acpComplete(spec: AcpAgentSpec, ext: AcpExtension, req: Co
       const p = params as unknown as PermissionRequest;
       const known = calls.get(p.toolCall.toolCallId) ?? { tool: dialect.toolOf(p.toolCall), raw: {} };
       const raw = { ...known.raw, ...dialect.inputOf(p.toolCall) };
-      if (ext.tools.belugaToolOf(known.tool, suites, ours)) return permissionAnswer(p, true);
+      if (tools.belugaToolOf(known.tool, suites, ours)) return permissionAnswer(p, true);
       for (const c of dialect.callsOf(known.tool, raw, req.cwd, suites)) {
         if (!req.tools?.includes(c.name)) return (declined.push(`${c.name} isn’t one of this request’s tools.`), permissionAnswer(p, false));
         const verdict = req.vetTool?.(c.name, c.input);
@@ -76,7 +77,7 @@ export async function acpComplete(spec: AcpAgentSpec, ext: AcpExtension, req: Co
       }
       return permissionAnswer(p, true);
     });
-    const session = await rpc.request<SessionResponse>('session/new', { cwd: req.cwd, mcpServers: mounted ? httpServers(mounted.http) : [] });
+    const session = await rpc.request<SessionResponse>('session/new', { cwd: req.cwd, mcpServers: mounted ? mcpServersFor(mounted, conn.init, ext.mount) : [] });
     sid = session.sessionId!;
     const options: readonly ConfigOption[] = session.configOptions ?? [];
     const set = async (id: string, value: string | undefined): Promise<void> => {

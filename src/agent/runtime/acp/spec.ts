@@ -1,6 +1,7 @@
 import type { RunProcess } from '../../types.js';
 import type { CodexRpc } from '../codex/rpc.js';
 import type { InitializeResponse } from '../opencode/acp.js';
+import type { AcpLimits } from './watch.js';
 
 /**
  * One ACP agent as Beluga runs it: how it's found, started and signed in. What it does beyond the
@@ -29,6 +30,8 @@ export interface AcpAgentSpec {
   readonly installFix: string;
   /** Not signed in, as the picker's fix says it. */
   readonly signInFix: string;
+  /** Its own patience, over the watch's (watch.ts): an agent slow to start takes a longer `setup`. */
+  readonly limits?: Partial<AcpLimits>;
 }
 
 /** One ACP agent's process for a run (or a look): its JSON-RPC, its process, what it said it can do. */
@@ -38,6 +41,10 @@ export interface AcpConnection {
   readonly init: InitializeResponse;
   /** Its last stderr lines, for a failure's details. */
   readonly stderr: () => readonly string[];
+  /** Why it ended, when its line knows (stuck, not signed in, how it exited); undefined while it runs on. */
+  readonly cause?: () => string | undefined;
+  /** Notes for the chat while a turn runs (it went quiet). */
+  readonly onNotice?: (fn: (note: string) => void) => void;
 }
 
 export interface AcpConnectOptions {

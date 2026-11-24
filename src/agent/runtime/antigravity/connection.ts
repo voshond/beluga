@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { addDirArgs, findAcpCommand, spawnAcp } from '../acp/connection.js';
 import type { AcpConnect, AcpConnectOptions, AcpConnection } from '../acp/spec.js';
+import { rulesFreeArgs } from './rules-free.js';
 import { AGY_MISSING_WORDS, ANTIGRAVITY } from './spec.js';
 
 export { AGY_MISSING_WORDS };
@@ -48,4 +49,4 @@ export function agyArgs(opts: { readonly addDirs?: readonly string[] } = {}): st
 }
 
 /** Spawn `agy acp` and shake hands. It signs in with what Antigravity already has (its keyring): never here. A look's log goes once it has stopped. */
-export const spawnAgy: AgyConnect = spawnAcp(ANTIGRAVITY, { afterLook: (pid) => dropAgyLog(pid) });
+export const spawnAgy: AgyConnect = spawnAcp(ANTIGRAVITY, { afterLook: (pid) => dropAgyLog(pid), launch: () => rulesFreeArgs() });

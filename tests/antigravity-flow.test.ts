@@ -13,6 +13,7 @@ import { agyAnswerPrompt, agyQuestion } from '../src/agent/runtime/antigravity/q
 import { agyBrainDir, dropAgyFolder, dropAgySession } from '../src/agent/runtime/antigravity/sessions.js';
 import { AGY_SIGN_IN, agyStatus, modelRows } from '../src/agent/runtime/antigravity/status.js';
 import { agyCalls, agyInput, agyTool, belugaToolOf } from '../src/agent/runtime/antigravity/tools.js';
+import { acpAgents } from '../src/agent/runtime/acp/agents.js';
 import { runtimeFor, signInCommand } from '../src/agent/runtime/registry.js';
 import type { AgentPlace, AgentRunInput, FollowUp, Steer } from '../src/agent/types.js';
 import { agentForFriend } from '../src/core/gateway/serve.js';
@@ -471,6 +472,9 @@ describe('around a run', () => {
   });
 
   it('is registered, signs in by starting agy, and wears its own mark', () => {
+    // One of your ACP agents: registered once you added it (Settings › Agent › ACP agents).
+    expect(runtimeFor('antigravity')).toBeUndefined();
+    acpAgents.add('antigravity');
     expect(runtimeFor('antigravity')?.label).toBe('Antigravity');
     expect(createAntigravityRuntime().capabilities).toBe(ANTIGRAVITY_CAPABILITIES);
     expect(signInCommand('antigravity')?.at(-1)).toMatch(/agy$/);
