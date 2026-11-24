@@ -1,34 +1,63 @@
-import { useState } from 'react';
-import type { InitiativeView } from '@beluga/core/initiatives/model.js';
+import { type ChangeEvent, useState } from 'react';
+import { CHECK_IN_TIME, type CheckInSchedule, type InitiativeView } from '@beluga/core/initiatives/model.js';
+import { DAY_NAMES, type Trigger, scheduleSentence } from '@beluga/core/sentinel/model.js';
 import { Icon } from '../components/Icon.js';
 import { Button, IconButton } from '../components/ui.js';
 import { Switch } from '../dialogs/settings-controls.js';
 import { useApp } from '../lib/beluga.js';
 import { sameDeep } from '../lib/stable.js';
+import { WEEK, toggleDay } from '../sentinel/sentinel-model.js';
 import { PickMenu } from '../tasks/PickMenu.js';
 import { MemoryFileSheet } from './MemoryFileSheet.js';
 import { Section } from './InitiativeParts.js';
 import { useInitiativeActions } from './use-initiatives.js';
+import sentinel from '../sentinel/sentinel.module.css';
 import s from './initiatives.module.css';
+
+const DEFAULT_CHECK_IN: CheckInSchedule = { at: '08:00', days: [1, 2, 3, 4, 5] };
+
+const scheduleOf = (trigger: Trigger | undefined): CheckInSchedule => (trigger?.kind === 'schedule' && trigger.every === 'week' ? { at: trigger.at, days: trigger.days?.length ? [...trigger.days] : [1] } : DEFAULT_CHECK_IN);
 
 export const CheckInRow = ({ item }: { item: InitiativeView }) => {
   const a = useInitiativeActions();
   const checkIn = useApp((st) => {
     const found = item.checkIn ? st.sentinel.items.find((x) => x.id === item.checkIn) : undefined;
-    return found ? { on: !found.paused, next: st.sentinel.nextAt[found.id] } : undefined;
+    return found ? { on: !found.paused, next: st.sentinel.nextAt[found.id], trigger: found.trigger } : undefined;
   }, sameDeep);
   const on = Boolean(checkIn?.on);
-  const handleToggle = (next: boolean): void => void a.act(() => a.api.setCheckIn(item.slug, next), next ? 'Check-ins are on: weekday mornings at 8:00' : 'Check-ins are off');
+  const schedule = scheduleOf(checkIn?.trigger);
+  const sentence = checkIn?.trigger ? scheduleSentence(checkIn.trigger) : scheduleSentence({ kind: 'schedule', every: 'week', ...DEFAULT_CHECK_IN, missed: 'catch-up' });
+  const handleToggle = (next: boolean): void => void a.act(() => a.api.setCheckIn(item.slug, next), next ? `Check-ins are on: ${sentence.toLowerCase()}` : 'Check-ins are off');
   const handleNow = (): void => void a.act(() => a.api.checkInNow(item.slug), 'Checking in: follow it in the Check-in chat').then((done) => done && a.open(item, 'checkin'));
+  const handleSchedule = (next: CheckInSchedule): void => void a.act(() => a.api.setCheckInTime(item.slug, next));
+  const handleTime = (event: ChangeEvent<HTMLInputElement>): void => {
+    if (!CHECK_IN_TIME.test(event.target.value) || event.target.value === schedule.at) return;
+    handleSchedule({ ...schedule, at: event.target.value });
+  };
+  const handleDay = (day: number): void => handleSchedule({ ...schedule, days: toggleDay(schedule.days, day) });
   const when = on && checkIn?.next ? `next ${new Date(checkIn.next).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}` : 'off';
   return (
     <div className={s.checkIn}>
-      <Switch on={on} onChange={handleToggle} label="Weekday check-ins" />
-      <span>Check-in on weekday mornings · {when}</span>
-      <span className={s.grow} />
-      <Button size="small" icon="refresh" onClick={handleNow}>
-        Check In Now
-      </Button>
+      <div className={s.checkInLine}>
+        <Switch on={on} onChange={handleToggle} label="Check-ins" />
+        <span>
+          Check-in {sentence.charAt(0).toLowerCase() + sentence.slice(1)} · {when}
+        </span>
+        <span className={s.grow} />
+        <Button size="small" icon="refresh" onClick={handleNow}>
+          Check In Now
+        </Button>
+      </div>
+      <div className={s.checkInLine}>
+        <input type="time" className={sentinel.time} aria-label="Check-in time" value={schedule.at} onChange={handleTime} />
+        <span className={sentinel.days} role="group" aria-label="Check-in days">
+          {WEEK.map((day) => (
+            <button key={day} type="button" className={sentinel.day} aria-pressed={schedule.days.includes(day)} onClick={() => handleDay(day)}>
+              {DAY_NAMES[day]}
+            </button>
+          ))}
+        </span>
+      </div>
     </div>
   );
 };

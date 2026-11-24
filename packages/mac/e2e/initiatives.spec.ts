@@ -123,3 +123,32 @@ test('Edit lists Slack conversations, docs and meetings row by row, and Refine f
   await expect(page.getByRole('region', { name: 'Goal' }).getByRole('heading', { name: 'Open questions' })).toBeVisible();
   await shot(page, '05-after-save.png');
 });
+
+test('an initiative’s page shows its tasks, ticks one off through the chat, links its epics and sets the check-in time', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  await expect(page.getByRole('button', { name: 'Open epic SHOP-120 in Jira: One-page checkout' })).toBeVisible();
+  const tasks = page.getByRole('region', { name: 'Tasks' });
+  await expect(tasks.getByRole('list', { name: 'Scheduled', exact: true }).getByRole('listitem')).toHaveCount(1);
+  await expect(tasks.getByRole('list', { name: 'Unscheduled', exact: true }).getByRole('listitem')).toHaveCount(2);
+  await expect(tasks.getByRole('list', { name: 'Unscheduled', exact: true }).getByRole('listitem').first()).toHaveAttribute('data-task', 'demo-task-2');
+  await expect(tasks.getByRole('list', { name: 'Done', exact: true }).getByRole('listitem')).toHaveCount(1);
+  await expect(tasks.getByText(/3 open · 1 scheduled · 1 done/)).toBeVisible();
+  await tasks.scrollIntoViewIfNeeded();
+  await shot(page, '06-initiative-tasks.png');
+  await tasks.getByRole('checkbox', { name: 'Complete Review the address form copy' }).click();
+  const row = tasks.locator('[data-task="demo-task-3"]');
+  await expect(row).toHaveAttribute('data-pending', 'complete');
+  await expect(row).toContainText('Completing…');
+  await expect(row.getByRole('checkbox')).toBeDisabled();
+  await shot(page, '07-initiative-task-pending.png');
+  const days = page.getByRole('group', { name: 'Check-in days' });
+  await expect(days.getByRole('button', { name: 'Mon' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(days.getByRole('button', { name: 'Sat' })).toHaveAttribute('aria-pressed', 'false');
+  await page.getByLabel('Check-in time').fill('09:30');
+  await expect(page.getByText(/Check-in every weekday at 9:30/)).toBeVisible();
+  await days.getByRole('button', { name: 'Fri' }).click();
+  await expect(page.getByText(/Check-in every week on Mon, Tue, Wed, Thu at 9:30/)).toBeVisible();
+  await expect(days.getByRole('button', { name: 'Fri' })).toHaveAttribute('aria-pressed', 'false');
+  await days.scrollIntoViewIfNeeded();
+  await shot(page, '08-initiative-check-in-time.png');
+});

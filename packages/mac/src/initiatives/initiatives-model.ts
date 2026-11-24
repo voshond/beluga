@@ -1,4 +1,4 @@
-import { type DocRef, type EpicStatus, type EpicTickets, type InitiativeView, type MeetingRef, type PrState, type SlackRef, type TicketCategory, docKindOf, lastCheckInAt, openSuggestions, progressShare } from '@beluga/core/initiatives/model.js';
+import { type DocRef, type EpicStatus, type EpicTickets, type InitiativeTask, type InitiativeTasks, type InitiativeView, type MeetingRef, type PrState, type SlackRef, type TicketCategory, docKindOf, lastCheckInAt, openSuggestions, progressShare } from '@beluga/core/initiatives/model.js';
 
 export const INITIATIVE_VIEWS: ReadonlySet<string> = new Set(['initiatives', 'initiative_page']);
 
@@ -101,4 +101,31 @@ export const prName = (pr: { readonly number?: number | undefined; readonly url:
   if (pr.number) return `#${pr.number}`;
   const fromUrl = /\/(\d+)\/?$/.exec(pr.url)?.[1];
   return fromUrl ? `#${fromUrl}` : 'PR';
+};
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+const dayWords = (iso: string): string => {
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return '';
+  return new Date(at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', ...(DATE_ONLY.test(iso) ? { timeZone: 'UTC' } : {}) });
+};
+
+const momentWords = (iso: string): string => {
+  if (DATE_ONLY.test(iso)) return dayWords(iso);
+  const at = Date.parse(iso);
+  return Number.isFinite(at) ? new Date(at).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+};
+
+export const taskWhen = (task: Pick<InitiativeTask, 'scheduled' | 'due' | 'pending'>): string => {
+  if (task.pending) return task.pending === 'complete' ? 'Completing…' : 'Reopening…';
+  if (task.scheduled) return momentWords(task.scheduled);
+  return task.due ? `due ${dayWords(task.due)}` : '';
+};
+
+export const tasksWords = (tasks: InitiativeTasks): string => {
+  const open = tasks.tasks.filter((t) => !t.done);
+  const scheduled = open.filter((t) => t.scheduled).length;
+  const done = tasks.tasks.length - open.length;
+  return [`${open.length} open`, scheduled ? `${scheduled} scheduled` : '', done ? `${done} done` : ''].filter(Boolean).join(' · ');
 };

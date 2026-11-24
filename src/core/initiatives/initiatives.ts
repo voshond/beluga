@@ -1,12 +1,14 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { AgentPlace } from '../../agent/types.js';
-import type { SentinelDraft } from '../sentinel/model.js';
+import type { ScheduleTrigger, SentinelDraft } from '../sentinel/model.js';
 import type { Action, Store } from '../store.js';
 import { InitiativeChats } from './chats.js';
-import { addTimeline, folderOf, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeConfig, writeOutbox, writeSuggestions, writeText } from './files.js';
+import { addTimeline, folderOf, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeConfig, writeOutbox, writeSuggestions, writeTasks, writeText } from './files.js';
 import {
   CHECK_IN_CHAT,
+  type CheckInSchedule,
+  CheckInScheduleSchema,
   FIRST_INITIATIVE_CHAT,
   type GoalRefine,
   GoalRefineSchema,
@@ -29,9 +31,10 @@ import {
   targetWords,
   decisionMessage,
   suggestionMessage,
+  taskMessage,
   uniqueSlug,
 } from './model.js';
-import { CHECK_IN_PROMPT, type LinkedRepo, TICKETS_PROMPT, initiativeBrief } from './prompt.js';
+import { CHECK_IN_PROMPT, type LinkedRepo, TASKS_PROMPT, TICKETS_PROMPT, initiativeBrief } from './prompt.js';
 import { type PushResult, commitFolder, dayOf, ensureRepo, pushIfTracked, unpushedCount } from './repo.js';
 
 export type CheckInHost = {
@@ -39,6 +42,7 @@ export type CheckInHost = {
   readonly exists: (id: string) => boolean;
   readonly pause: (id: string, paused: boolean) => void;
   readonly runNow: (id: string) => void;
+  readonly reschedule: (id: string, trigger: ScheduleTrigger) => void;
   readonly remove: (id: string) => void;
 };
 
@@ -76,7 +80,7 @@ type Local = {
 
 const FINAL_EVENTS: ReadonlySet<string> = new Set(['done', 'error', 'denied']);
 
-const CHECK_IN_TRIGGER = { kind: 'schedule', every: 'week', at: '08:00', days: [1, 2, 3, 4, 5], missed: 'catch-up' } as const;
+const CHECK_IN_TRIGGER: ScheduleTrigger = { kind: 'schedule', every: 'week', at: '08:00', days: [1, 2, 3, 4, 5], missed: 'catch-up' };
 
 export class Initiatives {
   readonly chats: InitiativeChats;
@@ -172,6 +176,7 @@ export class Initiatives {
       people: config?.people ?? [],
       ...(folder.progress ? { progress: folder.progress } : {}),
       ...(folder.tickets ? { tickets: folder.tickets } : {}),
+      ...(folder.tasks ? { tasks: folder.tasks } : {}),
       suggestions: folder.suggestions,
       outbox: folder.outbox,
       openDecisions: folder.openDecisions,
@@ -253,6 +258,27 @@ export class Initiatives {
     return { channel: initiativeChatChannel(slug, CHECK_IN_CHAT) };
   }
 
+  refreshTasks(slug: string): { readonly channel: string } {
+    this.need(slug);
+    const channel = initiativeChatChannel(slug, CHECK_IN_CHAT);
+    if (this.deps.ask(TASKS_PROMPT, channel) === undefined) throw new Error('The task refresh could not start');
+    return { channel };
+  }
+
+  /** The user ticks a task: it shows as on its way at once, and the chat completes (or reopens) it in Google. */
+  async setTaskDone(slug: string, id: string, done: boolean): Promise<{ readonly channel: string }> {
+    const item = this.need(slug);
+    const task = item.tasks?.tasks.find((t) => t.id === id);
+    if (!item.tasks || !task) throw new Error('That task is gone');
+    if (task.done === done && !task.pending) throw new Error(done ? 'That task is already done' : 'That task is already open');
+    writeTasks(this.deps.root, slug, { ...item.tasks, tasks: item.tasks.tasks.map((t) => (t.id === id ? { ...t, pending: done ? 'complete' : 'reopen' } : t)) });
+    await this.commit(slug, `${slug}: task ${done ? 'ticked' : 'reopened'}`);
+    this.refresh(slug);
+    const channel = this.workChannel(item);
+    if (this.deps.ask(taskMessage(task, done), channel) === undefined) throw new Error('The chat could not take it now');
+    return { channel };
+  }
+
   async refineGoal(input: GoalRefine): Promise<{ readonly goal: string }> {
     const parsed = GoalRefineSchema.parse(input);
     if (!parsed.name && !parsed.goal.trim() && !parsed.epics.length) throw new Error('Write a name, a few words on the goal or an epic key first');
@@ -303,12 +329,23 @@ export class Initiatives {
     return this.update(slug, { repos });
   }
 
-  setCheckIn(slug: string, on: boolean): void {
-    const item = this.need(slug);
+  private checkInHost(item: InitiativeView): { readonly host: CheckInHost; readonly id: string | undefined } {
     const host = this.deps.checkIns?.();
     if (!host) throw new Error('Check-ins need the Beluga app (its Sentinel)');
-    const id = item.checkIn && host.exists(item.checkIn) ? item.checkIn : this.makeCheckIn(slug, item.name);
+    return { host, id: item.checkIn && host.exists(item.checkIn) ? item.checkIn : this.makeCheckIn(item.slug, item.name) };
+  }
+
+  setCheckIn(slug: string, on: boolean): void {
+    const { host, id } = this.checkInHost(this.need(slug));
     if (id) host.pause(id, !on);
+    this.refresh(slug);
+  }
+
+  setCheckInTime(slug: string, schedule: CheckInSchedule): void {
+    const parsed = CheckInScheduleSchema.parse(schedule);
+    const { host, id } = this.checkInHost(this.need(slug));
+    if (!id) throw new Error('The check-in could not be made');
+    host.reschedule(id, { ...CHECK_IN_TRIGGER, at: parsed.at, days: [...new Set(parsed.days)].sort((a, b) => a - b) });
     this.refresh(slug);
   }
 

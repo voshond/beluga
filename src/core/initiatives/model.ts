@@ -224,11 +224,53 @@ export const TicketSchema = z.object({
 });
 export type Ticket = z.infer<typeof TicketSchema>;
 
+export const TicketEpicSchema = z.object({
+  key: z.string().min(1).max(40),
+  url: maybe(500),
+  title: maybe(300),
+});
+export type TicketEpic = z.infer<typeof TicketEpicSchema>;
+
 export const TicketsSchema = z.object({
   at: z.string().max(40),
+  epics: z.array(TicketEpicSchema).max(20).default([]),
   tickets: z.array(TicketSchema).max(1000).default([]),
 });
 export type EpicTickets = z.infer<typeof TicketsSchema>;
+
+export const TASK_PENDING = ['complete', 'reopen'] as const;
+export type TaskPending = (typeof TASK_PENDING)[number];
+
+/** A Google Task the agent keeps for this initiative (tasks.json); `pending` is a tick on its way to Google. */
+export const InitiativeTaskSchema = z.object({
+  id: z.string().min(1).max(80),
+  title: z.string().max(500).default(''),
+  notes: maybe(2000),
+  list: maybe(200),
+  due: maybe(40),
+  scheduled: maybe(40),
+  done: z.boolean().default(false),
+  pending: z
+    .enum(TASK_PENDING)
+    .nullish()
+    .transform((value) => value ?? undefined),
+  url: maybe(500),
+});
+export type InitiativeTask = z.infer<typeof InitiativeTaskSchema>;
+
+export const TasksSchema = z.object({
+  at: z.string().max(40),
+  tasks: z.array(InitiativeTaskSchema).max(500).default([]),
+});
+export type InitiativeTasks = z.infer<typeof TasksSchema>;
+
+export const CHECK_IN_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export const CheckInScheduleSchema = z.object({
+  at: z.string().regex(CHECK_IN_TIME),
+  days: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+});
+export type CheckInSchedule = z.infer<typeof CheckInScheduleSchema>;
 
 export const SUGGESTION_STATES = ['open', 'approved', 'dismissed'] as const;
 export const SuggestionStateSchema = z.enum(SUGGESTION_STATES);
@@ -307,6 +349,7 @@ export type InitiativeView = {
   readonly people: readonly InitiativePerson[];
   readonly progress?: EpicStatus;
   readonly tickets?: EpicTickets;
+  readonly tasks?: InitiativeTasks;
   readonly suggestions: readonly Suggestion[];
   readonly outbox: readonly OutboxDraft[];
   readonly openDecisions: readonly string[];
@@ -532,3 +575,42 @@ export const ticketGroups = (tickets: readonly Ticket[], epics: readonly string[
 };
 
 export const sameKeys = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((key) => b.includes(key));
+
+const BROWSE = /\/browse\/[A-Z][A-Z0-9_]+-\d+.*$/;
+
+/** An epic's Jira link: the one the agent read, or a ticket's link with the epic's key in its place. */
+export const epicUrlOf = (key: string, tickets: Pick<EpicTickets, 'epics' | 'tickets'> | undefined): string | undefined => {
+  const known = tickets?.epics.find((e) => e.key === key)?.url;
+  if (known && linkOf(known)) return linkOf(known);
+  const sample = tickets?.tickets.map((t) => t.url).find((url): url is string => Boolean(url && linkOf(url) && BROWSE.test(url)));
+  return sample ? sample.replace(BROWSE, `/browse/${key}`) : undefined;
+};
+
+export const epicTitleOf = (key: string, item: Pick<InitiativeView, 'tickets' | 'progress'>): string | undefined =>
+  item.tickets?.epics.find((e) => e.key === key)?.title ?? item.progress?.epics.find((e) => e.key === key)?.title;
+
+const timeOf = (iso: string | undefined): number => {
+  const at = iso ? Date.parse(iso) : NaN;
+  return Number.isFinite(at) ? at : Number.POSITIVE_INFINITY;
+};
+
+export type TaskGroups = {
+  readonly scheduled: readonly InitiativeTask[];
+  readonly unscheduled: readonly InitiativeTask[];
+  readonly done: readonly InitiativeTask[];
+};
+
+/** Open tasks with a calendar slot (soonest first), open ones without (by due date, then title), and done ones. */
+export const taskGroups = (tasks: readonly InitiativeTask[]): TaskGroups => {
+  const open = tasks.filter((t) => !t.done);
+  const byTitle = (a: InitiativeTask, b: InitiativeTask): number => a.title.localeCompare(b.title);
+  return {
+    scheduled: open.filter((t) => t.scheduled).sort((a, b) => timeOf(a.scheduled) - timeOf(b.scheduled) || byTitle(a, b)),
+    unscheduled: open.filter((t) => !t.scheduled).sort((a, b) => timeOf(a.due) - timeOf(b.due) || byTitle(a, b)),
+    done: tasks.filter((t) => t.done).sort(byTitle),
+  };
+};
+
+/** What the chat is told when the user ticks a task on the page. */
+export const taskMessage = (task: Pick<InitiativeTask, 'id' | 'title'>, done: boolean): string =>
+  `${done ? 'Complete' : 'Reopen'} task ${task.id}: ${task.title}`;

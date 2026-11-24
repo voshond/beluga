@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { GoalRefineSchema, INITIATIVE_CHAT_ID, INITIATIVE_SLUG, InitiativeDraftSchema, InitiativePatchSchema } from '../core/initiatives/model.js';
+import { CheckInScheduleSchema, GoalRefineSchema, INITIATIVE_CHAT_ID, INITIATIVE_SLUG, InitiativeDraftSchema, InitiativePatchSchema } from '../core/initiatives/model.js';
 
 const slug = z.string().regex(INITIATIVE_SLUG);
 const chat = z.string().regex(INITIATIVE_CHAT_ID);
@@ -10,8 +10,11 @@ export const INITIATIVES_API = {
   'initiatives.archive': { args: z.tuple([slug]) },
   'initiatives.setRepo': { args: z.tuple([slug, z.string().min(1).max(120), z.boolean()]) },
   'initiatives.setCheckIn': { args: z.tuple([slug, z.boolean()]) },
+  'initiatives.setCheckInTime': { args: z.tuple([slug, CheckInScheduleSchema]) },
   'initiatives.checkInNow': { args: z.tuple([slug]) },
   'initiatives.refreshTickets': { args: z.tuple([slug]) },
+  'initiatives.refreshTasks': { args: z.tuple([slug]) },
+  'initiatives.setTaskDone': { args: z.tuple([slug, z.string().min(1).max(80), z.boolean()]) },
   'initiatives.refineGoal': { args: z.tuple([GoalRefineSchema]) },
   'initiatives.chatNew': { args: z.tuple([slug]) },
   'initiatives.chatOpen': { args: z.tuple([slug, chat]) },

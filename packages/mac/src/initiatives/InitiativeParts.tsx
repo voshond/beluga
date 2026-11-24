@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { type EpicStatus, type InitiativeView, type Suggestion, isDecision, openSuggestions, pendingDrafts } from '@beluga/core/initiatives/model.js';
+import { type EpicStatus, type InitiativeView, type Suggestion, epicTitleOf, epicUrlOf, isDecision, openSuggestions, pendingDrafts } from '@beluga/core/initiatives/model.js';
 import { Button } from '../components/ui.js';
+import { openExternal } from '../lib/system.js';
 import { DecisionRow } from './DecisionRow.js';
 import { progressDetail, progressPercent, progressWords } from './initiatives-model.js';
 import { useInitiativeActions } from './use-initiatives.js';
@@ -21,6 +22,20 @@ export const ProgressBar = ({ progress }: { progress: EpicStatus | undefined }) 
         ))}
       </span>
     </span>
+  );
+};
+
+export const EpicLink = ({ epic, item }: { epic: string; item: Pick<InitiativeView, 'tickets' | 'progress'> }) => {
+  const url = epicUrlOf(epic, item.tickets);
+  const title = epicTitleOf(epic, item);
+  const handleOpen = (): void => {
+    if (url) void openExternal(url);
+  };
+  return (
+    <button type="button" className={s.epicLink} data-epic-link={epic} onClick={handleOpen} disabled={!url} title={url} aria-label={url ? `Open epic ${epic} in Jira${title ? `: ${title}` : ''}` : `Epic ${epic}`}>
+      <span className={s.epicName}>{epic}</span>
+      {title ? <span className={s.epicTitle}>{title}</span> : null}
+    </button>
   );
 };
 

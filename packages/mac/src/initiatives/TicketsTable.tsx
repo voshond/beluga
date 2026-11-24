@@ -10,7 +10,7 @@ import type { Tone } from '../plans/plans-model.js';
 import { StatusIcon } from '../tasks/marks.js';
 import { ago } from '../tasks/tasks-model.js';
 import { CATEGORY_LABEL, PR_STATE_LABEL, prName, ticketsWords } from './initiatives-model.js';
-import { Section } from './InitiativeParts.js';
+import { EpicLink, Section } from './InitiativeParts.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import s from './initiatives.module.css';
 
@@ -98,7 +98,7 @@ export const TicketsTable = ({ item }: { item: InitiativeView }) => {
         <div className={s.ticketGroups}>
           {groups.map((group) => (
             <div key={group.epic ?? 'other'} className={s.ticketGroup} data-epic={group.epic ?? 'other'}>
-              {groups.length > 1 || group.epic ? <span className={s.epicName}>{group.epic ?? 'Other tickets'}</span> : null}
+              {group.epic ? <EpicLink epic={group.epic} item={item} /> : groups.length > 1 ? <span className={s.epicName}>Other tickets</span> : null}
               <TicketList tickets={group.tickets} name={group.epic ? `Tickets under ${group.epic}` : 'Tickets under the epic'} now={now} />
             </div>
           ))}

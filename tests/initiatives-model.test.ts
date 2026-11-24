@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  TasksSchema,
+  epicTitleOf,
+  epicUrlOf,
+  taskGroups,
+  taskMessage,
   CHECK_IN_CHAT,
   EpicStatusSchema,
   InitiativeConfigSchema,
@@ -310,5 +315,27 @@ describe('the initiatives slice', () => {
     expect(channelOf({ kind: 'initiative_page', slug: 'a' })).toBe('initiative:a:main');
     expect(shownChannel({ kind: 'initiative_page', slug: 'a' })).toBe('initiative:a:main');
     expect(shownChannel({ kind: 'initiatives' })).toBeUndefined();
+  });
+});
+
+describe('initiative tasks and epics', () => {
+  it('reads tasks.json forgivingly and groups the tasks', () => {
+    const parsed = TasksSchema.parse({ at: 'x', tasks: [{ id: 'a', title: 'Later', due: '2026-12-01' }, { id: 'b', title: 'Soon', due: '2026-11-28', pending: null }, { id: 'c', title: 'Slot', scheduled: '2026-11-27T09:00:00Z' }, { id: 'd', title: 'Done', done: true }] });
+    expect(parsed.tasks[1]).toMatchObject({ id: 'b', done: false });
+    expect(parsed.tasks[1]!.pending).toBeUndefined();
+    const groups = taskGroups(parsed.tasks);
+    expect(groups.scheduled.map((t) => t.id)).toEqual(['c']);
+    expect(groups.unscheduled.map((t) => t.id)).toEqual(['b', 'a']);
+    expect(groups.done.map((t) => t.id)).toEqual(['d']);
+    expect(taskMessage({ id: 'a', title: 'Later' }, true)).toBe('Complete task a: Later');
+  });
+
+  it('links an epic: the link the agent read, else a ticket’s with the key swapped', () => {
+    const tickets = TicketsSchema.parse({ at: 'x', epics: [{ key: 'SHOP-1', url: 'https://acme.atlassian.net/browse/SHOP-1', title: 'Checkout' }], tickets: [{ key: 'APP-9', url: 'https://acme.atlassian.net/browse/APP-9?focus=1' }] });
+    expect(epicUrlOf('SHOP-1', tickets)).toBe('https://acme.atlassian.net/browse/SHOP-1');
+    expect(epicUrlOf('APP-1', tickets)).toBe('https://acme.atlassian.net/browse/APP-1');
+    expect(epicUrlOf('APP-1', TicketsSchema.parse({ at: 'x' }))).toBeUndefined();
+    expect(epicUrlOf('APP-1', undefined)).toBeUndefined();
+    expect(epicTitleOf('SHOP-1', { tickets })).toBe('Checkout');
   });
 });
