@@ -25,7 +25,7 @@ test('the top of the sidebar is Your Mac, Overview, Work (tasks, issues and acti
   for (const gone of ['Search', 'Usage', 'Terminal']) await expect(sidebar(page).locator('section').first().getByRole('button', { name: gone, exact: true })).toHaveCount(0);
 });
 
-test('Search from the toolbar, Usage from the icon in the sidebar’s bottom card, places by ⌘ key', async ({ page }) => {
+test('Search from the toolbar, Usage from the bar at the sidebar’s foot, places by ⌘ key', async ({ page }) => {
   await page.getByRole('button', { name: 'Search', exact: true }).first().click();
   await expect(page.locator('header').first()).toContainText('Search');
   await sidebar(page).getByRole('button', { name: 'Usage', exact: true }).click();

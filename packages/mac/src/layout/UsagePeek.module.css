@@ -1,0 +1,74 @@
+.peek {
+  flex: none;
+  display: grid;
+  gap: 3px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--text-2);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.peek:hover,
+.peek[data-active] {
+  background: var(--bg-hover);
+}
+.line {
+  --tone: var(--accent);
+  display: grid;
+  grid-template-columns: 16px 56px 28px;
+  align-items: center;
+  gap: 5px;
+}
+.line[data-pressure='warm'] {
+  --tone: var(--warn);
+}
+.line[data-pressure='hot'] {
+  --tone: var(--error);
+}
+.short {
+  color: var(--text-3);
+}
+.pct {
+  text-align: right;
+}
+.line[data-pressure='hot'] .pct {
+  color: var(--error);
+  font-weight: 600;
+}
+.track {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--tone) 18%, transparent);
+}
+.segmented {
+  -webkit-mask-image: linear-gradient(to right, transparent 1.5px, #000 1.5px);
+  mask-image: linear-gradient(to right, transparent 1.5px, #000 1.5px);
+  -webkit-mask-size: calc(100% / var(--segments)) 100%;
+  mask-size: calc(100% / var(--segments)) 100%;
+  -webkit-mask-position: -0.75px 0;
+  mask-position: -0.75px 0;
+}
+.projected,
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  transition: width var(--dur) var(--ease-out);
+}
+.projected {
+  background: color-mix(in srgb, var(--tone) 45%, transparent);
+}
+.fill {
+  background: var(--tone);
+}
+.now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  margin-left: -0.75px;
+  background: var(--text);
+  opacity: 0.55;
+}

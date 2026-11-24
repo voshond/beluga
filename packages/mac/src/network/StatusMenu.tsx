@@ -195,7 +195,7 @@ export function SelfBar({ extra }: { readonly extra?: ReactNode }) {
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button type="button" className={s.me} aria-label={`Your status: ${selfLine(self.presence)}`}>
-          <PersonAvatar name={self.name} id={self.peerId} state={self.presence.state} size={32} />
+          <PersonAvatar name={self.name} id={self.peerId} state={self.presence.state} size={26} />
           <span className={s.meText}>
             <span className={s.meName}>{self.name}</span>
             <span className={s.meStatus}>{selfLine(self.presence)}</span>

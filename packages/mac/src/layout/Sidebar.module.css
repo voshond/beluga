@@ -383,38 +383,20 @@
   margin-left: auto;
   display: inline-flex;
 }
-/* The bottom card, one row: you on the left, the room and Usage on the right. */
-.dock {
+.footer {
   flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 52px;
-  margin: 6px 8px 8px;
+  min-height: 44px;
   padding-right: 8px;
-  border: 0.5px solid var(--hairline);
-  border-radius: 12px;
-  background: var(--bg-raised);
-  overflow: hidden;
+  border-top: 0.5px solid var(--hairline);
 }
-.dockTools {
+.footerTools {
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
   margin-left: auto;
-}
-/* Usage as a framed square button, like the window's own toolbar buttons (the room's beside it matches). */
-.dockButton {
-  width: 34px;
-  height: 30px;
-  border: 0.5px solid var(--hairline-strong);
-  border-radius: 8px;
-  background: var(--bg-raised);
-}
-.dockButton svg {
-  width: 17px;
-  height: 17px;
 }
 /* A folder dragged from Finder over the sidebar: dropping it adds it as a project. */
 .dropping {
@@ -422,16 +404,6 @@
   background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
-/* Usage, in the bottom card: it turns amber when most of the week is used. */
-.usage {
-  display: inline-flex;
-}
-.usage[data-level='mid'] button {
-  color: var(--warn);
-}
-.usage[data-level='high'] button {
-  color: var(--error);
-}
 /* A worktree being archived: quiet words where its state would be. */
 .archiving {
   color: var(--text-3);

@@ -2,10 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { overviewNews } from '@beluga/ui/workspace-models.js';
 import { macTabs } from '../lib/go.js';
 import { newShares } from '@beluga/core/store.js';
-import { usageFor } from '@beluga/agent/usage.js';
-import { windowsOf } from '@beluga/ui/usage-cards.js';
 import { appDropScale } from '../chat/drop-model.js';
-import { myRuntime } from '../chat/ModelPicker.js';
 import { Icon } from '../components/Icon.js';
 import { Badge, IconButton, cx } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
@@ -46,10 +43,11 @@ import { AppMenu } from './AppMenu.js';
 import { WindowControls } from './WindowControls.js';
 import { ownTitleBar } from '../lib/window-frame.js';
 import { WebBack } from './WebBack.js';
+import { UsagePeek } from './UsagePeek.js';
 
 /**
  * The sidebar's top: Overview, then Work, Sentinel and Files. The rest are a click away without a row of their
- * own: Search in the toolbar (⇧⌘F), Usage as an icon above, the terminal in the right panel (⌘J),
+ * own: Search in the toolbar (⇧⌘F), Usage at the sidebar's foot, the terminal in the right panel (⌘J),
  * folders friends share under Files (projects they share are in Projects); Activity and Requests show up only while there's something
  * in them. Everything is also in ⌘K and the Go menu (⌘1…7). The room's group chat is no place
  * here (BLG-871): it's the first of Channels while someone else is in the room.
@@ -138,7 +136,7 @@ export function Sidebar() {
             <WebBack />
           </span>
         )}
-        {/* Only the sidebar's own toggle up here: Usage and Settings are in the card at the bottom. */}
+        {/* Only the sidebar's own toggle up here: Usage is in the bar at the bottom. */}
         <span className={s.titleEnd}>
           <IconButton size="large" icon="sidebar" label="Hide sidebar" keys={shortcutKeys('toggle-sidebar')} onClick={() => setPrefs({ sidebar: false })} />
         </span>
@@ -223,45 +221,21 @@ export function Sidebar() {
       {/* The call you're in, while you look at something else (BLG-706). */}
       <CallPill />
       <UpdatePill />
-      {/* One card at the bottom: you (and the room, in your card) and Usage. Settings is ⌘, and the menu bar's. */}
+      {/* The bar at the bottom: you (and the room, in your status) and Usage at a glance. */}
       <Dock />
     </nav>
     </SidebarChatSelection>
   );
 }
 
-/**
- * Usage as an icon in the sidebar's bottom card: how much of your agent's plan you've used (BLG-507: your
- * default agent's, Codex's when it's Codex: its week, else its tightest window), and the Usage page.
- */
-function UsageButton() {
-  const actions = useActions();
-  const week = useApp((st) => {
-    const u = usageFor(st.self, myRuntime(st.prefs));
-    if (u?.week) return u.week.pct;
-    const windows = windowsOf(u);
-    return windows.length ? Math.max(...windows.map((w) => w.pct)) : undefined;
-  });
-  const selected = useApp((st) => st.view.kind === 'usage');
-  return (
-    <span className={s.usage} data-level={week === undefined ? undefined : week >= 90 ? 'high' : week >= 70 ? 'mid' : 'low'}>
-      <IconButton size="large" icon="gauge" label="Usage" className={s.dockButton} keys={shortcutKeys('go-usage')} active={selected} onClick={() => actions.run({ type: 'view', view: { kind: 'usage' } })} />
-    </span>
-  );
-}
-
-/**
- * The sidebar's bottom card: you (your card holds your status and the room) and Usage. While the
- * Beluga network is off there's no you to click, so the room has a row of its own.
- */
 function Dock() {
   const netOn = useApp((st) => st.network.enabled && st.network.self !== undefined);
   const { friendsSidebar } = usePrefs();
   return (
-    <div className={s.dock}>
+    <div className={s.footer}>
       {friendsSidebar && (netOn ? <SelfBar extra={<RoomSection />} /> : <RoomFallback />)}
-      <span className={s.dockTools}>
-        <UsageButton />
+      <span className={s.footerTools}>
+        <UsagePeek />
       </span>
     </div>
   );
