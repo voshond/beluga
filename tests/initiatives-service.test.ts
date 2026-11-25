@@ -306,6 +306,20 @@ describe('Initiatives', () => {
     await expect(service.resolveSuggestion(slug, 1, 'approve')).rejects.toThrow(/already approved/);
   });
 
+  it('asks the chat to clarify an open suggestion, without resolving it', async () => {
+    const { root, asked, service } = await setup();
+    const { slug } = await service.create({ name: 'A' });
+    writeFileSync(path.join(root, slug, 'suggestions.json'), JSON.stringify([{ id: 1, text: 'Flag the checks', why: 'They are inverted' }, { id: 2, text: 'Done', state: 'approved' }]));
+    service.refresh(slug);
+    expect(await service.clarifySuggestion(slug, 1)).toEqual({ channel: initiativeChatChannel(slug, 'main') });
+    expect(asked).toEqual([{ prompt: 'Clarify suggestion 1: Flag the checks\nWhy: They are inverted', channel: initiativeChatChannel(slug, 'main') }]);
+    const saved = JSON.parse(readFileSync(path.join(root, slug, 'suggestions.json'), 'utf8')) as Array<{ state: string; clarifiedAt?: string }>;
+    expect(saved[0]).toMatchObject({ state: 'open' });
+    expect(saved[0]!.clarifiedAt).toBeTruthy();
+    await expect(service.clarifySuggestion(slug, 2)).rejects.toThrow(/already approved/);
+    await expect(service.clarifySuggestion(slug, 9)).rejects.toThrow(/gone/);
+  });
+
   it('decides a decision with the user’s answer, kept and sent to the chat', async () => {
     const { root, asked, store, service } = await setup();
     const { slug } = await service.create({ name: 'A' });

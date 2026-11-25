@@ -801,6 +801,7 @@ export const PHONE: Record<Method, Side> = {
   'initiatives.chatOpen': 'mac',
   'initiatives.chatDelete': 'mac',
   'initiatives.resolveSuggestion': 'mac',
+  'initiatives.clarifySuggestion': 'mac',
   'initiatives.sendDraft': 'mac',
   'initiatives.discardDraft': 'mac',
   'initiatives.readFile': 'mac',

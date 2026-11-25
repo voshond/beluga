@@ -29,6 +29,7 @@ import {
   sameKeys,
   sendDraftMessage,
   targetWords,
+  clarifyMessage,
   decisionMessage,
   suggestionMessage,
   taskMessage,
@@ -376,6 +377,20 @@ export class Initiatives {
     if (decision === 'dismiss') return {};
     const channel = this.workChannel(item);
     if (this.deps.ask(decided ? decisionMessage(suggestion, decided) : suggestionMessage(suggestion), channel) === undefined) throw new Error('The chat could not take it now');
+    return { channel };
+  }
+
+  async clarifySuggestion(slug: string, id: number): Promise<{ readonly channel: string }> {
+    const item = this.need(slug);
+    const suggestion = item.suggestions.find((s) => s.id === id);
+    if (!suggestion) throw new Error('That suggestion is gone');
+    if (suggestion.state !== 'open') throw new Error(`That suggestion was already ${suggestion.state}`);
+    const channel = this.workChannel(item);
+    if (this.deps.ask(clarifyMessage(suggestion), channel) === undefined) throw new Error('The chat could not take it now');
+    const clarifiedAt = new Date(this.now).toISOString();
+    writeSuggestions(this.deps.root, slug, item.suggestions.map((s) => (s.id === id ? { ...s, clarifiedAt } : s)));
+    await this.commit(slug, `${slug}: suggestion ${id} clarifying`);
+    this.refresh(slug);
     return { channel };
   }
 

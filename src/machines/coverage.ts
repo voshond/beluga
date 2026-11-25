@@ -505,6 +505,7 @@ export const MACHINE: Record<Method, MachineSide> = {
   'initiatives.chatOpen': 'drive',
   'initiatives.chatDelete': 'drive',
   'initiatives.resolveSuggestion': 'drive',
+  'initiatives.clarifySuggestion': 'drive',
   'initiatives.sendDraft': 'drive',
   'initiatives.discardDraft': 'drive',
   'initiatives.readFile': 'drive',
