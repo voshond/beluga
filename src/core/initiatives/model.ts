@@ -494,23 +494,33 @@ export const suggestionMessage = (suggestion: Pick<Suggestion, 'id' | 'text'>): 
 /** Drafts still waiting for the user, and those on their way out. */
 export const pendingDrafts = (item: Pick<InitiativeView, 'outbox'>): OutboxDraft[] => item.outbox.filter((d) => d.state === 'draft' || d.state === 'approved');
 
-/** The tool that posts a draft: its name's last part, whatever the MCP server is called. */
+/** A tool that posts a draft (its name's last part, whatever the MCP server is called) and the input field holding the text. */
+type OutboxTool = { readonly name: string; readonly kind: OutboxTarget['kind']; readonly field: string };
+
+const OUTBOX_TOOL_LIST: readonly OutboxTool[] = [
+  { name: 'slack_send_message', kind: 'slack', field: 'message' },
+  { name: 'conversations_add_message', kind: 'slack', field: 'text' },
+  { name: 'jira_add_comment', kind: 'jira', field: 'body' },
+];
+
+/** The tool the chat is first told to post a draft with. */
 export const OUTBOX_TOOLS: Readonly<Record<OutboxTarget['kind'], string>> = { slack: 'slack_send_message', jira: 'jira_add_comment' };
 
+const nameIs = (toolName: string, name: string): boolean => toolName === name || toolName.endsWith(`__${name}`);
+
 /** Tools that send a message outward, which an initiative's chat only uses for a draft the user sent. */
-const SENDING_TOOLS: readonly string[] = [...Object.values(OUTBOX_TOOLS), 'slack_schedule_message'];
+const SENDING_TOOLS: readonly string[] = [...OUTBOX_TOOL_LIST.map((t) => t.name), 'slack_schedule_message'];
 
-export const isSendingTool = (toolName: string): boolean => SENDING_TOOLS.some((t) => toolName === t || toolName.endsWith(`__${t}`));
-
-const toolIs = (toolName: string, kind: OutboxTarget['kind']): boolean => toolName === OUTBOX_TOOLS[kind] || toolName.endsWith(`__${OUTBOX_TOOLS[kind]}`);
+export const isSendingTool = (toolName: string): boolean => SENDING_TOOLS.some((t) => nameIs(toolName, t));
 
 const same = (a: unknown, b: string | undefined): boolean => (typeof a === 'string' ? a.trim() : '') === (b ?? '').trim();
 
 /** Whether this tool call posts exactly that text to exactly that place. */
 export const matchesDraft = (to: OutboxTarget, text: string, toolName: string, input: Record<string, unknown>): boolean => {
-  if (!toolIs(toolName, to.kind)) return false;
-  if (to.kind === 'slack') return same(input.channel_id, to.channel) && same(input.thread_ts, to.thread) && same(input.message, text);
-  return same(input.issue_key, to.issue) && same(input.body, text);
+  const tool = OUTBOX_TOOL_LIST.find((t) => t.kind === to.kind && nameIs(toolName, t.name));
+  if (!tool || input.blocks !== undefined) return false;
+  const where = to.kind === 'slack' ? same(input.channel_id, to.channel) && same(input.thread_ts, to.thread) : same(input.issue_key, to.issue);
+  return where && same(input[tool.field], text);
 };
 
 export const targetWords = (to: OutboxTarget): string => {
@@ -523,7 +533,7 @@ export const targetWords = (to: OutboxTarget): string => {
 export const sendDraftMessage = (draft: Pick<OutboxDraft, 'id' | 'to'>, text: string): string => {
   const call =
     draft.to.kind === 'slack'
-      ? `${OUTBOX_TOOLS.slack} with channel_id ${draft.to.channel}${draft.to.thread ? ` and thread_ts ${draft.to.thread}` : ''}`
+      ? `${OUTBOX_TOOLS.slack} (or conversations_add_message, with the message as text and no blocks) with channel_id ${draft.to.channel}${draft.to.thread ? ` and thread_ts ${draft.to.thread}` : ''}`
       : `${OUTBOX_TOOLS.jira} with issue_key ${draft.to.issue}`;
   return `Send draft ${draft.id} from the outbox now: ${call}, and the ${draft.to.kind === 'slack' ? 'message' : 'body'} exactly as below, nothing added or changed.\n\n${text}`;
 };
