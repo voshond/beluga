@@ -220,6 +220,7 @@ export const TicketSchema = z.object({
   assignee: maybe(120),
   updated: maybe(40),
   epic: maybe(40),
+  parent: maybe(40),
   prs: z.array(TicketPrSchema).max(30).default([]),
 });
 export type Ticket = z.infer<typeof TicketSchema>;
@@ -590,8 +591,15 @@ export type TicketGroup = {
   readonly tickets: readonly Ticket[];
 };
 
+/** Whether a ticket is a sub-task of another ticket that was read with it. */
+export const isSubTask = (ticket: Pick<Ticket, 'parent'>, tickets: readonly Pick<Ticket, 'key'>[]): boolean => Boolean(ticket.parent && tickets.some((t) => t.key === ticket.parent));
+
+/** A ticket's sub-tasks, open ones first. */
+export const subTasksOf = (key: string, tickets: readonly Ticket[]): Ticket[] => sortedTickets(tickets.filter((t) => t.parent === key));
+
+/** The tickets under the epics, without the sub-tasks, which show under their parent ticket. */
 export const ticketGroups = (tickets: readonly Ticket[], epics: readonly string[]): TicketGroup[] => {
-  const sorted = sortedTickets(tickets);
+  const sorted = sortedTickets(tickets.filter((t) => !isSubTask(t, tickets)));
   if (epics.length < 2) return sorted.length ? [{ tickets: sorted }] : [];
   const known = epics.map((epic): TicketGroup => ({ epic, tickets: sorted.filter((t) => t.epic === epic) }));
   const rest = sorted.filter((t) => !t.epic || !epics.includes(t.epic));

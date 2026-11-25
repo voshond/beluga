@@ -694,6 +694,18 @@ button.card:hover {
   font-size: 13px;
   font-weight: 500;
 }
+.ticket[data-sub-task='true'] .ticketMain {
+  padding-left: 34px;
+}
+.ticket[data-sub-task='true'] .ticketSummary {
+  font-weight: 400;
+}
+.ticketSubTasks {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  white-space: nowrap;
+}
 .ticket[data-category='done'] .ticketSummary {
   color: var(--text-3);
 }

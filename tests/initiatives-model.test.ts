@@ -21,6 +21,7 @@ import {
   sameKeys,
   slackKindOf,
   sortedTickets,
+  subTasksOf,
   ticketGroups,
   activeInitiativeChat,
   initiativeChatChannel,
@@ -276,6 +277,21 @@ describe('an epic’s tickets', () => {
     ]);
     expect(ticketGroups(tickets, ['SHOP-120', 'SHOP-999']).map((g) => g.epic)).toEqual(['SHOP-120', undefined]);
     expect(ticketGroups([], ['SHOP-120'])).toEqual([]);
+  });
+
+  it('keeps sub-tasks out of the groups and under their parent ticket', () => {
+    const { tickets } = TicketsSchema.parse({
+      at: 'now',
+      tickets: [
+        { key: 'RUN-52', epic: 'RUN-50', statusCategory: 'inProgress' },
+        { key: 'RUN-60', parent: 'RUN-52', statusCategory: 'done' },
+        { key: 'RUN-61', parent: 'RUN-52', statusCategory: 'todo' },
+        { key: 'RUN-70', parent: 'RUN-99', statusCategory: 'todo' },
+      ],
+    });
+    expect(ticketGroups(tickets, ['RUN-50'])[0]!.tickets.map((t) => t.key)).toEqual(['RUN-52', 'RUN-70']);
+    expect(subTasksOf('RUN-52', tickets).map((t) => t.key)).toEqual(['RUN-61', 'RUN-60']);
+    expect(subTasksOf('RUN-61', tickets)).toEqual([]);
   });
 
   it('knows when the epics changed', () => {
