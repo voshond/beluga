@@ -216,14 +216,3 @@ export const activityWords = (cell: Pick<ActivityCell, 'key' | 'count'>, now: Da
   const what = cell.count ? `${cell.count} ${cell.count === 1 ? 'event' : 'events'}` : 'Nothing';
   return `${what} · ${timelineDayLabel(cell.key, now)}`;
 };
-
-export type TextPart = {
-  readonly text: string;
-  readonly ticket?: string;
-};
-
-export const ticketParts = (text: string): TextPart[] =>
-  text
-    .split(/(?<![\w-])([A-Z][A-Z0-9_]+-\d+)(?![\w-])/)
-    .filter(Boolean)
-    .map((part) => (/^[A-Z][A-Z0-9_]+-\d+$/.test(part) ? { text: part, ticket: part } : { text: part }));

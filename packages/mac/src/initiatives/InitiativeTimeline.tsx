@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { type InitiativeView, type TimelineEntry, type TimelineKind, ticketUrlOf } from '@beluga/core/initiatives/model.js';
+import { type LinkKind, type SourceContext, linkParts } from '@beluga/core/initiatives/log.js';
+import { type InitiativeView, type TimelineEntry, type TimelineKind } from '@beluga/core/initiatives/model.js';
 import { Icon, type IconName } from '../components/Icon.js';
 import { Button } from '../components/ui.js';
 import { openExternal } from '../lib/system.js';
-import { type ActivityCell, activityWeeks, activityWords, ticketParts, timelineDays } from './initiatives-model.js';
+import { type ActivityCell, activityWeeks, activityWords, timelineDays } from './initiatives-model.js';
 import { Section } from './InitiativeParts.js';
 import s from './initiatives.module.css';
 
@@ -24,18 +25,20 @@ const KIND: Readonly<Record<TimelineKind, { readonly icon?: IconName; readonly l
   event: { label: '' },
 };
 
-type Tickets = InitiativeView['tickets'];
+const LINK_ICON: Readonly<Record<LinkKind, IconName | undefined>> = { ticket: undefined, doc: 'fileText', slack: 'chat', link: 'external' };
 
-const EntryText = ({ text, tickets }: { text: string; tickets: Tickets }) => (
+const EntryText = ({ text, item }: { text: string; item: SourceContext }) => (
   <span className={s.feedText}>
-    {ticketParts(text).map((part, i) => {
-      if (!part.ticket) return <span key={i}>{part.text}</span>;
-      const url = ticketUrlOf(part.ticket, tickets);
+    {linkParts(text, item).map((part, i) => {
+      if (!part.kind) return <span key={i}>{part.text}</span>;
+      const url = part.url;
+      const icon = LINK_ICON[part.kind];
       const handleOpen = (): void => {
         if (url) void openExternal(url);
       };
       return (
-        <button key={i} type="button" className={s.feedKey} onClick={handleOpen} disabled={!url} title={url} aria-label={url ? `Open ${part.ticket} in Jira` : part.ticket}>
+        <button key={i} type="button" className={s.feedLink} data-link={part.kind} onClick={handleOpen} disabled={!url} title={part.title ?? url} aria-label={url ? `Open ${part.title ?? part.text}` : part.text}>
+          {icon ? <Icon name={icon} size={11} /> : null}
           {part.text}
         </button>
       );
@@ -43,14 +46,14 @@ const EntryText = ({ text, tickets }: { text: string; tickets: Tickets }) => (
   </span>
 );
 
-const Entry = ({ entry, tickets }: { entry: TimelineEntry; tickets: Tickets }) => {
+const Entry = ({ entry, item }: { entry: TimelineEntry; item: SourceContext }) => {
   const kind = KIND[entry.kind];
   return (
     <li className={s.feedEntry} data-kind={entry.kind}>
       <span className={s.feedIcon} aria-hidden>
         {kind.icon ? <Icon name={kind.icon} size={11} /> : <span className={s.feedDot} />}
       </span>
-      <EntryText text={entry.text} tickets={tickets} />
+      <EntryText text={entry.text} item={item} />
       <span className={s.feedKind}>{kind.label}</span>
     </li>
   );
@@ -120,7 +123,7 @@ export const Timeline = ({ item }: { item: InitiativeView }) => {
               </time>
               <ul className={s.feedEntries}>
                 {day.entries.map((entry, j) => (
-                  <Entry key={`${j}-${entry.text}`} entry={entry} tickets={item.tickets} />
+                  <Entry key={`${j}-${entry.text}`} entry={entry} item={item} />
                 ))}
               </ul>
             </li>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type SourceContext, logStateOf, proofOf, recordMarkdown, sourcesOf, suggestionHistory, ticketKeysIn } from '../src/core/initiatives/log.js';
+import { type SourceContext, linkParts, logStateOf, proofOf, recordMarkdown, sourcesOf, suggestionHistory, ticketKeysIn } from '../src/core/initiatives/log.js';
 import { type OutboxDraft, SuggestionsSchema, TicketsSchema, clarifyMessage } from '../src/core/initiatives/model.js';
 
 const suggestions = SuggestionsSchema.parse([
@@ -80,5 +80,32 @@ describe('the decision log', () => {
   it('asks the chat to clarify with the why', () => {
     expect(clarifyMessage({ id: 5, text: 'Flag the checks', why: 'They are inverted' })).toBe('Clarify suggestion 5: Flag the checks\nWhy: They are inverted');
     expect(clarifyMessage({ id: 5, text: 'Flag the checks' })).toBe('Clarify suggestion 5: Flag the checks');
+  });
+});
+
+describe('links inside a timeline line', () => {
+  it('links tickets of known projects in place, a range as one link each, and leaves invoice numbers alone', () => {
+    expect(linkParts('RUN-89/90 done, R-2026-04040 / CP-2026-00982 stay', item)).toEqual([
+      { text: 'RUN-89', url: 'https://acme.atlassian.net/browse/RUN-89', kind: 'ticket', title: 'RUN-89 · Separate invoice' },
+      { text: '/' },
+      { text: '90', url: 'https://acme.atlassian.net/browse/RUN-90', kind: 'ticket', title: 'RUN-90' },
+      { text: ' done, R-2026-04040 / CP-2026-00982 stay' },
+    ]);
+  });
+
+  it('links the docs and channels it names, and bare links by their name or host', () => {
+    expect(linkParts('Read the rollback spec, asked in Sales <> Product, see https://example.com/notes.', item)).toEqual([
+      { text: 'Read the ' },
+      { text: 'rollback spec', url: 'https://docs.google.com/document/d/abcdefghijkl/edit', kind: 'doc', title: 'Rollback spec' },
+      { text: ', asked in ' },
+      { text: 'Sales <> Product', url: 'https://acme.slack.com/archives/C1', kind: 'slack', title: 'Sales <> Product' },
+      { text: ', see ' },
+      { text: 'example.com', url: 'https://example.com/notes', kind: 'link', title: 'https://example.com/notes' },
+      { text: '.' },
+    ]);
+  });
+
+  it('keeps a line with nothing to link as it is', () => {
+    expect(linkParts('initiative created', bare)).toEqual([{ text: 'initiative created' }]);
   });
 });

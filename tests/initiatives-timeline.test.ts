@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { timelineEntryOf } from '../src/core/initiatives/model.js';
-import { activityLevel, activityWeeks, ticketParts, timelineDayLabel, timelineDays } from '../packages/mac/src/initiatives/initiatives-model.js';
+import { activityLevel, activityWeeks, timelineDayLabel, timelineDays } from '../packages/mac/src/initiatives/initiatives-model.js';
 
 const NOW = new Date(2026, 10, 26, 15, 0);
 
@@ -43,9 +43,3 @@ describe('initiative activity grid', () => {
   });
 });
 
-describe('ticket keys in timeline text', () => {
-  it('splits the keys out as chips', () => {
-    expect(ticketParts('RUN-53 and RUN-54 are in progress')).toEqual([{ text: 'RUN-53', ticket: 'RUN-53' }, { text: ' and ' }, { text: 'RUN-54', ticket: 'RUN-54' }, { text: ' are in progress' }]);
-    expect(ticketParts('R-2026-04040 / CP-2026-00982 stay text')).toEqual([{ text: 'R-2026-04040 / CP-2026-00982 stay text' }]);
-  });
-});

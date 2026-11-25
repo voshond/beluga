@@ -584,21 +584,36 @@ button.card:hover {
   padding-top: 2px;
   line-height: 1.45;
 }
-.feedKey {
-  padding: 0 5px;
+.feedLink {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 0;
   border: 0;
-  border-radius: 4px;
-  background: var(--bg-raised);
+  background: none;
   color: var(--accent);
-  font: 11.5px var(--font-mono);
+  font: inherit;
   cursor: pointer;
 }
-.feedKey:disabled {
+.feedLink > svg {
+  align-self: center;
+}
+.feedLink:not(:disabled):hover {
+  text-decoration: underline;
+}
+.feedLink[data-link='ticket'] {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--bg-raised);
+  font: 11.5px var(--font-mono);
+}
+.feedLink[data-link='ticket']:not(:disabled):hover {
+  text-decoration: none;
+  background: var(--bg-hover);
+}
+.feedLink:disabled {
   color: var(--text-2);
   cursor: text;
-}
-.feedKey:not(:disabled):hover {
-  background: var(--bg-hover);
 }
 .feedKind {
   padding-top: 3px;

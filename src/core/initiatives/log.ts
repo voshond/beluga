@@ -97,3 +97,73 @@ export const recordMarkdown = (suggestion: Suggestion, item: SourceContext): str
   ];
   return `${lines.join('\n')}\n`;
 };
+
+export type LinkKind = 'ticket' | 'doc' | 'slack' | 'link';
+
+export type TextPart = {
+  readonly text: string;
+  readonly url?: string;
+  readonly kind?: LinkKind;
+  readonly title?: string;
+};
+
+type Span = TextPart & { readonly start: number; readonly end: number };
+
+const escapeRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const ticketSpan = (key: string, start: number, shown: string, item: SourceContext): Span => {
+  const source = ticketSource(key, item);
+  return { start, end: start + shown.length, text: shown, url: source.url, kind: 'ticket', title: source.label };
+};
+
+/** "RUN-53/54/55" is three tickets: RUN-53, then 54 and 55 after each slash. */
+const ticketSpans = (text: string, item: SourceContext): Span[] => {
+  const projects = jiraProjects(item);
+  return [...text.matchAll(TICKET_MENTION)]
+    .filter(([, project]) => projects.has(project!))
+    .flatMap(({ 1: project, 2: first, 3: more, index }) => {
+      const head = `${project}-${first}`;
+      const spans = [ticketSpan(head, index, head, item)];
+      let at = index + head.length;
+      for (const n of more!.split('/').filter(Boolean)) {
+        spans.push(ticketSpan(`${project}-${n}`, at + 1, n, item));
+        at += 1 + n.length;
+      }
+      return spans;
+    });
+};
+
+const namedLinks = (item: SourceContext): Array<{ readonly label: string; readonly url: string; readonly kind: LinkKind }> => [
+  ...item.docs.flatMap((d) => {
+    const url = linkOf(d.ref);
+    return url ? [{ label: d.label ?? d.ref, url, kind: 'doc' as const }] : [];
+  }),
+  ...item.slack.flatMap((c) => {
+    const url = linkOf(c.ref);
+    return url ? [{ label: c.label ?? c.ref, url, kind: 'slack' as const }] : [];
+  }),
+];
+
+const urlSpans = (text: string, item: SourceContext): Span[] =>
+  [...text.matchAll(URL_MENTION)].map((match) => {
+    const url = match[0].replace(/[.,;:!?]+$/, '');
+    const named = namedLinks(item).find((n) => n.url === url);
+    return { start: match.index!, end: match.index! + url.length, text: named?.label ?? url.replace(/^https?:\/\//, '').split('/')[0]!, url, kind: named?.kind ?? 'link', title: url };
+  });
+
+const nameSpans = (text: string, item: SourceContext): Span[] =>
+  namedLinks(item)
+    .filter((n) => n.label.length >= 4 && !/^https?:/.test(n.label))
+    .flatMap((n) => [...text.matchAll(new RegExp(escapeRegex(n.label), 'gi'))].map((m) => ({ start: m.index!, end: m.index! + m[0].length, text: m[0], url: n.url, kind: n.kind, title: n.label })));
+
+/** A line's words with the tickets, links, docs and Slack channels it mentions as links, in place. */
+export const linkParts = (text: string, item: SourceContext): TextPart[] => {
+  const spans = [...urlSpans(text, item), ...ticketSpans(text, item), ...nameSpans(text, item)]
+    .sort((a, b) => a.start - b.start || b.end - a.end)
+    .reduce<Span[]>((kept, span) => (kept.length && span.start < kept.at(-1)!.end ? kept : [...kept, span]), []);
+  const parts = spans.reduce<{ readonly at: number; readonly parts: TextPart[] }>(
+    (acc, { start, end, ...part }) => ({ at: end, parts: [...acc.parts, ...(start > acc.at ? [{ text: text.slice(acc.at, start) }] : []), part] }),
+    { at: 0, parts: [] },
+  );
+  return parts.at < text.length ? [...parts.parts, { text: text.slice(parts.at) }] : parts.parts;
+};
