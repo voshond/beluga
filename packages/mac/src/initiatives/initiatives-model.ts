@@ -140,3 +140,36 @@ export const tasksWords = (tasks: InitiativeTasks): string => {
   const done = tasks.tasks.length - open.length;
   return [`${open.length} open`, scheduled ? `${scheduled} scheduled` : '', done ? `${done} done` : ''].filter(Boolean).join(' · ');
 };
+
+export type TimelineDay = {
+  readonly key: string;
+  readonly label: string;
+  readonly entries: readonly string[];
+};
+
+const TIMELINE_LINE = /^(\d{4}-\d{2}-\d{2})\s*:\s*(.+)$/;
+
+const DAY_MS = 86_400_000;
+
+const startOfDay = (at: Date): number => new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
+
+export const timelineDayLabel = (key: string, now: Date): string => {
+  if (!key) return 'Undated';
+  const [year, month, day] = key.split('-').map(Number);
+  const date = new Date(year!, month! - 1, day!);
+  const daysAgo = Math.round((startOfDay(now) - date.getTime()) / DAY_MS);
+  if (daysAgo === 0) return 'Today';
+  if (daysAgo === 1) return 'Yesterday';
+  const sameYear = date.getFullYear() === now.getFullYear();
+  return date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) });
+};
+
+export const timelineDays = (lines: readonly string[], now: Date): TimelineDay[] =>
+  lines.reduce<TimelineDay[]>((days, line) => {
+    const match = TIMELINE_LINE.exec(line);
+    const key = match?.[1] ?? '';
+    const text = match?.[2] ?? line;
+    const last = days.at(-1);
+    if (last?.key === key) return [...days.slice(0, -1), { ...last, entries: [...last.entries, text] }];
+    return [...days, { key, label: timelineDayLabel(key, now), entries: [text] }];
+  }, []);

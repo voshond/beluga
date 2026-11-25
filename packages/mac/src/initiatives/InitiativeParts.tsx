@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { type EpicStatus, type InitiativeView, epicTitleOf, epicUrlOf } from '@beluga/core/initiatives/model.js';
 import { openExternal } from '../lib/system.js';
-import { progressDetail, progressPercent, progressWords } from './initiatives-model.js';
+import { progressDetail, progressPercent, progressWords, timelineDays } from './initiatives-model.js';
 import s from './initiatives.module.css';
 
 export const ProgressBar = ({ progress }: { progress: EpicStatus | undefined }) => {
@@ -47,16 +47,30 @@ export const Section = ({ title, children, aside }: { title: string; children: R
   </section>
 );
 
-export const Bullets = ({ title, items, empty }: { title: string; items: readonly string[]; empty: string }) => (
-  <Section title={title}>
-    {items.length ? (
-      <ul className={`${s.bullets} selectable`}>
-        {items.map((line, i) => (
-          <li key={`${i}-${line}`}>{line}</li>
-        ))}
-      </ul>
-    ) : (
-      <span className={s.quiet}>{empty}</span>
-    )}
-  </Section>
-);
+export const Timeline = ({ items }: { items: readonly string[] }) => {
+  const days = timelineDays(items, new Date());
+  return (
+    <Section title="Timeline">
+      {days.length ? (
+        <ol className={`${s.timeline} selectable`}>
+          {days.map((day, i) => (
+            <li key={`${i}-${day.key}`} className={s.timelineDay}>
+              <time className={s.timelineDate} dateTime={day.key || undefined} title={day.key || undefined}>
+                {day.label}
+              </time>
+              <ul className={s.timelineEntries}>
+                {day.entries.map((entry, j) => (
+                  <li key={`${j}-${entry}`} className={s.timelineEntry}>
+                    {entry}
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <span className={s.quiet}>Nothing in timeline.md yet.</span>
+      )}
+    </Section>
+  );
+};
