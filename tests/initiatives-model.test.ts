@@ -58,6 +58,7 @@ const item = (slug: string, name = slug): InitiativeView => ({
   people: [],
   suggestions: [],
   outbox: [],
+  artifacts: [],
   recent: [],
   files: [],
   chats: { chats: [{ id: 'main', channel: initiativeChatChannel(slug, 'main'), createdAt: 0 }], active: 'main' },

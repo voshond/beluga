@@ -21,6 +21,8 @@ initiatives/
     ├── tickets.json      every ticket under the epics and their sub-tasks, with their pull requests
     ├── tasks.json        your Google Tasks that belong to it, scheduled or not
     ├── suggestions.json  what the agent proposes: open, approved or dismissed
+    ├── artifacts.json    what worktrees sent it (report_to_initiative), newest last
+    ├── artifacts/        their files, `<id>-<name>`
     └── sources/          snapshots: jira.md, slack/, meetings/, docs/, prs.md
 ```
 
@@ -32,6 +34,7 @@ initiatives/
 - **tasks.json**: `{ at, tasks: [{ id, title, notes?, list?, due?, scheduled?, done, pending? (complete | reopen), url? }] }` (`TasksSchema`): the Google Tasks the agent keeps for this initiative, read through the calendar MCP. `scheduled` is the start of its first calendar placement; `pending` is a tick from the page on its way to Google.
 - **outbox.json**: the messages drafted for you to send (see §5, The outbox).
 - **suggestions.json**: `[{ id, text, why?, kind (jira | slack | calendar | task | doc | decision | other), options?, answer?, state (open | approved | dismissed), createdAt?, resolvedAt? }]`. The page lists the open ones.
+- **artifacts.json**: `[{ id, title, why?, file? (in `artifacts/`), path? (kept off the repo: where it is on this computer), name, bytes, ticket?, worktree?, project?, createdAt }]` (`ArtifactsSchema`). Beluga writes it, never the agent; see §8 (Artifacts).
 - **Commits.** After an initiative is made or changed, after a suggestion is resolved, and after each turn in one of its chats (its done, error or denied event), the daemon commits that folder alone if anything in it changed: `<slug>: created`, `<slug>: updated`, `<slug>: suggestion 3 approved`, `<slug>: check-in 2026-11-24`, `<slug>: chat 2026-11-24`. Commits queue per repo, never sign (`commit.gpgsign=false`), and fall back to "Beluga <beluga@localhost>" when git has no identity.
 - **Not in the repo.** Chat histories and agent sessions stay in `~/.beluga/initiatives/<slug>/`: `chats.json`, `chats/<id>/history.json` and `state.json`, and `local.json` (the id of its check-in sentinel, which is this computer's).
 
@@ -89,12 +92,21 @@ The state's `initiatives` slice (`InitiativesState`: `enabled`, `root`, `items`,
 - **An initiative's page** (`InitiativePage`), a simple stacked page with the whole window, as Sentinel's pages, and its own right panel with a Chat tab and the open suggestion's record: the name with its status (Active, Paused, Shipped), Edit… and ⋯ (Archive…); Goal, drawn as Markdown, with Refine With Agent (`GoalRefine`); the epic progress bar (done in green, in progress in blue), with each linked epic opening in Jira; Tickets (`TicketsTable`: a card list like the chat's task cards, one row each with its status ring, key, summary, pull requests with their state, assignee and last update, and its Jira status as a pill; a click on the key or summary opens Jira; open ones first, grouped by epic when there are several, each epic's name opening it in Jira; assignee and update hide when the page is narrow; with Refresh); the check-in switch, its schedule in words with the next run, Check In Now, and its time and weekday chips; Suggestions with Approve · Dismiss (a decision: its answers, Other… and Dismiss, `DecisionRow`); Tasks (`TasksSection`: Scheduled, Unscheduled and the last few Done, a checkbox each with its slot or due date, Completing… while one is on its way; with Refresh); Recent; Slack conversations, Docs (each with its kind: Confluence, Google Doc, Sheet or Slides, Link) and Meetings (`InitiativeFollows`, a link opens in Slack, the browser or the calendar); Repos (× to unlink, + to link); Memory, each file opening in a sheet (`MemoryFileSheet`).
 - **Its chat** (`InitiativeChat`), docked beside the page as the Sentinel chat is: the chat picker (Check-in among them), New Chat, ⋯ (Delete Chat…), the conversation, its approvals and questions, the outbox's cards (`OutboxCards`) and the message box.
 
+## 8. Artifacts
+
+Worktrees send the initiative what their work made: a report, test or validation output, a screenshot as proof, a generated spec.
+
+- **The tool.** Your own runs in a worktree, on every runtime, get `mcp__beluga_initiatives__report_to_initiative` (`file`, `title`, `why?`, `initiative?`; `src/agent/initiative-tools.ts`) when there are initiatives that aren't archived. `src/core/initiatives/report.ts` links the worktree by its ticket (`ws.ticket`, then a key in its branch, then in its name, `ticketKeyIn`): the initiative one of whose epics, tickets or sub-tasks it is (`initiativeOfTicket`, active ones first). Linked, its brief says so and asks for what's worth keeping, never every scratch file; not linked, it lists the initiatives and the agent names one when you ask. A friend's run, a guest's and an external agent's never get it.
+- **Kept.** `Initiatives.reportArtifact` copies the file (a path in the worktree, or a full path) into `artifacts/<id>-<name>`, adds it to `artifacts.json` with its ticket, worktree and project, puts "artifact #N “title” from RUN-52" on top of `timeline.md` and commits `<slug>: artifact N`. A file over 50 MB (`ARTIFACT_KEEP_MAX`: GitHub warns there and refuses 100 MB) stays where it is: the entry keeps its `path` and the agent is told to leave it. A secret (`isSecretPath`), a folder or a missing file is refused.
+- **The check-in** reads the ones sent since the last one, notes in the timeline what each shows, and raises a suggestion, the artifact among its sources, when one bears on a decision or shows a problem.
+- **The page.** The right panel's Artifacts tab (`ArtifactList.tsx`, with its count): the newest first, each with its number, title, why, ticket, worktree, size and when, and "Not in the repo" for one kept off it. A row opens in a sheet (`ArtifactSheet.tsx`, `initiatives.readArtifact`): text drawn (Markdown as Markdown), a picture shown (up to 15 MB), any other file by its path on the daemon's computer, with Copy Path.
+
 ## 8. Code, demo and tests
 
-- `src/core/initiatives/`: `model.ts` (browser-safe: types, zod schemas, channel helpers, the reducer), `files.ts` (folders), `repo.ts` (git), `chats.ts`, `prompt.ts`, `initiatives.ts` (the service), `chat-ref.ts` (how a ref resolves), `launch.ts`, `registry.ts`, `demo.ts`.
+- `src/core/initiatives/`: `model.ts` (browser-safe: types, zod schemas, channel helpers, the reducer), `files.ts` (folders), `repo.ts` (git), `chats.ts`, `prompt.ts`, `initiatives.ts` (the service), `chat-ref.ts` (how a ref resolves), `report.ts` (report_to_initiative for a worktree), `launch.ts`, `registry.ts`, `demo.ts`.
 - The demo (`npm run dev`) seeds two initiatives with progress, decisions and suggestions in a throwaway folder under the system's temp folder, removed when the daemon stops; nothing is committed there.
-- `tests/initiatives-model.test.ts`, `initiatives-files.test.ts`, `initiatives-service.test.ts`, `goal-refiner.test.ts`, and `packages/mac/e2e/initiatives.spec.ts` (the page, the table, Refine and the list editor against the demo).
+- `tests/initiatives-model.test.ts`, `initiatives-files.test.ts`, `initiatives-service.test.ts`, `initiatives-artifacts.test.ts`, `goal-refiner.test.ts`, and `packages/mac/e2e/initiatives.spec.ts` (the page, the table, Refine and the list editor against the demo).
 
-## 9. Not yet
+## 10. Not yet
 
-The phone (its views and `NeedsYou` cards for suggestions), dashboard tiles per initiative, a worktree joining an initiative, and opening an initiative chat from a desktop notification.
+The phone (its views and `NeedsYou` cards for suggestions, artifacts), dashboard tiles per initiative, an external agent sending artifacts, and opening an initiative chat from a desktop notification.

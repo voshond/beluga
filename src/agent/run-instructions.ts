@@ -68,6 +68,13 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
     sample: () => buildSetupAppend(SAMPLE_PROJECT, 'npm ci', 'detected'),
   },
   {
+    id: 'initiative-report',
+    label: 'Initiative artifacts',
+    when: 'Your own runs in a worktree, when there are initiatives',
+    source: 'src/core/initiatives/report.ts',
+    text: (c) => (c.input.initiativeReport && !c.askOnly ? c.input.initiativeReport.brief : ''),
+  },
+  {
     id: 'review-guide',
     label: 'Review guide',
     when: 'Your own runs in a project with a review guide',

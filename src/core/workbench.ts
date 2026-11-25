@@ -2012,6 +2012,14 @@ export class Workbench {
     };
   }
 
+  /** Your own run's worktree, as an initiative finds it: its ticket, branch and folder. Undefined: a main folder, or no such worktree. */
+  worktreeForRun(wsId: string): { readonly name: string; readonly path: string; readonly ticket?: string; readonly branch?: string; readonly project?: string } | undefined {
+    const ws = this.manager.find(wsId);
+    if (!ws || ws.kind !== 'worktree') return undefined;
+    const project = this.manager.list.find((p) => p.id === ws.projectId)?.name;
+    return { name: ws.name, path: ws.path, ...(ws.ticket ? { ticket: ws.ticket } : {}), ...(ws.branch ? { branch: ws.branch } : {}), ...(project ? { project } : {}) };
+  }
+
   /** Claude's name_worktree: the worktree's name once it knows the work. One you named stays; a pushed branch keeps its name. */
   private async nameForRun(wsId: string, name: string): Promise<string> {
     const before = this.manager.find(wsId);

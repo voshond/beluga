@@ -143,6 +143,8 @@ export interface AgentHostDeps {
   /** How freely Claude may use the phone now (off · ask · use · full), for the owner-approval gate. */
   /** Your own worktree runs: the project's setup, and Claude's tool to correct it (core/workbench). */
   readonly setup?: (channel: string) => import('../agent/types.js').SetupTools | undefined;
+  /** Your own worktree runs: report_to_initiative, when there are initiatives (core/initiatives/report.ts). */
+  readonly initiativeReport?: (channel: string) => import('../agent/types.js').InitiativeReportTools | undefined;
   /** What your own runs in a project's chat or worktree are told about its review guide (undefined: it has none). */
   readonly reviewGuide?: (channel: string) => string | undefined;
   readonly phoneUse?: () => 'off' | 'ask' | 'use' | 'full';
@@ -1748,6 +1750,7 @@ export class AgentHost {
         ...(move && !plans?.tools ? { continueInWorktree: move } : {}),
         // Your own Claude in a worktree keeps the project's setup true for the next one.
         ...(worktree && from === this.selfId && body.channel.startsWith('ws:') ? (({ setup }) => (setup ? { setup } : {}))({ setup: this.deps.setup?.(body.channel) }) : {}),
+        ...(worktree && from === this.selfId && !external && body.channel.startsWith('ws:') ? (({ initiativeReport }) => (initiativeReport ? { initiativeReport } : {}))({ initiativeReport: this.deps.initiativeReport?.(body.channel) }) : {}),
         ...(yours && !external && body.channel.startsWith('ws:') ? (({ reviewGuideBrief }) => (reviewGuideBrief ? { reviewGuideBrief } : {}))({ reviewGuideBrief: this.deps.reviewGuide?.(body.channel) }) : {}),
         onProcess: (p) => {
           proc = p;
@@ -1845,6 +1848,7 @@ export class AgentHost {
     const phone = this.deps.phone?.(scratch ? path.join(place.cwd, scratch) : undefined);
     const board = this.deps.board?.(channel, this.selfId, { plan: false });
     const setup = worktree && channel.startsWith('ws:') ? this.deps.setup?.(channel) : undefined;
+    const initiativeReport = worktree && channel.startsWith('ws:') ? this.deps.initiativeReport?.(channel) : undefined;
     const requestId = `term-${randomUUID()}`;
     this.deps.questions.track(requestId, this.selfId, channel);
     return agent.terminal(
@@ -1870,6 +1874,7 @@ export class AgentHost {
         ...(board?.brief ? { taskBrief: board.brief } : {}),
         ...(phone ? { phoneTools: phone.tools, phoneBrief: phone.brief } : {}),
         ...(setup ? { setup } : {}),
+        ...(initiativeReport ? { initiativeReport } : {}),
         ...this.modelFor(place.model, place.agent, place.effort),
         ownerMcp: true,
         ...this.launchArgs(),

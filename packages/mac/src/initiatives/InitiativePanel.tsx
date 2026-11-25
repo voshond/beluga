@@ -3,12 +3,13 @@ import { Icon } from '../components/Icon.js';
 import { IconButton } from '../components/ui.js';
 import { ResizeHandle } from '../layout/panel/ResizeHandle.js';
 import { useDockWidth } from '../layout/panel/use-dock-width.js';
+import { ArtifactList } from './ArtifactList.js';
 import { InitiativeChat } from './InitiativeChat.js';
 import { SuggestionRecord, kindLabel } from './SuggestionRecord.js';
 import home from '../sentinel/home.module.css';
 import s from './initiatives.module.css';
 
-export type PanelTab = 'chat' | 'record';
+export type PanelTab = 'chat' | 'record' | 'artifacts';
 
 type PanelProps = {
   readonly item: InitiativeView;
@@ -20,9 +21,10 @@ type PanelProps = {
 
 export const InitiativePanel = ({ item, picked, tab, onTab, onClose }: PanelProps) => {
   const dock = useDockWidth('initiatives.chat.width', 400);
-  const shown: PanelTab = picked ? tab : 'chat';
+  const shown: PanelTab = tab === 'record' && !picked ? 'chat' : tab;
   const handleChat = (): void => onTab('chat');
   const handleRecord = (): void => onTab('record');
+  const handleArtifacts = (): void => onTab('artifacts');
   return (
     <aside ref={dock.ref} className={home.panel} style={{ width: dock.width }} aria-label={`${item.name} panel`}>
       <ResizeHandle label={`Resize ${item.name} panel`} className={home.panelEdge} {...dock.handle} />
@@ -31,6 +33,11 @@ export const InitiativePanel = ({ item, picked, tab, onTab, onClose }: PanelProp
           <button type="button" role="tab" aria-selected={shown === 'chat'} className={s.panelTab} onClick={handleChat}>
             <Icon name="chat" size={12} />
             Chat
+          </button>
+          <button type="button" role="tab" aria-selected={shown === 'artifacts'} className={s.panelTab} onClick={handleArtifacts}>
+            <Icon name="fileText" size={12} />
+            Artifacts
+            {item.artifacts.length ? <span className={s.panelTabCount}>{item.artifacts.length}</span> : null}
           </button>
           {picked ? (
             <span className={s.panelTabWrap} data-on={shown === 'record'}>
@@ -47,6 +54,11 @@ export const InitiativePanel = ({ item, picked, tab, onTab, onClose }: PanelProp
         {picked && shown === 'record' ? (
           <div className={s.panelPane} data-pane="record" data-shown>
             <SuggestionRecord item={item} suggestion={picked} onChat={handleChat} />
+          </div>
+        ) : null}
+        {shown === 'artifacts' ? (
+          <div className={s.panelPane} data-pane="record" data-shown>
+            <ArtifactList item={item} />
           </div>
         ) : null}
       </div>

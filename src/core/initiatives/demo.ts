@@ -95,6 +95,10 @@ export const seedDemoInitiatives = async (initiatives: Initiatives, root: string
     writeText(path.join(folder, 'suggestions.json'), `${JSON.stringify(demo.suggestions, null, 2)}\n`);
     if (demo.tasks) writeText(path.join(folder, 'tasks.json'), `${JSON.stringify(demo.tasks, null, 2)}\n`);
     if (demo.outbox) writeText(path.join(folder, 'outbox.json'), `${JSON.stringify(demo.outbox, null, 2)}\n`);
+    if (slug === 'checkout-v2') {
+      writeText(path.join(folder, 'artifacts', '1-3ds-safari-retry.md'), '# 3DS on Safari: retry check\n\n- 40 test payments on Safari 18, 3DS challenge forced\n- 38 passed on the first frame, 2 after one retry, none failed\n');
+      writeText(path.join(folder, 'artifacts.json'), `${JSON.stringify([{ id: 1, title: '3DS on Safari: retry check', why: 'Shows the retry fixes the Safari challenge before SHOP-150 merges.', file: 'artifacts/1-3ds-safari-retry.md', name: '3ds-safari-retry.md', bytes: 140, ticket: 'SHOP-150', worktree: 'shop-150-3ds-retry', project: 'shop', createdAt: new Date(now - 3_600_000).toISOString() }], null, 2)}\n`);
+    }
     writeText(path.join(folder, 'sources', 'jira.md'), `# Jira\n\n${demo.status.epics.map((e) => `- ${e.key} ${e.title ?? ''}: ${e.done}/${e.total} done`).join('\n')}\n`);
     initiatives.refresh(slug);
   }

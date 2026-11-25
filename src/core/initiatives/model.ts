@@ -305,6 +305,63 @@ export type Suggestion = z.infer<typeof SuggestionSchema>;
 
 export const SuggestionsSchema = z.array(SuggestionSchema).max(500);
 
+/** What a worktree sent the initiative (artifacts.json): kept in `artifacts/` (`file`), or, too big for the repo, where it is on this computer (`path`). */
+export const ArtifactSchema = z.object({
+  id: z.number().int().min(1),
+  title: z.string().min(1).max(200),
+  why: maybe(1000),
+  file: maybe(400),
+  path: maybe(4096),
+  name: z.string().min(1).max(255),
+  bytes: z.number().int().min(0).default(0),
+  ticket: maybe(40),
+  worktree: maybe(200),
+  project: maybe(200),
+  from: maybe(120),
+  createdAt: z.string().max(40),
+});
+export type Artifact = z.infer<typeof ArtifactSchema>;
+
+export const ArtifactsSchema = z.array(ArtifactSchema).max(1000);
+
+/** Files the repo keeps: GitHub warns at 50 MB and refuses a file over 100 MB. */
+export const ARTIFACT_KEEP_MAX = 50 * 1024 * 1024;
+
+export const ARTIFACT_KINDS = ['text', 'image', 'other'] as const;
+export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
+
+const TEXT_EXTENSIONS: ReadonlySet<string> = new Set(['md', 'markdown', 'txt', 'log', 'json', 'xml', 'csv', 'tsv', 'yaml', 'yml', 'html', 'htm', 'diff', 'patch', 'sql', 'ts', 'tsx', 'js', 'py', 'sh']);
+const IMAGE_EXTENSIONS: ReadonlySet<string> = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']);
+
+export const artifactKindOf = (name: string): ArtifactKind => {
+  const ext = name.toLowerCase().split('.').pop() ?? '';
+  if (TEXT_EXTENSIONS.has(ext)) return 'text';
+  if (IMAGE_EXTENSIONS.has(ext)) return 'image';
+  return 'other';
+};
+
+/** An artifact as the page shows it: its text, its picture, or where it is (a file the page can't draw). */
+export type ArtifactRead =
+  | { readonly kind: 'text'; readonly name: string; readonly text: string; readonly cut: boolean }
+  | { readonly kind: 'image'; readonly name: string; readonly mediaType: string; readonly data: string }
+  | { readonly kind: 'other'; readonly name: string; readonly path: string };
+
+/** Newest first. */
+export const sortedArtifacts = (artifacts: readonly Artifact[]): Artifact[] => [...artifacts].sort((a, b) => b.id - a.id);
+
+/** The initiative a ticket belongs to: one of its epics, a ticket read under them, or a sub-task of one. Active ones win. */
+export const initiativeOfTicket = <T extends Pick<InitiativeView, 'slug' | 'status' | 'epics' | 'tickets'>>(items: readonly T[], key: string): T | undefined => {
+  const wanted = key.toUpperCase();
+  const holds = (item: T): boolean => item.epics.some((e) => e.toUpperCase() === wanted) || Boolean(item.tickets?.tickets.some((t) => t.key.toUpperCase() === wanted));
+  const open = items.filter((item) => item.status !== 'archived');
+  return open.find((item) => item.status === 'active' && holds(item)) ?? open.find(holds);
+};
+
+const TICKET_KEY = /\b([A-Z][A-Z0-9_]+-\d+)\b/;
+
+/** A ticket key in a branch or worktree name (RUN-52/core-engine, run-52-fix-nav). */
+export const ticketKeyIn = (text: string | undefined): string | undefined => TICKET_KEY.exec((text ?? '').toUpperCase())?.[1];
+
 export const OUTBOX_STATES = ['draft', 'approved', 'sent', 'discarded'] as const;
 export type OutboxState = (typeof OUTBOX_STATES)[number];
 
@@ -364,6 +421,7 @@ export type InitiativeView = {
   readonly tasks?: InitiativeTasks;
   readonly suggestions: readonly Suggestion[];
   readonly outbox: readonly OutboxDraft[];
+  readonly artifacts: readonly Artifact[];
   readonly recent: readonly string[];
   readonly files: readonly string[];
   readonly checkIn?: string;
