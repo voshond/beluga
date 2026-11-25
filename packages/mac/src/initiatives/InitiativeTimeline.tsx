@@ -99,34 +99,39 @@ export const Timeline = ({ item }: { item: InitiativeView }) => {
       Show all days
     </Button>
   ) : null;
-  return (
-    <Section title="Timeline" aside={aside}>
-      {item.timeline.length ? (
-        <>
-          <ActivityGrid entries={item.timeline} picked={picked} onPick={handlePick} />
-          <ol className={`${s.feed} selectable`}>
-            {days.map((day, i) => (
-              <li key={`${i}-${day.key}`} className={s.feedDay}>
-                <time className={s.feedDate} dateTime={day.key || undefined} title={day.key || undefined}>
-                  {day.label}
-                </time>
-                <ul className={s.feedEntries}>
-                  {day.entries.map((entry, j) => (
-                    <Entry key={`${j}-${entry.text}`} entry={entry} tickets={item.tickets} />
-                  ))}
-                </ul>
-              </li>
-            ))}
-          </ol>
-          {more ? (
-            <Button size="small" variant="quiet" icon={all ? 'chevronUp' : 'chevronDown'} onClick={handleAll}>
-              {all ? 'Show fewer' : `Show all ${item.timeline.length}`}
-            </Button>
-          ) : null}
-        </>
-      ) : (
+  if (!item.timeline.length) {
+    return (
+      <Section title="Timeline">
         <span className={s.quiet}>Nothing in timeline.md yet.</span>
-      )}
-    </Section>
+      </Section>
+    );
+  }
+  return (
+    <>
+      <Section title="Activity">
+        <ActivityGrid entries={item.timeline} picked={picked} onPick={handlePick} />
+      </Section>
+      <Section title="Timeline" aside={aside}>
+        <ol className={`${s.feed} selectable`}>
+          {days.map((day, i) => (
+            <li key={`${i}-${day.key}`} className={s.feedDay}>
+              <time className={s.feedDate} dateTime={day.key || undefined} title={day.key || undefined}>
+                {day.label}
+              </time>
+              <ul className={s.feedEntries}>
+                {day.entries.map((entry, j) => (
+                  <Entry key={`${j}-${entry.text}`} entry={entry} tickets={item.tickets} />
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ol>
+        {more ? (
+          <Button size="small" variant="quiet" icon={all ? 'chevronUp' : 'chevronDown'} onClick={handleAll}>
+            {all ? 'Show fewer' : `Show all ${item.timeline.length}`}
+          </Button>
+        ) : null}
+      </Section>
+    </>
   );
 };
