@@ -220,6 +220,7 @@ export const TicketSchema = z.object({
   assignee: maybe(120),
   updated: maybe(40),
   epic: maybe(40),
+  parent: maybe(40),
   prs: z.array(TicketPrSchema).max(30).default([]),
 });
 export type Ticket = z.infer<typeof TicketSchema>;
@@ -304,6 +305,63 @@ export type Suggestion = z.infer<typeof SuggestionSchema>;
 
 export const SuggestionsSchema = z.array(SuggestionSchema).max(500);
 
+/** What a worktree sent the initiative (artifacts.json): kept in `artifacts/` (`file`), or, too big for the repo, where it is on this computer (`path`). */
+export const ArtifactSchema = z.object({
+  id: z.number().int().min(1),
+  title: z.string().min(1).max(200),
+  why: maybe(1000),
+  file: maybe(400),
+  path: maybe(4096),
+  name: z.string().min(1).max(255),
+  bytes: z.number().int().min(0).default(0),
+  ticket: maybe(40),
+  worktree: maybe(200),
+  project: maybe(200),
+  from: maybe(120),
+  createdAt: z.string().max(40),
+});
+export type Artifact = z.infer<typeof ArtifactSchema>;
+
+export const ArtifactsSchema = z.array(ArtifactSchema).max(1000);
+
+/** Files the repo keeps: GitHub warns at 50 MB and refuses a file over 100 MB. */
+export const ARTIFACT_KEEP_MAX = 50 * 1024 * 1024;
+
+export const ARTIFACT_KINDS = ['text', 'image', 'other'] as const;
+export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
+
+const TEXT_EXTENSIONS: ReadonlySet<string> = new Set(['md', 'markdown', 'txt', 'log', 'json', 'xml', 'csv', 'tsv', 'yaml', 'yml', 'html', 'htm', 'diff', 'patch', 'sql', 'ts', 'tsx', 'js', 'py', 'sh']);
+const IMAGE_EXTENSIONS: ReadonlySet<string> = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']);
+
+export const artifactKindOf = (name: string): ArtifactKind => {
+  const ext = name.toLowerCase().split('.').pop() ?? '';
+  if (TEXT_EXTENSIONS.has(ext)) return 'text';
+  if (IMAGE_EXTENSIONS.has(ext)) return 'image';
+  return 'other';
+};
+
+/** An artifact as the page shows it: its text, its picture, or where it is (a file the page can't draw). */
+export type ArtifactRead =
+  | { readonly kind: 'text'; readonly name: string; readonly text: string; readonly cut: boolean }
+  | { readonly kind: 'image'; readonly name: string; readonly mediaType: string; readonly data: string }
+  | { readonly kind: 'other'; readonly name: string; readonly path: string };
+
+/** Newest first. */
+export const sortedArtifacts = (artifacts: readonly Artifact[]): Artifact[] => [...artifacts].sort((a, b) => b.id - a.id);
+
+/** The initiative a ticket belongs to: one of its epics, a ticket read under them, or a sub-task of one. Active ones win. */
+export const initiativeOfTicket = <T extends Pick<InitiativeView, 'slug' | 'status' | 'epics' | 'tickets'>>(items: readonly T[], key: string): T | undefined => {
+  const wanted = key.toUpperCase();
+  const holds = (item: T): boolean => item.epics.some((e) => e.toUpperCase() === wanted) || Boolean(item.tickets?.tickets.some((t) => t.key.toUpperCase() === wanted));
+  const open = items.filter((item) => item.status !== 'archived');
+  return open.find((item) => item.status === 'active' && holds(item)) ?? open.find(holds);
+};
+
+const TICKET_KEY = /\b([A-Z][A-Z0-9_]+-\d+)\b/;
+
+/** A ticket key in a branch or worktree name (RUN-52/core-engine, run-52-fix-nav). */
+export const ticketKeyIn = (text: string | undefined): string | undefined => TICKET_KEY.exec((text ?? '').toUpperCase())?.[1];
+
 export const OUTBOX_STATES = ['draft', 'approved', 'sent', 'discarded'] as const;
 export type OutboxState = (typeof OUTBOX_STATES)[number];
 
@@ -363,7 +421,7 @@ export type InitiativeView = {
   readonly tasks?: InitiativeTasks;
   readonly suggestions: readonly Suggestion[];
   readonly outbox: readonly OutboxDraft[];
-  readonly openDecisions: readonly string[];
+  readonly artifacts: readonly Artifact[];
   readonly recent: readonly string[];
   readonly files: readonly string[];
   readonly checkIn?: string;
@@ -472,20 +530,6 @@ const bullet = (line: string): string | undefined => {
   return match?.[1];
 };
 
-const sectionLines = (markdown: string, heading: RegExp): string[] => {
-  const lines = markdown.split('\n');
-  const start = lines.findIndex((l) => /^#{1,3}\s/.test(l) && heading.test(l));
-  if (start < 0) return [];
-  const rest = lines.slice(start + 1);
-  const end = rest.findIndex((l) => /^#{1,3}\s/.test(l));
-  return end < 0 ? rest : rest.slice(0, end);
-};
-
-export const openDecisionsOf = (markdown: string): string[] =>
-  sectionLines(markdown, /\bopen\b/i)
-    .map(bullet)
-    .filter((b): b is string => Boolean(b));
-
 export const recentOf = (markdown: string, max = 8): string[] =>
   markdown
     .split('\n')
@@ -590,8 +634,15 @@ export type TicketGroup = {
   readonly tickets: readonly Ticket[];
 };
 
+/** Whether a ticket is a sub-task of another ticket that was read with it. */
+export const isSubTask = (ticket: Pick<Ticket, 'parent'>, tickets: readonly Pick<Ticket, 'key'>[]): boolean => Boolean(ticket.parent && tickets.some((t) => t.key === ticket.parent));
+
+/** A ticket's sub-tasks, open ones first. */
+export const subTasksOf = (key: string, tickets: readonly Ticket[]): Ticket[] => sortedTickets(tickets.filter((t) => t.parent === key));
+
+/** The tickets under the epics, without the sub-tasks, which show under their parent ticket. */
 export const ticketGroups = (tickets: readonly Ticket[], epics: readonly string[]): TicketGroup[] => {
-  const sorted = sortedTickets(tickets);
+  const sorted = sortedTickets(tickets.filter((t) => !isSubTask(t, tickets)));
   if (epics.length < 2) return sorted.length ? [{ tickets: sorted }] : [];
   const known = epics.map((epic): TicketGroup => ({ epic, tickets: sorted.filter((t) => t.epic === epic) }));
   const rest = sorted.filter((t) => !t.epic || !epics.includes(t.epic));

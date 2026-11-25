@@ -1,11 +1,17 @@
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { AgentPlace } from '../../agent/types.js';
 import type { ScheduleTrigger, SentinelDraft } from '../sentinel/model.js';
+import { formatBytes } from '../../shared/format.js';
+import { isSecretPath } from '../shares.js';
 import type { Action, Store } from '../store.js';
 import { InitiativeChats } from './chats.js';
-import { addTimeline, folderOf, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeConfig, writeOutbox, writeSuggestions, writeTasks, writeText } from './files.js';
+import { addTimeline, artifactPath, folderOf, keepArtifactFile, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeArtifacts, writeConfig, writeOutbox, writeSuggestions, writeTasks, writeText } from './files.js';
 import {
+  ARTIFACT_KEEP_MAX,
+  type ArtifactRead,
+  ArtifactSchema,
+  artifactKindOf,
   CHECK_IN_CHAT,
   type CheckInSchedule,
   CheckInScheduleSchema,
@@ -74,6 +80,21 @@ export type InitiativeChatRun = {
 type Send = { readonly slug: string; readonly id: number; readonly to: OutboxTarget; readonly text: string };
 
 export const OUTBOX_DENIED = 'In an initiative, messages go out through its outbox: write this as a draft in outbox.json, and the user sends it from the chat.';
+
+/** A file a worktree's agent sends an initiative (report_to_initiative), with where it came from. */
+export type ArtifactReport = {
+  readonly file: string;
+  readonly title: string;
+  readonly why?: string;
+  readonly ticket?: string;
+  readonly worktree?: string;
+  readonly project?: string;
+  readonly from?: string;
+};
+
+const IMAGE_READ_MAX = 15 * 1024 * 1024;
+
+const MEDIA_TYPES: Readonly<Record<string, string>> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml' };
 
 type Local = {
   readonly checkIn?: string;
@@ -180,7 +201,7 @@ export class Initiatives {
       ...(folder.tasks ? { tasks: folder.tasks } : {}),
       suggestions: folder.suggestions,
       outbox: folder.outbox,
-      openDecisions: folder.openDecisions,
+      artifacts: folder.artifacts,
       recent: folder.recent,
       files: folder.files,
       ...(checkIn ? { checkIn } : {}),
@@ -461,6 +482,58 @@ export class Initiatives {
     this.putDraft(send.slug, folder.outbox, send.id, (d) => ({ ...d, state: 'sent', resolvedAt: new Date(this.now).toISOString() }));
     addTimeline(this.deps.root, send.slug, `${dayOf(this.now)}: sent ${send.to.kind === 'slack' ? 'a Slack message' : 'a Jira comment'} to ${targetWords(send.to)}`);
     this.refresh(send.slug);
+  }
+
+  /** Keeps a file a worktree made: copied into artifacts/, or, too big for the repo, noted where it is. */
+  async reportArtifact(slug: string, report: ArtifactReport): Promise<string> {
+    const item = this.need(slug);
+    if (isSecretPath(report.file)) throw new Error('That file holds secrets: it stays where it is.');
+    const bytes = this.fileSize(report.file);
+    const id = item.artifacts.reduce((n, a) => Math.max(n, a.id), 0) + 1;
+    const name = path.basename(report.file);
+    const kept = bytes <= ARTIFACT_KEEP_MAX;
+    const artifact = ArtifactSchema.parse({
+      id,
+      title: report.title.trim(),
+      why: report.why,
+      ...(kept ? { file: keepArtifactFile(this.deps.root, slug, id, report.file) } : { path: report.file }),
+      name,
+      bytes,
+      ticket: report.ticket,
+      worktree: report.worktree,
+      project: report.project,
+      from: report.from,
+      createdAt: new Date(this.now).toISOString(),
+    });
+    writeArtifacts(this.deps.root, slug, [...item.artifacts, artifact]);
+    addTimeline(this.deps.root, slug, `${dayOf(this.now)}: artifact #${id} “${artifact.title}”${artifact.ticket ? ` from ${artifact.ticket}` : ''}`);
+    await this.commit(slug, `${slug}: artifact ${id}`);
+    this.refresh(slug);
+    if (kept) return `Kept as artifact #${id} of ${item.name} (${artifact.file}). It shows on the initiative's page, and its next check-in reads it.`;
+    return `${name} is ${formatBytes(bytes)}, too big for the initiatives repo: artifact #${id} of ${item.name} points at ${report.file}, so leave the file there.`;
+  }
+
+  private fileSize(file: string): number {
+    try {
+      const stat = statSync(file);
+      if (stat.isFile()) return stat.size;
+    } catch {
+      throw new Error(`There is no file at ${file}`);
+    }
+    throw new Error(`${file} is a folder: send its files one by one, or a zip of it`);
+  }
+
+  readArtifact(slug: string, id: number): ArtifactRead {
+    const item = this.need(slug);
+    const artifact = item.artifacts.find((a) => a.id === id);
+    if (!artifact) throw new Error('That artifact is gone');
+    if (!artifact.file) return { kind: 'other', name: artifact.name, path: artifact.path ?? '' };
+    const file = artifactPath(this.deps.root, slug, artifact.file);
+    const kind = artifactKindOf(artifact.name);
+    if (kind === 'text') return { kind, ...readMemoryFile(this.deps.root, slug, artifact.file), name: artifact.name };
+    const mediaType = MEDIA_TYPES[artifact.name.toLowerCase().split('.').pop() ?? ''];
+    if (kind === 'image' && mediaType && statSync(file).size <= IMAGE_READ_MAX) return { kind, name: artifact.name, mediaType, data: readFileSync(file).toString('base64') };
+    return { kind: 'other', name: artifact.name, path: file };
   }
 
   readFile(slug: string, rel: string): { readonly name: string; readonly text: string; readonly cut: boolean } {

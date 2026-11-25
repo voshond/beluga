@@ -158,18 +158,12 @@ button.card:hover {
 }
 
 .log {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  overflow: hidden;
-  min-height: 260px;
-}
-.logMain {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border-right: 1px solid var(--hairline);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  overflow: hidden;
 }
 .logTitle {
   padding: 10px 10px 6px;
@@ -268,6 +262,90 @@ button.card:hover {
 .inChat {
   color: var(--accent);
   background: var(--bg-selected);
+}
+.panelTabs {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.panelTabWrap {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding-right: 4px;
+  border-bottom: 2px solid transparent;
+}
+.panelTabWrap[data-on='true'] {
+  border-bottom-color: var(--accent);
+}
+.panelTab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.panelTabWrap .panelTab {
+  border-bottom: 0;
+  padding-right: 4px;
+}
+.panelTab[aria-selected='true'] {
+  color: var(--text);
+}
+.panelTabs > .panelTab[aria-selected='true'] {
+  border-bottom-color: var(--accent);
+}
+.panelTab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.panelPane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.panelPane[data-pane='record'] {
+  overflow: auto;
+}
+.panelPane[data-shown='false'] {
+  display: none;
+}
+.panelPane > .panelTabCount {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+.artifactWhy {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.artifactEmpty {
+  padding: 12px 14px;
+}
+.artifactImage {
+  display: block;
+  max-width: 100%;
+  border-radius: 6px;
+}
+.artifactPath {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.record {
+  flex: none;
+  background: none;
 }
 .record {
   display: flex;
@@ -693,6 +771,18 @@ button.card:hover {
   -webkit-line-clamp: 2;
   font-size: 13px;
   font-weight: 500;
+}
+.ticket[data-sub-task='true'] .ticketMain {
+  padding-left: 34px;
+}
+.ticket[data-sub-task='true'] .ticketSummary {
+  font-weight: 400;
+}
+.ticketSubTasks {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  white-space: nowrap;
 }
 .ticket[data-category='done'] .ticketSummary {
   color: var(--text-3);

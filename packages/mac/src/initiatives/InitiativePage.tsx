@@ -10,7 +10,7 @@ import { GoalSection } from './GoalRefine.js';
 import { Follows } from './InitiativeFollows.js';
 import { Bullets, EpicLink, ProgressBar } from './InitiativeParts.js';
 import { CheckInRow, MemoryFiles, Repos } from './InitiativeSettings.js';
-import { InitiativeChat } from './InitiativeChat.js';
+import { InitiativePanel, type PanelTab } from './InitiativePanel.js';
 import { NewInitiativeSheet } from './NewInitiativeSheet.js';
 import { Suggestions } from './SuggestionLog.js';
 import { TasksSection } from './TasksSection.js';
@@ -74,10 +74,21 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
   const item = useApp((st) => initiativeOf(st.initiatives, slug), sameDeep);
   const enabled = useApp((st) => st.initiatives.enabled);
   const [editing, setEditing] = useState(false);
+  const [pickedId, setPickedId] = useState<number | undefined>(undefined);
+  const [tab, setTab] = useState<PanelTab>('chat');
   const handleEdit = (): void => setEditing(true);
   const handleClose = (): void => setEditing(false);
+  const handlePick = (id: number): void => {
+    setPickedId(id);
+    setTab('record');
+  };
+  const handleUnpick = (): void => {
+    setPickedId(undefined);
+    setTab('chat');
+  };
   if (!enabled) return <Empty icon="flag" title="Initiatives need the Beluga app" detail="Open the Beluga app to drive one." />;
   if (!item) return <Empty icon="flag" title="That initiative is gone" detail="Its folder is no longer in the initiatives repo." />;
+  const picked = item.suggestions.find((x) => x.id === pickedId);
   return (
     <div className={home.home} data-initiative-page={item.slug}>
       <div className={home.page}>
@@ -96,16 +107,15 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
           </div>
           <TicketsTable item={item} />
           <CheckInRow item={item} />
-          <Suggestions item={item} />
+          <Suggestions item={item} pickedId={picked?.id} onPick={handlePick} />
           <TasksSection item={item} />
-          <Bullets title="Open decisions" items={item.openDecisions} empty="Nothing open in decisions.md." />
           <Bullets title="Recent" items={item.recent} empty="Nothing in timeline.md yet." />
           <Follows item={item} />
           <Repos item={item} />
           <MemoryFiles item={item} />
         </div>
       </div>
-      <InitiativeChat item={item} />
+      <InitiativePanel item={item} picked={picked} tab={tab} onTab={setTab} onClose={handleUnpick} />
       {editing ? <NewInitiativeSheet editing={item} close={handleClose} /> : null}
     </div>
   );

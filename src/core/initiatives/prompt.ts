@@ -56,10 +56,11 @@ const DOCS_HOW =
   'For each doc source, read it as its line says (Confluence pages with the Confluence MCP by page id, Google Docs, Sheets and Slides with the calendar MCP’s drive_read_file by file id, or Google Drive’s read_file_content when only that is there), compare it with its snapshot in sources/docs/, write the new snapshot there (its text as Markdown, with the date read and the page’s title on top), and note in timeline.md what changed since the last check-in, or that it was first read. One you cannot read stays as it was: say so in your answer.';
 
 export const TICKETS_SHAPE =
-  '{"at" (now, an ISO date), "epics": [{"key", "url" (its Jira link), "title"}], "tickets": [{"key", "url", "summary", "status", "statusCategory" ("todo" | "inProgress" | "done"), "assignee", "updated" (an ISO date), "epic" (the epic’s key), "prs": [{"url", "number", "state" ("open" | "draft" | "merged" | "closed"), "repo", "title"}]}]}';
+  '{"at" (now, an ISO date), "epics": [{"key", "url" (its Jira link), "title"}], "tickets": [{"key", "url", "summary", "status", "statusCategory" ("todo" | "inProgress" | "done"), "assignee", "updated" (an ISO date), "epic" (the epic’s key), "parent" (a sub-task’s parent ticket key; leave it out for the others), "prs": [{"url", "number", "state" ("open" | "draft" | "merged" | "closed"), "repo", "title"}]}]}';
 
 const TICKETS_HOW = [
   'For each Jira epic, list every issue under it with the Jira MCP (jira_search with the JQL "parent = KEY", or the epic link field on older projects): key, link, summary, status, status category, assignee and last update.',
+  'Then list their sub-tasks the same way (jira_search with the JQL "parent in (KEY-1, KEY-2, …)" for those tickets) and keep each one as a ticket of its own, with "parent" set to its parent’s key and "epic" to the parent’s epic.',
   'Find each ticket’s pull requests two ways and merge them by link: Jira’s development info (jira_get_issues_development_info for the keys), and in each linked repo’s folder `gh pr list --state all --search KEY --json number,url,state,isDraft,title` for a pull request whose title or branch names the key.',
   `Write tickets.json: ${TICKETS_SHAPE}. Leave out what a ticket does not have; a ticket without pull requests gets "prs": [].`,
 ].join(' ');
@@ -68,7 +69,7 @@ export const TICKETS_PROMPT = [
   'Refresh this initiative’s tickets, and nothing else.',
   TICKETS_HOW,
   'Then set status.json’s counts from the same tickets. Leave the other memory files as they are, and change nothing outside this folder.',
-  'Answer with one line: how many tickets, how many are done, and how many pull requests are open.',
+  'Answer with one line: how many tickets, how many are done, how many sub-tasks are open, and how many pull requests are open.',
 ].join(' ');
 
 export const TASKS_SHAPE =
@@ -93,8 +94,9 @@ export const CHECK_IN_PROMPT = [
   TICKETS_HOW,
   TASKS_HOW,
   DOCS_HOW,
+  'Read the artifacts worktrees sent since the last check-in (artifacts.json, newest first, and their files in artifacts/): note in timeline.md what each one shows, and when one bears on a decision or shows a problem (failing checks, a gap against the acceptance criteria), say so in a suggestion with the artifact in its "sources".',
   'For each meeting: one that is coming gets prep notes (what to raise, what is open, who to ask), one that happened gets its follow-ups (what was agreed, who owes what), both in sources/meetings/.',
-  'Then update the rest of the memory: snapshots in sources/ (jira.md, slack/, meetings/, docs/, prs.md), status.json (counts across the epics: total, done, inProgress, blocked, stale for open tickets untouched in 7 days, with "at" set to now as an ISO date), brief.md (where it stands, in a few lines), timeline.md (what happened since last time, newest first), decisions.md (new open questions under "## Open", settled ones moved to "## Decided" with the date and why) and suggestions.json (what you propose next; a question only the user can settle is a "decision" with its "options"; a message worth sending can be drafted straight into outbox.json).',
+  'Then update the rest of the memory: snapshots in sources/ (jira.md, slack/, meetings/, docs/, prs.md), status.json (counts across the epics: total, done, inProgress, blocked, stale for open tickets untouched in 7 days, with "at" set to now as an ISO date), brief.md (where it stands, in a few lines), timeline.md (what happened since last time, newest first), decisions.md (your own notes, which the page does not show: new open questions under "## Open", settled ones moved to "## Decided" with the date and why) and suggestions.json (what you propose next; every open question only the user can settle is also a "decision" with its "options", one per question and never a second one while it is open, and a question that only waits on someone else stays in decisions.md, named in a decision’s "why" when it bears on it; a message worth sending can be drafted straight into outbox.json).',
   'Do not post, comment, transition, invite or change anything outside this folder: write it as a suggestion instead. Answer with one line on how it stands, then what needs the user.',
 ].join(' ');
 
@@ -123,14 +125,15 @@ ${fence(item.goal.trim() || 'Not written down yet.')}
 
 Your working folder is the initiative's memory, a folder in a git repository Beluga commits after your turn. Keep it current:
 - brief.md: where it stands now, short. Every chat starts from it.
-- decisions.md: "## Open" questions and "## Decided" ones, each with the date and why.
+- decisions.md: your own notes, "## Open" questions and "## Decided" ones, each with the date and why. The page does not show it: a question the user must settle is also a "decision" in suggestions.json.
 - timeline.md: what happened, newest first, one bullet each ("- 2026-11-24: …").
 - people.md: who is involved and what they own.
 - status.json: {"at", "total", "done", "inProgress", "blocked", "stale", "epics": [{"key", "title", "total", "done", "inProgress", "blocked", "stale"}]} from the epics.
-- tickets.json: every ticket under the epics with its pull requests, which the page shows as a table: ${TICKETS_SHAPE}. Rewrite it whole whenever you read the epics.
+- tickets.json: every ticket under the epics and every sub-task under those tickets, with their pull requests, which the page shows as a table: ${TICKETS_SHAPE}. Rewrite it whole whenever you read the epics.
 - tasks.json: the user's Google Tasks that belong to this initiative, which the page shows as scheduled and unscheduled with a checkbox each: ${TASKS_SHAPE}. A task you create for it (create_task, when the user asks) goes in here too.
 - suggestions.json: an array of {"id" (a number, never reused), "text", "why", "kind" ("jira" | "slack" | "calendar" | "task" | "doc" | "decision" | "other"), "state": "open", "createdAt", "sources" ([{"label", "url"}]: the tickets, Slack threads and docs it is about, so the page can link them)}. When the next step is the user's call (in or out of scope, which way to go), make it a "decision" with "options": 2 to 4 short answers to pick from ("In scope", "Out of scope"); the page shows them as buttons, with Other… for an answer of their own. Keep the ones the user resolved as they are, except: once you did an approved or decided one, set its "outcome" (one line on what came of it) and "proof" ([{"label", "url"}]: the Jira comment, the Slack permalink, the pull request, the doc), which the page keeps as its decision log.
 - outbox.json: messages you prepared for the user to send, an array of {"id" (a number, never reused), "to", "text", "why", "suggestion" (the suggestion's id it comes from, if any), "state": "draft", "createdAt"}. "to" is {"kind": "slack", "channel" (the channel, DM or group DM id, C… or D…), "thread" (the parent's ts, only for a reply), "label" ("#checkout-v2", "DM with Julia")} or {"kind": "jira", "issue" ("RUN-12"), "label"}. Write the text exactly as it should go out, in the voice of the user. Leave the others as they are: the user sends, edits or discards each one from the chat.
+- artifacts.json and artifacts/: what worktrees working on its tickets sent (reports, test output, screenshots, specs), each {"id", "title", "why", "file" (in artifacts/) or "path" (too big for the repo: where it is on this computer), "name", "bytes", "ticket", "worktree", "project", "createdAt"}. Beluga writes them: read them, never change or remove them.
 - sources/: snapshots of what you read (meetings/ holds each meeting’s prep notes before it and follow-ups after it).
 Other files here now: ${others.length ? others.join(', ') : 'none'}.
 

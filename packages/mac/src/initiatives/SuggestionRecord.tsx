@@ -8,13 +8,15 @@ import { DecisionAnswers } from './DecisionRow.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import s from './initiatives.module.css';
 
-type RecordProps = { readonly item: InitiativeView; readonly suggestion: Suggestion };
+type RecordProps = { readonly item: InitiativeView; readonly suggestion: Suggestion; readonly onChat: () => void };
 
 const KIND_LABEL: Readonly<Record<Suggestion['kind'], string>> = { jira: 'Jira', slack: 'Slack', calendar: 'Calendar', task: 'Task', doc: 'Doc', decision: 'Decision', other: 'Other' };
 
+export const kindLabel = (suggestion: Suggestion): string => (isDecision(suggestion) ? KIND_LABEL.decision : KIND_LABEL[suggestion.kind]);
+
 export const KindChip = ({ suggestion }: { suggestion: Suggestion }) => (
   <span className={s.kindChip} data-kind={isDecision(suggestion) ? 'decision' : suggestion.kind}>
-    {isDecision(suggestion) ? KIND_LABEL.decision : KIND_LABEL[suggestion.kind]}
+    {kindLabel(suggestion)}
   </span>
 );
 
@@ -57,14 +59,16 @@ const Part = ({ title, children }: { title: string; children: ReactNode }) => (
   </>
 );
 
-const OpenActions = ({ item, suggestion }: RecordProps) => {
+const OpenActions = ({ item, suggestion, onChat }: RecordProps) => {
   const a = useInitiativeActions();
   const handleApprove = (): void => void a.act(() => a.api.resolveSuggestion(item.slug, suggestion.id, 'approve'), 'Sent to the chat');
   const handleDismiss = (): void => void a.act(() => a.api.resolveSuggestion(item.slug, suggestion.id, 'dismiss'));
   const handleClarify = (): void =>
     void a.act(() => a.api.clarifySuggestion(item.slug, suggestion.id), 'Asked in the chat').then((done) => {
       const chat = initiativeChatOf(done?.channel)?.chat;
-      if (chat) a.open(item, chat);
+      if (!chat) return;
+      a.open(item, chat);
+      onChat();
     });
   return (
     <div className={s.recordActions}>
@@ -87,7 +91,7 @@ const OpenActions = ({ item, suggestion }: RecordProps) => {
   );
 };
 
-export const SuggestionRecord = ({ item, suggestion }: RecordProps) => {
+export const SuggestionRecord = ({ item, suggestion, onChat }: RecordProps) => {
   const a = useInitiativeActions();
   const open = suggestion.state === 'open';
   const proof = proofOf(suggestion, item.outbox);
@@ -115,7 +119,7 @@ export const SuggestionRecord = ({ item, suggestion }: RecordProps) => {
         </Part>
       ) : null}
       {open ? (
-        <OpenActions item={item} suggestion={suggestion} />
+        <OpenActions item={item} suggestion={suggestion} onChat={onChat} />
       ) : (
         <>
           <Part title="Decision">

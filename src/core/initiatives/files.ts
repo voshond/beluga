@@ -1,9 +1,9 @@
-import { type Dirent, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { type Dirent, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { z } from 'zod';
-import { type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, type InitiativeTasks, TasksSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type OutboxDraft, OutboxSchema, type Suggestion, SuggestionsSchema, openDecisionsOf, recentOf } from './model.js';
+import { type Artifact, ArtifactsSchema, type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, type InitiativeTasks, TasksSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type OutboxDraft, OutboxSchema, type Suggestion, SuggestionsSchema, recentOf } from './model.js';
 
-export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json'] as const;
+export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json', 'artifacts.json'] as const;
 
 const MAX_FILES = 200;
 const MAX_READ = 512 * 1024;
@@ -18,7 +18,7 @@ export type InitiativeFolder = {
   readonly tasks?: InitiativeTasks;
   readonly suggestions: readonly Suggestion[];
   readonly outbox: readonly OutboxDraft[];
-  readonly openDecisions: readonly string[];
+  readonly artifacts: readonly Artifact[];
   readonly recent: readonly string[];
   readonly files: readonly string[];
   readonly trouble?: string;
@@ -102,8 +102,9 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
   const tasks = parseJson(file('tasks.json'), TasksSchema, 'tasks.json');
   const suggestions = parseJson(file('suggestions.json'), SuggestionsSchema, 'suggestions.json');
   const outbox = parseJson(file('outbox.json'), OutboxSchema, 'outbox.json');
+  const artifacts = parseJson(file('artifacts.json'), ArtifactsSchema, 'artifacts.json');
   const missing = config.value || config.trouble ? undefined : 'initiative.json is missing';
-  const troubles = [config.trouble ?? missing, status.trouble, tickets.trouble, tasks.trouble, suggestions.trouble, outbox.trouble].filter((t): t is string => Boolean(t));
+  const troubles = [config.trouble ?? missing, status.trouble, tickets.trouble, tasks.trouble, suggestions.trouble, outbox.trouble, artifacts.trouble].filter((t): t is string => Boolean(t));
   return {
     slug,
     folder,
@@ -114,7 +115,7 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
     ...(tasks.value ? { tasks: tasks.value } : {}),
     suggestions: suggestions.value ?? [],
     outbox: outbox.value ?? [],
-    openDecisions: openDecisionsOf(file('decisions.md') ?? ''),
+    artifacts: artifacts.value ?? [],
     recent: recentOf(file('timeline.md') ?? ''),
     files: memoryFiles(folder),
     ...(troubles.length ? { trouble: troubles.join('; ') } : {}),
@@ -128,6 +129,28 @@ export const writeSuggestions = (root: string, slug: string, suggestions: readon
 export const writeTasks = (root: string, slug: string, tasks: InitiativeTasks): void => writeJsonFile(path.join(folderOf(root, slug), 'tasks.json'), tasks);
 
 export const writeOutbox = (root: string, slug: string, outbox: readonly OutboxDraft[]): void => writeText(path.join(folderOf(root, slug), 'outbox.json'), `${JSON.stringify(outbox, null, 2)}\n`);
+
+export const writeArtifacts = (root: string, slug: string, artifacts: readonly Artifact[]): void => writeText(path.join(folderOf(root, slug), 'artifacts.json'), `${JSON.stringify(artifacts, null, 2)}\n`);
+
+const safeName = (name: string): string => name.replace(/[^\w.-]+/g, '-').replace(/^[.-]+/, '').slice(0, 120) || 'file';
+
+/** Copies a file into the initiative's artifacts/ as `<id>-<name>`: → its path in the folder. */
+export const keepArtifactFile = (root: string, slug: string, id: number, source: string): string => {
+  const rel = `artifacts/${id}-${safeName(path.basename(source))}`;
+  const target = path.join(folderOf(root, slug), rel);
+  mkdirSync(path.dirname(target), { recursive: true });
+  copyFileSync(source, target);
+  return rel;
+};
+
+/** An artifact's file in the folder, refused when it would lead outside it. */
+export const artifactPath = (root: string, slug: string, rel: string): string => {
+  const folder = folderOf(root, slug);
+  const file = path.resolve(folder, rel);
+  const inside = path.relative(folder, file);
+  if (!inside || inside.startsWith('..') || path.isAbsolute(inside) || !existsSync(file)) throw new Error('That artifact’s file is gone');
+  return file;
+};
 
 /** One line on top of timeline.md's bullets (newest first), as the agent writes them. */
 export const addTimeline = (root: string, slug: string, line: string): void => {

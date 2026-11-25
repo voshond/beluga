@@ -1,6 +1,6 @@
 import { activityOf } from '@beluga/ui/workspace-models.js';
 import type { IssueStatus } from '@beluga/core/board/model.js';
-import { CHECK_IN_CHAT, type InitiativeView, type Ticket, type TicketCategory, type TicketPr, initiativeChatChannel, ticketGroups } from '@beluga/core/initiatives/model.js';
+import { CHECK_IN_CHAT, type InitiativeView, type Ticket, type TicketCategory, type TicketPr, initiativeChatChannel, subTasksOf, ticketGroups } from '@beluga/core/initiatives/model.js';
 import { Button } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
 import { openExternal } from '../lib/system.js';
@@ -9,7 +9,7 @@ import { TonePill } from '../plans/marks.js';
 import type { Tone } from '../plans/plans-model.js';
 import { StatusIcon } from '../tasks/marks.js';
 import { ago } from '../tasks/tasks-model.js';
-import { CATEGORY_LABEL, PR_STATE_LABEL, prName, ticketsWords } from './initiatives-model.js';
+import { CATEGORY_LABEL, PR_STATE_LABEL, prName, subTasksWords, ticketsWords } from './initiatives-model.js';
 import { EpicLink, Section } from './InitiativeParts.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import s from './initiatives.module.css';
@@ -38,14 +38,15 @@ const TICKET_STATUS: Readonly<Record<TicketCategory, IssueStatus>> = { todo: 'to
 
 const TICKET_TONE: Readonly<Record<TicketCategory, Tone>> = { todo: 'neutral', inProgress: 'claude', done: 'ok' };
 
-const TicketRow = ({ ticket, now }: { ticket: Ticket; now: number }) => {
+const TicketRow = ({ ticket, subTasks = [], nested = false, now }: { ticket: Ticket; subTasks?: readonly Ticket[]; nested?: boolean; now: number }) => {
   const url = ticket.url;
+  const progress = subTasksWords(subTasks);
   const who = [ticket.assignee ?? 'Unassigned', whenOf(ticket.updated, now)].filter(Boolean).join(' · ');
   const handleOpen = (): void => {
     if (url) void openExternal(url);
   };
   return (
-    <div role="listitem" className={s.ticket} data-ticket={ticket.key} data-category={ticket.statusCategory}>
+    <div role="listitem" className={s.ticket} data-ticket={ticket.key} data-category={ticket.statusCategory} data-sub-task={nested}>
       <button type="button" className={s.ticketMain} onClick={handleOpen} disabled={!url} aria-label={`Open ${ticket.key} in Jira: ${ticket.summary}`}>
         <StatusIcon status={TICKET_STATUS[ticket.statusCategory]} size={14} />
         <span className={s.ticketKey}>{ticket.key}</span>
@@ -55,6 +56,7 @@ const TicketRow = ({ ticket, now }: { ticket: Ticket; now: number }) => {
         {ticket.prs.map((pr) => (
           <PrLink key={pr.url} pr={pr} />
         ))}
+        {progress ? <span className={s.ticketSubTasks}>{progress}</span> : null}
         <span className={s.ticketWho}>{who}</span>
         <TonePill tone={TICKET_TONE[ticket.statusCategory]}>{ticket.status || CATEGORY_LABEL[ticket.statusCategory]}</TonePill>
       </span>
@@ -62,11 +64,12 @@ const TicketRow = ({ ticket, now }: { ticket: Ticket; now: number }) => {
   );
 };
 
-const TicketList = ({ tickets, name, now }: { tickets: readonly Ticket[]; name: string; now: number }) => (
+const TicketList = ({ tickets, all, name, now }: { tickets: readonly Ticket[]; all: readonly Ticket[]; name: string; now: number }) => (
   <div className={s.ticketList} role="list" aria-label={name}>
-    {tickets.map((ticket) => (
-      <TicketRow key={ticket.key} ticket={ticket} now={now} />
-    ))}
+    {tickets.flatMap((ticket) => {
+      const subTasks = subTasksOf(ticket.key, all);
+      return [<TicketRow key={ticket.key} ticket={ticket} subTasks={subTasks} now={now} />, ...subTasks.map((sub) => <TicketRow key={sub.key} ticket={sub} nested now={now} />)];
+    })}
   </div>
 );
 
@@ -99,7 +102,7 @@ export const TicketsTable = ({ item }: { item: InitiativeView }) => {
           {groups.map((group) => (
             <div key={group.epic ?? 'other'} className={s.ticketGroup} data-epic={group.epic ?? 'other'}>
               {group.epic ? <EpicLink epic={group.epic} item={item} /> : groups.length > 1 ? <span className={s.epicName}>Other tickets</span> : null}
-              <TicketList tickets={group.tickets} name={group.epic ? `Tickets under ${group.epic}` : 'Tickets under the epic'} now={now} />
+              <TicketList tickets={group.tickets} all={item.tickets?.tickets ?? []} name={group.epic ? `Tickets under ${group.epic}` : 'Tickets under the epic'} now={now} />
             </div>
           ))}
         </div>

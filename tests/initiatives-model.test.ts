@@ -21,12 +21,12 @@ import {
   sameKeys,
   slackKindOf,
   sortedTickets,
+  subTasksOf,
   ticketGroups,
   activeInitiativeChat,
   initiativeChatChannel,
   initiativeChatOf,
   initiativeChatTitle,
-  openDecisionsOf,
   progressShare,
   recentOf,
   reduceInitiatives,
@@ -58,7 +58,7 @@ const item = (slug: string, name = slug): InitiativeView => ({
   people: [],
   suggestions: [],
   outbox: [],
-  openDecisions: [],
+  artifacts: [],
   recent: [],
   files: [],
   chats: { chats: [{ id: 'main', channel: initiativeChatChannel(slug, 'main'), createdAt: 0 }], active: 'main' },
@@ -278,6 +278,21 @@ describe('an epic’s tickets', () => {
     expect(ticketGroups([], ['SHOP-120'])).toEqual([]);
   });
 
+  it('keeps sub-tasks out of the groups and under their parent ticket', () => {
+    const { tickets } = TicketsSchema.parse({
+      at: 'now',
+      tickets: [
+        { key: 'RUN-52', epic: 'RUN-50', statusCategory: 'inProgress' },
+        { key: 'RUN-60', parent: 'RUN-52', statusCategory: 'done' },
+        { key: 'RUN-61', parent: 'RUN-52', statusCategory: 'todo' },
+        { key: 'RUN-70', parent: 'RUN-99', statusCategory: 'todo' },
+      ],
+    });
+    expect(ticketGroups(tickets, ['RUN-50'])[0]!.tickets.map((t) => t.key)).toEqual(['RUN-52', 'RUN-70']);
+    expect(subTasksOf('RUN-52', tickets).map((t) => t.key)).toEqual(['RUN-61', 'RUN-60']);
+    expect(subTasksOf('RUN-61', tickets)).toEqual([]);
+  });
+
   it('knows when the epics changed', () => {
     expect(sameKeys(['A-1', 'B-2'], ['B-2', 'A-1'])).toBe(true);
     expect(sameKeys(['A-1'], ['A-1', 'B-2'])).toBe(false);
@@ -286,12 +301,6 @@ describe('an epic’s tickets', () => {
 });
 
 describe('initiative memory parsing', () => {
-  it('reads the open decisions only', () => {
-    const md = '# Decisions\n\n## Open\n\n- Launch in NO?\n- [ ] Guest checkout flag?\n\n## Decided\n\n- 2026-11-20: Apple Pay first\n';
-    expect(openDecisionsOf(md)).toEqual(['Launch in NO?', 'Guest checkout flag?']);
-    expect(openDecisionsOf('# Decisions\n')).toEqual([]);
-  });
-
   it('reads the newest timeline lines', () => {
     const md = `# Timeline\n\n${Array.from({ length: 12 }, (_, i) => `- line ${i}`).join('\n')}\n`;
     expect(recentOf(md)).toHaveLength(8);

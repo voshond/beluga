@@ -28,6 +28,7 @@ import { useViewEnv } from './views/sources.js';
 import { boardOf } from './board/registry.js';
 import { sentinelOf } from './sentinel/registry.js';
 import { initiativesOf } from './initiatives/registry.js';
+import { initiativeReportFor } from './initiatives/report.js';
 import { needPlans, plansOf } from './plans/registry.js';
 import { assistantOf } from './assistant/registry.js';
 import { companionOf } from '../companion/registry.js';
@@ -289,6 +290,11 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       servedTo: () => servedLan(session)?.host,
       phoneUse: () => companionOf(session)?.control.useLevel() ?? 'off',
       setup: (channel) => workbench?.setupForRun(channel.slice(3)),
+      initiativeReport: (channel) => {
+        const initiatives = initiativesOf(session);
+        const ws = workbench?.worktreeForRun(channel.slice(3));
+        return initiatives && ws ? initiativeReportFor(initiatives, opts.store.getState().initiatives.items, ws) : undefined;
+      },
       reviewGuide: (channel) => workbench?.reviewGuideForRun(channel),
       terminalDriving: (channel) => agentTerms?.driving(channel) ?? false,
       toolbox: (channel) => {

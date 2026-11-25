@@ -5,6 +5,7 @@ import { createDashboardTools } from './dashboard-tools.js';
 import { createMacTools } from './mac-tools.js';
 import { createMcpTools } from './mcp-tools.js';
 import { createHonchoTools } from './honcho-tools.js';
+import { createInitiativeTools } from './initiative-tools.js';
 import { createMemoryTools } from './memory-tools.js';
 import { createPhoneTools } from './phone-tools.js';
 import { createPlanTools } from './plan-tools.js';
@@ -57,6 +58,8 @@ export function runToolSuites(input: AgentRunInput, bridge: RoomBridge, shelf: V
     ...(input.memoryTools ? { beluga_memory: createMemoryTools(input.memoryTools) } : {}),
     // Your own runs ask Honcho about you, with Honcho on (core/honcho, BLG-101).
     ...(input.honchoTools ? { beluga_honcho: createHonchoTools(input.honchoTools) } : {}),
+    // Your own worktree runs send what the work made to an initiative (core/initiatives/report.ts).
+    ...(input.initiativeReport && !askOnly ? { beluga_initiatives: createInitiativeTools(input.initiativeReport) } : {}),
     beluga_view: createViewTools(shelf, cwd),
   };
 }

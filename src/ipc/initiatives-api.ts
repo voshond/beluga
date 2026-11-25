@@ -24,4 +24,5 @@ export const INITIATIVES_API = {
   'initiatives.sendDraft': { args: z.tuple([slug, z.number().int().min(1), z.string().trim().min(1).max(5000)]) },
   'initiatives.discardDraft': { args: z.tuple([slug, z.number().int().min(1)]) },
   'initiatives.readFile': { args: z.tuple([slug, z.string().min(1).max(400)]) },
+  'initiatives.readArtifact': { args: z.tuple([slug, z.number().int().min(1)]) },
 } as const;

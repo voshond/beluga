@@ -33,4 +33,5 @@ export const INITIATIVES_HANDLERS = {
   'initiatives.sendDraft': (s, slug, id, text) => needInitiatives(s).sendDraft(slug, id, text),
   'initiatives.discardDraft': (s, slug, id) => needInitiatives(s).discardDraft(slug, id),
   'initiatives.readFile': (s, slug, rel) => needInitiatives(s).readFile(slug, rel),
+  'initiatives.readArtifact': (s, slug, id) => needInitiatives(s).readArtifact(slug, id),
 } satisfies InitiativesHandlers;

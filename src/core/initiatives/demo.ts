@@ -29,10 +29,12 @@ const demos = (now: number): DemoInitiative[] => {
         at: iso,
         epics: [{ key: 'SHOP-120', url: 'https://example.atlassian.net/browse/SHOP-120', title: 'One-page checkout' }],
         tickets: [
-          { key: 'SHOP-141', url: 'https://example.atlassian.net/browse/SHOP-141', summary: 'Tax rates for Norway', status: 'Blocked', statusCategory: 'inProgress', assignee: 'Ana Ruiz', updated: at(4), epic: 'SHOP-120', prs: [] },
-          { key: 'SHOP-150', url: 'https://example.atlassian.net/browse/SHOP-150', summary: '3DS challenge fails on Safari', status: 'In Review', statusCategory: 'inProgress', assignee: undefined, updated: at(1), epic: 'SHOP-120', prs: [{ url: 'https://github.com/example/shop/pull/412', number: 412, state: 'open', repo: 'example/shop', title: 'Retry the 3DS frame on Safari' }] },
-          { key: 'SHOP-152', url: 'https://example.atlassian.net/browse/SHOP-152', summary: 'Address lookup falls back to manual entry', status: 'To Do', statusCategory: 'todo', assignee: 'Jonas Berg', updated: at(6), epic: 'SHOP-120', prs: [] },
-          { key: 'SHOP-133', url: 'https://example.atlassian.net/browse/SHOP-133', summary: 'Apple Pay button on the one-page form', status: 'Done', statusCategory: 'done', assignee: 'Mia Chen', updated: at(2), epic: 'SHOP-120', prs: [{ url: 'https://github.com/example/shop/pull/398', number: 398, state: 'merged', repo: 'example/shop', title: 'Apple Pay on one page' }] },
+          { key: 'SHOP-141', url: 'https://example.atlassian.net/browse/SHOP-141', summary: 'Tax rates for Norway', status: 'Blocked', statusCategory: 'inProgress', assignee: 'Ana Ruiz', updated: at(4), epic: 'SHOP-120', parent: undefined, prs: [] },
+          { key: 'SHOP-158', url: 'https://example.atlassian.net/browse/SHOP-158', summary: 'Norway VAT table from finance', status: 'Done', statusCategory: 'done', assignee: 'Ana Ruiz', updated: at(5), epic: 'SHOP-120', parent: 'SHOP-141', prs: [] },
+          { key: 'SHOP-159', url: 'https://example.atlassian.net/browse/SHOP-159', summary: 'Show tax per line on the summary', status: 'To Do', statusCategory: 'todo', assignee: 'Ana Ruiz', updated: at(4), epic: 'SHOP-120', parent: 'SHOP-141', prs: [] },
+          { key: 'SHOP-150', url: 'https://example.atlassian.net/browse/SHOP-150', summary: '3DS challenge fails on Safari', status: 'In Review', statusCategory: 'inProgress', assignee: undefined, updated: at(1), epic: 'SHOP-120', parent: undefined, prs: [{ url: 'https://github.com/example/shop/pull/412', number: 412, state: 'open', repo: 'example/shop', title: 'Retry the 3DS frame on Safari' }] },
+          { key: 'SHOP-152', url: 'https://example.atlassian.net/browse/SHOP-152', summary: 'Address lookup falls back to manual entry', status: 'To Do', statusCategory: 'todo', assignee: 'Jonas Berg', updated: at(6), epic: 'SHOP-120', parent: undefined, prs: [] },
+          { key: 'SHOP-133', url: 'https://example.atlassian.net/browse/SHOP-133', summary: 'Apple Pay button on the one-page form', status: 'Done', statusCategory: 'done', assignee: 'Mia Chen', updated: at(2), epic: 'SHOP-120', parent: undefined, prs: [{ url: 'https://github.com/example/shop/pull/398', number: 398, state: 'merged', repo: 'example/shop', title: 'Apple Pay on one page' }] },
         ],
       },
       tasks: {
@@ -67,9 +69,9 @@ const demos = (now: number): DemoInitiative[] => {
         at: new Date(now - 3 * DAY).toISOString(),
         epics: [],
         tickets: [
-          { key: 'APP-93', url: 'https://example.atlassian.net/browse/APP-93', summary: 'Skip button on the welcome carousel', status: 'In Progress', statusCategory: 'inProgress', assignee: 'Sam Okafor', updated: at(3), epic: 'APP-88', prs: [{ url: 'https://github.com/example/app/pull/77', number: 77, state: 'draft', repo: 'example/app', title: 'Welcome: skip' }] },
-          { key: 'APP-90', url: 'https://example.atlassian.net/browse/APP-90', summary: 'New welcome copy', status: 'Done', statusCategory: 'done', assignee: 'Sam Okafor', updated: at(8), epic: 'APP-88', prs: [] },
-          { key: 'APP-97', url: 'https://example.atlassian.net/browse/APP-97', summary: 'Sample-list picker', status: 'To Do', statusCategory: 'todo', assignee: undefined, updated: at(10), epic: 'APP-91', prs: [] },
+          { key: 'APP-93', url: 'https://example.atlassian.net/browse/APP-93', summary: 'Skip button on the welcome carousel', status: 'In Progress', statusCategory: 'inProgress', assignee: 'Sam Okafor', updated: at(3), epic: 'APP-88', parent: undefined, prs: [{ url: 'https://github.com/example/app/pull/77', number: 77, state: 'draft', repo: 'example/app', title: 'Welcome: skip' }] },
+          { key: 'APP-90', url: 'https://example.atlassian.net/browse/APP-90', summary: 'New welcome copy', status: 'Done', statusCategory: 'done', assignee: 'Sam Okafor', updated: at(8), epic: 'APP-88', parent: undefined, prs: [] },
+          { key: 'APP-97', url: 'https://example.atlassian.net/browse/APP-97', summary: 'Sample-list picker', status: 'To Do', statusCategory: 'todo', assignee: undefined, updated: at(10), epic: 'APP-91', parent: undefined, prs: [] },
         ],
       },
       status: { at: new Date(now - 3 * DAY).toISOString(), total: 18, done: 5, inProgress: 4, blocked: 0, stale: 6, epics: [{ key: 'APP-88', title: 'New welcome flow', total: 11, done: 4, inProgress: 3, blocked: 0, stale: 2 }, { key: 'APP-91', title: 'Sample lists', total: 7, done: 1, inProgress: 1, blocked: 0, stale: 4 }] },
@@ -93,6 +95,10 @@ export const seedDemoInitiatives = async (initiatives: Initiatives, root: string
     writeText(path.join(folder, 'suggestions.json'), `${JSON.stringify(demo.suggestions, null, 2)}\n`);
     if (demo.tasks) writeText(path.join(folder, 'tasks.json'), `${JSON.stringify(demo.tasks, null, 2)}\n`);
     if (demo.outbox) writeText(path.join(folder, 'outbox.json'), `${JSON.stringify(demo.outbox, null, 2)}\n`);
+    if (slug === 'checkout-v2') {
+      writeText(path.join(folder, 'artifacts', '1-3ds-safari-retry.md'), '# 3DS on Safari: retry check\n\n- 40 test payments on Safari 18, 3DS challenge forced\n- 38 passed on the first frame, 2 after one retry, none failed\n');
+      writeText(path.join(folder, 'artifacts.json'), `${JSON.stringify([{ id: 1, title: '3DS on Safari: retry check', why: 'Shows the retry fixes the Safari challenge before SHOP-150 merges.', file: 'artifacts/1-3ds-safari-retry.md', name: '3ds-safari-retry.md', bytes: 140, ticket: 'SHOP-150', worktree: 'shop-150-3ds-retry', project: 'shop', createdAt: new Date(now - 3_600_000).toISOString() }], null, 2)}\n`);
+    }
     writeText(path.join(folder, 'sources', 'jira.md'), `# Jira\n\n${demo.status.epics.map((e) => `- ${e.key} ${e.title ?? ''}: ${e.done}/${e.total} done`).join('\n')}\n`);
     initiatives.refresh(slug);
   }

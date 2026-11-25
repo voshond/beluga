@@ -72,6 +72,8 @@ const ALWAYS_OK = new Set([
   ...['memory_list', 'memory_add', 'memory_replace', 'memory_remove', 'memory_file', 'memory_search'].map((n) => `mcp__beluga_memory__${n}`),
   // Honcho (core/honcho, BLG-101): only your own runs have it, with Honcho on. It only reads what Honcho inferred about you.
   'mcp__beluga_honcho__honcho_ask',
+  // report_to_initiative: your own worktree runs, into your own initiatives repo.
+  'mcp__beluga_initiatives__report_to_initiative',
   // Child threads (core/threads): only your own runs have them, with the flag on. They start and follow your own chats, under limits; no tool archives or deletes one.
   ...['thread_start', 'thread_status', 'thread_message', 'thread_stop'].map((n) => `mcp__beluga_threads__${n}`),
   // A friend's task only has these when its owner allowed them for that request (core/gateway/serve.ts).

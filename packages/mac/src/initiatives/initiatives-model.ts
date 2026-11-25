@@ -1,4 +1,4 @@
-import { type DocRef, type EpicStatus, type EpicTickets, type InitiativeTask, type InitiativeTasks, type InitiativeView, type MeetingRef, type PrState, type SlackRef, type TicketCategory, docKindOf, lastCheckInAt, openSuggestions, progressShare } from '@beluga/core/initiatives/model.js';
+import { type DocRef, type EpicStatus, type EpicTickets, type InitiativeTask, type InitiativeTasks, type InitiativeView, type MeetingRef, type PrState, type SlackRef, type Ticket, type TicketCategory, docKindOf, isSubTask, lastCheckInAt, openSuggestions, progressShare } from '@beluga/core/initiatives/model.js';
 
 export const INITIATIVE_VIEWS: ReadonlySet<string> = new Set(['initiatives', 'initiative_page']);
 
@@ -90,11 +90,22 @@ export const CATEGORY_LABEL: Readonly<Record<TicketCategory, string>> = { todo: 
 
 export const PR_STATE_LABEL: Readonly<Record<PrState, string>> = { open: 'Open', draft: 'Draft', merged: 'Merged', closed: 'Closed' };
 
+const doneOf = (tickets: readonly Ticket[]): number => tickets.filter((t) => t.statusCategory === 'done').length;
+
+export const subTasksWords = (subTasks: readonly Ticket[]): string => (subTasks.length ? `${doneOf(subTasks)}/${subTasks.length} sub-tasks` : '');
+
 export const ticketsWords = (tickets: EpicTickets): string => {
-  const total = tickets.tickets.length;
-  const done = tickets.tickets.filter((t) => t.statusCategory === 'done').length;
+  const subTasks = tickets.tickets.filter((t) => isSubTask(t, tickets.tickets));
+  const main = tickets.tickets.filter((t) => !subTasks.includes(t));
   const prs = tickets.tickets.reduce((n, t) => n + t.prs.filter((pr) => pr.state === 'open' || pr.state === 'draft').length, 0);
-  return [`${total} ${total === 1 ? 'ticket' : 'tickets'}`, `${done} done`, prs ? `${prs} open ${prs === 1 ? 'pull request' : 'pull requests'}` : ''].filter(Boolean).join(' · ');
+  return [
+    `${main.length} ${main.length === 1 ? 'ticket' : 'tickets'}`,
+    `${doneOf(main)} done`,
+    subTasks.length ? `${subTasks.length} ${subTasks.length === 1 ? 'sub-task' : 'sub-tasks'}, ${doneOf(subTasks)} done` : '',
+    prs ? `${prs} open ${prs === 1 ? 'pull request' : 'pull requests'}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 };
 
 export const prName = (pr: { readonly number?: number | undefined; readonly url: string }): string => {

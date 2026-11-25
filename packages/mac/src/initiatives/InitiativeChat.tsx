@@ -8,8 +8,6 @@ import { Composer } from '../chat/Composer.js';
 import { Icon } from '../components/Icon.js';
 import { type ActionItem, ActionsDropdown } from '../components/SpecMenu.js';
 import { Empty, IconButton, Tip } from '../components/ui.js';
-import { ResizeHandle } from '../layout/panel/ResizeHandle.js';
-import { useDockWidth } from '../layout/panel/use-dock-width.js';
 import { useActions } from '../lib/actions.js';
 import { useApp } from '../lib/beluga.js';
 import { openSheet } from '../lib/sheets.js';
@@ -18,7 +16,6 @@ import { OutboxCards } from './OutboxCards.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import v from '../views/views.module.css';
 import chat from '../sentinel/sentinel.module.css';
-import home from '../sentinel/home.module.css';
 import s from './initiatives.module.css';
 
 const STARTERS: readonly string[] = ['Where does this stand?', 'What should I decide this week?', 'Who is blocked, and on what?'];
@@ -29,7 +26,6 @@ export const InitiativeChat = ({ item }: { item: InitiativeView }) => {
   const id = initiativeChatOf(channel)?.chat ?? item.chats.active;
   const actions = useActions();
   const a = useInitiativeActions();
-  const dock = useDockWidth('initiatives.chat.width', 400);
   const titles = useApp((st) => JSON.stringify(item.chats.chats.map((c) => initiativeChatTitle(c.channel, st.log))));
   const names = useMemo(() => JSON.parse(titles) as string[], [titles]);
   const busy = useApp((st) => activityOf(st.log, channel).running);
@@ -65,35 +61,30 @@ export const InitiativeChat = ({ item }: { item: InitiativeView }) => {
     </div>
   );
   return (
-    <aside ref={dock.ref} className={home.panel} style={{ width: dock.width }} aria-label={`${item.name} chat`}>
-      <ResizeHandle label={`Resize ${item.name} chat`} className={home.panelEdge} {...dock.handle} />
-      <div className={home.panelInner} style={{ width: dock.width }}>
-        <div className={chat.chatTab} data-initiative-chat={id}>
-          <div className={chat.chatBar}>
-            <PickMenu<string> label="Chats" choices={item.chats.chats.map((c, i) => ({ value: c.id, label: names[i] ?? 'New chat', mark: <Icon name={c.id === CHECK_IN_CHAT ? 'calendar' : 'chat'} size={13} /> }))} chosen={[id]} onPick={handleOpen} actions={[{ label: 'New Chat', icon: 'plus', onSelect: () => void handleNew() }]}>
-              <button type="button" className={chat.chatName} aria-label={`Chat: ${name}`}>
-                <Icon name="chat" size={13} />
-                <span>{name}</span>
-                <Icon name="chevronDown" size={10} />
-              </button>
-            </PickMenu>
-            {busy ? <span className={chat.chatBusy}>Working…</span> : null}
-            <span className={chat.grow} />
-            <Tip label="A new conversation beside this one">
-              <IconButton size="small" icon="plus" label="New Chat" onClick={() => void handleNew()} />
-            </Tip>
-            <ActionsDropdown items={more}>
-              <IconButton size="small" icon="more" label="More for this chat" />
-            </ActionsDropdown>
-          </div>
-          <div className={v.chat} data-drop-zone>
-            <ChatLog key={channel} channel={channel} empty={<Empty icon="claude" title="Ask about this initiative" detail="Your agent reads its memory first, and suggests before it acts outward." action={starters} />} />
-            <Attention channel={channel} />
-            <OutboxCards item={item} />
-            <Composer />
-          </div>
-        </div>
+    <div className={chat.chatTab} data-initiative-chat={id}>
+      <div className={chat.chatBar}>
+        <PickMenu<string> label="Chats" choices={item.chats.chats.map((c, i) => ({ value: c.id, label: names[i] ?? 'New chat', mark: <Icon name={c.id === CHECK_IN_CHAT ? 'calendar' : 'chat'} size={13} /> }))} chosen={[id]} onPick={handleOpen} actions={[{ label: 'New Chat', icon: 'plus', onSelect: () => void handleNew() }]}>
+          <button type="button" className={chat.chatName} aria-label={`Chat: ${name}`}>
+            <Icon name="chat" size={13} />
+            <span>{name}</span>
+            <Icon name="chevronDown" size={10} />
+          </button>
+        </PickMenu>
+        {busy ? <span className={chat.chatBusy}>Working…</span> : null}
+        <span className={chat.grow} />
+        <Tip label="A new conversation beside this one">
+          <IconButton size="small" icon="plus" label="New Chat" onClick={() => void handleNew()} />
+        </Tip>
+        <ActionsDropdown items={more}>
+          <IconButton size="small" icon="more" label="More for this chat" />
+        </ActionsDropdown>
       </div>
-    </aside>
+      <div className={v.chat} data-drop-zone>
+        <ChatLog key={channel} channel={channel} empty={<Empty icon="claude" title="Ask about this initiative" detail="Your agent reads its memory first, and suggests before it acts outward." action={starters} />} />
+        <Attention channel={channel} />
+        <OutboxCards item={item} />
+        <Composer />
+      </div>
+    </div>
   );
 };

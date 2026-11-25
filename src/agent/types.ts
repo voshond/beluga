@@ -186,6 +186,8 @@ export interface AgentRunInput {
   /** Your own runs, with Honcho on (core/honcho/run.ts, BLG-101): its picture of you, and a tool to ask it about you. Never a friend's run. */
   readonly honchoBrief?: string;
   readonly honchoTools?: HonchoTools;
+  /** Your own worktree runs, when there are initiatives: send what the work made to one (core/initiatives/report.ts). */
+  readonly initiativeReport?: InitiativeReportTools;
   /** Your own runs: dashboards and the numbers sentinels keep (server `beluga_dashboard`; sentinel_measure inside a run). */
   readonly dashboardTools?: DashboardTools;
   /** Your own runs: the notes of calls you were in (core/calls, BLG-715), to look up, never pasted in. */
@@ -779,6 +781,12 @@ export interface MemoryTools {
   file(scope: MemoryKind, entry: string, filed: boolean): string;
   /** BLG-123: the entries, filed away or not, a query is about. */
   search(query: string): string;
+}
+
+/** Your own worktree runs: send a file the work made to an initiative (core/initiatives/report.ts, server `beluga_initiatives`). */
+export interface InitiativeReportTools {
+  readonly brief: string;
+  report(input: { readonly file: string; readonly title: string; readonly why?: string; readonly initiative?: string }): Promise<string>;
 }
 
 /** Honcho's model of the user as an agent tool (agent/honcho-tools.ts, server `beluga_honcho`, BLG-101). Throws a message the agent can read. */
