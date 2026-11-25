@@ -1,0 +1,241 @@
+.gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding: 20px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+}
+.variant {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.variantTitle {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.grow {
+  flex: 1;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.buttons {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+.why {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.kind,
+.ref {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.kind {
+  font-weight: 600;
+  background: var(--bg-raised);
+  color: var(--text-2);
+}
+.kind[data-kind='jira'] {
+  color: var(--info);
+}
+.kind[data-kind='slack'] {
+  color: var(--plan);
+}
+.kind[data-kind='decision'] {
+  color: var(--warn);
+}
+.ref {
+  font-family: var(--font-mono);
+  color: var(--text-2);
+  border: 1px solid var(--hairline);
+}
+.headline {
+  font-size: 14px;
+  font-weight: 600;
+}
+.detail {
+  color: var(--text-2);
+}
+.whyBox {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+  padding-left: 8px;
+  border-left: 2px solid var(--hairline-strong);
+}
+.whyLabel {
+  font-weight: 600;
+  color: var(--text-2);
+}
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.footer kbd {
+  margin-left: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+}
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 85%;
+}
+.message[data-from='me'] {
+  align-self: flex-end;
+  text-align: right;
+}
+.author {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.thinking,
+.hint {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.threadInput {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.focus {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 10px;
+  background: var(--bg-raised);
+}
+.focusHead {
+  display: flex;
+  align-items: center;
+}
+.counter {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.focusTitle {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 340px;
+}
+.splitList {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--hairline);
+  background: var(--bg-sidebar-solid);
+}
+.splitItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.splitItem:hover {
+  background: var(--bg-hover);
+}
+.splitItem[aria-selected='true'] {
+  background: var(--bg-selected);
+}
+.splitItemText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.splitDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+}
