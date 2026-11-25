@@ -202,12 +202,10 @@ button.card:hover {
   text-align: left;
   cursor: pointer;
 }
-.logItem:hover,
-.logTable tbody tr:hover {
+.logItem:hover {
   background: var(--bg-hover);
 }
-.logItem[aria-selected='true'],
-.logTable tbody tr[aria-selected='true'] {
+.logItem[aria-selected='true'] {
   background: var(--bg-selected);
 }
 .logItemTop {
@@ -221,40 +219,16 @@ button.card:hover {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.logProof {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
 .logDate {
   font-size: 11px;
   color: var(--text-3);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-}
-.logTable {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.logTable th {
-  text-align: left;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-3);
-  padding: 4px 10px;
-  border-top: 1px solid var(--hairline);
-  border-bottom: 1px solid var(--hairline);
-}
-.logTable td {
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--hairline);
-  vertical-align: middle;
-}
-.logTable tbody tr {
-  cursor: pointer;
-}
-.logCellText {
-  max-width: 0;
-  width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .kindChip,
 .stateBadge,

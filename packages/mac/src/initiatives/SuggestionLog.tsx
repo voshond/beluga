@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { type InitiativeView, type Suggestion, openSuggestions, pendingDrafts } from '@beluga/core/initiatives/model.js';
 import { dayOfIso, proofOf, suggestionHistory } from '@beluga/core/initiatives/log.js';
 import { Section } from './InitiativeParts.js';
@@ -7,40 +7,40 @@ import s from './initiatives.module.css';
 
 type PickProps = { readonly suggestion: Suggestion; readonly selected: boolean; readonly onSelect: (id: number) => void };
 
-const OpenRow = ({ suggestion, selected, onSelect }: PickProps) => {
+type LogRowProps = PickProps & { readonly date: string | undefined; readonly badges: ReactNode };
+
+const LogRow = ({ suggestion, selected, onSelect, date, badges }: LogRowProps) => {
   const handleClick = (): void => onSelect(suggestion.id);
   return (
     <button type="button" role="option" aria-selected={selected} className={s.logItem} onClick={handleClick} data-suggestion={suggestion.id}>
       <span className={s.logItemTop}>
         <KindChip suggestion={suggestion} />
-        {suggestion.clarifiedAt ? <span className={s.inChat}>In chat</span> : null}
+        {badges}
         <span className={s.grow} />
-        <span className={s.logDate}>{dayOfIso(suggestion.createdAt).slice(5)}</span>
+        <span className={s.logDate}>{dayOfIso(date).slice(5)}</span>
       </span>
       <span className={s.logItemText}>{suggestion.text}</span>
     </button>
   );
 };
 
-const HistoryRow = ({ item, suggestion, selected, onSelect }: PickProps & { readonly item: InitiativeView }) => {
-  const handleClick = (): void => onSelect(suggestion.id);
-  const handleKeyDown = (e: KeyboardEvent<HTMLTableRowElement>): void => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    e.preventDefault();
-    onSelect(suggestion.id);
-  };
-  const proof = proofOf(suggestion, item.outbox).length;
+const OpenRow = (props: PickProps) => (
+  <LogRow {...props} date={props.suggestion.createdAt} badges={props.suggestion.clarifiedAt ? <span className={s.inChat}>In chat</span> : null} />
+);
+
+const HistoryRow = ({ item, ...props }: PickProps & { readonly item: InitiativeView }) => {
+  const proof = proofOf(props.suggestion, item.outbox).length;
   return (
-    <tr aria-selected={selected} tabIndex={0} onClick={handleClick} onKeyDown={handleKeyDown} data-suggestion={suggestion.id}>
-      <td className={s.logDate}>{dayOfIso(suggestion.resolvedAt)}</td>
-      <td className={s.logCellText}>
-        <KindChip suggestion={suggestion} /> {suggestion.text}
-      </td>
-      <td>
-        <StateBadge suggestion={suggestion} />
-      </td>
-      <td className={s.quiet}>{proof || '—'}</td>
-    </tr>
+    <LogRow
+      {...props}
+      date={props.suggestion.resolvedAt}
+      badges={
+        <>
+          <StateBadge suggestion={props.suggestion} />
+          {proof ? <span className={s.logProof}>{proof === 1 ? '1 proof' : `${proof} proofs`}</span> : null}
+        </>
+      }
+    />
   );
 };
 
@@ -68,21 +68,11 @@ export const Suggestions = ({ item }: { item: InitiativeView }) => {
             )}
             <span className={s.logTitle}>Decision log · {history.length}</span>
             {history.length ? (
-              <table className={s.logTable} aria-label="Decision log">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Suggestion</th>
-                    <th>Result</th>
-                    <th>Proof</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((x) => (
-                    <HistoryRow key={x.id} item={item} suggestion={x} selected={x.id === selected.id} onSelect={setSelectedId} />
-                  ))}
-                </tbody>
-              </table>
+              <div role="listbox" aria-label="Decision log" className={s.logOpen}>
+                {history.map((x) => (
+                  <HistoryRow key={x.id} item={item} suggestion={x} selected={x.id === selected.id} onSelect={setSelectedId} />
+                ))}
+              </div>
             ) : (
               <span className={`${s.quiet} ${s.logEmpty}`}>What you approve, decide or dismiss is kept here.</span>
             )}
