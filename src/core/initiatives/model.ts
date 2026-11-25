@@ -276,6 +276,12 @@ export const SUGGESTION_STATES = ['open', 'approved', 'dismissed'] as const;
 export const SuggestionStateSchema = z.enum(SUGGESTION_STATES);
 export type SuggestionState = z.infer<typeof SuggestionStateSchema>;
 
+export const SuggestionProofSchema = z.object({
+  label: z.string().min(1).max(200),
+  url: z.string().max(2000).optional(),
+});
+export type SuggestionProof = z.infer<typeof SuggestionProofSchema>;
+
 export const SuggestionSchema = z.object({
   id: z.number().int().min(1),
   text: z.string().min(1).max(2000),
@@ -288,6 +294,9 @@ export const SuggestionSchema = z.object({
   state: SuggestionStateSchema.default('open'),
   createdAt: z.string().max(40).optional(),
   resolvedAt: z.string().max(40).optional(),
+  clarifiedAt: z.string().max(40).optional(),
+  outcome: z.string().max(2000).optional(),
+  proof: z.array(SuggestionProofSchema).max(20).optional(),
 });
 export type Suggestion = z.infer<typeof SuggestionSchema>;
 
@@ -490,6 +499,9 @@ export const progressShare = (progress: EpicStatus | undefined): number | undefi
 };
 
 export const suggestionMessage = (suggestion: Pick<Suggestion, 'id' | 'text'>): string => `Do suggestion ${suggestion.id}: ${suggestion.text}`;
+
+export const clarifyMessage = (suggestion: Pick<Suggestion, 'id' | 'text' | 'why'>): string =>
+  `Clarify suggestion ${suggestion.id}: ${suggestion.text}${suggestion.why ? `\nWhy: ${suggestion.why}` : ''}`;
 
 /** Drafts still waiting for the user, and those on their way out. */
 export const pendingDrafts = (item: Pick<InitiativeView, 'outbox'>): OutboxDraft[] => item.outbox.filter((d) => d.state === 'draft' || d.state === 'approved');

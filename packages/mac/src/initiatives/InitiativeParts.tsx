@@ -1,10 +1,7 @@
 import type { ReactNode } from 'react';
-import { type EpicStatus, type InitiativeView, type Suggestion, epicTitleOf, epicUrlOf, isDecision, openSuggestions, pendingDrafts } from '@beluga/core/initiatives/model.js';
-import { Button } from '../components/ui.js';
+import { type EpicStatus, type InitiativeView, epicTitleOf, epicUrlOf } from '@beluga/core/initiatives/model.js';
 import { openExternal } from '../lib/system.js';
-import { DecisionRow } from './DecisionRow.js';
 import { progressDetail, progressPercent, progressWords } from './initiatives-model.js';
-import { useInitiativeActions } from './use-initiatives.js';
 import s from './initiatives.module.css';
 
 export const ProgressBar = ({ progress }: { progress: EpicStatus | undefined }) => {
@@ -49,47 +46,6 @@ export const Section = ({ title, children, aside }: { title: string; children: R
     {children}
   </section>
 );
-
-const SuggestionRow = ({ slug, suggestion }: { slug: string; suggestion: Suggestion }) => {
-  const a = useInitiativeActions();
-  const handleApprove = (): void => void a.act(() => a.api.resolveSuggestion(slug, suggestion.id, 'approve'), 'Sent to the chat');
-  const handleDismiss = (): void => void a.act(() => a.api.resolveSuggestion(slug, suggestion.id, 'dismiss'));
-  return (
-    <div className={s.suggestion} data-suggestion={suggestion.id}>
-      <span className={s.suggestionText}>
-        <span>{suggestion.text}</span>
-        {suggestion.why ? <span className={s.why}>{suggestion.why}</span> : null}
-      </span>
-      <span className={s.buttons}>
-        <Button size="small" variant="primary" onClick={handleApprove} aria-label={`Approve: ${suggestion.text}`}>
-          Approve
-        </Button>
-        <Button size="small" variant="quiet" onClick={handleDismiss} aria-label={`Dismiss: ${suggestion.text}`}>
-          Dismiss
-        </Button>
-      </span>
-    </div>
-  );
-};
-
-export const Suggestions = ({ item }: { item: InitiativeView }) => {
-  const open = openSuggestions(item);
-  const waiting = pendingDrafts(item).length;
-  return (
-    <Section title="Suggestions">
-      {waiting ? <span className={s.quiet}>{waiting === 1 ? 'A message is waiting for you in the chat’s outbox.' : `${waiting} messages are waiting for you in the chat’s outbox.`}</span> : null}
-      {open.length ? (
-        <div className={s.list}>
-          {open.map((suggestion) =>
-            isDecision(suggestion) ? <DecisionRow key={suggestion.id} slug={item.slug} suggestion={suggestion} /> : <SuggestionRow key={suggestion.id} slug={item.slug} suggestion={suggestion} />,
-          )}
-        </div>
-      ) : (
-        <span className={s.quiet}>Nothing to approve or decide. The next check-in may suggest something.</span>
-      )}
-    </Section>
-  );
-};
 
 export const Bullets = ({ title, items, empty }: { title: string; items: readonly string[]; empty: string }) => (
   <Section title={title}>
