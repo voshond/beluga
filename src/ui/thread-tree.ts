@@ -1,6 +1,7 @@
 import { isPlanOwned } from '../core/plans/owner.js';
 import type { AppState } from '../core/store.js';
-import { defaultAgentOf } from '../protocol.js';
+import { type AgentRef, defaultAgentOf } from '../protocol.js';
+import { projectAgent } from '../shared/agent-picker.js';
 import { type ThreadLive, type ThreadNode, deriveThreadState, subtree } from '../core/threads/model.js';
 import { type ThreadState, isThreadWorking } from '../shared/threads.js';
 import type { Workspace } from '../workspaces/types.js';
@@ -34,7 +35,7 @@ type LiveSource = Pick<AppState, 'log' | 'approvals' | 'questions'>;
 const NO_NESTING: ThreadNesting = { nested: new Set(), under: new Map() };
 /** The log is replaced on every streamed event, the projects are not: a row isn't drawn again for it. */
 /** mixedHarnesses, once per projects list and self. */
-const mixes = new WeakMap<object, { readonly self: unknown; readonly value: boolean }>();
+const mixes = new WeakMap<object, { readonly self: unknown; readonly picks: unknown; readonly value: boolean }>();
 const nestings = new WeakMap<object, { readonly plans: unknown; readonly board: unknown; readonly value: ThreadNesting }>();
 
 /**
@@ -72,11 +73,18 @@ export function threadNesting(state: Pick<AppState, 'prefs' | 'projects' | 'plan
 export function mixedHarnesses(state: Pick<AppState, 'prefs' | 'projects' | 'self'>): boolean {
   if (!state.prefs.agentThreads) return false;
   const known = mixes.get(state.projects);
-  if (known && known.self === state.self) return known.value;
-  const runtimes = new Set(state.projects.flatMap((p) => p.workspaces.flatMap((w) => (w.archived || w.kind === 'main' ? [] : [(w.agent ?? defaultAgentOf(state.self)).runtime]))));
+  if (known && known.self === state.self && known.picks === state.prefs.projectAgents) return known.value;
+  const runtimes = new Set(state.projects.flatMap((p) => p.workspaces.flatMap((w) => (w.archived || w.kind === 'main' ? [] : [(w.agent ?? projectAgent(state.prefs, defaultAgentOf(state.self), p.name)).runtime]))));
   const value = runtimes.size >= 2;
-  mixes.set(state.projects, { self: state.self, value });
+  mixes.set(state.projects, { self: state.self, picks: state.prefs.projectAgents, value });
   return value;
+}
+
+/** The harness a chat runs on, as the daemon picks it: its own, else its project's (Project Settings), else yours. */
+export function workspaceHarness(state: Pick<AppState, 'prefs' | 'projects' | 'self'>, ws: Pick<Workspace, 'agent' | 'projectId'>): AgentRef {
+  if (ws.agent) return ws.agent;
+  const project = state.projects.find((p) => p.id === ws.projectId)?.name;
+  return projectAgent(state.prefs, defaultAgentOf(state.self), project);
 }
 
 /** The workspace `id` of a thread's parent chat, when its parent is a workspace chat at all. */

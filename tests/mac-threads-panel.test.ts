@@ -81,6 +81,21 @@ describe('child threads in the sidebar', () => {
     expect(harnessOf(state, ws('x', { kind: 'main' }))).toBeUndefined();
   });
 
+  it('shows the project’s own agent on a chat with no pick of its own, as the daemon runs it', () => {
+    const codex = { runtime: 'codex', label: 'Codex' };
+    const projects = [
+      { id: 'p', name: 'platform-fe', workspaces: [ws('a')] },
+      { id: 'q', name: 'beluga', workspaces: [ws('b', { projectId: 'q' })] },
+    ];
+    const state = { prefs: { agentThreads: true, projectAgents: { 'platform-fe': codex } }, self: { defaultAgent: { runtime: 'claude', label: 'Claude' } }, projects } as never;
+    expect(mixedHarnesses(state)).toBe(true);
+    expect(harnessOf(state, ws('a'))?.runtime).toBe('codex');
+    expect(harnessOf(state, ws('b', { projectId: 'q' }))?.runtime).toBe('claude');
+    expect(harnessOf(state, ws('a', { agent: { runtime: 'claude', label: 'Claude' } as Workspace['agent'] }))?.runtime).toBe('claude');
+    const same = { prefs: { agentThreads: true }, self: { defaultAgent: { runtime: 'claude', label: 'Claude' } }, projects } as never;
+    expect(mixedHarnesses(same)).toBe(false);
+  });
+
   it('caps five children: finished ones collapse, working ones and the open one stay', () => {
     const rows = [row('a', 1, 'done'), row('b', 2, 'running'), row('c', 3, 'done'), row('d', 4, 'done'), row('e', 5, 'running')];
     expect(capFold(rows, 3, () => false)).toMatchObject({ hidden: 2 });

@@ -1,12 +1,12 @@
 import type { AppState } from '../../../../src/core/store.js';
 import { type ThreadNode, stopOrder } from '../../../../src/core/threads/model.js';
-import { type AgentRef, defaultAgentOf } from '../../../../src/protocol.js';
+import type { AgentRef } from '../../../../src/protocol.js';
 import { type AgentMark, agentMark } from '../../../../src/shared/agent-marks.js';
 import { span } from '../../../../src/shared/clock.js';
 import { resetWords } from '../../../../src/shared/run-failure.js';
 import { agentName } from '../../../../src/shared/agent-label.js';
 import { THREAD_WORDS, type ThreadState, isThreadWorking } from '../../../../src/shared/threads.js';
-import { type ThreadFamilyParent, type ThreadNesting, mixedHarnesses, threadNesting, threadParent, threadRank, threadStateOf } from '../../../../src/ui/thread-tree.js';
+import { type ThreadFamilyParent, type ThreadNesting, mixedHarnesses, threadNesting, threadParent, threadRank, threadStateOf, workspaceHarness } from '../../../../src/ui/thread-tree.js';
 import { activityOf } from '../../../../src/ui/workspace-models.js';
 import { laterUntil } from '../../../../src/core/triage/facts.js';
 import type { Workspace } from '../../../../src/workspaces/types.js';
@@ -114,7 +114,7 @@ export function threadStarts(state: Pick<ThreadFamilySource, 'prefs' | 'self' | 
     .flatMap((p) => p.workspaces)
     .filter((w) => w.thread?.parent === channel)
     .map((w) => {
-      const harness = w.agent ?? defaultAgentOf(state.self);
+      const harness = workspaceHarness(state, w);
       return { id: w.id, title: w.name, ts: w.thread!.startedAt, mark: agentMark(harness), agent: agentName(harness), ...(w.archived ? { archived: true as const } : {}) };
     })
     .sort((a, b) => a.ts - b.ts);
@@ -199,14 +199,14 @@ export function foldNoun(rows: readonly FoldRow[]): string {
 }
 
 /** The harness a row's mark shows, with threads on: the chat's own agent, else yours. A main folder has no mark. */
-export function harnessOf(state: Pick<AppState, 'prefs' | 'self' | 'projects'>, ws: Pick<Workspace, 'agent' | 'kind'>): AgentRef | undefined {
+export function harnessOf(state: Pick<AppState, 'prefs' | 'self' | 'projects'>, ws: Pick<Workspace, 'agent' | 'kind' | 'projectId'>): AgentRef | undefined {
   if (!state.prefs.agentThreads || ws.kind === 'main' || !mixedHarnesses(state)) return undefined;
-  return ws.agent ?? defaultAgentOf(state.self);
+  return workspaceHarness(state, ws);
 }
 
 /** A child thread's row. */
 export function threadFamilyRow(state: ThreadFamilySource, w: Workspace): ThreadFamilyRow {
-  const harness = w.agent ?? defaultAgentOf(state.self);
+  const harness = workspaceHarness(state, w);
   const thread = w.thread!;
   const stateNow = threadStateOf(state, w) ?? 'queued';
   const model = w.model ?? harness.model;
@@ -227,8 +227,8 @@ export function threadFamilyRow(state: ThreadFamilySource, w: Workspace): Thread
 }
 
 /** A native sub-agent's row: its parent chat's harness, and its own model when known. */
-export function agentFamilyRow(state: Pick<ThreadFamilySource, 'self'>, ws: Pick<Workspace, 'agent'>, sub: SubAgent): ThreadFamilyRow {
-  const harness = ws.agent ?? defaultAgentOf(state.self);
+export function agentFamilyRow(state: Pick<ThreadFamilySource, 'prefs' | 'self' | 'projects'>, ws: Pick<Workspace, 'agent' | 'projectId'>, sub: SubAgent): ThreadFamilyRow {
+  const harness = workspaceHarness(state, ws);
   const a = sub.agent;
   return {
     kind: 'agent',
