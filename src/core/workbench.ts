@@ -12,6 +12,7 @@ import { tilde } from './paths.js';
 import { CHATS_PROJECT, type WorkspaceManager } from '../workspaces/manager.js';
 import type { Workspace } from '../workspaces/types.js';
 import { worktreeOrigin } from '../workspaces/origin.js';
+import { worktreePorts } from '../workspaces/ports.js';
 import { parseToolReport, toolTrailLine } from '../workspaces/toolbox.js';
 import { formatBytes, measureAll } from '../workspaces/disk.js';
 import { contentIn, resetTo } from '../workspaces/git.js';
@@ -208,7 +209,7 @@ export function fixFailedPrompt(kind: 'setup' | 'run', command: string, code: nu
 }
 
 export { shellId, setupId, runId, githubId, globalShellId, isGlobalShell, globalShellNumber, globalShellDir } from '../shared/terminal-keys.js';
-import { agentTermId, githubId, runId, setupId, shellId, isGlobalShell, globalShellNumber, cleanTerminalName, SSH_HOST, isSshShell, sshHostOf, sshShellId } from '../shared/terminal-keys.js';
+import { agentTermId, githubId, isOutputTerm, outputTermId, runId, setupId, shellId, isGlobalShell, globalShellNumber, cleanTerminalName, SSH_HOST, isSshShell, sshHostOf, sshShellId } from '../shared/terminal-keys.js';
 import { readSshHosts } from './ssh-hosts.js';
 import { pace, paced } from './power-saver.js';
 
@@ -1620,7 +1621,7 @@ export class Workbench {
       this.closeTerminal(key);
       return keepName(this.globalShell(key, was.place.dir));
     }
-    if (key.endsWith(':setup') || key.endsWith(':github')) return undefined;
+    if (key.endsWith(':setup') || key.endsWith(':github') || isOutputTerm(key)) return undefined;
     if (key.endsWith(':run')) {
       const wsId = key.slice(0, -':run'.length);
       this.closeTerminal(key);
@@ -1647,6 +1648,21 @@ export class Workbench {
     for (const key of [shellId(wsId), setupId(wsId), runId(wsId), githubId(wsId), agentTermId(wsId)]) if (this.deps.terminals?.get(key)) this.closeTerminal(key);
     // Shells split beside the agent's terminal.
     for (const s of this.deps.terminals?.list() ?? []) if (s.id.startsWith(`${wsId}:pane:`)) this.closeTerminal(s.id);
+    for (const s of this.deps.terminals?.list() ?? []) if (s.id.startsWith(`${wsId}:out:`)) this.closeTerminal(s.id);
+  }
+
+  /**
+   * A worktree server's output in a terminal tab of its own, when it writes to a file in the worktree
+   * (what an agent keeps running past its turn writes to .beluga/scratch/kept-….log) → the tab's key.
+   */
+  async followPort(wsId: string, port: number): Promise<string | undefined> {
+    const ws = this.manager.find(wsId);
+    if (!ws || ws.archived || process.platform === 'win32') return undefined;
+    const log = (await worktreePorts(ws.path)).find((p) => p.port === port)?.log;
+    if (!log) return undefined;
+    const key = outputTermId(wsId, port);
+    if (this.deps.terminals?.get(key)?.running) return key;
+    return this.openProgram(key, ws, { file: 'tail', args: ['-n', '200', '-F', log], env: {}, title: `Output :${port}` }) ? key : undefined;
   }
 
   private watchExit(key: string, session: PtyProcess, onExit: (code: number | null) => void): void {

@@ -705,6 +705,8 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'workspaces.moveReceive': { refused: COMPUTERS },
   'workspaces.moveUndo': { refused: COMPUTERS },
   'workspaces.ports': { refused: NO_TOOL },
+  'workspaces.stopPort': { refused: NO_TOOL },
+  'workspaces.followPort': { refused: NO_TOOL },
   'questions.run': { refused: NO_TOOL },
   'questions.runInput': { refused: NO_TOOL },
   'questions.runStop': { refused: NO_TOOL },

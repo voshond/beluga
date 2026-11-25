@@ -3,8 +3,9 @@ import { type PreviewRef, type PreviewSize, PREVIEW_SIZES, SIZE_WIDTH, parsePrev
 import { quoteInBox } from '../../chat/message-menu.js';
 import { copyText } from '../../lib/copy.js';
 import { toast, useApi, useApp, useBeluga } from '../../lib/beluga.js';
+import { useDevServer } from '../../lib/dev-servers.js';
 import { openExternal } from '../../lib/system.js';
-import { webServed } from '../../lib/boot.js';
+import { webPreviewOrigin, webServed } from '../../lib/boot.js';
 import { useWindowActive } from '../../lib/window-active.js';
 import { Icon } from '../Icon.js';
 import { ActionsContext, ActionsDropdown, type ActionItem } from '../SpecMenu.js';
@@ -136,7 +137,11 @@ export function PreviewView({ ref_: ref, wsId, embedded = false }: { ref_: Previ
   const file = target.kind === 'url' ? undefined : target.file;
   const remote = webServed();
   const pageUrl = target.kind === 'url' ? browserUrl(target.url, p.result, remote) : undefined;
-  const closedToLan = remote && target.kind === 'url' && p.ok?.lanBlocked;
+  const dev = useDevServer(wsId);
+  const devPort = target.kind === 'url' ? Number(new URL(target.url).port || 80) : undefined;
+  // Through the preview origin's dev proxy, the browser here opens it whatever it listens on.
+  const proxied = Boolean(webPreviewOrigin() && p.ok?.kind === 'url' && p.ok.via);
+  const closedToLan = remote && target.kind === 'url' && p.ok?.lanBlocked && !proxied;
   const goTo = (): void => void (file && api.workbench.openCode(wsId, file));
   const say = (text: string, level: 'success' | 'warn' = 'success'): void => toast(client, text, level);
   const ask = (): void => void (p.problem && quoteInBox(ui, askToFix(title, p.problem, p.values)));
@@ -148,8 +153,14 @@ export function PreviewView({ ref_: ref, wsId, embedded = false }: { ref_: Previ
   // ••• and right-click: everything beyond the frame and its props.
   const items: ActionItem[] = [
     ...(file ? [{ label: 'Open in Editor', icon: 'external' as const, onSelect: goTo }] : []),
-    ...(pageUrl ? [{ label: 'Open in Browser', icon: 'globe' as const, onSelect: () => void openExternal(pageUrl) }] : []),
+    ...(pageUrl ? [{ label: 'Open in Browser', icon: 'globe' as const, onSelect: () => (proxied && target.kind === 'url' ? dev.open(target.url) : void openExternal(pageUrl)) }] : []),
     { label: 'Draw Again', icon: 'refresh', onSelect: p.redraw },
+    ...(devPort
+      ? [
+          { label: 'Show Output', icon: 'terminal' as const, separate: true, onSelect: () => dev.follow(devPort) },
+          { label: 'Stop Server', icon: 'stop' as const, onSelect: () => dev.stop(devPort) },
+        ]
+      : []),
     ...(!page && exports.length > 1
       ? [
           {

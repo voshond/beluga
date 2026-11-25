@@ -1,9 +1,9 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { type Listener, type ProcFacts, belongsTo, nameOf, parseLsof, parseProcNetTcp, parseWindowsScan, portsOf, worktreePorts } from '../src/workspaces/ports.js';
+import { type Listener, type ProcFacts, belongsTo, nameOf, parseLsof, parseProcNetTcp, parseWindowsScan, portsOf, stopTargets, stopWorktreePort, worktreePorts } from '../src/workspaces/ports.js';
 
 /** A worktree's ports (BLG-801): its processes' listening sockets, on macOS, Linux and Windows, named by what they are. */
 
@@ -52,6 +52,56 @@ describe.runIf(process.platform === 'darwin' || process.platform === 'linux')(`o
     a.child.kill('SIGKILL');
     await until(async () => !(await worktreePorts(wt)).some((p) => p.port === a.port));
   }, 30_000);
+
+  it('says which file a server writes to, and stops it with the shell it runs under', async () => {
+    const wt = tmp();
+    mkdirSync(path.join(wt, '.beluga', 'scratch'), { recursive: true });
+    const log = path.join(wt, '.beluga', 'scratch', 'kept-test.log');
+    const server = `require('http').createServer().listen(0, '127.0.0.1', function () { console.log(this.address().port) })`;
+    const shell = spawn('/bin/sh', ['-c', `${JSON.stringify(process.execPath)} -e ${JSON.stringify(server)} > ${JSON.stringify(log)} 2>&1`], { cwd: wt, stdio: 'ignore' });
+    stops.push(() => shell.kill('SIGKILL'));
+    let ports: Awaited<ReturnType<typeof worktreePorts>> = [];
+    await until(async () => (ports = await worktreePorts(wt)).length === 1);
+    expect(ports[0]).toMatchObject({ log });
+    expect(await stopWorktreePort(wt, ports[0]!.port)).toBe(true);
+    await until(async () => !(await worktreePorts(wt)).length);
+    await until(async () => shell.exitCode !== null || shell.signalCode !== null);
+    expect(await stopWorktreePort(wt, ports[0]!.port)).toBe(false);
+  }, 30_000);
+});
+
+describe('what stopping a server stops', () => {
+  const rows = [
+    { pid: 10, ppid: 1, line: '/usr/bin/zsh -l' },
+    { pid: 20, ppid: 10, line: 'npm run dev' },
+    { pid: 21, ppid: 20, line: 'sh -c vite --port 3001' },
+    { pid: 22, ppid: 21, line: 'node /w/node_modules/.bin/vite --port 3001' },
+    { pid: 23, ppid: 22, line: 'node esbuild --service' },
+    { pid: 30, ppid: 1, line: 'claude --output-format stream-json' },
+    { pid: 31, ppid: 30, line: '/bin/zsh -c -l source ~/.claude/shell-snapshots/x && eval npm run dev' },
+    { pid: 32, ppid: 31, line: 'node vite' },
+  ];
+
+  it('the wrappers it runs under and all beneath, never your shell', () => {
+    expect(stopTargets(rows, 22, new Set()).sort()).toEqual([20, 21, 22, 23]);
+  });
+
+  it('never the agent, nor the shell it runs commands in', () => {
+    expect(stopTargets(rows, 32, new Set())).toEqual([32]);
+  });
+
+  it('never Beluga itself', () => {
+    expect(stopTargets(rows, 22, new Set([20]))).toEqual([21, 22, 23]);
+  });
+});
+
+describe('a server’s output file', () => {
+  const listener: Listener = { pid: 5, port: 3001, host: '127.0.0.1', comm: 'node' };
+  it('is said when it is inside the worktree only', () => {
+    const inside: ProcFacts = { env: '', cwd: '/w', cmdline: 'node vite', out: '/w/.beluga/scratch/kept-1.log' };
+    expect(portsOf([listener], new Map([[5, inside]]), '/w')[0]?.log).toBe('/w/.beluga/scratch/kept-1.log');
+    expect(portsOf([listener], new Map([[5, { ...inside, out: '/dev/pts/3' }]]), '/w')[0]?.log).toBeUndefined();
+  });
 });
 
 describe('reading what the OS says', () => {

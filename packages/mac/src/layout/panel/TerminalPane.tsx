@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { githubId, isOwnShell, runId, setupId, shellId, terminalLabel } from '@beluga/shared/terminal-keys.js';
+import { githubId, isOutputTerm, isOwnShell, runId, setupId, shellId, terminalLabel } from '@beluga/shared/terminal-keys.js';
 import { findWorkspace } from '@beluga/ui/workspace-models.js';
 import { ActionsDropdown, type ActionItem } from '../../components/SpecMenu.js';
 import { Button, Dot, Empty, IconButton } from '../../components/ui.js';
@@ -49,12 +49,13 @@ function useWorkspaceTerminals(wsId: string): Tabbed {
   useEffect(() => pruneShells(terminals), [terminals]);
   const extra = extraShells(owners, wsId, terminals, picked);
   const own = [shellId(wsId), setupId(wsId), runId(wsId), githubId(wsId)].filter((k) => k in terminals || k === shellId(wsId));
-  const keys = [...own, ...extra];
+  const outputs = Object.keys(terminals).filter((k) => k.startsWith(`${wsId}:out:`) && isOutputTerm(k));
+  const keys = [...own, ...outputs, ...extra];
   const key = picked && keys.includes(picked) && (picked in terminals || extra.includes(picked)) ? picked : shellId(wsId);
   const isExtra = (k: string): boolean => extra.includes(k);
   return {
     key,
-    tabs: keys.map((k) => ({ key: k, label: terminalLabel(k, names), running: k in terminals && !(k in exits), ...(k in exits ? { exit: exits[k] } : {}), closable: isExtra(k), renamable: k === shellId(wsId) || isExtra(k) })),
+    tabs: keys.map((k) => ({ key: k, label: terminalLabel(k, names), running: k in terminals && !(k in exits), ...(k in exits ? { exit: exits[k] } : {}), closable: isExtra(k) || outputs.includes(k), renamable: k === shellId(wsId) || isExtra(k) })),
     start: (size) => {
       if (key === shellId(wsId)) void api.terminals.shell(wsId, size);
       else if (isExtra(key) && ws) void api.terminals.global(key, ws.path, size);

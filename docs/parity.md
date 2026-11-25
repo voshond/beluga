@@ -377,6 +377,8 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `workspaces.saveEnvInBeluga` | ✓ Save in Beluga on a worktree's env bar, and Archive/Delete's “Save them in Beluga” |
 | `workspaces.checkEnv` | ✓ when a project's page or a worktree opens |
 | `workspaces.ports` | – the ports a worktree's servers listen on, for forwarding a computer's to this Mac (the Ports tab is BLG-802) |
+| `workspaces.stopPort` | Stop on a Ports row, Stop Server in a dev page preview's ••• |
+| `workspaces.followPort` | Show Output on a Ports row and in a dev page preview's •••: an Output :<port> terminal tab |
 | `workspaces.askClaudeToReview` | ✓ |
 | `workspaces.askClaudeToMerge` | ✓ |
 | `workspaces.compact` | ✓ |

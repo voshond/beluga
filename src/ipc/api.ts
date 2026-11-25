@@ -385,8 +385,12 @@ export const API = {
   'workspaces.saveEnvInBeluga': args(id),
   // Look at a project's worktrees' env files now (untouched copies follow the main folder; changed ones are asked about).
   'workspaces.checkEnv': args(id),
-  // The ports a worktree's processes listen on now (BLG-801): [{ port, pid, name (vite, next…), host }].
+  // The ports a worktree's processes listen on now (BLG-801): [{ port, pid, name (vite, next…), host, log? }].
   'workspaces.ports': args(id),
+  // Stop the worktree's server on that port, with what wraps it (npm, sh -c) → true when one was there.
+  'workspaces.stopPort': args(id, z.number().int().min(1).max(65535)),
+  // Follow that server's output (the file it writes to) in a terminal tab of the worktree → the tab's key, or undefined.
+  'workspaces.followPort': args(id, z.number().int().min(1).max(65535)),
   'workspaces.askClaudeToReview': args(id),
   'workspaces.askClaudeToMerge': args(id),
   'workspaces.compact': args(id, opt(z.string().max(2000))),

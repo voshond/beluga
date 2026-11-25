@@ -4,6 +4,7 @@ import type { WorktreePort } from '@beluga/workspaces/ports.js';
 import { Icon } from '../../components/Icon.js';
 import { Button, Tip } from '../../components/ui.js';
 import { useApp, useBeluga } from '../../lib/beluga.js';
+import { useDevServer } from '../../lib/dev-servers.js';
 import { sameDeep } from '../../lib/stable.js';
 import { openExternal } from '../../lib/system.js';
 import s from './ports.module.css';
@@ -29,10 +30,14 @@ interface Row {
   readonly port: number;
   readonly local: number;
   readonly where?: string;
+  /** On the computer Beluga runs on (not forwarded from another): it can be stopped, and followed when it writes to a file. */
+  readonly here?: boolean;
+  readonly log?: string;
 }
 
 export function PortsTab({ wsId }: { wsId: string }) {
   const { client } = useBeluga();
+  const dev = useDevServer(wsId);
   const forwarded = useApp((st) => (st.forwards ?? NONE).filter((f) => f.workspaceId === wsId), sameDeep);
   const [here, setHere] = useState<readonly WorktreePort[]>([]);
   const onComputer = useApp((st) => st.onComputers?.[wsId]);
@@ -51,7 +56,7 @@ export function PortsTab({ wsId }: { wsId: string }) {
   }, [client, wsId]);
   const rows: Row[] = [
     ...forwarded.map((f) => ({ key: `${f.machineId}:${f.port}`, name: f.name, port: f.port, local: f.local, where: f.machineName })),
-    ...here.filter((p) => !forwarded.some((f) => f.local === p.port)).map((p) => ({ key: `here:${p.port}`, name: p.name, port: p.port, local: p.port })),
+    ...here.filter((p) => !forwarded.some((f) => f.local === p.port)).map((p) => ({ key: `here:${p.port}`, name: p.name, port: p.port, local: p.port, here: true, ...(p.log ? { log: p.log } : {}) })),
   ];
   if (!rows.length && !onComputer) return null;
   return (
@@ -65,10 +70,24 @@ export function PortsTab({ wsId }: { wsId: string }) {
             {r.where ? <span className={s.detail}>{r.local === r.port ? `from ${r.where}` : `from ${r.where}’s ${r.port} · ${r.port} is in use on ${thisComputer()}`}</span> : null}
           </span>
           <Tip label={`Open http://localhost:${r.local} in your browser`}>
-            <Button size="small" variant="quiet" onClick={() => void openExternal(`http://localhost:${r.local}`)}>
+            <Button size="small" variant="quiet" onClick={() => (r.here ? dev.open(`http://localhost:${r.local}`) : void openExternal(`http://localhost:${r.local}`))}>
               Open
             </Button>
           </Tip>
+          {r.log ? (
+            <Tip label={`Follow what it prints (${r.log.split('/').pop()}) in a terminal tab`}>
+              <Button size="small" variant="quiet" onClick={() => dev.follow(r.port)}>
+                Output
+              </Button>
+            </Tip>
+          ) : null}
+          {r.here ? (
+            <Tip label="Stop this server, and the npm or shell it runs under">
+              <Button size="small" variant="quiet" onClick={() => dev.stop(r.port)}>
+                Stop
+              </Button>
+            </Tip>
+          ) : null}
         </div>
       ))}
       {shares.map((p) => (
