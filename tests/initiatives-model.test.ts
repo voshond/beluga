@@ -302,6 +302,12 @@ describe('an epic’s tickets', () => {
 });
 
 describe('initiative memory parsing', () => {
+  it('reads a decision an agent marked "decided" as approved, and still refuses other states', () => {
+    const decided = { id: 2, text: 'Footer country code?', kind: 'decision', state: 'decided', answer: 'I scheduled a task' };
+    expect(SuggestionsSchema.parse([decided])[0]!.state).toBe('approved');
+    expect(SuggestionsSchema.safeParse([{ ...decided, state: 'done' }]).success).toBe(false);
+  });
+
   it('reads the newest timeline lines', () => {
     const md = `# Timeline\n\n${Array.from({ length: 12 }, (_, i) => `- line ${i}`).join('\n')}\n`;
     expect(timelineOf(md, 8)).toHaveLength(8);

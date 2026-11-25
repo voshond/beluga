@@ -274,7 +274,8 @@ export const CheckInScheduleSchema = z.object({
 export type CheckInSchedule = z.infer<typeof CheckInScheduleSchema>;
 
 export const SUGGESTION_STATES = ['open', 'approved', 'dismissed'] as const;
-export const SuggestionStateSchema = z.enum(SUGGESTION_STATES);
+/** An answered decision is approved; an agent writing "decided" means the same. */
+export const SuggestionStateSchema = z.preprocess((state) => (state === 'decided' ? 'approved' : state), z.enum(SUGGESTION_STATES));
 export type SuggestionState = z.infer<typeof SuggestionStateSchema>;
 
 export const SuggestionProofSchema = z.object({
