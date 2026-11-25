@@ -1,8 +1,7 @@
 import { stopOrder } from '../core/threads/model.js';
 import type { DomainState } from '../core/store.js';
-import { defaultAgentOf } from '../protocol.js';
 import { isThreadWorking } from '../shared/threads.js';
-import { type ThreadNesting, mixedHarnesses, threadFamily, threadNodes, threadParent, threadRank, threadStateOf } from '../ui/thread-tree.js';
+import { type ThreadNesting, mixedHarnesses, threadFamily, threadNodes, threadParent, threadRank, threadStateOf, workspaceHarness } from '../ui/thread-tree.js';
 import type { Workspace } from '../workspaces/types.js';
 import { agentRefView, clip, convTopic } from './needs-you.js';
 import { plainLine } from './strip.js';
@@ -21,7 +20,7 @@ export function threadRowOf(state: DomainState, channel: string, nesting: Thread
   const ws = own(state, channel);
   if (!ws || !state.prefs.agentThreads) return {};
   const parent = nesting.nested.has(ws.id) ? convTopic(ws.thread!.parent) : undefined;
-  return { ...(mixedHarnesses(state) ? { harness: agentRefView(ws.agent ?? defaultAgentOf(state.self)) } : {}), ...(parent ? { parent } : {}) };
+  return { ...(mixedHarnesses(state) ? { harness: agentRefView(workspaceHarness(state, ws)) } : {}), ...(parent ? { parent } : {}) };
 }
 
 /** A chat's family, for its Threads sheet. */
@@ -39,7 +38,7 @@ export function threadFamilyOf(state: DomainState, channel: string): Pick<ConvVi
     ...(ws.thread ? { parent: parentOf(state, ws, byId) } : {}),
     children: children.flatMap((w) => {
       const topic = convTopic(`${WS}${w.id}`);
-      return topic ? [{ id: clip(w.id, 200), topic, title: clip(w.name, 300), state: stateOf(w), working: isThreadWorking(stateOf(w)), harness: agentRefView(w.agent ?? defaultAgentOf(state.self)) }] : [];
+      return topic ? [{ id: clip(w.id, 200), topic, title: clip(w.name, 300), state: stateOf(w), working: isThreadWorking(stateOf(w)), harness: agentRefView(workspaceHarness(state, w)) }] : [];
     }),
     ...(agents.length ? { agents } : {}),
     chat: clip(ws.id, 200),
@@ -60,7 +59,7 @@ export function familyOf(state: DomainState, id: string): Pick<BranchView, 'thre
 
 /** The chat's native sub-agents (no background work), the newest 40, as its runs list them: read-only rows with the chat's harness. */
 function nativeAgents(state: DomainState, channel: string, ws: Workspace): NonNullable<ThreadFamilyView['agents']> {
-  const harness = agentRefView(ws.agent ?? defaultAgentOf(state.self));
+  const harness = agentRefView(workspaceHarness(state, ws));
   return state.log
     .flatMap((l) => (l.type === 'agent' && l.channel === channel ? l.subagents.filter((s) => s.kind !== 'background') : []))
     .slice(-40)
