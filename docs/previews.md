@@ -162,12 +162,24 @@ there reaches a dev server; on a loopback host name, never. One dev server shows
 time (the cookie is the origin's): the newest one framed. The proxy in front of the preview origin
 must pass websockets for hot reload (Nginx Proxy Manager: **Websockets Support**).
 
-When the web port listens beyond loopback, a dev page also gets its address on the network
-(`lan`): the server's LAN address (never a container's or a VPN's, `src/net/lan.ts`), or the name
-in `BELUGA_LAN_HOST`. **Open in Browser** opens that from a browser or the app as a client, never
-the client's own localhost. A dev server listening on loopback only says so above the frame, with
-**Ask Agent to Fix** (start it on all interfaces). A server too old to carry dev pages still shows a
-card.
+**Open in Browser** from a browser or the app as a client goes through that proxy too
+(`packages/mac/src/lib/dev-servers.ts`): it asks `preview.open` again for a fresh ticket (the frame
+used its own) and opens `<preview origin>/d/<id>/…`. The dev server sees `localhost` as always, so
+nothing in a project changes for it: no `allowedHosts`, no `--host 0.0.0.0`. The Ports tab's
+**Open** does the same for the server's own worktrees.
+
+Without a preview origin, when the web port listens beyond loopback, a dev page gets its address on
+the network (`lan`): the server's LAN address (never a container's or a VPN's, `src/net/lan.ts`), or
+the name in `BELUGA_LAN_HOST`, and **Open in Browser** opens that, never the client's own localhost.
+A dev server listening on loopback only then says so above the frame, with **Ask Agent to Fix**
+(start it on all interfaces). A server too old to carry dev pages still shows a card.
+
+**Its server** (`workspaces.stopPort`, `workspaces.followPort`): a dev page's ••• and the Ports tab
+stop the worktree's server on that port, with what it runs under (npm, `sh -c`, nodemon; never the
+agent or your shell), SIGTERM then SIGKILL after 3 s. **Show Output** / **Output** follows what it
+prints in an `Output :<port>` terminal tab (`tail -F`), when it writes to a file inside the worktree:
+every server an agent keeps past its turn (`BELUGA_KEEP=1`) writes to `.beluga/scratch/kept-….log`.
+One started in a terminal tab is already shown there.
 
 At the public origin a preview also needs your Beluga session. `preview.open` (only on a signed-in
 socket) hands out a one-time ticket that lasts 2 minutes. The frame's first load trades it for an

@@ -65,7 +65,7 @@ import { TERMINAL_IMPORT_HANDLERS } from './terminal-import-handlers.js';
 import { AGENT_TERM_HANDLERS } from './agent-term-handlers.js';
 import { TOOLBOX_HANDLERS } from './toolbox-handlers.js';
 import { MEMORY_HANDLERS } from './memory-handlers.js';
-import { worktreePorts } from '../workspaces/ports.js';
+import { stopWorktreePort, worktreePorts } from '../workspaces/ports.js';
 import { waitingNeeds } from '../companion/needs-you.js';
 import { saveDismissedNeeds, withDismissed } from '../core/dismissed-needs.js';
 
@@ -287,6 +287,11 @@ export const HANDLERS = {
     const ws = s.store.getState().projects.flatMap((p) => p.workspaces).find((w) => w.id === id);
     return ws ? worktreePorts(ws.path) : [];
   },
+  'workspaces.stopPort': (s, id, port) => {
+    const ws = s.store.getState().projects.flatMap((p) => p.workspaces).find((w) => w.id === id);
+    return ws ? stopWorktreePort(ws.path, port) : false;
+  },
+  'workspaces.followPort': (s, id, port) => bench(s)?.followPort(id, port),
   'workspaces.usageBreakdown': (s, id) => {
     const ws = s.store.getState().projects.flatMap((p) => p.workspaces).find((w) => w.id === id);
     return ws ? readFolderUsage(ws.path, { claudeDir: defaultClaudeDir(), codexDir: defaultCodexDir() }) : undefined;

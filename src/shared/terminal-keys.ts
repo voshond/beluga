@@ -15,6 +15,9 @@ export const TERM_BUSY = 'Your agent is still on a turn in the chat here: let it
 export const isTermBusy = (message: string): boolean => message.includes(TERM_BUSY);
 /** A shell split beside the agent's terminal: `<wsId>:pane:1`, `<wsId>:pane:2`… */
 export const paneTermId = (wsId: string, n: number): string => `${wsId}:pane:${n}`;
+/** A worktree server's output followed in a tab of its own: `<wsId>:out:5173`. */
+export const outputTermId = (wsId: string, port: number): string => `${wsId}:out:${port}`;
+export const isOutputTerm = (key: string): boolean => /:out:\d+$/.test(key);
 /** Shells of the global Terminal tab (not tied to a workspace): `shell:1`, `shell:2`… */
 export const globalShellId = (n: number): string => `shell:${n}`;
 export const isGlobalShell = (key: string): boolean => /^shell:\d+$/.test(key);
@@ -53,5 +56,6 @@ export function terminalLabel(key: string, names: Readonly<Record<string, string
   if (isGlobalShell(key)) return `Shell ${globalShellNumber(key)}`;
   if (isSshShell(key)) return sshHostOf(key);
   if (key.startsWith('toolbox:')) return key.split(':')[3] ?? 'Tool';
+  if (isOutputTerm(key)) return `Output :${key.split(':').pop()}`;
   return key.endsWith(':setup') ? 'Setup' : key.endsWith(':run') ? 'Run' : key.endsWith(':github') ? 'GitHub' : isAgentTerm(key) ? 'Agent' : 'Shell';
 }

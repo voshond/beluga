@@ -21,6 +21,8 @@ export interface WorktreePort {
   readonly name: string;
   /** Where it listens: 127.0.0.1, ::1, or 0.0.0.0 / :: for every address. */
   readonly host: string;
+  /** The file inside the worktree its output goes to (a server kept past an agent's turn writes to .beluga/scratch/kept-….log). */
+  readonly log?: string;
 }
 
 /** A process listening on a port, before it's known whose it is. */
@@ -37,6 +39,8 @@ export interface ProcFacts {
   readonly env: string;
   readonly cwd?: string;
   readonly cmdline: string;
+  /** Where its standard output goes (a file, a terminal, a pipe), when the OS says. */
+  readonly out?: string;
   /** Windows: the command lines of it and its parents, nearest first. */
   readonly lineage?: readonly string[];
 }
@@ -173,7 +177,8 @@ export function portsOf(listeners: readonly Listener[], facts: ReadonlyMap<numbe
     const had = byPort.get(l.port);
     // One port on 127.0.0.1 and ::1 is one row; a loopback address says more than a wildcard.
     if (had && !(had.host.startsWith('0.') || had.host === '::')) continue;
-    byPort.set(l.port, { port: l.port, pid: l.pid, name: nameOf(f.cmdline, l.comm), host: l.host });
+    const log = f.out && f.out !== root && within(f.out, root) ? f.out : undefined;
+    byPort.set(l.port, { port: l.port, pid: l.pid, name: nameOf(f.cmdline, l.comm), host: l.host, ...(log ? { log } : {}) });
   }
   return [...byPort.values()].sort((a, b) => a.port - b.port);
 }
@@ -192,7 +197,7 @@ async function macScan(): Promise<PortScan> {
   const listeners = parseLsof(await run('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpcn']));
   if (!listeners.length) return NONE;
   const list = [...new Set(listeners.map((l) => l.pid))].join(',');
-  const [envOut, cmdOut, cwdOut] = await Promise.all([run('ps', ['-wwE', '-o', 'pid=,command=', '-p', list]), run('ps', ['-ww', '-o', 'pid=,command=', '-p', list]), run('lsof', ['-a', '-d', 'cwd', '-Fpn', '-p', list])]);
+  const [envOut, cmdOut, cwdOut, outOut] = await Promise.all([run('ps', ['-wwE', '-o', 'pid=,command=', '-p', list]), run('ps', ['-ww', '-o', 'pid=,command=', '-p', list]), run('lsof', ['-a', '-d', 'cwd', '-Fpn', '-p', list]), run('lsof', ['-a', '-d', '1', '-Fpn', '-p', list])]);
   const rows = (out: string): Map<number, string> =>
     new Map(
       out.split('\n').flatMap((line) => {
@@ -204,11 +209,15 @@ async function macScan(): Promise<PortScan> {
   const facts = new Map<number, ProcFacts>();
   // ps -E prints the command, then its environment, space-separated: the tag is looked for between spaces.
   for (const [pid, line] of rows(envOut)) facts.set(pid, { env: ` ${line} `, cmdline: cmds.get(pid) ?? line });
-  let pid = 0;
-  for (const line of cwdOut.split('\n')) {
-    if (line.startsWith('p')) pid = Number(line.slice(1));
-    else if (line.startsWith('n') && facts.has(pid)) facts.set(pid, { ...facts.get(pid)!, cwd: line.slice(1) });
-  }
+  const each = (out: string, key: 'cwd' | 'out'): void => {
+    let pid = 0;
+    for (const line of out.split('\n')) {
+      if (line.startsWith('p')) pid = Number(line.slice(1));
+      else if (line.startsWith('n') && facts.has(pid)) facts.set(pid, { ...facts.get(pid)!, [key]: line.slice(1) });
+    }
+  };
+  each(cwdOut, 'cwd');
+  each(outOut, 'out');
   return { listeners, facts };
 }
 
@@ -228,10 +237,10 @@ async function linuxScan(proc = '/proc'): Promise<PortScan> {
       if (s && !mine.some((l) => l.port === s.port && l.host === s.host)) mine.push({ pid: Number(p), port: s.port, host: s.host });
     }
     if (!mine.length) continue;
-    const [comm, cmdline, env, cwd] = await Promise.all([read(`${p}/comm`), read(`${p}/cmdline`), read(`${p}/environ`), readlink(path.join(proc, p, 'cwd')).catch(() => undefined)]);
+    const [comm, cmdline, env, cwd, out] = await Promise.all([read(`${p}/comm`), read(`${p}/cmdline`), read(`${p}/environ`), readlink(path.join(proc, p, 'cwd')).catch(() => undefined), readlink(path.join(proc, p, 'fd', '1')).catch(() => undefined)]);
     const program = path.basename(cmdline.split('\0')[0] ?? '') || comm.trim();
     listeners.push(...mine.map((l) => ({ ...l, comm: program })));
-    facts.set(Number(p), { env: `${env}\0`, cmdline: cmdline.split('\0').join(' ').trim(), ...(cwd ? { cwd } : {}) });
+    facts.set(Number(p), { env: `${env}\0`, cmdline: cmdline.split('\0').join(' ').trim(), ...(cwd ? { cwd } : {}), ...(out ? { out } : {}) });
   }
   return { listeners, facts };
 }
@@ -317,4 +326,65 @@ export async function portsByFolder(dirs: readonly string[], platform: NodeJS.Pl
     out.set(dir, ports);
   }
   return out;
+}
+
+/** A process, its parent and its command line. */
+export interface ProcLink {
+  readonly pid: number;
+  readonly ppid: number;
+  readonly line: string;
+}
+
+/** What wraps a dev server without being one (a package runner, `sh -c`, a restarter): stopping the server stops it too, so nothing starts it again. */
+const WRAPPER = /(^|[\s/])(npm|npx|pnpm|yarn|bun|bunx|concurrently|nodemon|turbo|nohup)(\s|$)|(^|[\s/])-?(ba|z|da|k)?sh\s+(-\S+\s+)*-c(\s|$)/;
+/** Never climbed into: the agent and what it runs its commands in. */
+const AGENT = /claude|codex/i;
+
+/** What stopping the listener `pid` stops: the wrappers it runs under, then everything under the topmost of them. */
+export function stopTargets(rows: readonly ProcLink[], pid: number, own: ReadonlySet<number>): number[] {
+  const byPid = new Map(rows.map((r) => [r.pid, r]));
+  let top = pid;
+  for (let p = byPid.get(byPid.get(pid)?.ppid ?? 0); p && p.pid > 1 && !own.has(p.pid) && WRAPPER.test(p.line) && !AGENT.test(p.line); p = byPid.get(p.ppid)) top = p.pid;
+  const kids = new Map<number, number[]>();
+  for (const r of rows) kids.set(r.ppid, [...(kids.get(r.ppid) ?? []), r.pid]);
+  const out: number[] = [];
+  for (const queue = [top]; queue.length; ) {
+    const next = queue.shift()!;
+    if (out.includes(next) || own.has(next)) continue;
+    out.push(next);
+    queue.push(...(kids.get(next) ?? []));
+  }
+  return out;
+}
+
+async function processLinks(): Promise<ProcLink[]> {
+  return (await run('ps', ['-A', '-ww', '-o', 'pid=,ppid=,args=']))
+    .split('\n')
+    .map((l) => /^\s*(\d+)\s+(\d+)\s(.*)$/.exec(l))
+    .filter((m): m is RegExpExecArray => Boolean(m))
+    .map((m) => ({ pid: Number(m[1]), ppid: Number(m[2]), line: m[3]! }));
+}
+
+const signal = (pid: number, sig: NodeJS.Signals | 0): boolean => {
+  try {
+    process.kill(pid, sig);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Stop the server a worktree has on `port`: SIGTERM, then SIGKILL what's left after `graceMs` → whether one was there. */
+export async function stopWorktreePort(dir: string, port: number, graceMs = 3_000): Promise<boolean> {
+  const found = (await worktreePorts(dir)).find((p) => p.port === port);
+  if (!found) return false;
+  if (process.platform === 'win32') {
+    await run('taskkill', ['/PID', String(found.pid), '/T', '/F']);
+    return true;
+  }
+  const pids = stopTargets(await processLinks(), found.pid, new Set([process.pid, process.ppid]));
+  for (const pid of pids) signal(pid, 'SIGTERM');
+  for (const end = Date.now() + graceMs; pids.some((p) => signal(p, 0)) && Date.now() < end; ) await new Promise((r) => setTimeout(r, 100));
+  for (const pid of pids) if (signal(pid, 0)) signal(pid, 'SIGKILL');
+  return true;
 }
