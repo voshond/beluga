@@ -297,6 +297,8 @@ export const SuggestionSchema = z.object({
   clarifiedAt: z.string().max(40).optional(),
   outcome: z.string().max(2000).optional(),
   proof: z.array(SuggestionProofSchema).max(20).optional(),
+  /** What it is about: the tickets, threads and docs behind it. */
+  sources: z.array(SuggestionProofSchema).max(20).optional(),
 });
 export type Suggestion = z.infer<typeof SuggestionSchema>;
 
@@ -604,11 +606,17 @@ const BROWSE = /\/browse\/[A-Z][A-Z0-9_]+-\d+.*$/;
 export const epicUrlOf = (key: string, tickets: Pick<EpicTickets, 'epics' | 'tickets'> | undefined): string | undefined => {
   const known = tickets?.epics.find((e) => e.key === key)?.url;
   if (known && linkOf(known)) return linkOf(known);
-  const sample = tickets?.tickets.map((t) => t.url).find((url): url is string => Boolean(url && linkOf(url) && BROWSE.test(url)));
+  const sample = [...(tickets?.tickets ?? []), ...(tickets?.epics ?? [])].map((t) => t.url).find((url): url is string => Boolean(url && linkOf(url) && BROWSE.test(url)));
   return sample ? sample.replace(BROWSE, `/browse/${key}`) : undefined;
 };
 
-export const epicTitleOf = (key: string, item: Pick<InitiativeView, 'tickets' | 'progress'>): string | undefined =>
+/** Any ticket's Jira link: the one the agent read, or one built like the epic's. */
+export const ticketUrlOf = (key: string, tickets: Pick<EpicTickets, 'epics' | 'tickets'> | undefined): string | undefined => {
+  const known = tickets?.tickets.find((t) => t.key === key)?.url;
+  return (known && linkOf(known)) || epicUrlOf(key, tickets);
+};
+
+export const epicTitleOf =(key: string, item: Pick<InitiativeView, 'tickets' | 'progress'>): string | undefined =>
   item.tickets?.epics.find((e) => e.key === key)?.title ?? item.progress?.epics.find((e) => e.key === key)?.title;
 
 const timeOf = (iso: string | undefined): number => {

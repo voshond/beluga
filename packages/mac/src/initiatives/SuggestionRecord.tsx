@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { type InitiativeView, type Suggestion, initiativeChatOf, isDecision, linkOf } from '@beluga/core/initiatives/model.js';
-import { LOG_STATE_LABEL, type LogProof, dayOfIso, logStateOf, proofOf, recordMarkdown } from '@beluga/core/initiatives/log.js';
+import { LOG_STATE_LABEL, type LogSource, dayOfIso, logStateOf, proofOf, recordMarkdown, sourcesOf } from '@beluga/core/initiatives/log.js';
 import { Button } from '../components/ui.js';
 import { copyText } from '../lib/copy.js';
 import { openExternal } from '../lib/system.js';
@@ -27,20 +27,28 @@ export const StateBadge = ({ suggestion }: { suggestion: Suggestion }) => {
   );
 };
 
-const ProofLine = ({ proof }: { proof: LogProof }) => {
-  const url = proof.url ? linkOf(proof.url) : undefined;
+const LinkLine = ({ link }: { link: LogSource }) => {
+  const url = link.url ? linkOf(link.url) : undefined;
   const handleOpen = (): void => {
     if (url) void openExternal(url);
   };
-  if (!url) return <li>{proof.label}</li>;
+  if (!url) return <li>{link.label}</li>;
   return (
     <li>
-      <button type="button" className={s.proofLink} onClick={handleOpen} title={url} aria-label={`Open ${proof.label}`}>
-        {proof.label}
+      <button type="button" className={s.proofLink} onClick={handleOpen} title={url} aria-label={`Open ${link.label}`}>
+        {link.label}
       </button>
     </li>
   );
 };
+
+const LinkList = ({ links }: { links: readonly LogSource[] }) => (
+  <ul className={s.proofList}>
+    {links.map((link) => (
+      <LinkLine key={link.url ?? link.label} link={link} />
+    ))}
+  </ul>
+);
 
 const Part = ({ title, children }: { title: string; children: ReactNode }) => (
   <>
@@ -83,7 +91,8 @@ export const SuggestionRecord = ({ item, suggestion }: RecordProps) => {
   const a = useInitiativeActions();
   const open = suggestion.state === 'open';
   const proof = proofOf(suggestion, item.outbox);
-  const handleCopy = (): void => void a.act(() => copyText(recordMarkdown(suggestion, item.outbox)), 'Copied the record');
+  const sources = sourcesOf(suggestion, item);
+  const handleCopy = (): void => void a.act(() => copyText(recordMarkdown(suggestion, item)), 'Copied the record');
   return (
     <article className={`${s.record} selectable`} data-record={suggestion.id} aria-label={`Suggestion ${suggestion.id}`}>
       <span className={s.recordHead}>
@@ -100,6 +109,11 @@ export const SuggestionRecord = ({ item, suggestion }: RecordProps) => {
       </span>
       <h3 className={s.recordTitle}>{suggestion.text}</h3>
       {suggestion.why ? <Part title="Context">{suggestion.why}</Part> : null}
+      {sources.length ? (
+        <Part title="Sources">
+          <LinkList links={sources} />
+        </Part>
+      ) : null}
       {open ? (
         <OpenActions item={item} suggestion={suggestion} />
       ) : (
@@ -111,11 +125,7 @@ export const SuggestionRecord = ({ item, suggestion }: RecordProps) => {
           <Part title="Outcome">{suggestion.outcome ?? (suggestion.state === 'dismissed' ? 'Not done.' : 'The chat has not written one yet.')}</Part>
           <Part title="Proof">
             {proof.length ? (
-              <ul className={s.proofList}>
-                {proof.map((p) => (
-                  <ProofLine key={`${p.from}-${p.label}`} proof={p} />
-                ))}
-              </ul>
+              <LinkList links={proof} />
             ) : (
               <span className={s.quiet}>None yet.</span>
             )}
