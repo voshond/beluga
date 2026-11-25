@@ -1,4 +1,4 @@
-import { type DocRef, type EpicStatus, type EpicTickets, type InitiativeTask, type InitiativeTasks, type InitiativeView, type MeetingRef, type PrState, type SlackRef, type Ticket, type TicketCategory, docKindOf, isSubTask, lastCheckInAt, openSuggestions, progressShare } from '@beluga/core/initiatives/model.js';
+import { type DocRef, type EpicStatus, type EpicTickets, type InitiativeTask, type InitiativeTasks, type InitiativeView, type MeetingRef, type PrState, type SlackRef, type Ticket, type TicketCategory, type TimelineEntry, docKindOf, isSubTask, lastCheckInAt, openSuggestions, progressShare } from '../../../../src/core/initiatives/model.js';
 
 export const INITIATIVE_VIEWS: ReadonlySet<string> = new Set(['initiatives', 'initiative_page']);
 
@@ -144,32 +144,86 @@ export const tasksWords = (tasks: InitiativeTasks): string => {
 export type TimelineDay = {
   readonly key: string;
   readonly label: string;
-  readonly entries: readonly string[];
+  readonly entries: readonly TimelineEntry[];
 };
-
-const TIMELINE_LINE = /^(\d{4}-\d{2}-\d{2})\s*:\s*(.+)$/;
 
 const DAY_MS = 86_400_000;
 
-const startOfDay = (at: Date): number => new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
+const startOfDay = (at: Date): Date => new Date(at.getFullYear(), at.getMonth(), at.getDate());
+
+const dateOfKey = (key: string): Date => {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year!, month! - 1, day!);
+};
+
+export const dayKeyOf = (at: Date): string => `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
 
 export const timelineDayLabel = (key: string, now: Date): string => {
   if (!key) return 'Undated';
-  const [year, month, day] = key.split('-').map(Number);
-  const date = new Date(year!, month! - 1, day!);
-  const daysAgo = Math.round((startOfDay(now) - date.getTime()) / DAY_MS);
+  const date = dateOfKey(key);
+  const daysAgo = Math.round((startOfDay(now).getTime() - date.getTime()) / DAY_MS);
   if (daysAgo === 0) return 'Today';
   if (daysAgo === 1) return 'Yesterday';
   const sameYear = date.getFullYear() === now.getFullYear();
   return date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) });
 };
 
-export const timelineDays = (lines: readonly string[], now: Date): TimelineDay[] =>
-  lines.reduce<TimelineDay[]>((days, line) => {
-    const match = TIMELINE_LINE.exec(line);
-    const key = match?.[1] ?? '';
-    const text = match?.[2] ?? line;
+export const timelineDays = (entries: readonly TimelineEntry[], now: Date): TimelineDay[] =>
+  entries.reduce<TimelineDay[]>((days, entry) => {
     const last = days.at(-1);
-    if (last?.key === key) return [...days.slice(0, -1), { ...last, entries: [...last.entries, text] }];
-    return [...days, { key, label: timelineDayLabel(key, now), entries: [text] }];
+    if (last?.key === entry.day) return [...days.slice(0, -1), { ...last, entries: [...last.entries, entry] }];
+    return [...days, { key: entry.day, label: timelineDayLabel(entry.day, now), entries: [entry] }];
   }, []);
+
+export type ActivityCell = {
+  readonly key: string;
+  readonly count: number;
+  readonly level: 0 | 1 | 2 | 3 | 4;
+  readonly future: boolean;
+};
+
+export type ActivityWeek = {
+  readonly month?: string;
+  readonly cells: readonly ActivityCell[];
+};
+
+export const activityLevel = (count: number): ActivityCell['level'] => {
+  if (count <= 0) return 0;
+  if (count === 1) return 1;
+  if (count === 2) return 2;
+  if (count <= 4) return 3;
+  return 4;
+};
+
+/** The last weeks as columns of Monday to Sunday, GitHub style, with a month label where one starts. */
+export const activityWeeks = (entries: readonly TimelineEntry[], now: Date, weeks = 26): ActivityWeek[] => {
+  const counts = entries.reduce((map, e) => (e.day ? map.set(e.day, (map.get(e.day) ?? 0) + 1) : map), new Map<string, number>());
+  const today = startOfDay(now);
+  const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7) - (weeks - 1) * 7);
+  return Array.from({ length: weeks }, (_, w) => {
+    const cells = Array.from({ length: 7 }, (_, d) => {
+      const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + w * 7 + d);
+      const key = dayKeyOf(date);
+      const count = counts.get(key) ?? 0;
+      return { key, count, level: activityLevel(count), future: date.getTime() > today.getTime() };
+    });
+    const first = dateOfKey(cells[0]!.key);
+    return { ...(first.getDate() <= 7 ? { month: first.toLocaleDateString('en-GB', { month: 'short' }) } : {}), cells };
+  });
+};
+
+export const activityWords = (cell: Pick<ActivityCell, 'key' | 'count'>, now: Date): string => {
+  const what = cell.count ? `${cell.count} ${cell.count === 1 ? 'event' : 'events'}` : 'Nothing';
+  return `${what} · ${timelineDayLabel(cell.key, now)}`;
+};
+
+export type TextPart = {
+  readonly text: string;
+  readonly ticket?: string;
+};
+
+export const ticketParts = (text: string): TextPart[] =>
+  text
+    .split(/(?<![\w-])([A-Z][A-Z0-9_]+-\d+)(?![\w-])/)
+    .filter(Boolean)
+    .map((part) => (/^[A-Z][A-Z0-9_]+-\d+$/.test(part) ? { text: part, ticket: part } : { text: part }));

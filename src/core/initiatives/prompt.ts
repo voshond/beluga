@@ -126,7 +126,7 @@ ${fence(item.goal.trim() || 'Not written down yet.')}
 Your working folder is the initiative's memory, a folder in a git repository Beluga commits after your turn. Keep it current:
 - brief.md: where it stands now, short. Every chat starts from it.
 - decisions.md: your own notes, "## Open" questions and "## Decided" ones, each with the date and why. The page does not show it: a question the user must settle is also a "decision" in suggestions.json.
-- timeline.md: what happened, newest first, one bullet each ("- 2026-11-24: …").
+- timeline.md: what happened, newest first, one bullet each with its kind ("- 2026-11-24 [check-in]: …"), which the page shows as an activity feed. Kinds: check-in (what a check-in found), decision (one the user made), message (a draft or a message sent), ticket (a ticket created, moved or changed), said (what someone said: name them first, "Natalia: …"), doc (a doc changed or first read), meeting (a meeting held or scheduled), artifact, created, event (anything else).
 - people.md: who is involved and what they own.
 - status.json: {"at", "total", "done", "inProgress", "blocked", "stale", "epics": [{"key", "title", "total", "done", "inProgress", "blocked", "stale"}]} from the epics.
 - tickets.json: every ticket under the epics and every sub-task under those tickets, with their pull requests, which the page shows as a table: ${TICKETS_SHAPE}. Rewrite it whole whenever you read the epics.

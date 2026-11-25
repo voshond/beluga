@@ -28,7 +28,8 @@ import {
   initiativeChatOf,
   initiativeChatTitle,
   progressShare,
-  recentOf,
+  timelineEntryOf,
+  timelineOf,
   reduceInitiatives,
   slugOf,
   suggestionMessage,
@@ -59,7 +60,7 @@ const item = (slug: string, name = slug): InitiativeView => ({
   suggestions: [],
   outbox: [],
   artifacts: [],
-  recent: [],
+  timeline: [],
   files: [],
   chats: { chats: [{ id: 'main', channel: initiativeChatChannel(slug, 'main'), createdAt: 0 }], active: 'main' },
 });
@@ -303,8 +304,14 @@ describe('an epic’s tickets', () => {
 describe('initiative memory parsing', () => {
   it('reads the newest timeline lines', () => {
     const md = `# Timeline\n\n${Array.from({ length: 12 }, (_, i) => `- line ${i}`).join('\n')}\n`;
-    expect(recentOf(md)).toHaveLength(8);
-    expect(recentOf(md)[0]).toBe('line 0');
+    expect(timelineOf(md, 8)).toHaveLength(8);
+    expect(timelineOf(md)[0]).toEqual({ day: '', kind: 'event', text: 'line 0' });
+  });
+
+  it('reads a line\'s day and kind, and old lines without a kind', () => {
+    expect(timelineEntryOf('2026-11-25 [check-in]: RUN-52 in progress')).toEqual({ day: '2026-11-25', kind: 'check-in', text: 'RUN-52 in progress' });
+    expect(timelineEntryOf('2026-11-11: Natalia: wants a ticket')).toEqual({ day: '2026-11-11', kind: 'event', text: 'Natalia: wants a ticket' });
+    expect(timelineEntryOf('2026-11-11 [party]: who knows')).toEqual({ day: '2026-11-11', kind: 'event', text: 'who knows' });
   });
 });
 

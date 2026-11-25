@@ -422,7 +422,7 @@ export type InitiativeView = {
   readonly suggestions: readonly Suggestion[];
   readonly outbox: readonly OutboxDraft[];
   readonly artifacts: readonly Artifact[];
-  readonly recent: readonly string[];
+  readonly timeline: readonly TimelineEntry[];
   readonly files: readonly string[];
   readonly checkIn?: string;
   readonly chats: InitiativeChats;
@@ -530,12 +530,33 @@ const bullet = (line: string): string | undefined => {
   return match?.[1];
 };
 
-export const recentOf = (markdown: string, max = 8): string[] =>
+export const TIMELINE_KINDS = ['check-in', 'decision', 'message', 'ticket', 'said', 'doc', 'meeting', 'artifact', 'created', 'event'] as const;
+export type TimelineKind = (typeof TIMELINE_KINDS)[number];
+
+/** One bullet of timeline.md: "- 2026-11-25 [check-in]: …", the kind and even the day optional. */
+export type TimelineEntry = {
+  readonly day: string;
+  readonly kind: TimelineKind;
+  readonly text: string;
+};
+
+const TIMELINE_LINE = /^(?:(\d{4}-\d{2}-\d{2})\s*(?:\[([a-z-]+)\])?\s*:\s*)?(.+)$/;
+
+const isTimelineKind = (kind: string | undefined): kind is TimelineKind => (TIMELINE_KINDS as readonly string[]).includes(kind ?? '');
+
+export const timelineEntryOf = (line: string): TimelineEntry => {
+  const match = TIMELINE_LINE.exec(line.trim());
+  const kind = match?.[2];
+  return { day: match?.[1] ?? '', kind: isTimelineKind(kind) ? kind : 'event', text: match?.[3] ?? line };
+};
+
+export const timelineOf = (markdown: string, max = 500): TimelineEntry[] =>
   markdown
     .split('\n')
     .map(bullet)
     .filter((b): b is string => Boolean(b))
-    .slice(0, max);
+    .slice(0, max)
+    .map(timelineEntryOf);
 
 export const openSuggestions = (item: Pick<InitiativeView, 'suggestions'>): Suggestion[] => item.suggestions.filter((s) => s.state === 'open');
 
