@@ -140,6 +140,10 @@ describe('initiative schemas', () => {
     expect(matchesDraft(thread, 'hi', 'mcp__x__slack_send_message', { channel_id: 'D1', thread_ts: '17.5', message: ' hi\n' })).toBe(true);
     expect(matchesDraft(thread, 'hi', 'mcp__x__slack_send_message', { channel_id: 'D1', message: 'hi' })).toBe(false);
     expect(matchesDraft({ kind: 'jira', issue: 'RUN-1' }, 'ok', 'mcp__x__slack_send_message', { channel_id: 'RUN-1', message: 'ok' })).toBe(false);
+    expect(isSendingTool('mcp__slack-user__conversations_add_message')).toBe(true);
+    expect(matchesDraft(thread, 'hi', 'mcp__slack-user__conversations_add_message', { channel_id: 'D1', thread_ts: '17.5', text: 'hi' })).toBe(true);
+    expect(matchesDraft(thread, 'hi', 'mcp__slack-user__conversations_add_message', { channel_id: 'D1', thread_ts: '17.5', message: 'hi' })).toBe(false);
+    expect(matchesDraft(thread, 'hi', 'mcp__slack-user__conversations_add_message', { channel_id: 'D1', thread_ts: '17.5', text: 'hi', blocks: '[]' })).toBe(false);
     expect(sendDraftMessage({ id: 4, to: { kind: 'jira', issue: 'RUN-1' } }, 'ok')).toBe('Send draft 4 from the outbox now: jira_add_comment with issue_key RUN-1, and the body exactly as below, nothing added or changed.\n\nok');
   });
 
