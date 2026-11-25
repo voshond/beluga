@@ -202,7 +202,7 @@ export class Initiatives {
       suggestions: folder.suggestions,
       outbox: folder.outbox,
       artifacts: folder.artifacts,
-      recent: folder.recent,
+      timeline: folder.timeline,
       files: folder.files,
       ...(checkIn ? { checkIn } : {}),
       chats,
@@ -439,7 +439,7 @@ export class Initiatives {
     const draft = this.openDraft(item, id);
     this.sends.delete(`${slug}:${id}`);
     this.putDraft(slug, item.outbox, id, (d) => ({ ...d, state: 'discarded', resolvedAt: new Date(this.now).toISOString() }));
-    addTimeline(this.deps.root, slug, `${dayOf(this.now)}: discarded a draft to ${targetWords(draft.to)}`);
+    addTimeline(this.deps.root, slug, `${dayOf(this.now)} [message]: discarded a draft to ${targetWords(draft.to)}`);
     await this.commit(slug, `${slug}: draft ${id} discarded`);
     this.refresh(slug);
   }
@@ -480,7 +480,7 @@ export class Initiatives {
     const folder = readFolder(this.deps.root, send.slug);
     if (!folder.outbox.some((d) => d.id === send.id)) return;
     this.putDraft(send.slug, folder.outbox, send.id, (d) => ({ ...d, state: 'sent', resolvedAt: new Date(this.now).toISOString() }));
-    addTimeline(this.deps.root, send.slug, `${dayOf(this.now)}: sent ${send.to.kind === 'slack' ? 'a Slack message' : 'a Jira comment'} to ${targetWords(send.to)}`);
+    addTimeline(this.deps.root, send.slug, `${dayOf(this.now)} [message]: sent ${send.to.kind === 'slack' ? 'a Slack message' : 'a Jira comment'} to ${targetWords(send.to)}`);
     this.refresh(send.slug);
   }
 
@@ -506,7 +506,7 @@ export class Initiatives {
       createdAt: new Date(this.now).toISOString(),
     });
     writeArtifacts(this.deps.root, slug, [...item.artifacts, artifact]);
-    addTimeline(this.deps.root, slug, `${dayOf(this.now)}: artifact #${id} “${artifact.title}”${artifact.ticket ? ` from ${artifact.ticket}` : ''}`);
+    addTimeline(this.deps.root, slug, `${dayOf(this.now)} [artifact]: artifact #${id} “${artifact.title}”${artifact.ticket ? ` from ${artifact.ticket}` : ''}`);
     await this.commit(slug, `${slug}: artifact ${id}`);
     this.refresh(slug);
     if (kept) return `Kept as artifact #${id} of ${item.name} (${artifact.file}). It shows on the initiative's page, and its next check-in reads it.`;

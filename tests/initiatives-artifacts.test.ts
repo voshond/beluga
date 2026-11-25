@@ -41,7 +41,7 @@ describe('initiative artifacts', () => {
     const saved = ArtifactsSchema.parse(JSON.parse(readFileSync(path.join(root, slug, 'artifacts.json'), 'utf8')));
     expect(saved[0]).toMatchObject({ id: 1, title: 'veraPDF report', file: 'artifacts/1-vera-report.md', name: 'vera report.md', ticket: 'RUN-54', worktree: 'run-54-vera', project: 'platform' });
     expect(readFileSync(path.join(root, slug, 'artifacts/1-vera-report.md'), 'utf8')).toContain('3 failures');
-    expect(readFileSync(path.join(root, slug, 'timeline.md'), 'utf8')).toContain('- 2026-11-25: artifact #1 “veraPDF report” from RUN-54');
+    expect(readFileSync(path.join(root, slug, 'timeline.md'), 'utf8')).toContain('- 2026-11-25 [artifact]: artifact #1 “veraPDF report” from RUN-54');
     expect(items()[0]!.artifacts).toHaveLength(1);
     expect(service.readArtifact(slug, 1)).toMatchObject({ kind: 'text', name: 'vera report.md', cut: false });
     await service.reportArtifact(slug, { file: path.join(dir, '.beluga/scratch/vera report.md'), title: 'Again' });

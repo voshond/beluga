@@ -1,7 +1,7 @@
 import { type Dirent, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { z } from 'zod';
-import { type Artifact, ArtifactsSchema, type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, type InitiativeTasks, TasksSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type OutboxDraft, OutboxSchema, type Suggestion, SuggestionsSchema, recentOf } from './model.js';
+import { type Artifact, ArtifactsSchema, type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, type InitiativeTasks, TasksSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type OutboxDraft, OutboxSchema, type Suggestion, SuggestionsSchema, type TimelineEntry, timelineOf } from './model.js';
 
 export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json', 'artifacts.json'] as const;
 
@@ -19,7 +19,7 @@ export type InitiativeFolder = {
   readonly suggestions: readonly Suggestion[];
   readonly outbox: readonly OutboxDraft[];
   readonly artifacts: readonly Artifact[];
-  readonly recent: readonly string[];
+  readonly timeline: readonly TimelineEntry[];
   readonly files: readonly string[];
   readonly trouble?: string;
 };
@@ -116,7 +116,7 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
     suggestions: suggestions.value ?? [],
     outbox: outbox.value ?? [],
     artifacts: artifacts.value ?? [],
-    recent: recentOf(file('timeline.md') ?? ''),
+    timeline: timelineOf(file('timeline.md') ?? ''),
     files: memoryFiles(folder),
     ...(troubles.length ? { trouble: troubles.join('; ') } : {}),
   };
@@ -172,7 +172,7 @@ export const scaffoldFolder = (root: string, slug: string, config: InitiativeCon
   const put = (name: string, text: string): void => writeText(path.join(folder, name), text);
   put('brief.md', `# ${config.name}\n\n${config.goal || 'The goal is not written down yet.'}\n\n## Where it stands\n\nNothing checked yet. The first check-in fills this in.\n\n## Epics\n\n${list(config.epics, 'none linked yet')}\n`);
   put('decisions.md', `# Decisions\n\n## Open\n\n## Decided\n`);
-  put('timeline.md', `# Timeline\n\nNewest first.\n\n- ${today}: initiative created\n`);
+  put('timeline.md', `# Timeline\n\nNewest first.\n\n- ${today} [created]: initiative created\n`);
   put('people.md', `# People\n\nWho is involved and what they own.\n`);
   put('suggestions.json', '[]\n');
   put('outbox.json', '[]\n');

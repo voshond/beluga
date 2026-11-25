@@ -20,7 +20,7 @@ describe('an initiative’s folder', () => {
     expect(folder.config).toMatchObject({ name: 'Checkout v2', epics: ['SHOP-120'], status: 'active' });
     expect(folder.brief).toContain('# Checkout v2');
     expect(folder.suggestions).toEqual([]);
-    expect(folder.recent).toEqual(['2026-11-24: initiative created']);
+    expect(folder.timeline).toEqual([{ day: '2026-11-24', kind: 'created', text: 'initiative created' }]);
     expect(folder.files).toEqual(['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'suggestions.json', 'outbox.json', 'sources/README.md']);
     expect(listSlugs(root)).toEqual(['checkout-v2']);
   });

@@ -46,17 +46,3 @@ export const Section = ({ title, children, aside }: { title: string; children: R
     {children}
   </section>
 );
-
-export const Bullets = ({ title, items, empty }: { title: string; items: readonly string[]; empty: string }) => (
-  <Section title={title}>
-    {items.length ? (
-      <ul className={`${s.bullets} selectable`}>
-        {items.map((line, i) => (
-          <li key={`${i}-${line}`}>{line}</li>
-        ))}
-      </ul>
-    ) : (
-      <span className={s.quiet}>{empty}</span>
-    )}
-  </Section>
-);

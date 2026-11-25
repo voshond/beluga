@@ -366,7 +366,7 @@ describe('Initiatives', () => {
     expect(saved[1]).toMatchObject({ state: 'discarded' });
     expect(saved.every((d) => Boolean(d.resolvedAt))).toBe(true);
     const timeline = readFileSync(path.join(root, slug, 'timeline.md'), 'utf8');
-    expect(timeline).toMatch(/- \d{4}-\d{2}-\d{2}: discarded a draft to a comment on SHOP-150\n- \d{4}-\d{2}-\d{2}: sent a Slack message to #checkout\n/);
+    expect(timeline).toMatch(/- \d{4}-\d{2}-\d{2} \[message\]: discarded a draft to a comment on SHOP-150\n- \d{4}-\d{2}-\d{2} \[message\]: sent a Slack message to #checkout\n/);
     await expect(service.sendDraft(slug, 2, 'x')).rejects.toThrow(/already discarded/);
     const other = (await service.create({ name: 'B' })).slug;
     await service.sendDraft(slug, 1, 'x').catch(() => undefined);
@@ -394,7 +394,7 @@ describe('Initiatives', () => {
     expect(gitLog(root)[0]).toBe('tracked: updated');
     writeFileSync(path.join(root, slug, 'timeline.md'), '# Timeline\n\n- today: checked\n');
     store.dispatch({ type: 'agent_event', owner: SELF, requestId: 'r1', requester: SELF, event: 'done', text: 'ok', ts: Date.now(), channel: initiativeChatChannel(slug, CHECK_IN_CHAT) });
-    await waitFor(() => store.getState().initiatives.items[0]!.recent[0] === 'today: checked');
+    await waitFor(() => store.getState().initiatives.items[0]!.timeline[0]?.text === 'today: checked');
     expect(gitLog(root)[0]).toMatch(/^tracked: check-in \d{4}-\d{2}-\d{2}$/);
   });
 

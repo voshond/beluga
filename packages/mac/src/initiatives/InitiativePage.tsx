@@ -8,7 +8,8 @@ import { openSheet } from '../lib/sheets.js';
 import { sameDeep } from '../lib/stable.js';
 import { GoalSection } from './GoalRefine.js';
 import { Follows } from './InitiativeFollows.js';
-import { Bullets, EpicLink, ProgressBar } from './InitiativeParts.js';
+import { EpicLink, ProgressBar } from './InitiativeParts.js';
+import { Timeline } from './InitiativeTimeline.js';
 import { CheckInRow, MemoryFiles, Repos } from './InitiativeSettings.js';
 import { InitiativePanel, type PanelTab } from './InitiativePanel.js';
 import { NewInitiativeSheet } from './NewInitiativeSheet.js';
@@ -109,7 +110,7 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
           <CheckInRow item={item} />
           <Suggestions item={item} pickedId={picked?.id} onPick={handlePick} />
           <TasksSection item={item} />
-          <Bullets title="Recent" items={item.recent} empty="Nothing in timeline.md yet." />
+          <Timeline item={item} />
           <Follows item={item} />
           <Repos item={item} />
           <MemoryFiles item={item} />

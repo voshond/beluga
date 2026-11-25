@@ -439,14 +439,187 @@ button.card:hover {
   min-width: 200px;
 }
 
-.bullets {
+.grid {
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.gridDays,
+.gridWeek {
+  display: grid;
+  grid-template-rows: 14px repeat(7, 10px);
+  gap: 3px;
+}
+.gridDays {
+  padding-right: 4px;
+  font-size: 9px;
+  line-height: 10px;
+  color: var(--text-3);
+}
+.gridMonth {
+  width: 10px;
+  overflow: visible;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 12px;
+  color: var(--text-3);
+}
+.gridCell {
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: var(--bg-sunken);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.gridCell[data-future] {
+  background: transparent;
+  box-shadow: none;
+}
+.gridCell[data-level='1'] {
+  background: color-mix(in srgb, var(--accent) 30%, var(--bg-sunken));
+}
+.gridCell[data-level='2'] {
+  background: color-mix(in srgb, var(--accent) 50%, var(--bg-sunken));
+}
+.gridCell[data-level='3'] {
+  background: color-mix(in srgb, var(--accent) 75%, var(--bg-sunken));
+}
+.gridCell[data-level='4'] {
+  background: var(--accent);
+}
+.gridCell:not(:disabled):not([data-future]) {
+  cursor: pointer;
+}
+.gridCell:not(:disabled):hover,
+.gridCell[data-picked] {
+  box-shadow: 0 0 0 1.5px var(--text);
+}
+
+.feed {
   margin: 0;
-  padding-left: 18px;
+  padding: 0;
+  list-style: none;
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
   font-size: 13px;
   color: var(--text);
+}
+.feed::before {
+  content: '';
+  position: absolute;
+  left: 10.5px;
+  top: 30px;
+  bottom: 10px;
+  width: 1px;
+  background: var(--hairline);
+}
+.feedDay {
+  display: flex;
+  flex-direction: column;
+}
+.feedDate {
+  padding: 10px 0 4px 34px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.feedDay:first-child .feedDate {
+  padding-top: 2px;
+}
+.feedEntries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.feedEntry {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  gap: 12px;
+  align-items: start;
+  padding: 4px 0;
+}
+.feedIcon {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--bg-raised);
+  box-shadow: 0 0 0 3px var(--bg);
+  color: var(--text-3);
+}
+.feedDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.feedEntry[data-kind='check-in'] .feedIcon {
+  color: var(--ok);
+}
+.feedEntry[data-kind='decision'] .feedIcon {
+  color: var(--plan);
+}
+.feedEntry[data-kind='message'] .feedIcon,
+.feedEntry[data-kind='meeting'] .feedIcon {
+  color: var(--info);
+}
+.feedEntry[data-kind='ticket'] .feedIcon,
+.feedEntry[data-kind='created'] .feedIcon {
+  color: var(--accent);
+}
+.feedEntry[data-kind='said'] .feedIcon {
+  color: var(--warn);
+}
+.feedText {
+  padding-top: 2px;
+  line-height: 1.45;
+}
+.feedLink {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.feedLink > svg {
+  align-self: center;
+}
+.feedLink:not(:disabled):hover {
+  text-decoration: underline;
+}
+.feedLink[data-link='ticket'] {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--bg-raised);
+  font: 11.5px var(--font-mono);
+}
+.feedLink[data-link='ticket']:not(:disabled):hover {
+  text-decoration: none;
+  background: var(--bg-hover);
+}
+.feedLink:disabled {
+  color: var(--text-2);
+  cursor: text;
+}
+.feedKind {
+  padding-top: 3px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
 }
 
 .chips {
