@@ -27,7 +27,6 @@ import {
   initiativeChatChannel,
   initiativeChatOf,
   initiativeChatTitle,
-  openDecisionsOf,
   progressShare,
   recentOf,
   reduceInitiatives,
@@ -59,7 +58,6 @@ const item = (slug: string, name = slug): InitiativeView => ({
   people: [],
   suggestions: [],
   outbox: [],
-  openDecisions: [],
   recent: [],
   files: [],
   chats: { chats: [{ id: 'main', channel: initiativeChatChannel(slug, 'main'), createdAt: 0 }], active: 'main' },
@@ -302,12 +300,6 @@ describe('an epic’s tickets', () => {
 });
 
 describe('initiative memory parsing', () => {
-  it('reads the open decisions only', () => {
-    const md = '# Decisions\n\n## Open\n\n- Launch in NO?\n- [ ] Guest checkout flag?\n\n## Decided\n\n- 2026-11-20: Apple Pay first\n';
-    expect(openDecisionsOf(md)).toEqual(['Launch in NO?', 'Guest checkout flag?']);
-    expect(openDecisionsOf('# Decisions\n')).toEqual([]);
-  });
-
   it('reads the newest timeline lines', () => {
     const md = `# Timeline\n\n${Array.from({ length: 12 }, (_, i) => `- line ${i}`).join('\n')}\n`;
     expect(recentOf(md)).toHaveLength(8);

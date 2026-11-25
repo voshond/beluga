@@ -1,7 +1,7 @@
 import { type Dirent, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { z } from 'zod';
-import { type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, type InitiativeTasks, TasksSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type OutboxDraft, OutboxSchema, type Suggestion, SuggestionsSchema, openDecisionsOf, recentOf } from './model.js';
+import { type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, type InitiativeTasks, TasksSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type OutboxDraft, OutboxSchema, type Suggestion, SuggestionsSchema, recentOf } from './model.js';
 
 export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json'] as const;
 
@@ -18,7 +18,6 @@ export type InitiativeFolder = {
   readonly tasks?: InitiativeTasks;
   readonly suggestions: readonly Suggestion[];
   readonly outbox: readonly OutboxDraft[];
-  readonly openDecisions: readonly string[];
   readonly recent: readonly string[];
   readonly files: readonly string[];
   readonly trouble?: string;
@@ -114,7 +113,6 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
     ...(tasks.value ? { tasks: tasks.value } : {}),
     suggestions: suggestions.value ?? [],
     outbox: outbox.value ?? [],
-    openDecisions: openDecisionsOf(file('decisions.md') ?? ''),
     recent: recentOf(file('timeline.md') ?? ''),
     files: memoryFiles(folder),
     ...(troubles.length ? { trouble: troubles.join('; ') } : {}),

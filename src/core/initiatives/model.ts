@@ -364,7 +364,6 @@ export type InitiativeView = {
   readonly tasks?: InitiativeTasks;
   readonly suggestions: readonly Suggestion[];
   readonly outbox: readonly OutboxDraft[];
-  readonly openDecisions: readonly string[];
   readonly recent: readonly string[];
   readonly files: readonly string[];
   readonly checkIn?: string;
@@ -472,20 +471,6 @@ const bullet = (line: string): string | undefined => {
   const match = /^\s*[-*]\s+(?:\[[ xX]\]\s+)?(.+?)\s*$/.exec(line);
   return match?.[1];
 };
-
-const sectionLines = (markdown: string, heading: RegExp): string[] => {
-  const lines = markdown.split('\n');
-  const start = lines.findIndex((l) => /^#{1,3}\s/.test(l) && heading.test(l));
-  if (start < 0) return [];
-  const rest = lines.slice(start + 1);
-  const end = rest.findIndex((l) => /^#{1,3}\s/.test(l));
-  return end < 0 ? rest : rest.slice(0, end);
-};
-
-export const openDecisionsOf = (markdown: string): string[] =>
-  sectionLines(markdown, /\bopen\b/i)
-    .map(bullet)
-    .filter((b): b is string => Boolean(b));
 
 export const recentOf = (markdown: string, max = 8): string[] =>
   markdown

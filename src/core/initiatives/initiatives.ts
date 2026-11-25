@@ -180,7 +180,6 @@ export class Initiatives {
       ...(folder.tasks ? { tasks: folder.tasks } : {}),
       suggestions: folder.suggestions,
       outbox: folder.outbox,
-      openDecisions: folder.openDecisions,
       recent: folder.recent,
       files: folder.files,
       ...(checkIn ? { checkIn } : {}),

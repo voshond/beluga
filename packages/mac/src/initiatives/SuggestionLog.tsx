@@ -1,8 +1,8 @@
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
 import { type InitiativeView, type Suggestion, openSuggestions, pendingDrafts } from '@beluga/core/initiatives/model.js';
 import { dayOfIso, proofOf, suggestionHistory } from '@beluga/core/initiatives/log.js';
 import { Section } from './InitiativeParts.js';
-import { KindChip, StateBadge, SuggestionRecord } from './SuggestionRecord.js';
+import { KindChip, StateBadge } from './SuggestionRecord.js';
 import s from './initiatives.module.css';
 
 type PickProps = { readonly suggestion: Suggestion; readonly selected: boolean; readonly onSelect: (id: number) => void };
@@ -44,44 +44,37 @@ const HistoryRow = ({ item, ...props }: PickProps & { readonly item: InitiativeV
   );
 };
 
-export const Suggestions = ({ item }: { item: InitiativeView }) => {
-  const [selectedId, setSelectedId] = useState<number | undefined>(undefined);
+type SuggestionsProps = { readonly item: InitiativeView; readonly pickedId: number | undefined; readonly onPick: (id: number) => void };
+
+export const Suggestions = ({ item, pickedId, onPick }: SuggestionsProps) => {
   const open = openSuggestions(item);
   const history = suggestionHistory(item);
   const waiting = pendingDrafts(item).length;
-  const selected = item.suggestions.find((x) => x.id === selectedId) ?? open[0] ?? history[0];
   return (
     <Section title="Suggestions">
       {waiting ? <span className={s.quiet}>{waiting === 1 ? 'A message is waiting for you in the chat’s outbox.' : `${waiting} messages are waiting for you in the chat’s outbox.`}</span> : null}
-      {selected ? (
-        <div className={s.log}>
-          <div className={s.logMain}>
-            <span className={s.logTitle}>Needs you · {open.length}</span>
-            {open.length ? (
-              <div role="listbox" aria-label="Open suggestions" className={s.logOpen}>
-                {open.map((x) => (
-                  <OpenRow key={x.id} suggestion={x} selected={x.id === selected.id} onSelect={setSelectedId} />
-                ))}
-              </div>
-            ) : (
-              <span className={`${s.quiet} ${s.logEmpty}`}>Nothing to approve or decide. The next check-in may suggest something.</span>
-            )}
-            <span className={s.logTitle}>Decision log · {history.length}</span>
-            {history.length ? (
-              <div role="listbox" aria-label="Decision log" className={s.logOpen}>
-                {history.map((x) => (
-                  <HistoryRow key={x.id} item={item} suggestion={x} selected={x.id === selected.id} onSelect={setSelectedId} />
-                ))}
-              </div>
-            ) : (
-              <span className={`${s.quiet} ${s.logEmpty}`}>What you approve, decide or dismiss is kept here.</span>
-            )}
+      <div className={s.log}>
+        <span className={s.logTitle}>Needs you · {open.length}</span>
+        {open.length ? (
+          <div role="listbox" aria-label="Open suggestions" className={s.logOpen}>
+            {open.map((x) => (
+              <OpenRow key={x.id} suggestion={x} selected={x.id === pickedId} onSelect={onPick} />
+            ))}
           </div>
-          <SuggestionRecord item={item} suggestion={selected} />
-        </div>
-      ) : (
-        <span className={s.quiet}>Nothing to approve or decide. The next check-in may suggest something.</span>
-      )}
+        ) : (
+          <span className={`${s.quiet} ${s.logEmpty}`}>Nothing to approve or decide. The next check-in may suggest something.</span>
+        )}
+        <span className={s.logTitle}>Decision log · {history.length}</span>
+        {history.length ? (
+          <div role="listbox" aria-label="Decision log" className={s.logOpen}>
+            {history.map((x) => (
+              <HistoryRow key={x.id} item={item} suggestion={x} selected={x.id === pickedId} onSelect={onPick} />
+            ))}
+          </div>
+        ) : (
+          <span className={`${s.quiet} ${s.logEmpty}`}>What you approve, decide or dismiss is kept here.</span>
+        )}
+      </div>
     </Section>
   );
 };

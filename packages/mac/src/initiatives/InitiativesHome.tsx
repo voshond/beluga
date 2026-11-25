@@ -39,9 +39,6 @@ const InitiativeCard = ({ item, now }: { item: InitiativeView; now: number }) =>
       <ProgressBar progress={item.progress} />
       <span className={s.cardLine}>
         {item.epics.length ? <span>{item.epics.join(', ')}</span> : null}
-        <span>
-          {item.openDecisions.length} open {item.openDecisions.length === 1 ? 'decision' : 'decisions'}
-        </span>
         <span>{lastCheckInWords(item, (at) => ago(at, now))}</span>
       </span>
     </button>

@@ -682,7 +682,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `initiatives.chatNew` | ✓ an initiative's chat › New Chat (the bar, and the picker) |
 | `initiatives.chatOpen` | ✓ an initiative's chat: the chat's name, a picker of its chats (Check-in among them) |
 | `initiatives.chatDelete` | ✓ an initiative's chat › ⋯ › Delete Chat… (confirms; the Check-in chat stays) |
-| `initiatives.resolveSuggestion` | ✓ an initiative's page › Suggestions › the selected record › Approve (sends “Do suggestion N: …” into its chat, where outward steps ask as usual) · Dismiss · a decision's answers or Other… (keeps the answer, sends “Decided suggestion N: … Answer: …”); resolved ones stay in the Decision log with their outcome and proof |
+| `initiatives.resolveSuggestion` | ✓ an initiative's page › Suggestions › a row › its record in the right panel › Approve (sends “Do suggestion N: …” into its chat, where outward steps ask as usual) · Dismiss · a decision's answers or Other… (keeps the answer, sends “Decided suggestion N: … Answer: …”); resolved ones stay in the Decision log with their outcome and proof |
 | `initiatives.clarifySuggestion` | ✓ an initiative's page › Suggestions › the selected record › Clarify in chat (sends “Clarify suggestion N: …” into its chat and opens that chat; the suggestion stays open, marked In chat) |
 | `initiatives.sendDraft` | ✓ an initiative's chat › Outbox card › Send (the text as edited; asks the chat to post exactly that, and allows only that call) |
 | `initiatives.discardDraft` | ✓ an initiative's chat › Outbox card › Discard (kept as discarded, with a line in timeline.md) |
