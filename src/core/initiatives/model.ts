@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { Watch } from './watches.js';
 
 export const INITIATIVE_SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const INITIATIVE_CHAT_ID = /^[a-z0-9]{1,24}$/;
@@ -6,6 +7,8 @@ export const INITIATIVE_CHAT_PREFIX = 'initiative:';
 export const FIRST_INITIATIVE_CHAT = 'main';
 export const CHECK_IN_CHAT = 'checkin';
 export const CHECK_IN_TITLE = 'Check-in';
+export const WATCH_CHAT = 'watch';
+export const WATCH_TITLE = 'Follow-ups';
 export const DEFAULT_INITIATIVES_DIR = 'Documents/GitHub/initiatives';
 
 export const EPIC_KEY = /^[A-Z][A-Z0-9_]{0,19}-\d{1,7}$/;
@@ -422,6 +425,7 @@ export type InitiativeView = {
   readonly tasks?: InitiativeTasks;
   readonly suggestions: readonly Suggestion[];
   readonly outbox: readonly OutboxDraft[];
+  readonly watches?: readonly Watch[];
   readonly artifacts: readonly Artifact[];
   readonly timeline: readonly TimelineEntry[];
   readonly files: readonly string[];
@@ -492,6 +496,7 @@ type TitleLog = ReadonlyArray<{ readonly channel: string; readonly type: string;
 
 export const initiativeChatTitle = (channel: string, log: TitleLog, max = 40): string => {
   if (initiativeChatOf(channel)?.chat === CHECK_IN_CHAT) return CHECK_IN_TITLE;
+  if (initiativeChatOf(channel)?.chat === WATCH_CHAT) return WATCH_TITLE;
   const first = log.find((l) => l.channel === channel && l.type === 'chat' && !l.byAgent && l.text?.trim());
   const line = (first?.text ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? '';
   if (!line) return 'New chat';
@@ -531,7 +536,7 @@ const bullet = (line: string): string | undefined => {
   return match?.[1];
 };
 
-export const TIMELINE_KINDS = ['check-in', 'decision', 'message', 'ticket', 'said', 'doc', 'meeting', 'artifact', 'created', 'event'] as const;
+export const TIMELINE_KINDS = ['check-in', 'decision', 'message', 'ticket', 'said', 'doc', 'meeting', 'artifact', 'created', 'event', 'follow-up'] as const;
 export type TimelineKind = (typeof TIMELINE_KINDS)[number];
 
 /** One bullet of timeline.md: "- 2026-11-25 [check-in]: …", the kind and even the day optional. */

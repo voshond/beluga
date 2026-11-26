@@ -1,4 +1,5 @@
 import type { DomainState } from '../core/store.js';
+import { initiativeChatOf } from '../core/initiatives/model.js';
 import { assistantChatOf } from '../shared/assistant.js';
 import { sentinelChatOf } from '../core/sentinel/model.js';
 import type { Notice } from '../core/work-store.js';
@@ -127,7 +128,7 @@ export function noticeLook(n: Pick<Notice, 'kind' | 'tag'>): { readonly look: No
 }
 
 /** Where opening a notice goes: the room, Your Mac, the Sentinel chat, one of your workspaces, or one shared with you. */
-export type NoticeTarget = { readonly kind: 'room' } | { readonly kind: 'assistant'; readonly chat?: string } | { readonly kind: 'sentinel_chat'; readonly chat: string } | { readonly kind: 'workspace'; readonly id: string } | { readonly kind: 'shared'; readonly owner: string; readonly id: string };
+export type NoticeTarget = { readonly kind: 'room' } | { readonly kind: 'assistant'; readonly chat?: string } | { readonly kind: 'sentinel_chat'; readonly chat: string } | { readonly kind: 'workspace'; readonly id: string } | { readonly kind: 'shared'; readonly owner: string; readonly id: string } | { readonly kind: 'initiative'; readonly slug: string; readonly chat: string };
 
 export function noticeTarget(state: Pick<DomainState, 'projects' | 'shared'>, channel: string | undefined): NoticeTarget | undefined {
   if (channel === 'room') return { kind: 'room' };
@@ -135,6 +136,8 @@ export function noticeTarget(state: Pick<DomainState, 'projects' | 'shared'>, ch
   if (chat) return { kind: 'assistant', chat };
   const sentinelChat = sentinelChatOf(channel);
   if (sentinelChat) return { kind: 'sentinel_chat', chat: sentinelChat };
+  const initiative = initiativeChatOf(channel);
+  if (initiative) return { kind: 'initiative', ...initiative };
   if (!channel?.startsWith('ws:')) return undefined;
   const id = channel.slice(3);
   const shared = state.shared.find((w) => w.id === id);

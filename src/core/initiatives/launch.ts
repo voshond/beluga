@@ -26,6 +26,7 @@ const checkInsOf = (session: Session): CheckInHost | undefined => {
     runNow: (id) => void sentinels.start(id, 'you'),
     reschedule: (id, trigger) => void sentinels.update(id, { trigger }),
     remove: (id) => sentinels.remove(id),
+    rewrite: (id, patch) => void sentinels.update(id, patch),
   };
 };
 

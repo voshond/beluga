@@ -34,4 +34,8 @@ export const INITIATIVES_HANDLERS = {
   'initiatives.discardDraft': (s, slug, id) => needInitiatives(s).discardDraft(slug, id),
   'initiatives.readFile': (s, slug, rel) => needInitiatives(s).readFile(slug, rel),
   'initiatives.readArtifact': (s, slug, id) => needInitiatives(s).readArtifact(slug, id),
+  'initiatives.addWatch': (s, slug, draft) => needInitiatives(s).addWatch(slug, draft),
+  'initiatives.stopWatch': (s, slug, id) => needInitiatives(s).stopWatch(slug, id),
+  'initiatives.lookNow': (s, slug, id) => needInitiatives(s).lookNow(slug, id),
+  'initiatives.readNews': (s, slug, id) => needInitiatives(s).readNews(slug, id),
 } satisfies InitiativesHandlers;
