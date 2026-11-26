@@ -22,6 +22,7 @@ export const useInitiativeActions = () => {
       }
     };
     const openList = (): void => actions.run({ type: 'view', view: { kind: 'initiatives' } });
+    const openPeople = (): void => actions.run({ type: 'view', view: { kind: 'initiative_people' } });
     const open = (item: Pick<InitiativeView, 'slug' | 'chats'>, chat?: string): void => actions.run({ type: 'view', view: { kind: 'initiative_page', slug: item.slug, chat: chat ?? item.chats.active } });
     const create = (draft: InitiativeDraft): Promise<{ readonly slug: string } | undefined> => act(() => api.initiatives.create(draft as Args<'initiatives.create'>[0]));
     const update = (slug: string, patch: InitiativePatch): Promise<InitiativeView | undefined> => act(() => api.initiatives.update(slug, patch as Args<'initiatives.update'>[1]));
@@ -29,6 +30,7 @@ export const useInitiativeActions = () => {
       api: api.initiatives,
       act,
       openList,
+      openPeople,
       open,
       create,
       update,

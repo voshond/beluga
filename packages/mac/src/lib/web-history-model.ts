@@ -36,6 +36,7 @@ const REQUIRED: Record<LinkedKind, readonly string[]> = {
   sentinel_chat: [],
   initiatives: [],
   initiative_page: ['slug'],
+  initiative_people: [],
 };
 
 const NUMERIC: ReadonlySet<string> = new Set(['gh_issue.number', 'gh_run.runId']);
