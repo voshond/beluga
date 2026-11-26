@@ -82,6 +82,7 @@ export const launchInitiatives = (host: InitiativesHost): (() => void) => {
     refine: (input) => session.refineGoal(input),
     successHost: () => successOf(session, demo),
     defineSuccess: (req) => session.defineSuccess(req),
+    enrichPeople: (req) => session.enrichPeople(req),
     commit: !demo,
   });
   attachInitiatives(session, initiatives);

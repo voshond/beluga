@@ -688,9 +688,13 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `initiatives.discardDraft` | ✓ an initiative's chat › Outbox card › Discard (kept as discarded, with a line in timeline.md) |
 | `initiatives.readFile` | ✓ an initiative's page › Memory: a file opens in a sheet (Markdown drawn, JSON as code) |
 | `initiatives.readArtifact` | ✓ an initiative's page › the right panel's Artifacts tab: a row opens in a sheet (text and Markdown drawn, a picture shown, any other file by its path on the daemon's computer) |
-| `initiatives.savePerson` | ✓ an initiative's page › People › + › New Person…, a person's pencil; Initiatives › People › New Person and a card's pencil (name, cares about, Slack, Jira, notes, in `people/<slug>.json` at the repo's root) |
+| `initiatives.savePerson` | ✓ an initiative's page › People › + › New Person…, a person's pencil; Initiatives › People › New Person and a card's pencil (name, cares about, Slack, Jira, GitHub, email, title, notes, in `people/<slug>.json` at the repo's root; ids and the picture link it doesn't show are kept) |
 | `initiatives.removePerson` | ✓ Initiatives › People › a card's trash (confirms; refused while an initiative still names them) |
 | `initiatives.setPerson` | ✓ an initiative's page › People › + (pick someone from the directory, then their role), a person's pencil (their role here) and × (takes them off; they stay in the directory) |
+| `initiatives.enrichPeople` | ✓ Initiatives › People › Enrich People (everyone) and a card's sparkles (one person): your agent looks them up read-only in Slack, Jira, the Google directory and GitHub |
+| `initiatives.keepEnrichment` | ✓ Initiatives › People › a card's Found list: a value's ✓, or Take All |
+| `initiatives.dropEnrichment` | ✓ Initiatives › People › a card's Found list: a value's ×, or Dismiss All |
+| `initiatives.personAvatar` | ✓ every directory person's picture (People page, an initiative's People), drawn from the copy Beluga keeps |
 | `initiatives.proposePeople` | ✓ an initiative's page › People › From people.md (shown until it has people or a people suggestion; its Check-in chat proposes people.md's people as one suggestion, and approving it writes the directory) |
 | `initiatives.saveAudience` | ✓ an initiative's page › Updates › + (New Audience…) and an audience's pencil: name, people from the directory, tone (Short for execs · Detailed for the team), cadence (time and weekday chips; none is on request), and where it goes (a Slack channel or thread, a Confluence page's section, or a prep sheet for a followed meeting) |
 | `initiatives.removeAudience` | ✓ an initiative's page › Updates › an audience's × (confirms; its sent updates stay in `updates/`) |

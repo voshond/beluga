@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { type InitiativeView, type Suggestion, openSuggestions, pendingDrafts } from '@beluga/core/initiatives/model.js';
 import { decisionLog } from '@beluga/core/initiatives/decisions.js';
 import { dayOfIso, proofOf } from '@beluga/core/initiatives/log.js';
+import { Button } from '../components/ui.js';
 import { NoteRow, OpenQuestions } from './DecisionNotes.js';
 import { Section } from './InitiativeParts.js';
 import { KindChip, StateBadge } from './SuggestionRecord.js';
@@ -48,9 +49,10 @@ const HistoryRow = ({ item, ...props }: PickProps & { readonly item: InitiativeV
 
 type SuggestionsProps = { readonly item: InitiativeView; readonly pickedId: number | undefined; readonly onPick: (id: number) => void };
 
+const LOG_PAGE = 10;
+
 export const Suggestions = ({ item, pickedId, onPick }: SuggestionsProps) => {
   const open = openSuggestions(item);
-  const history = decisionLog(item);
   const waiting = pendingDrafts(item).length;
   return (
     <Section title="Suggestions">
@@ -67,10 +69,24 @@ export const Suggestions = ({ item, pickedId, onPick }: SuggestionsProps) => {
           <span className={`${s.quiet} ${s.logEmpty}`}>Nothing to approve or decide. The next check-in may suggest something.</span>
         )}
         <OpenQuestions item={item} />
-        <span className={s.logTitle}>Decision log · {history.length}</span>
-        {history.length ? (
+      </div>
+    </Section>
+  );
+};
+
+/** What was approved, decided or dismissed, the latest first: a page at a time, so a long log stays short. */
+export const DecisionLog = ({ item, pickedId, onPick }: SuggestionsProps) => {
+  const [shown, setShown] = useState(LOG_PAGE);
+  const history = decisionLog(item);
+  const left = history.length - shown;
+  const handleMore = (): void => setShown((was) => was + LOG_PAGE);
+  const handleLess = (): void => setShown(LOG_PAGE);
+  return (
+    <Section title={`Decision log · ${history.length}`}>
+      {history.length ? (
+        <div className={s.log}>
           <div role="listbox" aria-label="Decision log" className={s.logOpen}>
-            {history.map((x, i) =>
+            {history.slice(0, shown).map((x, i) =>
               x.kind === 'suggestion' ? (
                 <HistoryRow key={x.suggestion.id} item={item} suggestion={x.suggestion} selected={x.suggestion.id === pickedId} onSelect={onPick} />
               ) : (
@@ -78,10 +94,24 @@ export const Suggestions = ({ item, pickedId, onPick }: SuggestionsProps) => {
               ),
             )}
           </div>
-        ) : (
-          <span className={`${s.quiet} ${s.logEmpty}`}>What you approve, decide or dismiss is kept here.</span>
-        )}
-      </div>
+        </div>
+      ) : (
+        <span className={s.quiet}>What you approve, decide or dismiss is kept here.</span>
+      )}
+      {left > 0 || shown > LOG_PAGE ? (
+        <div>
+          {left > 0 ? (
+            <Button size="small" variant="quiet" onClick={handleMore}>
+              {`Show ${Math.min(left, LOG_PAGE)} More · ${left} Older`}
+            </Button>
+          ) : null}
+          {shown > LOG_PAGE ? (
+            <Button size="small" variant="quiet" onClick={handleLess}>
+              Show Less
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </Section>
   );
 };

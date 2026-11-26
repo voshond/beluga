@@ -7,7 +7,7 @@ import { useClock } from '../lib/window-active.js';
 import { openSheet } from '../lib/sheets.js';
 import { PickMenu } from '../tasks/PickMenu.js';
 import { Section } from './InitiativeParts.js';
-import { Handles, OpenList, contactWords, usePeople } from './PeopleParts.js';
+import { Handles, OpenList, PersonPicture, contactWords, usePeople } from './PeopleParts.js';
 import { PersonSheet } from './PersonSheet.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import p from './people.module.css';
@@ -39,7 +39,7 @@ const MemberRow = ({ item, member, now, onEdit }: RowProps) => {
   return (
     <div role="listitem" className={p.person} data-person={member.slug}>
       <span className={p.personHead}>
-        <Icon name="person" size={13} />
+        <PersonPicture slug={member.slug} name={member.name} />
         <span className={p.personName}>{member.name}</span>
         {member.role ? <span className={p.role}>{member.role}</span> : null}
         {member.person ? null : <span className={s.pill}>Not in the directory</span>}

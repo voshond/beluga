@@ -19,12 +19,16 @@ export const PersonSheet = ({ person, legacy, initiative, close }: PersonSheetPr
   const [cares, setCares] = useState(person?.cares ?? '');
   const [slack, setSlack] = useState(person?.slack ?? '');
   const [jira, setJira] = useState(person?.jira ?? '');
+  const [github, setGithub] = useState(person?.github ?? '');
+  const [email, setEmail] = useState(person?.email ?? '');
+  const [title, setTitle] = useState(person?.title ?? '');
   const [notes, setNotes] = useState(person?.notes ?? '');
 
   const slug = person?.slug ?? legacy?.slug;
 
   const handleSubmit = async (): Promise<string | void> => {
-    const saved = await a.act(() => a.api.savePerson({ ...(slug ? { slug } : {}), name: name.trim(), cares, slack, jira, notes }));
+    const { slug: _slug, ...kept } = person ?? { slug: undefined };
+    const saved = await a.act(() => a.api.savePerson({ ...kept, ...(slug ? { slug } : {}), name: name.trim(), cares, slack, jira, github, email, title, notes }));
     if (!saved) return 'Couldn’t save them: see the message above';
     if (initiative) {
       const placed = await a.act(() => a.api.setPerson(initiative.slug, saved.slug, role.trim()));
@@ -60,6 +64,15 @@ export const PersonSheet = ({ person, legacy, initiative, close }: PersonSheetPr
       </Field>
       <Field label="Jira" htmlFor="person-jira">
         <TextInput id="person-jira" value={jira} onChange={setJira} maxLength={120} placeholder="Their Jira name" />
+      </Field>
+      <Field label="GitHub" htmlFor="person-github">
+        <TextInput id="person-github" value={github} onChange={setGithub} maxLength={80} placeholder="Their login" />
+      </Field>
+      <Field label="Email" htmlFor="person-email">
+        <TextInput id="person-email" value={email} onChange={setEmail} maxLength={200} placeholder="julia@example.com" />
+      </Field>
+      <Field label="Title" htmlFor="person-title">
+        <TextInput id="person-title" value={title} onChange={setTitle} maxLength={200} placeholder="Head of Operations" />
       </Field>
       <Field label="Notes" htmlFor="person-notes">
         <TextArea id="person-notes" value={notes} onChange={setNotes} rows={3} maxLength={4000} />

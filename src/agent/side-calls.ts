@@ -3,6 +3,7 @@ import { nameTask, titleChat, titlePlan } from './namer.js';
 import { reviewPr } from './pr-reviewer.js';
 import { refineGoal } from './goal-refiner.js';
 import { defineSuccess } from './success-definer.js';
+import { enrichPeople } from './people-enricher.js';
 import { describeProject } from './project-describer.js';
 import type { Complete } from './runtime/types.js';
 import { fixRun, fixSetup, workOutScripts } from './setup-fixer.js';
@@ -10,7 +11,7 @@ import { draftTask } from './task-drafter.js';
 import { standIn } from './stand-in.js';
 import type { AgentBackend } from './types.js';
 
-type SideCalls = Required<Pick<AgentBackend, 'nameTask' | 'titlePlan' | 'titleChat' | 'answerChat' | 'fixSetup' | 'fixRun' | 'workOutScripts' | 'draftTask' | 'describeProject' | 'reviewPr' | 'standIn' | 'refineGoal' | 'defineSuccess'>>;
+type SideCalls = Required<Pick<AgentBackend, 'nameTask' | 'titlePlan' | 'titleChat' | 'answerChat' | 'fixSetup' | 'fixRun' | 'workOutScripts' | 'draftTask' | 'describeProject' | 'reviewPr' | 'standIn' | 'refineGoal' | 'defineSuccess' | 'enrichPeople'>>;
 
 /**
  * The one-shot calls a backend makes besides runs (BLG-441): naming worktrees and plans, drafting
@@ -34,5 +35,6 @@ export function sideCalls(complete: Complete, cwd: string, model?: string): Side
     standIn: (req) => standIn(req, { cwd, complete, ...(model ? { model } : {}) }),
     refineGoal: (req) => refineGoal(req, { cwd, complete }),
     defineSuccess: (req) => defineSuccess(req, { cwd, complete }),
+    enrichPeople: (req) => enrichPeople(req, { cwd, complete }),
   };
 }

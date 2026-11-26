@@ -16,8 +16,13 @@ const openInitiative = async (page: Page, name: string): Promise<void> => {
   await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
 };
 
+const openArea = async (page: Page, name: string): Promise<void> => {
+  await page.getByRole('tablist', { name: /^Areas of / }).getByRole('tab', { name: new RegExp(`^${name}`) }).click();
+};
+
 test('an initiative’s page shows the epic’s tickets, open first, with their pull requests', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
+  await openArea(page, 'Work');
   const tickets = page.getByRole('region', { name: 'Tickets' });
   const topLevel = tickets.locator('[role="listitem"][data-sub-task="false"]');
   await expect(topLevel).toHaveCount(4);
@@ -31,7 +36,12 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
   await expect(tickets.getByRole('button', { name: /Open pull request #398 in example\/shop: Merged/ })).toBeVisible();
   await expect(tickets.getByText(/4 tickets · 1 done · 2 sub-tasks, 1 done · 1 open pull request/)).toBeVisible();
   await expect(tickets.getByRole('button', { name: 'Refresh the tickets from Jira' })).toBeEnabled();
-  await expect(page.getByRole('region', { name: 'Goal' }).getByRole('heading', { name: 'Scope' })).toBeVisible();
+  if (shots) {
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await tickets.screenshot({ path: path.join(shots, '06-tickets-dark.png') });
+    await page.emulateMedia({ colorScheme: 'light' });
+  }
+  await openArea(page, 'Sources');
   await expect(page.getByRole('region', { name: 'Slack conversations' }).getByRole('button', { name: 'Open 3DS on Safari in Slack' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Meetings' }).getByText('Thursday')).toBeVisible();
   const docs = page.getByRole('region', { name: 'Docs' });
@@ -40,16 +50,18 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
   await expect(docs.getByText('Google Sheet', { exact: true })).toBeVisible();
   await docs.scrollIntoViewIfNeeded();
   await shot(page, '01c-initiative-docs.png');
+  await openArea(page, 'Overview');
+  await expect(page.getByRole('region', { name: 'Goal' }).getByRole('heading', { name: 'Scope' })).toBeVisible();
   await shot(page, '01-initiative-page.png');
   if (shots) {
     await page.emulateMedia({ colorScheme: 'dark' });
-    await tickets.screenshot({ path: path.join(shots, '06-tickets-dark.png') });
     await page.getByRole('progressbar').first().locator('..').screenshot({ path: path.join(shots, '07-bar-dark.png') });
   }
   const bar = page.getByRole('progressbar').first();
   expect((await bar.locator('[data-part="done"]').boundingBox())!.width).toBeGreaterThan(100);
   expect((await bar.locator('[data-part="inProgress"]').boundingBox())!.width).toBeGreaterThan(30);
   await page.setViewportSize({ width: 2300, height: 1000 });
+  await openArea(page, 'Work');
   await expect(tickets.locator('[data-ticket="SHOP-141"]').getByText(/Ana Ruiz/).first()).toBeVisible();
   await shot(page, '01b-initiative-page-wide.png');
   if (shots) await tickets.screenshot({ path: path.join(shots, '08-tickets-dark-wide.png') });
@@ -62,7 +74,7 @@ test('the Suggestions section lists decisions.md’s open questions and adds its
   const open = section.getByRole('list', { name: 'Open questions' });
   await expect(open.getByRole('listitem')).toHaveCount(3);
   await expect(open.getByRole('listitem').first()).toContainText('Does finance have the final NO tax table?');
-  const log = section.getByRole('listbox', { name: 'Decision log' });
+  const log = page.getByRole('listbox', { name: 'Decision log' });
   const note = log.getByRole('option').filter({ hasText: 'Google Pay waits for v2.1.' });
   await expect(note).toContainText('Why: one SDK update fewer before the freeze.');
   await expect(note).toContainText('Decided');
@@ -76,13 +88,15 @@ test('what was said in a meeting shows as a decision, a task to make and a no-no
   await openInitiative(page, 'Checkout v2');
   await expect(page.getByRole('listbox', { name: 'Decision log' })).toContainText('Does the address form keep the manual-entry fallback?');
   await expect(page.getByRole('listbox', { name: 'Open suggestions' })).toContainText('Create a task: send the address form copy to legal by Friday');
-  await expect(page.getByRole('region', { name: 'Timeline' })).toContainText('Checkout standup held, no notes found');
   await page.getByRole('listbox', { name: 'Decision log' }).scrollIntoViewIfNeeded();
   await shot(page, '01d-initiative-meeting-notes.png');
+  await openArea(page, 'Timeline');
+  await expect(page.getByRole('region', { name: 'Timeline' })).toContainText('Checkout standup held, no notes found');
 });
 
 test('several epics group the tickets by epic', async ({ page }) => {
   await openInitiative(page, 'Mobile Onboarding');
+  await openArea(page, 'Work');
   const tickets = page.getByRole('region', { name: 'Tickets' });
   await expect(tickets.locator('[data-epic]')).toHaveCount(2);
   await expect(tickets.locator('[data-epic="APP-88"]').getByRole('listitem')).toHaveCount(2);
@@ -140,6 +154,8 @@ test('Edit lists Slack conversations, docs and meetings row by row, and Refine f
   await shot(page, '04-edit-sheet.png');
   await sheet.getByRole('button', { name: 'Save' }).click();
   await expect(sheet).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Goal' }).getByRole('heading', { name: 'Open questions' })).toBeVisible();
+  await openArea(page, 'Sources');
   const follows = page.getByRole('region', { name: 'Slack conversations' });
   await expect(follows.getByRole('listitem')).toHaveCount(3);
   await expect(follows.getByRole('button', { name: 'Open Payments thread in Slack' })).toBeVisible();
@@ -149,13 +165,13 @@ test('Edit lists Slack conversations, docs and meetings row by row, and Refine f
   await expect(docList.getByRole('listitem')).toHaveCount(3);
   await expect(docList.getByRole('listitem').last()).toContainText('Google Doc');
   await expect(docList.getByRole('button', { name: 'Open Copy deck in the browser' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Goal' }).getByRole('heading', { name: 'Open questions' })).toBeVisible();
   await shot(page, '05-after-save.png');
 });
 
 test('an initiative’s page shows its tasks, ticks one off through the chat, links its epics and sets the check-in time', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
   await expect(page.getByRole('button', { name: 'Open epic SHOP-120 in Jira: One-page checkout' })).toBeVisible();
+  await openArea(page, 'Work');
   const tasks = page.getByRole('region', { name: 'Tasks' });
   await expect(tasks.getByRole('list', { name: 'Scheduled', exact: true }).getByRole('listitem')).toHaveCount(1);
   await expect(tasks.getByRole('list', { name: 'Unscheduled', exact: true }).getByRole('listitem')).toHaveCount(2);
@@ -170,6 +186,7 @@ test('an initiative’s page shows its tasks, ticks one off through the chat, li
   await expect(row).toContainText('Completing…');
   await expect(row.getByRole('checkbox')).toBeDisabled();
   await shot(page, '07-initiative-task-pending.png');
+  await openArea(page, 'Overview');
   const days = page.getByRole('group', { name: 'Check-in days' });
   await expect(days.getByRole('button', { name: 'Mon' })).toHaveAttribute('aria-pressed', 'true');
   await expect(days.getByRole('button', { name: 'Sat' })).toHaveAttribute('aria-pressed', 'false');
@@ -184,6 +201,7 @@ test('an initiative’s page shows its tasks, ticks one off through the chat, li
 
 test('an initiative’s page lists its people with what is open both ways, and People shows them across initiatives', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
+  await openArea(page, 'People');
   const people = page.getByRole('region', { name: 'People' });
   const rows = people.locator('[data-person]');
   await expect(rows).toHaveCount(2);
@@ -221,6 +239,7 @@ test('an initiative’s page lists its people with what is open both ways, and P
 
 test('a fresh initiative offers the people.md pass', async ({ page }) => {
   await openInitiative(page, 'Mobile Onboarding');
+  await openArea(page, 'People');
   const people = page.getByRole('region', { name: 'People' });
   await expect(people.getByRole('status')).toContainText('Nobody yet');
   await expect(people.getByRole('button', { name: 'Propose people from people.md' })).toBeVisible();
@@ -228,6 +247,7 @@ test('a fresh initiative offers the people.md pass', async ({ page }) => {
 
 test('Updates shows each audience with last sent and next due, its draft to send, and a prep sheet that is only kept', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
+  await openArea(page, 'People');
   const updates = page.getByRole('region', { name: 'Updates' });
   const rows = updates.locator('[data-audience]');
   await expect(rows).toHaveCount(3);
@@ -253,7 +273,9 @@ test('Updates shows each audience with last sent and next due, its draft to send
   await sheet.getByRole('button', { name: 'Done' }).click();
   await expect(prep.locator('[data-outbox]')).toHaveCount(0);
   await expect(prep).toContainText('Last kept');
+  await openArea(page, 'Timeline');
   await expect(page.getByRole('region', { name: 'Timeline' })).toContainText('prep sheet for Thursday ready for Go/no-go');
+  await openArea(page, 'People');
   await updates.getByRole('button', { name: 'New audience' }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Name').fill('Ops');
@@ -270,6 +292,7 @@ test('Updates shows each audience with last sent and next due, its draft to send
 
 test('an initiative’s page shows what it waits for and what came in, and adds and stops a follow-up', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
+  await openArea(page, 'Work');
   const fresh = page.getByRole('region', { name: 'New since you asked' });
   await expect(fresh.locator('[data-news="2"]')).toContainText('Ana Ruiz: Finance signed off the new table');
   await expect(fresh.locator('[data-news="2"]')).toContainText('About: Finance’s final Norway tax table');
@@ -299,6 +322,11 @@ test('an initiative’s page shows what it waits for and what came in, and adds 
 
 test('an initiative’s page lists its risks by severity, keeps closed ones aside, and shows what blocks a ticket', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
+  await openArea(page, 'Work');
+  const tickets = page.getByRole('region', { name: 'Tickets' });
+  await expect(tickets.locator('[data-ticket="SHOP-141"]').getByRole('button', { name: 'Blocked by FIN-88 (outside the initiative): In Progress' })).toBeVisible();
+  await expect(tickets.locator('[data-ticket="SHOP-152"]').getByRole('button', { name: 'Blocked by SHOP-150: In Review' })).toBeVisible();
+  await openArea(page, 'Overview');
   const risks = page.getByRole('region', { name: 'Risks' });
   const open = risks.getByRole('list', { name: 'Open risks' });
   await expect(open.getByRole('listitem')).toHaveCount(3);
@@ -308,9 +336,6 @@ test('an initiative’s page lists its risks by severity, keeps closed ones asid
   await expect(risks.getByRole('list', { name: 'Closed risks' })).toHaveCount(0);
   await risks.getByRole('button', { name: 'Show Closed · 1' }).click();
   await expect(risks.getByRole('list', { name: 'Closed risks' }).getByRole('listitem')).toHaveCount(1);
-  const tickets = page.getByRole('region', { name: 'Tickets' });
-  await expect(tickets.locator('[data-ticket="SHOP-141"]').getByRole('button', { name: 'Blocked by FIN-88 (outside the initiative): In Progress' })).toBeVisible();
-  await expect(tickets.locator('[data-ticket="SHOP-152"]').getByRole('button', { name: 'Blocked by SHOP-150: In Review' })).toBeVisible();
   await risks.scrollIntoViewIfNeeded();
   await shot(page, '09-initiative-risks.png');
   await risks.getByRole('button', { name: 'Add Risk' }).click();
@@ -432,4 +457,25 @@ test('a new initiative can start in discovery', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Loyalty Idea' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Problem' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Delivery' }).getByRole('button', { name: 'Move to Delivery' })).toBeDisabled();
+});
+
+test('Enrich People finds handles for each person to take or dismiss one by one', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  await page.getByRole('button', { name: 'More for Checkout v2' }).click();
+  await page.getByRole('menuitem', { name: 'People Across Initiatives' }).click();
+  await page.getByRole('button', { name: 'Enrich People' }).click();
+  await expect(page.getByRole('button', { name: 'Looking Them Up…' })).toBeDisabled();
+  const ana = page.locator('[data-person="ana-ruiz"]');
+  const found = ana.getByRole('list', { name: 'Found for Ana Ruiz' });
+  await expect(found.getByRole('listitem')).toHaveCount(5, { timeout: 15_000 });
+  await expect(found.locator('[data-found="slack"]')).toContainText('@ana → ana.ruiz');
+  await shot(page, '11-people-enrich.png');
+  await found.getByRole('button', { name: 'Take GitHub for Ana Ruiz' }).click();
+  await expect(ana).toContainText('GitHub: ana-ruiz');
+  await found.getByRole('button', { name: 'Dismiss Slack for Ana Ruiz' }).click();
+  await expect(found.getByRole('listitem')).toHaveCount(3);
+  await expect(ana).toContainText('Slack: @ana');
+  await ana.getByRole('button', { name: 'Take All' }).click();
+  await expect(ana.getByRole('list', { name: 'Found for Ana Ruiz' })).toHaveCount(0);
+  await expect(ana).toContainText('ana.ruiz@example.com');
 });

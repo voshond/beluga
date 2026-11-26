@@ -81,6 +81,8 @@ const KNOWN = {
   initiatives_init: true,
   initiatives_off: true,
   initiatives_people: true,
+  initiatives_enrichment: true,
+  initiatives_avatars: true,
   invite: true,
   knock: true,
   link_remove: true,
