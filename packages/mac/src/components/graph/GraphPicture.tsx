@@ -16,7 +16,8 @@ const ROOM: Size = { width: 1600, height: 1200 };
 
 /**
  * The graph drawn once more, off screen, at 1:1 and whole (the card shows only what fits, a busy
- * graph only what's in view), with the layout the card has. Once drawn it's turned into a PNG.
+ * graph only what's in view), with the layout the card has. Once drawn it's framed by what's drawn
+ * and turned into a PNG.
  */
 export function GraphPicture({ graph, mode, cacheKey, shapeKey, localImages, onDone, onFail }: { graph: Graph; mode: 'inline' | 'full'; cacheKey: string; shapeKey?: string; localImages: boolean; onDone: (png: Blob) => void; onFail: (err: Error) => void }) {
   const host = useRef<HTMLDivElement>(null);
@@ -25,15 +26,26 @@ export function GraphPicture({ graph, mode, cacheKey, shapeKey, localImages, onD
     const timer = setTimeout(() => onFail(new Error('The graph couldn’t be laid out')), GIVE_UP_MS);
     return () => clearTimeout(timer);
   }, []);
-  const handleReady = (): void => {
-    const el = host.current;
-    if (!el) return onFail(new Error('The graph went away'));
-    void drawPicture(el).then(onDone, (err: unknown) => onFail(err instanceof Error ? err : new Error(String(err))));
+  // Framed by what's drawn: the frame takes its size, then the picture is taken once that shows.
+  const [framed, setFramed] = useState(false);
+  const handleReady = (drawn: Size): void => {
+    setSize(drawn);
+    setFramed(true);
   };
+  useEffect(() => {
+    if (!framed) return;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const el = host.current;
+        if (!el) return onFail(new Error('The graph went away'));
+        void drawPicture(el).then(onDone, (err: unknown) => onFail(err instanceof Error ? err : new Error(String(err))));
+      }),
+    );
+  }, [framed]);
   return createPortal(
     <div ref={host} className={`${g.palette} ${g.pictureHost}`} style={{ width: size.width + PICTURE_PAD * 2, height: size.height + PICTURE_PAD * 2 }} aria-hidden="true">
       <Suspense fallback={null}>
-        <FlowGraph graph={graph} mode={mode} localImages={localImages} cacheKey={cacheKey} {...(shapeKey ? { shapeKey } : {})} picture onLaidOut={setSize} onPictureReady={handleReady} />
+        <FlowGraph graph={graph} mode={mode} localImages={localImages} cacheKey={cacheKey} {...(shapeKey ? { shapeKey } : {})} picture onLaidOut={(laid) => (framed ? undefined : setSize(laid))} onPictureReady={handleReady} />
       </Suspense>
     </div>,
     document.body,

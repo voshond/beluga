@@ -73,6 +73,8 @@ test('draws what Claude visualizes, and you can explore it', async ({ page }) =>
   expect(saved.suggestedFilename()).toBe('How a payment goes through.png');
   const png = await saved.createReadStream().then(async (stream) => Buffer.concat(await stream.toArray()));
   expect(png.subarray(1, 4).toString()).toBe('PNG');
+  // RGBA: outside its round corners the picture is see-through.
+  expect(png[25]).toBe(6);
   if (process.env.GRAPH_PICTURE_TO) await saved.saveAs(process.env.GRAPH_PICTURE_TO);
   await expect(page.locator('.react-flow__viewport')).toHaveCount(1);
 

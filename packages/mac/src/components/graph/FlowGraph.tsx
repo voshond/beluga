@@ -22,7 +22,7 @@ import { PACK_FROM, packedLayout, startView } from './graph-pack.js';
 import { cachedLayout, rememberLayout } from './layout-cache.js';
 import { layout } from './layout.js';
 import { useSharpZoom } from './sharp-zoom.js';
-import { PICTURE_PAD } from './graph-picture.js';
+import { PICTURE_PAD, drawnBox } from './graph-picture.js';
 import { BUSY_FROM, detailAt } from './detail.js';
 import { NODE_TYPES, type FlowNode, drawingOf } from './nodes.js';
 import { EDGE_TYPES, EdgeMarkers, type FlowEdge } from './edges.js';
@@ -71,8 +71,8 @@ export interface FlowGraphProps {
   readonly startAt?: readonly string[];
   /** Drawn off screen for its picture (GraphPicture): whole, at 1:1, with nothing over it. */
   readonly picture?: boolean;
-  /** The picture's drawing is done: every node placed and every line drawn. */
-  readonly onPictureReady?: () => void;
+  /** The picture's drawing is done (every node placed, every line drawn) and framed: how big what's drawn is. */
+  readonly onPictureReady?: (drawn: Size) => void;
 }
 
 /** A fresh canvas for each graph (Claude rewrote the block, the file changed): nothing carries over. */
@@ -355,7 +355,15 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, onCopyImage, start
   useEffect(() => {
     if (!picture || pictured.current || phase !== 'ready' || !initialized) return;
     pictured.current = true;
-    requestAnimationFrame(() => requestAnimationFrame(() => onPictureReady?.()));
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        // Framed by what's drawn (ELK's size can leave room on one side): the same room all round.
+        const drawn = wrap.current ? drawnBox(wrap.current) : undefined;
+        if (!drawn) return onPictureReady?.(bounds.current ?? { width: 0, height: 0 });
+        void flow.setViewport({ x: PICTURE_PAD - drawn.x, y: PICTURE_PAD - drawn.y, zoom: 1 });
+        onPictureReady?.({ width: drawn.width, height: drawn.height });
+      }),
+    );
   }, [phase, initialized]);
 
   // A live graph changed shape: once its new nodes are measured, lay it out again where you are.
