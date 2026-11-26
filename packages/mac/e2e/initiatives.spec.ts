@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { SocketClient } from '../../../src/ipc/socket-client.js';
 import { expect, test, type Page } from './fixtures.js';
 
 const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' });
@@ -10,7 +11,7 @@ const shot = async (page: Page, name: string): Promise<void> => {
 const openInitiative = async (page: Page, name: string): Promise<void> => {
   await page.goto('/');
   await expect(sidebar(page)).toBeVisible();
-  await sidebar(page).getByRole('button', { name: /Initiatives/ }).first().click();
+  await sidebar(page).getByRole('button', { name: 'All Initiatives' }).click();
   await page.getByRole('button', { name: `Open ${name}` }).click();
   await expect(page.getByRole('heading', { name })).toBeVisible();
 };
@@ -18,15 +19,17 @@ const openInitiative = async (page: Page, name: string): Promise<void> => {
 test('an initiative’s page shows the epic’s tickets, open first, with their pull requests', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
   const tickets = page.getByRole('region', { name: 'Tickets' });
-  await expect(tickets.getByRole('listitem')).toHaveCount(4);
-  await expect(tickets.getByRole('listitem').first()).toHaveAttribute('data-category', 'inProgress');
-  await expect(tickets.getByRole('listitem').last()).toHaveAttribute('data-ticket', 'SHOP-133');
+  const topLevel = tickets.locator('[role="listitem"][data-sub-task="false"]');
+  await expect(topLevel).toHaveCount(4);
+  await expect(tickets.locator('[data-sub-task="true"]')).toHaveCount(2);
+  await expect(topLevel.first()).toHaveAttribute('data-category', 'inProgress');
+  await expect(topLevel.last()).toHaveAttribute('data-ticket', 'SHOP-133');
   await expect(tickets.getByRole('button', { name: 'Open SHOP-150 in Jira: 3DS challenge fails on Safari' })).toBeVisible();
   await expect(tickets.locator('[data-ticket="SHOP-141"]')).toContainText('Ana Ruiz');
   await expect(tickets.locator('[data-ticket="SHOP-141"]')).toContainText('Blocked');
   await expect(tickets.getByRole('button', { name: /Open pull request #412 in example\/shop: Open/ })).toBeVisible();
   await expect(tickets.getByRole('button', { name: /Open pull request #398 in example\/shop: Merged/ })).toBeVisible();
-  await expect(tickets.getByText(/4 tickets · 1 done · 1 open pull request/)).toBeVisible();
+  await expect(tickets.getByText(/4 tickets · 1 done · 2 sub-tasks, 1 done · 1 open pull request/)).toBeVisible();
   await expect(tickets.getByRole('button', { name: 'Refresh the tickets from Jira' })).toBeEnabled();
   await expect(page.getByRole('region', { name: 'Goal' }).getByRole('heading', { name: 'Scope' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Slack conversations' }).getByRole('button', { name: 'Open 3DS on Safari in Slack' })).toBeVisible();
@@ -47,7 +50,7 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
   expect((await bar.locator('[data-part="done"]').boundingBox())!.width).toBeGreaterThan(100);
   expect((await bar.locator('[data-part="inProgress"]').boundingBox())!.width).toBeGreaterThan(30);
   await page.setViewportSize({ width: 2300, height: 1000 });
-  await expect(tickets.getByText('Ana Ruiz')).toBeVisible();
+  await expect(tickets.locator('[data-ticket="SHOP-141"]').getByText('Ana Ruiz')).toBeVisible();
   await shot(page, '01b-initiative-page-wide.png');
   if (shots) await tickets.screenshot({ path: path.join(shots, '08-tickets-dark-wide.png') });
 });
@@ -151,4 +154,45 @@ test('an initiative’s page shows its tasks, ticks one off through the chat, li
   await expect(days.getByRole('button', { name: 'Fri' })).toHaveAttribute('aria-pressed', 'false');
   await days.scrollIntoViewIfNeeded();
   await shot(page, '08-initiative-check-in-time.png');
+});
+
+const sectionTitles = (page: Page): Promise<string[]> => sidebar(page).locator('button[aria-expanded]').evaluateAll((buttons) => buttons.map((b) => (b.textContent ?? '').replace(/\d+/g, '').trim()));
+
+test('the sidebar’s Initiatives section sits between Chats and Projects, opens each initiative and folds', async ({ page, demo }) => {
+  await page.goto('/');
+  await expect(sidebar(page)).toBeVisible();
+  const titles = await sectionTitles(page);
+  expect(titles.indexOf('Initiatives')).toBe(titles.indexOf('Chats') + 1);
+  expect(titles.indexOf('Projects')).toBe(titles.indexOf('Initiatives') + 1);
+  const row = sidebar(page).locator('[data-initiative-row="checkout-v2"]');
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('Checkout v2');
+  await row.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Checkout v2' })).toBeVisible();
+  await expect(row).toHaveAttribute('aria-current', 'page');
+  await shot(page, '09-sidebar-section.png');
+  const title = sidebar(page).getByRole('button', { name: /^Initiatives/ });
+  await title.click();
+  await expect(title).toHaveAttribute('aria-expanded', 'false');
+  await expect(row).toBeVisible();
+  await expect(sidebar(page).locator('[data-initiative-row="mobile-onboarding"]')).toHaveCount(0);
+  await page.reload();
+  await expect(sidebar(page).getByRole('button', { name: /^Initiatives/ })).toHaveAttribute('aria-expanded', 'false');
+  await sidebar(page).getByRole('button', { name: /^Initiatives/ }).click();
+  await sidebar(page).getByRole('button', { name: 'All Initiatives' }).click();
+  await expect(page.getByRole('heading', { name: 'Initiatives', exact: true })).toBeVisible();
+  await expect(sidebar(page).getByRole('button', { name: 'All Initiatives' })).toHaveAttribute('aria-current', 'page');
+  await sidebar(page).getByRole('button', { name: 'New Initiative' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+  const client = await SocketClient.connect({ url: demo.endpoint.url, token: demo.endpoint.token, kind: 'test', version: 'e2e' });
+  await client.api.session.setPrefs({ chatCategories: true });
+  await expect.poll(() => sectionTitles(page)).toContain('Inbox');
+  const categoryTitles = await sectionTitles(page);
+  expect(categoryTitles.indexOf('Projects')).toBe(categoryTitles.indexOf('Initiatives') + 1);
+  expect(categoryTitles.indexOf('Initiatives')).toBeGreaterThan(categoryTitles.indexOf('Inbox'));
+  await shot(page, '10-sidebar-section-categories.png');
+  await client.api.session.setPrefs({ chatCategories: false });
+  client.close();
 });
