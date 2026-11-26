@@ -35,5 +35,5 @@ export const watchPrompt = (watches: readonly Watch[], now: number): string =>
 
 export const watchChatNote = (chat: string): string =>
   chat === WATCH_CHAT
-    ? '\n\nThis is the initiative’s Follow-ups chat: Beluga wakes it when watches in watches.json are due, naming only those. Look only where they say, stay silent ("Nothing") when nothing is new, and change nothing outside this folder.'
+    ? '\n\nThis is the initiative’s Follow-ups chat: Beluga wakes it when watches in watches.json are due, naming only those, each time in a new conversation that remembers nothing of the last look: watches.json and the files here are all it keeps.Look only where they say, stay silent ("Nothing") when nothing is new, and change nothing outside this folder.'
     : '';

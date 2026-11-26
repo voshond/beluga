@@ -3,9 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { waitFor } from './helpers.js';
+import { initiativeChatFound } from '../src/core/initiatives/chat-ref.js';
 import { readFolder } from '../src/core/initiatives/files.js';
 import { type CheckInHost, Initiatives } from '../src/core/initiatives/initiatives.js';
-import { type InitiativeView, type InitiativesSlice, initiativeChatChannel, initiativeChatTitle, timelineEntryOf } from '../src/core/initiatives/model.js';
+import { CHECK_IN_CHAT, type InitiativeView, type InitiativesSlice, initiativeChatChannel, initiativeChatTitle, timelineEntryOf } from '../src/core/initiatives/model.js';
 import { initiativeBrief } from '../src/core/initiatives/prompt.js';
 import { followUpNews } from '../src/core/initiatives/watch-notices.js';
 import { watchPrompt } from '../src/core/initiatives/watch-prompt.js';
@@ -173,6 +174,25 @@ describe('Initiatives follow-ups', () => {
     expect(made.steps![0]).toMatchObject({ kind: 'chat', to: `${SELF}/${initiativeChatChannel(slug, WATCH_CHAT)}` });
     expect(host.paused.get('sn2')).toBe(false);
     expect(service.view(slug).watches).toHaveLength(1);
+  });
+
+  it('lists the Follow-ups chat when it arms, so the sentinel finds the chat it wakes', async () => {
+    const { store, service, slug } = await setup();
+    const channel = initiativeChatChannel(slug, WATCH_CHAT);
+    expect(initiativeChatFound(store.getState(), channel)).toBeUndefined();
+    await service.addWatch(slug, { what: 'Ana’s go', where: { kind: 'jira', issue: 'SHOP-2' } });
+    await waitFor(() => Boolean(initiativeChatFound(store.getState(), channel)));
+    expect(service.view(slug).chats.chats.map((c) => c.id)).toContain(WATCH_CHAT);
+  });
+
+  it('a sentinel wakes the Check-in and Follow-ups chats in a new session; the others resume theirs', async () => {
+    const { service, slug } = await setup();
+    for (const chat of [CHECK_IN_CHAT, WATCH_CHAT, 'main']) {
+      const channel = initiativeChatChannel(slug, chat);
+      service.chatRun(channel, SELF)!.place.onSession(`s-${chat}`);
+      expect(service.chatRun(channel, SELF)!.place.resume).toBe(`s-${chat}`);
+      expect(service.chatRun(channel, SELF, { woken: true })!.place.resume).toBe(chat === 'main' ? `s-${chat}` : undefined);
+    }
   });
 
   it('merges legacy questions, waits for a confirmed Slack post, and makes one reminder after a successful check', async () => {

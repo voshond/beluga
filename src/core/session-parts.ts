@@ -274,7 +274,7 @@ export function createSessionParts(session: Session, opts: SessionOptions): Sess
       board: (channel, from, o) => boardOf(session)?.forRun(channel, from, o),
       sentinel: (channel, from) => sentinelOf(session)?.forRun(channel, from),
       sentinelChat: (channel, from) => sentinelOf(session)?.chatPlace(channel, from),
-      initiativeChat: (channel, from) => initiativesOf(session)?.chatRun(channel, from),
+      initiativeChat: (channel, from, opts) => initiativesOf(session)?.chatRun(channel, from, opts),
       confirmTool: (toolName, input) => sentinelOf(session)?.confirmWords(toolName, input),
       plans: (channel, from, said, chain) => plansOf(session)?.forRun(channel, from, said, chain),
       threads: (channel) => threadsOf(session)?.forRun(channel),

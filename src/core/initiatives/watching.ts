@@ -23,6 +23,8 @@ export type WatchingDeps = {
   /** The initiative's watch sentinel on this computer (local.json), and keeping a new one there. */
   readonly sentinel: (slug: string) => string | undefined;
   readonly keepSentinel: (slug: string, id: string) => void;
+  /** Lists the Follow-ups chat, so the sentinel finds the chat it wakes. */
+  readonly ensureChat: (slug: string) => void;
   readonly commit: (slug: string, message: string) => Promise<void>;
   readonly refresh: (slug: string) => void;
   /** Its name, and whether it is followed at all (an archived one watches nothing). */
@@ -209,6 +211,7 @@ export class InitiativeWatches {
       if (id) host.pause(id, true);
       return;
     }
+    this.deps.ensureChat(slug);
     const at = Math.max(next, now + LEAD_MS);
     const due = watches.filter((w) => isWatching(w) && nextLookWhen(w, now) <= at);
     const trigger: OnceTrigger = { kind: 'once', at: new Date(at).toISOString(), missed: 'catch-up' };

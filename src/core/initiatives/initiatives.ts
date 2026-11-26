@@ -184,6 +184,7 @@ export class Initiatives {
       },
       sentinel: (slug) => this.local(slug).watch,
       keepSentinel: (slug, id) => this.saveLocal(slug, { ...this.local(slug), watch: id }),
+      ensureChat: (slug) => this.chats.ensure(slug, WATCH_CHAT),
       commit: (slug, message) => this.commit(slug, message),
       refresh: (slug) => this.refresh(slug),
       about: (slug) => {
@@ -352,6 +353,7 @@ export class Initiatives {
   }
 
   private checkInDraft(slug: string, name: string, status: InitiativeStatus): SentinelDraft {
+    this.chats.ensure(slug, CHECK_IN_CHAT);
     return {
       name: `${name} check-in`.slice(0, 80),
       icon: 'calendar',
@@ -945,10 +947,11 @@ Ask: ${question.waitingOn}` : ''}`;
     });
   }
 
-  chatRun(channel: string, from: string): InitiativeChatRun | undefined {
+  /** `woken`: a sentinel sent the turn. The Check-in and Follow-ups chats then start a new session: all they need is in the folder. */
+  chatRun(channel: string, from: string, opts: { readonly woken?: boolean } = {}): InitiativeChatRun | undefined {
     const of = initiativeChatOf(channel);
     if (!of || !this.known(of.slug)) return undefined;
-    const place = this.chats.place(channel, from);
+    const place = this.chats.place(channel, from, { fresh: Boolean(opts.woken) && (of.chat === CHECK_IN_CHAT || of.chat === WATCH_CHAT) });
     if (!place) return undefined;
     const item = this.view(of.slug);
     const brief = readFolder(this.deps.root, of.slug).brief;

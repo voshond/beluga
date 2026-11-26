@@ -107,6 +107,7 @@ export interface AgentHostDeps {
   readonly initiativeChat?: (
     channel: string,
     from: string,
+    opts?: { readonly woken?: boolean },
   ) => import('./initiatives/initiatives.js').InitiativeChatRun | undefined;
   /** What a tool that always asks you (policy ALWAYS_ASK_YOU: deleting a sentinel or a dashboard) says on its card, in words. */
   readonly confirmTool?: (toolName: string, input: Record<string, unknown>) => { readonly title: string; readonly detail: string } | undefined;
@@ -1572,7 +1573,7 @@ export class AgentHost {
     const mac = root ? undefined : this.deps.assistant?.(body.channel, from);
     // The Sentinel chat: its own folder and session (your runs only).
     const sentinelChat = root || mac ? undefined : this.deps.sentinelChat?.(body.channel, from);
-    const initiative = root || mac || sentinelChat ? undefined : this.deps.initiativeChat?.(body.channel, from);
+    const initiative = root || mac || sentinelChat ? undefined : this.deps.initiativeChat?.(body.channel, from, { woken: Boolean(body.origin?.sentinel) });
     lane.onInitiativeStep = initiative?.onStep;
     // A friend's worktree, your own agent asked there: it works here and reads theirs from afar.
     const guest = root || mac || sentinelChat || initiative ? undefined : this.deps.guestRun?.(body.channel, from);
