@@ -1071,3 +1071,23 @@ button.card:hover {
 .task[data-pending] .taskWhen {
   color: var(--accent);
 }
+.noteItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 13px;
+}
+.noteWhy {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.noteGroupTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.kindChip[data-kind='note'] {
+  color: var(--text-3);
+}

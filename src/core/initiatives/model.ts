@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { DecisionNotes } from './decisions.js';
 
 export const INITIATIVE_SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const INITIATIVE_CHAT_ID = /^[a-z0-9]{1,24}$/;
@@ -424,6 +425,7 @@ export type InitiativeView = {
   readonly outbox: readonly OutboxDraft[];
   readonly artifacts: readonly Artifact[];
   readonly timeline: readonly TimelineEntry[];
+  readonly decisions?: DecisionNotes;
   readonly files: readonly string[];
   readonly checkIn?: string;
   readonly chats: InitiativeChats;

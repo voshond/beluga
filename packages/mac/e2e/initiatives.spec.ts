@@ -18,7 +18,8 @@ const openInitiative = async (page: Page, name: string): Promise<void> => {
 test('an initiative’s page shows the epic’s tickets, open first, with their pull requests', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
   const tickets = page.getByRole('region', { name: 'Tickets' });
-  await expect(tickets.getByRole('listitem')).toHaveCount(4);
+  await expect(tickets.locator('[data-sub-task="false"]')).toHaveCount(4);
+  await expect(tickets.locator('[data-sub-task="true"]')).toHaveCount(2);
   await expect(tickets.getByRole('listitem').first()).toHaveAttribute('data-category', 'inProgress');
   await expect(tickets.getByRole('listitem').last()).toHaveAttribute('data-ticket', 'SHOP-133');
   await expect(tickets.getByRole('button', { name: 'Open SHOP-150 in Jira: 3DS challenge fails on Safari' })).toBeVisible();
@@ -26,7 +27,7 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
   await expect(tickets.locator('[data-ticket="SHOP-141"]')).toContainText('Blocked');
   await expect(tickets.getByRole('button', { name: /Open pull request #412 in example\/shop: Open/ })).toBeVisible();
   await expect(tickets.getByRole('button', { name: /Open pull request #398 in example\/shop: Merged/ })).toBeVisible();
-  await expect(tickets.getByText(/4 tickets · 1 done · 1 open pull request/)).toBeVisible();
+  await expect(tickets.getByText(/4 tickets · 1 done · 2 sub-tasks, 1 done · 1 open pull request/)).toBeVisible();
   await expect(tickets.getByRole('button', { name: 'Refresh the tickets from Jira' })).toBeEnabled();
   await expect(page.getByRole('region', { name: 'Goal' }).getByRole('heading', { name: 'Scope' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Slack conversations' }).getByRole('button', { name: 'Open 3DS on Safari in Slack' })).toBeVisible();
@@ -47,9 +48,26 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
   expect((await bar.locator('[data-part="done"]').boundingBox())!.width).toBeGreaterThan(100);
   expect((await bar.locator('[data-part="inProgress"]').boundingBox())!.width).toBeGreaterThan(30);
   await page.setViewportSize({ width: 2300, height: 1000 });
-  await expect(tickets.getByText('Ana Ruiz')).toBeVisible();
+  await expect(tickets.locator('[data-ticket="SHOP-141"]').getByText(/Ana Ruiz/)).toBeVisible();
   await shot(page, '01b-initiative-page-wide.png');
   if (shots) await tickets.screenshot({ path: path.join(shots, '08-tickets-dark-wide.png') });
+});
+
+test('the Suggestions section lists decisions.md’s open questions and adds its settled notes to the decision log', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  const section = page.getByRole('region', { name: 'Suggestions' });
+  await expect(section.getByText('Waiting on others · 2')).toBeVisible();
+  const open = section.getByRole('list', { name: 'Open questions' });
+  await expect(open.getByRole('listitem')).toHaveCount(2);
+  await expect(open.getByRole('listitem').first()).toContainText('Does finance have the final NO tax table?');
+  const log = section.getByRole('listbox', { name: 'Decision log' });
+  const note = log.getByRole('option').filter({ hasText: 'Google Pay waits for v2.1.' });
+  await expect(note).toContainText('Why: one SDK update fewer before the freeze.');
+  await expect(note).toContainText('Decided');
+  await expect(log.getByText('Apple Pay ships after launch.')).toHaveCount(0);
+  await expect(log.getByRole('option').filter({ hasText: 'Is Apple Pay in scope for launch?' })).toHaveCount(1);
+  await section.scrollIntoViewIfNeeded();
+  if (shots) await section.screenshot({ path: path.join(shots, '09-decisions.png') });
 });
 
 test('several epics group the tickets by epic', async ({ page }) => {

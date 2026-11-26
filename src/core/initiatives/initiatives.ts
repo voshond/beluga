@@ -204,6 +204,7 @@ export class Initiatives {
       outbox: folder.outbox,
       artifacts: folder.artifacts,
       timeline: folder.timeline,
+      ...(folder.decisions ? { decisions: folder.decisions } : {}),
       files: folder.files,
       ...(checkIn ? { checkIn } : {}),
       chats,

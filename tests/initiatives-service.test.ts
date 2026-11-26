@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { resolveChat } from '../src/core/chat-links/resolve.js';
+import { chatToolsOf } from '../src/core/chat-links/transcript.js';
 import { type CheckInHost, Initiatives, OUTBOX_DENIED } from '../src/core/initiatives/initiatives.js';
 import { CHECK_IN_CHAT, type GoalRefine, initiativeChatChannel } from '../src/core/initiatives/model.js';
 import { CHECK_IN_PROMPT, TASKS_PROMPT, TICKETS_PROMPT } from '../src/core/initiatives/prompt.js';
@@ -42,7 +43,7 @@ const fakeHost = (): Host => {
   };
 };
 
-const setup = async (opts: { readonly commit?: boolean; readonly now?: () => number; readonly refine?: (input: GoalRefine) => Promise<string | undefined> } = {}) => {
+const setup = async (opts: { readonly dir?: string; readonly commit?: boolean; readonly now?: () => number; readonly refine?: (input: GoalRefine) => Promise<string | undefined> } = {}) => {
   const store = new Store(initialState('room', 'auto'));
   store.dispatch({ type: 'identity', selfId: SELF, isHost: true, home: '/Users/k' });
   const root = path.join(tmp(), 'initiatives');
@@ -51,7 +52,7 @@ const setup = async (opts: { readonly commit?: boolean; readonly now?: () => num
   const service = new Initiatives({
     store,
     root,
-    dir: tmp(),
+    dir: opts.dir ?? tmp(),
     selfId: () => SELF,
     ask: (prompt, channel) => {
       asked.push({ prompt, channel });
@@ -396,6 +397,41 @@ describe('Initiatives', () => {
     store.dispatch({ type: 'agent_event', owner: SELF, requestId: 'r1', requester: SELF, event: 'done', text: 'ok', ts: Date.now(), channel: initiativeChatChannel(slug, CHECK_IN_CHAT) });
     await waitFor(() => store.getState().initiatives.items[0]!.timeline[0]?.text === 'today: checked');
     expect(gitLog(root)[0]).toMatch(/^tracked: check-in \d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('lets search_chats find what was said in a chat that isn’t loaded, from its saved history', async () => {
+    const dir = tmp();
+    const { store, service } = await setup({ dir });
+    const { slug } = await service.create({ name: 'Checkout v2' });
+    const channel = initiativeChatChannel(slug, 'main');
+    const saved = [{ id: 'm1', type: 'chat', channel, from: SELF, name: 'me', text: 'who owns the Safari payment bug?', ts: 1000, byAgent: false }];
+    mkdirSync(path.join(dir, slug, 'chats', 'main'), { recursive: true });
+    writeFileSync(path.join(dir, slug, 'chats', 'main', 'history.json'), JSON.stringify(saved));
+    expect(store.getState().log.some((l) => l.channel === channel)).toBe(false);
+    expect(service.savedChats(new Set([channel])).map((c) => c.channel)).toEqual([initiativeChatChannel(slug, CHECK_IN_CHAT)]);
+    const sources = service.savedChats(new Set()).filter((c) => c.items.length);
+    expect(sources).toMatchObject([{ channel, place: 'Checkout v2 › who owns the Safari payment bug?' }]);
+    const tools = chatToolsOf({ state: () => store.getState(), requester: SELF, chain: () => ({ chainId: 'c', hop: 0 }), sources: () => sources });
+    const found = tools.search('safari payment', {});
+    expect(found).toContain(`${SELF}/${channel}`);
+    expect(found).toContain('who owns the Safari payment bug?');
+    service.chats.loadSaved(channel);
+    expect(store.getState().log.filter((l) => l.channel === channel).map((l) => l.id)).toEqual(['m1']);
+  });
+
+  it('shows decisions.md’s open questions and settled notes, and nothing for a file in another shape', async () => {
+    const { store, root, service } = await setup();
+    const { slug } = await service.create({ name: 'Checkout v2' });
+    const item = () => store.getState().initiatives.items.find((i) => i.slug === slug)!;
+    expect(item().decisions).toEqual({ open: [], decided: [] });
+    writeFileSync(path.join(root, slug, 'decisions.md'), '# Decisions\n\n## Open\n\n- 2026-11-25: Does finance have the NO tax table? Asked Priya.\n\n## Decided\n\n- 2026-11-24: Google Pay waits. Why: one SDK update fewer.\n');
+    service.refresh(slug);
+    expect(item().decisions).toEqual({ open: [{ day: '2026-11-25', text: 'Does finance have the NO tax table? Asked Priya.' }], decided: [{ day: '2026-11-24', text: 'Google Pay waits.', why: 'one SDK update fewer.' }] });
+    writeFileSync(path.join(root, slug, 'decisions.md'), 'we picked Postgres, and that is that\n');
+    service.refresh(slug);
+    expect(item().decisions).toBeUndefined();
+    expect(item().trouble).toBeUndefined();
+    expect(item().files).toContain('decisions.md');
   });
 
   it('seeds the demo’s two initiatives', async () => {
