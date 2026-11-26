@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { INITIATIVE_STATUSES, type InitiativeStatus, type InitiativeView, initiativeOf } from '@beluga/core/initiatives/model.js';
 import { Icon } from '../components/Icon.js';
 import { type ActionItem, ActionsDropdown } from '../components/SpecMenu.js';
-import { Button, Empty, IconButton } from '../components/ui.js';
+import { Button, Empty, IconButton, Segmented } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
 import { openSheet } from '../lib/sheets.js';
 import { sameDeep } from '../lib/stable.js';
 import { DiscoverySections } from './DiscoverySections.js';
 import { GoalSection } from './GoalRefine.js';
+import { type InitiativeArea, areaOptions, rememberArea, useInitiativeArea } from './initiative-areas.js';
 import { Follows } from './InitiativeFollows.js';
 import { EpicLink, ProgressBar } from './InitiativeParts.js';
 import { Timeline } from './InitiativeTimeline.js';
@@ -16,7 +17,7 @@ import { InitiativePanel, type PanelTab } from './InitiativePanel.js';
 import { NewInitiativeSheet } from './NewInitiativeSheet.js';
 import { PeopleSection } from './PeopleSection.js';
 import { RisksSection } from './RisksSection.js';
-import { Suggestions } from './SuggestionLog.js';
+import { DecisionLog, Suggestions } from './SuggestionLog.js';
 import { SuccessSection } from './SuccessSection.js';
 import { TasksSection } from './TasksSection.js';
 import { TicketsTable } from './TicketsTable.js';
@@ -84,6 +85,8 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
   const [editing, setEditing] = useState(false);
   const [pickedId, setPickedId] = useState<number | undefined>(undefined);
   const [tab, setTab] = useState<PanelTab>('chat');
+  const area = useInitiativeArea(slug);
+  const handleArea = (next: InitiativeArea): void => rememberArea(slug, next);
   const handleEdit = (): void => setEditing(true);
   const handleClose = (): void => setEditing(false);
   const handlePick = (id: number): void => {
@@ -108,33 +111,46 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
               {item.trouble}
             </div>
           ) : null}
-          <GoalSection item={item} />
-          {item.status === 'discovery' ? (
+          <Segmented value={area} options={areaOptions(item)} onChange={handleArea} label={`Areas of ${item.name}`} />
+          {area === 'overview' ? (
             <>
-              <DiscoverySections item={item} />
+              <GoalSection item={item} />
+              {item.status === 'discovery' ? (
+                <DiscoverySections item={item} />
+              ) : (
+                <div className={s.section}>
+                  <ProgressBar progress={item.progress} />
+                  <Facts item={item} />
+                </div>
+              )}
               <RisksSection item={item} />
+              {item.status === 'discovery' ? null : <SuccessSection item={item} />}
+              <CheckInRow item={item} />
+              <Suggestions item={item} pickedId={picked?.id} onPick={handlePick} />
+              <DecisionLog item={item} pickedId={picked?.id} onPick={handlePick} />
             </>
-          ) : (
+          ) : null}
+          {area === 'work' ? (
             <>
-              <div className={s.section}>
-                <ProgressBar progress={item.progress} />
-                <Facts item={item} />
-              </div>
-              <RisksSection item={item} />
-              <SuccessSection item={item} />
-              <TicketsTable item={item} />
+              {item.status === 'discovery' ? null : <TicketsTable item={item} />}
+              <TasksSection item={item} />
+              <WatchesSection item={item} />
             </>
-          )}
-          <CheckInRow item={item} />
-          <Suggestions item={item} pickedId={picked?.id} onPick={handlePick} />
-          <WatchesSection item={item} />
-          <UpdatesSection item={item} />
-          <PeopleSection item={item} />
-          <TasksSection item={item} />
-          <Timeline item={item} />
-          <Follows item={item} />
-          <Repos item={item} />
-          <MemoryFiles item={item} />
+          ) : null}
+          {area === 'people' ? (
+            <>
+              <PeopleSection item={item} />
+              <UpdatesSection item={item} />
+            </>
+          ) : null}
+          {area === 'timeline' ? <Timeline item={item} /> : null}
+          {area === 'sources' ? (
+            <>
+              <Follows item={item} />
+              <Repos item={item} />
+              <MemoryFiles item={item} />
+            </>
+          ) : null}
         </div>
       </div>
       <InitiativePanel item={item} picked={picked} tab={tab} onTab={setTab} onClose={handleUnpick} />
