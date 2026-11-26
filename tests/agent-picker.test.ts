@@ -57,6 +57,18 @@ describe('agentPicker', () => {
     expect(agentPicker(state(), 'draft', 'claude', { runtime: 'codex', label: 'Codex', model: 'gpt-5-codex' })).toMatchObject({ runtime: 'codex', label: 'Codex · GPT-5 Codex' });
   });
 
+  it("an initiative chat shows its own model, Check-in and Follow-ups the initiative model, the rest your default's", () => {
+    const chats = [
+      { id: 'main', channel: 'initiative:a:main' },
+      { id: 'checkin', channel: 'initiative:a:checkin' },
+      { id: 'watch', channel: 'initiative:a:watch', model: 'opus' },
+    ];
+    const st: PickerState = { ...state([], true, 'opus'), prefs: { model: 'opus', initiativeModel: 'haiku' }, initiatives: { items: [{ chats: { chats } }] } };
+    expect(agentPicker(st, 'initiative:a:main')).toMatchObject({ model: 'opus', label: 'Opus' });
+    expect(agentPicker(st, 'initiative:a:checkin')).toMatchObject({ model: 'haiku', label: 'Haiku' });
+    expect(agentPicker(st, 'initiative:a:watch')).toMatchObject({ model: 'opus', label: 'Opus' });
+  });
+
   it("a Your Mac chat shows its own agent, else your default's model", () => {
     const st: PickerState = { ...state([], true, 'haiku'), assistant: { chats: [{ channel: 'mac:assistant' }, { channel: 'mac:assistant:ab12', agent: { runtime: 'codex', label: 'Codex', model: 'gpt-5-codex' } }] } };
     expect(agentPicker(st, 'mac:assistant')).toMatchObject({ conversation: 'mac:assistant', runtime: 'claude', model: 'haiku', label: 'Haiku' });

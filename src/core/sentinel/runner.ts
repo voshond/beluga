@@ -240,6 +240,8 @@ export interface RunnerDeps {
   readonly serviceEnv?: (projectId: string | undefined) => Record<string, string>;
   /** The effort levels an agent's model takes (undefined agent: your default), when they're known. */
   readonly efforts?: (agent: AgentRef | undefined) => readonly string[] | undefined;
+  /** The model an agent step that picked no agent runs on (Settings' sentinel model, when your agent is Claude); undefined: your default. */
+  readonly stepModel?: () => string | undefined;
   /** Keep a run's numbers (the files, the state, the first dashboard) → their names as kept. */
   readonly keep?: (active: ActiveRun, measured: readonly Measured[]) => void;
   /** Run a Toolbox tool (BLG-75) by name in a project → {exitCode, output}. Undefined in tests/fakes. */
@@ -382,7 +384,8 @@ export class SentinelRunner {
         break;
       }
       const startedAt = this.deps.now();
-      setStep(i, { state: 'running', startedAt });
+      const model = step.kind === 'claude' ? this.agentOf(step)?.model : undefined;
+      setStep(i, { state: 'running', startedAt, ...(model ? { model } : {}) });
       let result: StepEnd;
       try {
         result = await this.step(active, step, i, outputs, i === lastClaude, { run: set, step: (patch) => setStep(i, patch) });
@@ -917,6 +920,12 @@ export class SentinelRunner {
     };
   }
 
+  /** The agent a step runs on: its own pick, else Claude on Settings' sentinel model; undefined: your default. */
+  private agentOf(step: ClaudeStep): AgentRef | undefined {
+    const fallback = this.deps.stepModel?.();
+    return stepAgent(step) ?? (fallback ? stepAgent({ model: fallback }) : undefined);
+  }
+
   private async place(active: ActiveRun, step: ClaudeStep): Promise<SentinelPlace | string> {
     const made = active.places[step.where];
     if (made) return made;
@@ -924,7 +933,7 @@ export class SentinelRunner {
     if (!places) return 'Agent conversations need the Beluga app';
     const s = active.sentinel;
     let place: SentinelPlace | undefined;
-    if (step.where === 'mac') place = places.macChat({ agent: stepAgent(step) });
+    if (step.where === 'mac') place = places.macChat({ agent: this.agentOf(step) });
     else {
       if (!s.projectId) return `it needs a project: pick one on the sentinel’s page, or have the agent work on ${ASSISTANT_TITLE}`;
       const at = this.deps.now();
@@ -948,7 +957,7 @@ export class SentinelRunner {
     // sharing one can each pick their own). Your Mac's chats run your default agent.
     // Its effort too, when its model takes it (else Settings' effort).
     if (place.workspaceId) {
-      const agent = stepAgent(step);
+      const agent = this.agentOf(step);
       this.deps.places?.setAgent?.(place.workspaceId, agent, stepEffort(step, this.deps.efforts?.(agent)));
     }
     // Earlier outputs filled in are material in tags, never instructions; a big one is its file and a preview.

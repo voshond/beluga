@@ -421,7 +421,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `workbench.generateReviewGuide` | Project Settings › Review Guide › Generate / Regenerate (a chat of its own in Beluga's folder for the guide) |
 | `workbench.openReviewGuide` | Project Settings › Review Guide › Open (your editor) |
 | `workbench.removeReviewGuide` | Project Settings › Review Guide › Remove |
-| `workbench.setModel` | ✓ (the composer's agent picker: a model of the same runtime, for this conversation or new ones; the phone's picker since 1.32) |
+| `workbench.setModel` | ✓ (the composer's agent picker: a model of the same runtime, for this conversation or new ones; the phone's picker since 1.32. In an initiative's chat it is that chat's own model, kept in its `chats.json`, never the default for new conversations) |
 | `workbench.setEffort` | ✓ (the composer's agent picker: Thinking, Auto to Max, for this conversation or new ones) |
 | `workbench.setAgent` | ✓ (the agent picker's other runtimes, grouped Claude › Codex › Local model; a runtime this Mac doesn't run is greyed with why; the phone's picker since 1.32) |
 | `workbench.createPr` | ✓ |

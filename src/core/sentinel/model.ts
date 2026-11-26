@@ -455,6 +455,8 @@ export interface StepRun {
   readonly output?: string;
   /** A Claude step's conversation. */
   readonly channel?: string;
+  /** The model a Claude step ran on, when Beluga picked it (the step's own, or Settings' sentinel model). */
+  readonly model?: string;
   readonly why?: string;
 }
 

@@ -48,9 +48,25 @@ describe('a step’s effort in its run', () => {
       ['c1', { runtime: 'claude', label: 'Claude', model: 'opus' }, 'max'],
       // Haiku doesn't take high: Settings' effort.
       ['c1', { runtime: 'claude', label: 'Claude', model: 'haiku' }, undefined],
-      // Your default agent's model isn't known here: the step's effort goes as it is.
-      ['c1', undefined, 'medium'],
+      // No agent of its own: Claude on Settings' sentinel model; its levels aren't known, so the step's effort goes as it is.
+      ['c1', { runtime: 'claude', label: 'Claude', model: 'sonnet' }, 'medium'],
     ]);
+    expect(s.sentinels.runGet(run.id).run.steps.map((st) => st.model)).toEqual(['opus', 'haiku', 'sonnet']);
+  });
+
+  it('a step with no agent follows your default when the sentinel model is empty or your agent isn’t Claude', async () => {
+    const set: Array<AgentRef | undefined> = [];
+    const p = fakePlaces();
+    const s = setup({ reply: () => 'ok', places: { ...p.places, setAgent: (_id, agent) => void set.push(agent) } });
+    const made = s.sentinels.create({ name: 'Default', projectId: 'api', steps: [{ kind: 'claude', where: 'project', prompt: 'Sum up' }] });
+    s.store.dispatch({ type: 'prefs', prefs: { sentinelModel: '' } });
+    const first = s.sentinels.start(made.id, 'you');
+    await until(() => !['queued', 'running'].includes(s.sentinels.runGet(first.id).run.state));
+    s.store.dispatch({ type: 'prefs', prefs: { sentinelModel: 'haiku', defaultAgent: { runtime: 'codex', label: 'Codex' } } });
+    const second = s.sentinels.start(made.id, 'you');
+    await until(() => !['queued', 'running'].includes(s.sentinels.runGet(second.id).run.state));
+    expect(set).toEqual([undefined, undefined]);
+    expect(s.sentinels.runGet(second.id).run.steps[0]?.model).toBeUndefined();
   });
 
   it('a workspace’s effort is its place’s, and a new agent clears it', async () => {

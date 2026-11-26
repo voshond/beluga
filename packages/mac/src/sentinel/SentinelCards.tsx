@@ -399,7 +399,8 @@ const WHERE_INFO: ReadonlyArray<{ readonly value: ClaudeStep['where']; readonly 
 ];
 
 function ClaudeFields({ step, item, change }: { step: ClaudeStep; item: Sentinel; change: (patch: Partial<ClaudeStep>) => void }) {
-  const agents = useAgentEntries();
+  const sentinelModel = useApp((st) => st.prefs.sentinelModel);
+  const agents = useAgentEntries(sentinelModel);
   const prompt = useDraft(step.prompt, (v) => v !== step.prompt && change({ prompt: v }));
   const where = WHERE_INFO.find((w) => w.value === step.where);
   return (

@@ -490,6 +490,8 @@ export type InitiativeChat = {
   readonly id: string;
   readonly channel: string;
   readonly createdAt: number;
+  /** Its own model, picked in the chat (none: Settings' initiative model or your default). */
+  readonly model?: string;
 };
 
 export type InitiativeChats = {

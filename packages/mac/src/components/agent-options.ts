@@ -15,16 +15,23 @@ export const YOUR_AGENT = '';
  * Who does a piece of work (BLG-497), as pop-up entries: "Your agent (Claude)" first (value '',
  * following your default), then every agent and model you can pick, a section per runtime, each
  * with its runtime's mark beside the name. One not set up here stays greyed, saying why. Values
- * are agentChoices' `runtime:model` (agentForChoice turns one into an AgentRef).
+ * are agentChoices' `runtime:model` (agentForChoice turns one into an AgentRef). `defaultModel`:
+ * the model "your agent" runs on here when it's Claude (a sentinel's agent step: Settings' sentinel model).
  */
-export function useAgentEntries(): SelectEntry<string>[] {
+export function useAgentEntries(defaultModel?: string): SelectEntry<string>[] {
   const runtimes = useApp((s) => s.runtimes);
   const models = useApp((s) => s.models);
   const mine = useMyAgent();
   return useMemo(() => {
     const options = agentChoices(runtimes, models);
     const groups = [...new Set(options.map((o) => o.group))];
-    const yours: SelectOption<string> = { value: YOUR_AGENT, label: `Your agent (${agentName(mine)})`, icon: runtimeMark(mine.runtime), description: 'Whatever your default agent is when the work starts' };
+    const pinned = defaultModel && mine.runtime === 'claude' ? defaultModel : undefined;
+    const yours: SelectOption<string> = {
+      value: YOUR_AGENT,
+      label: pinned ? `Your agent (${agentName(mine)} · ${pinned})` : `Your agent (${agentName(mine)})`,
+      icon: runtimeMark(mine.runtime),
+      description: pinned ? `Your default agent on ${pinned}, the sentinel model in Settings` : 'Whatever your default agent is when the work starts',
+    };
     return [
       yours,
       ...groups.map((group) => ({
@@ -34,7 +41,7 @@ export function useAgentEntries(): SelectEntry<string>[] {
           .map((o): SelectOption<string> => ({ value: o.value, label: o.label, icon: o.mark, ...(o.disabled ? { disabled: true } : {}), ...(o.why ? { description: o.why } : {}) })),
       })),
     ];
-  }, [runtimes, models, mine]);
+  }, [runtimes, models, mine, defaultModel]);
 }
 
 /**

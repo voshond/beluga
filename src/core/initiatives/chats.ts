@@ -8,6 +8,7 @@ import { HistorySaver } from '../history-saver.js';
 import { chosenAgent } from '../settings.js';
 import { type LogItem, type Store, settleRun } from '../store.js';
 import { CHECK_IN_CHAT, FIRST_INITIATIVE_CHAT, WATCH_CHAT, INITIATIVE_CHAT_ID, type InitiativeChats as ChatsState, initiativeChatChannel, initiativeChatOf } from './model.js';
+import { initiativeChatModel } from '../../shared/initiative-chat-model.js';
 
 export type InitiativeChatDeps = {
   readonly store: Store;
@@ -26,7 +27,7 @@ type Saved = {
 };
 
 type ChatsFile = {
-  readonly chats: ReadonlyArray<{ readonly id: string; readonly createdAt: number }>;
+  readonly chats: ReadonlyArray<{ readonly id: string; readonly createdAt: number; readonly model?: string }>;
   readonly active: string;
 };
 
@@ -48,6 +49,11 @@ const writeJson = (file: string, value: object): void => {
   const tmp = `${file}.${process.pid}.tmp`;
   writeFileSync(tmp, `${JSON.stringify(value)}\n`, { mode: 0o600 });
   renameSync(tmp, file);
+};
+
+const withModel = <T extends { readonly model?: string }>(chat: T, model: string): T => {
+  const { model: _was, ...rest } = chat;
+  return (model ? { ...rest, model } : rest) as T;
 };
 
 export class InitiativeChats {
@@ -158,7 +164,7 @@ export class InitiativeChats {
 
   state(slug: string): ChatsState {
     const list = this.lists.get(slug) ?? this.defaults();
-    return { chats: list.chats.map((c) => ({ id: c.id, channel: initiativeChatChannel(slug, c.id), createdAt: c.createdAt })), active: list.active };
+    return { chats: list.chats.map((c) => ({ id: c.id, channel: initiativeChatChannel(slug, c.id), createdAt: c.createdAt, ...(c.model ? { model: c.model } : {}) })), active: list.active };
   }
 
   private defaults(): ChatsFile {
@@ -172,7 +178,7 @@ export class InitiativeChats {
     const raw = Array.isArray(listed?.chats) ? listed.chats : [];
     const chats = raw
       .filter((c, i) => typeof c?.id === 'string' && INITIATIVE_CHAT_ID.test(c.id) && raw.findIndex((x) => x?.id === c.id) === i)
-      .map((c) => ({ id: c.id, createdAt: typeof c.createdAt === 'number' ? c.createdAt : 0 }));
+      .map((c) => ({ id: c.id, createdAt: typeof c.createdAt === 'number' ? c.createdAt : 0, ...(typeof c.model === 'string' && c.model ? { model: c.model } : {}) }));
     if (!chats.length) return this.defaults();
     const active = chats.some((c) => c.id === listed?.active) && listed?.active ? listed.active : chats[0]!.id;
     return { chats, active };
@@ -254,6 +260,24 @@ export class InitiativeChats {
     return true;
   }
 
+  /** The chat's own model ('' : back to the default); false: not a chat of a known initiative. */
+  setModel(channel: string, model: string): boolean {
+    const of = initiativeChatOf(channel);
+    if (!of || !this.has(of.slug, of.chat)) return false;
+    const list = this.need(of.slug);
+    this.save(of.slug, { ...list, chats: list.chats.map((c) => (c.id === of.chat ? withModel(c, model) : c)) });
+    return true;
+  }
+
+  /** The model a chat runs on (initiativeChatModel); undefined: your default. */
+  modelOf(channel: string): string | undefined {
+    const of = initiativeChatOf(channel);
+    if (!of) return undefined;
+    const prefs = this.deps.store.getState().prefs;
+    const own = this.lists.get(of.slug)?.chats.find((c) => c.id === of.chat)?.model;
+    return initiativeChatModel(of.chat, own, chosenAgent(prefs).runtime, prefs.initiativeModel);
+  }
+
   /** `fresh`: a new session, not the saved one (a check-in or a follow-up look starts from the folder, not the last run). */
   place(channel: string, from: string, opts: { readonly fresh?: boolean } = {}): AgentPlace | undefined {
     const of = initiativeChatOf(channel);
@@ -264,11 +288,13 @@ export class InitiativeChats {
     const was = opts.fresh ? undefined : this.sessions.get(channel);
     const resume = (was?.runtime ?? 'claude') === agent.runtime ? was?.sessionId : undefined;
     if (opts.fresh) this.deps.store.dispatch({ type: 'context_reset', channel });
+    const model = this.modelOf(channel);
     return {
       cwd,
       additionalDirectories: [],
       autoEdit: true,
       agent,
+      ...(model ? { model } : {}),
       ...(resume ? { resume } : {}),
       onSession: (next) => {
         if (!this.has(of.slug, of.chat) || next === this.sessions.get(channel)?.sessionId) return;

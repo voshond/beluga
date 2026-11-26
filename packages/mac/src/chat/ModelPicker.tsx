@@ -43,7 +43,7 @@ export function setMyAgent(api: Api, runtime: string, label: string, model: stri
 }
 
 /** The picker's view of the state: "your default model" is your agent's, whichever runtime it is. */
-export const pickerState = (st: AppState): PickerState => ({ ...st, prefs: { model: myModel(st.prefs) || undefined } });
+export const pickerState = (st: AppState): PickerState => ({ ...st, prefs: { model: myModel(st.prefs) || undefined, initiativeModel: st.prefs.initiativeModel } });
 
 export const autoChoice = (st: AppState, channel: string): AutoChoice | undefined => {
   const found = conversationRoute(st, channel, myRuntime(st.prefs));

@@ -46,6 +46,10 @@ export const REFLECTION_MODEL_DEFAULT = 'haiku';
 export const REFLECTION_MODEL_MAX = 80;
 /** Its skill look writes a whole SKILL.md, where a weak model hurts: a stronger one unless you pick another (BLG-106). */
 export const REFLECTION_SKILL_MODEL_DEFAULT = 'sonnet';
+/** The chats an initiative wakes on its own (Check-in, Follow-ups) run on a cheaper model unless you pick another; '' : your default. */
+export const INITIATIVE_MODEL_DEFAULT = 'sonnet';
+/** A sentinel's agent step that picked no agent runs on this model when your agent is Claude; '' : your default. */
+export const SENTINEL_MODEL_DEFAULT = 'sonnet';
 export const SETTLE_IDLE_DAYS_MAX = 365;
 export const ARCHIVE_SETTLED_DAYS_DEFAULT = 14;
 export const ARCHIVE_SETTLED_DAYS_MAX = 3650;
@@ -209,6 +213,10 @@ export const Settings = z.object({
   reflectionSkills: z.boolean().catch(true).default(true),
   /** The model that drafts the skill. */
   reflectionSkillModel: z.string().min(1).max(REFLECTION_MODEL_MAX).catch(REFLECTION_SKILL_MODEL_DEFAULT).default(REFLECTION_SKILL_MODEL_DEFAULT),
+  /** The model of an initiative's Check-in and Follow-ups chats ('' : your default). */
+  initiativeModel: z.string().max(REFLECTION_MODEL_MAX).catch(INITIATIVE_MODEL_DEFAULT).default(INITIATIVE_MODEL_DEFAULT),
+  /** The model of a sentinel's agent step that picked none ('' : your default). */
+  sentinelModel: z.string().max(REFLECTION_MODEL_MAX).catch(SENTINEL_MODEL_DEFAULT).default(SENTINEL_MODEL_DEFAULT),
   /** How much of Claude's sub-agent work the chat shows. */
   subagents: z.enum(['full', 'compact', 'hidden']).default('full'),
   /** Workspace buttons you chose to hide from the top bar. */

@@ -490,6 +490,9 @@ describe('models, usage, space and search', () => {
     await waitFor(() => kay.runs.length === 2, 4000);
     expect(kay.runs[1]).toMatchObject({ model: 'opus', effort: 'high' });
     expect(kay.workspaces.find(ws!.id)?.model).toBe('opus');
+    // An initiative's chat keeps its own: picking there never moves the default for every conversation.
+    kay.bench.setModel('initiative:checkout:main', 'fable');
+    expect(kay.state().prefs.model).toBe('haiku');
   });
 
   it('keeps each conversation’s own effort: another chat’s pick never changes it', async () => {
