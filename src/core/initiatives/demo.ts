@@ -2,6 +2,7 @@ import path from 'node:path';
 import { writeText } from './files.js';
 import type { Initiatives } from './initiatives.js';
 import type { EpicStatus, EpicTickets, InitiativeDraft, InitiativeTasks, OutboxDraft, Suggestion } from './model.js';
+import type { AudienceDraft } from './audience.js';
 import type { PersonDraft } from './people.js';
 import { dayOf } from './repo.js';
 
@@ -23,6 +24,27 @@ const DEMO_PEOPLE: ReadonlyArray<{ readonly entry: PersonDraft; readonly role: s
   { entry: { name: 'Ana Ruiz', cares: 'A clean Safari fix before the freeze', slack: '@ana', jira: 'Ana Ruiz', notes: 'Out this week' }, role: 'Payments engineer, owns SHOP-141 and SHOP-150' },
   { entry: { name: 'Kai Jensen', cares: 'Correct VAT in every market', slack: '@kai', jira: '', notes: '' }, role: 'Finance lead, signs off the Norway tax table' },
 ];
+
+const DEMO_AUDIENCES: readonly AudienceDraft[] = [
+  { name: 'Leadership', people: ['kai-jensen'], tone: 'short', cadence: { days: [5], at: '16:00' }, target: { kind: 'slack', channel: 'C0LEADERS', label: '#leadership' } },
+  { name: 'Payments team', people: ['ana-ruiz'], tone: 'detailed', cadence: { days: [1], at: '09:00' }, target: { kind: 'confluence', page: '2201', section: 'Status', label: 'Checkout v2 spec' } },
+  { name: 'Go/no-go', people: ['ana-ruiz', 'kai-jensen'], tone: 'detailed', cadence: { days: [4], at: '09:00' }, target: { kind: 'prep', meeting: 'Go/no-go', label: 'Thursday' } },
+];
+
+const TEAM_UPDATE = '## What changed\n\n- Apple Pay is on the one-page form (SHOP-133, in progress).\n- The Norway VAT table is with finance.\n\n## Open\n\n- SHOP-150 (3DS on Safari) needs an owner.';
+
+const seedUpdates = (folder: string, now: number): void => {
+  const at = new Date(now - 5 * DAY).toISOString();
+  const file = `updates/${dayOf(now - 5 * DAY)}-payments-team-9.md`;
+  writeText(path.join(folder, file), `# Payments team: Confluence update · Checkout v2 spec › Status\n\n${dayOf(now - 5 * DAY)}\n\n${TEAM_UPDATE}\n`);
+  const tickets = [
+    { key: 'SHOP-141', summary: 'Tax rates for Norway', status: 'In Progress', done: false, assignee: 'Ana Ruiz' },
+    { key: 'SHOP-150', summary: '3DS challenge fails on Safari', status: 'To Do', done: false, assignee: 'Ana Ruiz' },
+    { key: 'SHOP-152', summary: 'Address lookup falls back to manual entry', status: 'To Do', done: false, assignee: 'Jonas Berg' },
+    { key: 'SHOP-133', summary: 'Apple Pay button on the one-page form', status: 'In Progress', done: false, assignee: 'Mia Chen' },
+  ];
+  writeText(path.join(folder, 'updates.json'), `${JSON.stringify([{ audience: 'payments-team', at, draft: 9, to: { kind: 'confluence', page: '2201', section: 'Status', label: 'Checkout v2 spec' }, file, tickets }], null, 2)}\n`);
+};
 
 const demos = (now: number): DemoInitiative[] => {
   const iso = new Date(now - 2 * 60 * 60 * 1000).toISOString();
@@ -67,6 +89,8 @@ const demos = (now: number): DemoInitiative[] => {
       outbox: [
         { id: 1, to: { kind: 'slack', channel: 'C0CHECKOUT', label: '#checkout-v2' }, text: 'Hey team, with Ana out, who can pick up SHOP-150 (the Safari payment bug)? It has been blocked for 4 days and it is on the launch path.', why: 'From suggestion 1', suggestion: 1, state: 'draft', createdAt: iso },
         { id: 2, to: { kind: 'jira', issue: 'SHOP-150', label: 'Safari payment bug' }, text: 'Still blocked on Safari 17: the payment sheet closes before the token comes back. Looking for an owner in #checkout-v2.', state: 'draft', createdAt: iso },
+        { id: 3, to: { kind: 'slack', channel: 'C0LEADERS', label: '#leadership' }, audience: 'leadership', text: 'Checkout v2: on track for the freeze. Apple Pay is done; two blockers left (Norway tax table, Safari 3DS). Need: a call on launching Norway with the old tax table by Thursday.', why: 'Its Friday update is due', state: 'draft', createdAt: iso },
+        { id: 4, to: { kind: 'prep', meeting: 'Go/no-go', label: 'Thursday' }, audience: 'go-no-go', text: '## Raise\n\n- Norway: launch with the old tax table, or wait for SHOP-141?\n- SHOP-150 (3DS on Safari) has no owner while Ana is out.\n\n## Ask\n\n- Kai: is the final Norway table in by Friday?', why: 'Thursday’s go/no-go', state: 'draft', createdAt: iso },
       ],
     },
     {
@@ -112,4 +136,7 @@ export const seedDemoInitiatives = async (initiatives: Initiatives, root: string
     const { slug } = await initiatives.savePerson(person.entry);
     await initiatives.setPerson('checkout-v2', slug, person.role);
   }
+  for (const audience of DEMO_AUDIENCES) await initiatives.saveAudience('checkout-v2', audience);
+  seedUpdates(path.join(root, 'checkout-v2'), now);
+  initiatives.refresh('checkout-v2');
 };

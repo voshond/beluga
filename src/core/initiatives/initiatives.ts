@@ -5,11 +5,12 @@ import type { ScheduleTrigger, SentinelDraft } from '../sentinel/model.js';
 import { formatBytes } from '../../shared/format.js';
 import { isSecretPath } from '../shares.js';
 import type { Action, Store } from '../store.js';
+import { type AudienceDraft, AudienceDraftSchema } from './audience.js';
 import { InitiativeChats } from './chats.js';
 import { keepProposal, readDirectory, removePersonFile, writePerson } from './directory.js';
 import { PEOPLE_DIR, type PersonDraft } from './people.js';
 import { PEOPLE_PASS } from './people-prompt.js';
-import { addTimeline, artifactPath, folderOf, keepArtifactFile, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeArtifacts, writeConfig, writeOutbox, writeSuggestions, writeTasks, writeText } from './files.js';
+import { addTimeline, artifactPath, folderOf, keepArtifactFile, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeArtifacts, writeConfig, writeOutbox, writeSuggestions, writeTasks, writeText, writeUpdates } from './files.js';
 import {
   ARTIFACT_KEEP_MAX,
   type ArtifactRead,
@@ -40,12 +41,17 @@ import {
   targetWords,
   clarifyMessage,
   decisionMessage,
+  DRAFT_KIND_WORDS,
+  isSentTarget,
   suggestionMessage,
+  textMaxOf,
   taskMessage,
   uniqueSlug,
 } from './model.js';
 import { CHECK_IN_PROMPT, type LinkedRepo, TASKS_PROMPT, TICKETS_PROMPT, initiativeBrief } from './prompt.js';
 import { type PushResult, commitFolder, dayOf, ensureRepo, pushIfTracked, unpushedCount } from './repo.js';
+import { UPDATES_DIR, UpdateRecordSchema, audienceIdOf, ticketMarks } from './updates.js';
+import { draftUpdatePrompt } from './updates-prompt.js';
 
 export type CheckInHost = {
   readonly create: (draft: SentinelDraft) => { readonly id: string };
@@ -199,6 +205,8 @@ export class Initiatives {
       repos: config?.repos ?? [],
       meetings: config?.meetings ?? [],
       people: config?.people ?? [],
+      audiences: config?.audiences ?? [],
+      updates: folder.updates,
       ...(folder.progress ? { progress: folder.progress } : {}),
       ...(folder.tickets ? { tickets: folder.tickets } : {}),
       ...(folder.tasks ? { tasks: folder.tasks } : {}),
@@ -424,8 +432,11 @@ export class Initiatives {
   async sendDraft(slug: string, id: number, text: string): Promise<{ readonly channel: string }> {
     const item = this.need(slug);
     const draft = this.openDraft(item, id);
+    const to = draft.to;
+    if (!isSentTarget(to)) throw new Error('A prep sheet is never sent: copy it into the meeting, then mark it Done');
     const final = text.trim();
     if (!final) throw new Error('Write the message first');
+    if (final.length > textMaxOf(to)) throw new Error(`That is ${final.length} characters: a ${DRAFT_KIND_WORDS[to.kind]} takes ${textMaxOf(to)} at most`);
     this.sends.set(`${slug}:${id}`, { slug, id, to: draft.to, text: final });
     const edited = final !== draft.text.trim();
     this.putDraft(slug, item.outbox, id, (d) => {
@@ -435,7 +446,7 @@ export class Initiatives {
     await this.commit(slug, `${slug}: draft ${id} approved`);
     this.refresh(slug);
     const channel = this.workChannel(item);
-    if (this.deps.ask(sendDraftMessage(draft, final), channel) === undefined) throw new Error('The chat could not take it now');
+    if (this.deps.ask(sendDraftMessage({ id: draft.id, to }, final), channel) === undefined) throw new Error('The chat could not take it now');
     return { channel };
   }
 
@@ -483,10 +494,80 @@ export class Initiatives {
 
   private markSent(send: Send): void {
     const folder = readFolder(this.deps.root, send.slug);
-    if (!folder.outbox.some((d) => d.id === send.id)) return;
+    const draft = folder.outbox.find((d) => d.id === send.id);
+    if (!draft) return;
     this.putDraft(send.slug, folder.outbox, send.id, (d) => ({ ...d, state: 'sent', resolvedAt: new Date(this.now).toISOString() }));
-    addTimeline(this.deps.root, send.slug, `${dayOf(this.now)} [message]: sent ${send.to.kind === 'slack' ? 'a Slack message' : 'a Jira comment'} to ${targetWords(send.to)}`);
+    if (draft.audience) this.keepUpdate(send.slug, draft, send.text);
+    else addTimeline(this.deps.root, send.slug, `${dayOf(this.now)} [message]: sent ${send.to.kind === 'slack' ? 'a Slack message' : 'a Jira comment'} to ${targetWords(send.to)}`);
     this.refresh(send.slug);
+  }
+
+  /** A stakeholder update the user sent, or a prep sheet they kept: its text in updates/, a record with the tickets as they stand (the next one's delta), and a timeline line. */
+  private keepUpdate(slug: string, draft: OutboxDraft, text: string): void {
+    const folder = readFolder(this.deps.root, slug);
+    const audience = folder.config?.audiences.find((a) => a.id === draft.audience);
+    const name = audience?.name ?? draft.audience ?? 'an audience';
+    const day = dayOf(this.now);
+    const prep = draft.to.kind === 'prep';
+    if (draft.audience) {
+      const file = `${UPDATES_DIR}/${day}-${draft.audience}-${draft.id}.md`;
+      writeText(path.join(folder.folder, file), `# ${name}: ${DRAFT_KIND_WORDS[draft.to.kind]} · ${targetWords(draft.to)}\n\n${day}\n\n${text.trim()}\n`);
+      const record = UpdateRecordSchema.parse({ audience: draft.audience, at: new Date(this.now).toISOString(), draft: draft.id, to: draft.to, file, tickets: ticketMarks(folder.tickets?.tickets ?? []) });
+      writeUpdates(this.deps.root, slug, [...folder.updates, record]);
+    }
+    addTimeline(this.deps.root, slug, prep ? `${day} [update]: prep sheet for ${targetWords(draft.to)} ready for ${name}` : `${day} [update]: sent the ${name} update to ${targetWords(draft.to)}`);
+  }
+
+  /** Adds an audience for stakeholder updates, or edits one (by its id). */
+  async saveAudience(slug: string, draft: AudienceDraft): Promise<{ readonly id: string }> {
+    this.need(slug);
+    const parsed = AudienceDraftSchema.parse(draft);
+    const was = this.config(slug);
+    const directory = readDirectory(this.deps.root);
+    const stranger = parsed.people.find((person) => !directory.some((p) => p.slug === person));
+    if (stranger) throw new Error(`${stranger} is not in the people directory`);
+    const target = parsed.target;
+    if (target.kind === 'prep' && !was.meetings.some((m) => m.match === target.meeting)) throw new Error('Follow that meeting first: Edit… › Meetings');
+    const id = parsed.id ?? audienceIdOf(parsed.name, was.audiences.map((a) => a.id));
+    const audience = { ...parsed, id };
+    const audiences = was.audiences.some((a) => a.id === id) ? was.audiences.map((a) => (a.id === id ? audience : a)) : [...was.audiences, audience];
+    writeConfig(this.deps.root, slug, InitiativeConfigSchema.parse({ ...was, audiences }));
+    await this.commit(slug, `${slug}: audience ${id} saved`);
+    this.refresh(slug);
+    return { id };
+  }
+
+  async removeAudience(slug: string, id: string): Promise<void> {
+    this.need(slug);
+    const was = this.config(slug);
+    if (!was.audiences.some((a) => a.id === id)) throw new Error('That audience is gone');
+    writeConfig(this.deps.root, slug, InitiativeConfigSchema.parse({ ...was, audiences: was.audiences.filter((a) => a.id !== id) }));
+    await this.commit(slug, `${slug}: audience ${id} removed`);
+    this.refresh(slug);
+  }
+
+  /** The page's Draft Now: the Check-in chat drafts one audience's update into the outbox, from the facts Beluga works out. */
+  draftUpdate(slug: string, id: string): { readonly channel: string } {
+    const item = this.need(slug);
+    const audience = (item.audiences ?? []).find((a) => a.id === id);
+    if (!audience) throw new Error('That audience is gone');
+    const channel = initiativeChatChannel(slug, CHECK_IN_CHAT);
+    if (this.deps.ask(draftUpdatePrompt(item, audience, readDirectory(this.deps.root)), channel) === undefined) throw new Error('The chat could not take it now');
+    return { channel };
+  }
+
+  /** A prep sheet is never sent: Done keeps it (with the user's edits) as that meeting's update. */
+  async keepPrep(slug: string, id: number, text: string): Promise<void> {
+    const item = this.need(slug);
+    const draft = this.openDraft(item, id);
+    if (draft.to.kind !== 'prep') throw new Error('Only a prep sheet is kept this way: send the others');
+    const final = text.trim();
+    if (!final) throw new Error('The prep sheet is empty');
+    const edited = final !== draft.text.trim();
+    this.putDraft(slug, item.outbox, id, (d) => ({ ...d, state: 'sent', resolvedAt: new Date(this.now).toISOString(), ...(edited ? { sentText: final } : {}) }));
+    this.keepUpdate(slug, draft, final);
+    await this.commit(slug, `${slug}: prep sheet ${id} kept`);
+    this.refresh(slug);
   }
 
   /** Keeps a file a worktree made: copied into artifacts/, or, too big for the repo, noted where it is. */
@@ -580,7 +661,7 @@ export class Initiatives {
     const brief = readFolder(this.deps.root, of.slug).brief;
     return {
       place,
-      brief: initiativeBrief(item, brief, this.repos(item), of.chat, readDirectory(this.deps.root)),
+      brief: initiativeBrief(item, brief, this.repos(item), of.chat, readDirectory(this.deps.root), this.now),
       vetTool: (toolName, input) => this.vetSend(of.slug, toolName, input),
       preApproved: (toolName, input) => this.preApproved(of.slug, toolName, input),
     };

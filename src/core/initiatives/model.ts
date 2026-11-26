@@ -1,5 +1,7 @@
 import { z } from 'zod';
+import { type Audience, AudiencesSchema } from './audience.js';
 import type { Person, WaitingQuestion } from './people.js';
+import type { UpdateRecord } from './updates.js';
 
 export const INITIATIVE_SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const INITIATIVE_CHAT_ID = /^[a-z0-9]{1,24}$/;
@@ -114,6 +116,7 @@ export const InitiativeConfigSchema = z
     calendarMatch: z.string().max(500).optional(),
     docs: docRefs.default([]),
     repos: z.array(z.string().min(1).max(120)).max(30).default([]),
+    audiences: AudiencesSchema.default([]),
     createdAt: z.string().max(40).optional(),
   })
   .transform(({ slackChannels, calendarMatch, slack, meetings, ...rest }) => ({
@@ -396,12 +399,23 @@ export type OutboxState = (typeof OUTBOX_STATES)[number];
 
 const JIRA_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 
-/** Where a draft goes: a Slack channel, DM or thread (by its ids), or a comment on a Jira ticket. */
+/** Where a draft goes: a Slack channel, DM or thread (by its ids), a comment on a Jira ticket, one section of a Confluence page (by page id and heading), or a prep sheet for a meeting, which is never sent. */
 export const OutboxTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('slack'), channel: z.string().min(1).max(80), thread: z.string().max(40).optional(), label: z.string().max(200).optional() }),
   z.object({ kind: z.literal('jira'), issue: z.string().regex(JIRA_KEY), label: z.string().max(200).optional() }),
+  z.object({ kind: z.literal('confluence'), page: z.string().regex(/^\d{1,20}$/), section: z.string().trim().min(1).max(200), label: z.string().max(200).optional() }),
+  z.object({ kind: z.literal('prep'), meeting: z.string().trim().min(1).max(500), label: z.string().max(200).optional() }),
 ]);
 export type OutboxTarget = z.infer<typeof OutboxTargetSchema>;
+
+/** A Slack message or Jira comment; a Confluence section or a prep sheet has room for the detailed tone. */
+export const MESSAGE_MAX = 5000;
+export const PAGE_MAX = 20_000;
+
+export const textMaxOf = (to: Pick<OutboxTarget, 'kind'>): number => (to.kind === 'slack' || to.kind === 'jira' ? MESSAGE_MAX : PAGE_MAX);
+
+/** What it is, in a few words: "Slack message", "Confluence update". */
+export const DRAFT_KIND_WORDS: Readonly<Record<OutboxTarget['kind'], string>> = { slack: 'Slack message', jira: 'Jira comment', confluence: 'Confluence update', prep: 'Prep sheet' };
 
 /**
  * A message the agent prepared and the user sends (or discards) from the chat (outbox.json).
@@ -410,11 +424,13 @@ export type OutboxTarget = z.infer<typeof OutboxTargetSchema>;
 export const OutboxDraftSchema = z.object({
   id: z.number().int().min(1),
   to: OutboxTargetSchema,
-  text: z.string().min(1).max(5000),
+  text: z.string().min(1).max(PAGE_MAX),
   why: z.string().max(2000).optional(),
   suggestion: z.number().int().min(1).optional(),
+  /** The audience (initiative.json's `audiences`) this is the stakeholder update for. */
+  audience: z.string().max(40).optional(),
   state: z.enum(OUTBOX_STATES).default('draft'),
-  sentText: z.string().max(5000).optional(),
+  sentText: z.string().max(PAGE_MAX).optional(),
   createdAt: z.string().max(40).optional(),
   resolvedAt: z.string().max(40).optional(),
 });
@@ -445,6 +461,10 @@ export type InitiativeView = {
   readonly repos: readonly string[];
   readonly meetings: readonly MeetingRef[];
   readonly people: readonly InitiativePerson[];
+  /** Who gets a stakeholder update, how and when (initiative.json). */
+  readonly audiences?: readonly Audience[];
+  /** The updates sent (or prep sheets kept), oldest first (updates.json). */
+  readonly updates?: readonly UpdateRecord[];
   readonly progress?: EpicStatus;
   readonly tickets?: EpicTickets;
   readonly tasks?: InitiativeTasks;
@@ -565,7 +585,7 @@ const bullet = (line: string): string | undefined => {
   return match?.[1];
 };
 
-export const TIMELINE_KINDS = ['check-in', 'decision', 'message', 'ticket', 'said', 'doc', 'meeting', 'artifact', 'created', 'event'] as const;
+export const TIMELINE_KINDS = ['check-in', 'decision', 'message', 'ticket', 'said', 'doc', 'meeting', 'artifact', 'created', 'update', 'event'] as const;
 export type TimelineKind = (typeof TIMELINE_KINDS)[number];
 
 /** One bullet of timeline.md: "- 2026-11-25 [check-in]: …", the kind and even the day optional. */
@@ -615,10 +635,16 @@ const OUTBOX_TOOL_LIST: readonly OutboxTool[] = [
   { name: 'slack_send_message', kind: 'slack', field: 'message' },
   { name: 'conversations_add_message', kind: 'slack', field: 'text' },
   { name: 'jira_add_comment', kind: 'jira', field: 'body' },
+  { name: 'confluence_update_page_section', kind: 'confluence', field: 'new_content' },
 ];
 
+/** A draft that goes out (a prep sheet never does). */
+export type SentTarget = Exclude<OutboxTarget, { kind: 'prep' }>;
+
+export const isSentTarget = (to: OutboxTarget): to is SentTarget => to.kind !== 'prep';
+
 /** The tool the chat is first told to post a draft with. */
-export const OUTBOX_TOOLS: Readonly<Record<OutboxTarget['kind'], string>> = { slack: 'slack_send_message', jira: 'jira_add_comment' };
+export const OUTBOX_TOOLS: Readonly<Record<SentTarget['kind'], string>> = { slack: 'slack_send_message', jira: 'jira_add_comment', confluence: 'confluence_update_page_section' };
 
 const nameIs = (toolName: string, name: string): boolean => toolName === name || toolName.endsWith(`__${name}`);
 
@@ -633,23 +659,34 @@ const same = (a: unknown, b: string | undefined): boolean => (typeof a === 'stri
 export const matchesDraft = (to: OutboxTarget, text: string, toolName: string, input: Record<string, unknown>): boolean => {
   const tool = OUTBOX_TOOL_LIST.find((t) => t.kind === to.kind && nameIs(toolName, t.name));
   if (!tool || input.blocks !== undefined) return false;
-  const where = to.kind === 'slack' ? same(input.channel_id, to.channel) && same(input.thread_ts, to.thread) : same(input.issue_key, to.issue);
-  return where && same(input[tool.field], text);
+  return whereMatches(to, input) && same(input[tool.field], text);
+};
+
+const whereMatches = (to: OutboxTarget, input: Record<string, unknown>): boolean => {
+  if (to.kind === 'slack') return same(input.channel_id, to.channel) && same(input.thread_ts, to.thread);
+  if (to.kind === 'jira') return same(input.issue_key, to.issue);
+  if (to.kind === 'confluence') return same(input.page_id, to.page) && input.heading_text === to.section && (input.content_format === undefined || input.content_format === 'markdown');
+  return false;
 };
 
 export const targetWords = (to: OutboxTarget): string => {
   if (to.kind === 'jira') return to.label ? `${to.issue}: ${to.label}` : `a comment on ${to.issue}`;
+  if (to.kind === 'confluence') return `${to.label ?? `Confluence page ${to.page}`} › ${to.section}`;
+  if (to.kind === 'prep') return to.label ?? to.meeting;
   const where = to.label ?? to.channel;
   return to.thread ? `${where} (in a thread)` : where;
 };
 
 /** What the chat is told when the user sends a draft: the call to make, word for word. */
-export const sendDraftMessage = (draft: Pick<OutboxDraft, 'id' | 'to'>, text: string): string => {
+export const sendDraftMessage = (draft: Pick<OutboxDraft, 'id'> & { readonly to: SentTarget }, text: string): string => {
+  const to = draft.to;
+  if (to.kind === 'confluence')
+    return `Send draft ${draft.id} from the outbox now: ${OUTBOX_TOOLS.confluence} with page_id ${to.page}, heading_text exactly "${to.section}", content_format markdown, and new_content exactly as below (the section's body, without its heading), nothing added or changed.\n\n${text}`;
   const call =
-    draft.to.kind === 'slack'
-      ? `${OUTBOX_TOOLS.slack} (or conversations_add_message, with the message as text and no blocks) with channel_id ${draft.to.channel}${draft.to.thread ? ` and thread_ts ${draft.to.thread}` : ''}`
-      : `${OUTBOX_TOOLS.jira} with issue_key ${draft.to.issue}`;
-  return `Send draft ${draft.id} from the outbox now: ${call}, and the ${draft.to.kind === 'slack' ? 'message' : 'body'} exactly as below, nothing added or changed.\n\n${text}`;
+    to.kind === 'slack'
+      ? `${OUTBOX_TOOLS.slack} (or conversations_add_message, with the message as text and no blocks) with channel_id ${to.channel}${to.thread ? ` and thread_ts ${to.thread}` : ''}`
+      : `${OUTBOX_TOOLS.jira} with issue_key ${to.issue}`;
+  return `Send draft ${draft.id} from the outbox now: ${call}, and the ${to.kind === 'slack' ? 'message' : 'body'} exactly as below, nothing added or changed.\n\n${text}`;
 };
 
 /** A suggestion the user answers instead of approving: a decision kind, or one with answers to pick. */

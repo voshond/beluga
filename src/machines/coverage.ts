@@ -514,6 +514,10 @@ export const MACHINE: Record<Method, MachineSide> = {
   'initiatives.removePerson': 'drive',
   'initiatives.setPerson': 'drive',
   'initiatives.proposePeople': 'drive',
+  'initiatives.saveAudience': 'drive',
+  'initiatives.removeAudience': 'drive',
+  'initiatives.draftUpdate': 'drive',
+  'initiatives.keepPrep': 'drive',
   // ---- dashboard
   'dashboard.create': 'drive',
   'dashboard.update': 'drive',

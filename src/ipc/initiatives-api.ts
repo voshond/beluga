@@ -1,9 +1,11 @@
 import { z } from 'zod';
+import { AUDIENCE_ID, AudienceDraftSchema } from '../core/initiatives/audience.js';
 import { PersonDraftSchema } from '../core/initiatives/people.js';
-import { CheckInScheduleSchema, GoalRefineSchema, INITIATIVE_CHAT_ID, INITIATIVE_SLUG, InitiativeDraftSchema, InitiativePatchSchema } from '../core/initiatives/model.js';
+import { CheckInScheduleSchema, GoalRefineSchema, INITIATIVE_CHAT_ID, INITIATIVE_SLUG, InitiativeDraftSchema, InitiativePatchSchema, PAGE_MAX } from '../core/initiatives/model.js';
 
 const slug = z.string().regex(INITIATIVE_SLUG);
 const chat = z.string().regex(INITIATIVE_CHAT_ID);
+const audience = z.string().regex(AUDIENCE_ID);
 
 export const INITIATIVES_API = {
   'initiatives.create': { args: z.tuple([InitiativeDraftSchema]) },
@@ -22,7 +24,7 @@ export const INITIATIVES_API = {
   'initiatives.chatDelete': { args: z.tuple([slug, chat]) },
   'initiatives.resolveSuggestion': { args: z.tuple([slug, z.number().int().min(1), z.enum(['approve', 'dismiss']), z.string().trim().min(1).max(2000).optional()]) },
   'initiatives.clarifySuggestion': { args: z.tuple([slug, z.number().int().min(1)]) },
-  'initiatives.sendDraft': { args: z.tuple([slug, z.number().int().min(1), z.string().trim().min(1).max(5000)]) },
+  'initiatives.sendDraft': { args: z.tuple([slug, z.number().int().min(1), z.string().trim().min(1).max(PAGE_MAX)]) },
   'initiatives.discardDraft': { args: z.tuple([slug, z.number().int().min(1)]) },
   'initiatives.readFile': { args: z.tuple([slug, z.string().min(1).max(400)]) },
   'initiatives.readArtifact': { args: z.tuple([slug, z.number().int().min(1)]) },
@@ -30,4 +32,8 @@ export const INITIATIVES_API = {
   'initiatives.removePerson': { args: z.tuple([slug]) },
   'initiatives.setPerson': { args: z.tuple([slug, slug, z.string().max(200).nullish()]) },
   'initiatives.proposePeople': { args: z.tuple([slug]) },
+  'initiatives.saveAudience': { args: z.tuple([slug, AudienceDraftSchema]) },
+  'initiatives.removeAudience': { args: z.tuple([slug, audience]) },
+  'initiatives.draftUpdate': { args: z.tuple([slug, audience]) },
+  'initiatives.keepPrep': { args: z.tuple([slug, z.number().int().min(1), z.string().trim().min(1).max(PAGE_MAX)]) },
 } as const;
