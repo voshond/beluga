@@ -8,7 +8,7 @@ import { openSheet } from '../lib/sheets.js';
 import { sameDeep } from '../lib/stable.js';
 import { DiscoverySections } from './DiscoverySections.js';
 import { GoalSection } from './GoalRefine.js';
-import { type InitiativeArea, areaOptions, rememberArea, useInitiativeArea } from './initiative-areas.js';
+import { type InitiativeArea, areaOptions, rememberArea, shownArea, useInitiativeArea } from './initiative-areas.js';
 import { Follows } from './InitiativeFollows.js';
 import { EpicLink, ProgressBar } from './InitiativeParts.js';
 import { Timeline } from './InitiativeTimeline.js';
@@ -85,7 +85,7 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
   const [editing, setEditing] = useState(false);
   const [pickedId, setPickedId] = useState<number | undefined>(undefined);
   const [tab, setTab] = useState<PanelTab>('chat');
-  const area = useInitiativeArea(slug);
+  const kept = useInitiativeArea(slug);
   const handleArea = (next: InitiativeArea): void => rememberArea(slug, next);
   const handleEdit = (): void => setEditing(true);
   const handleClose = (): void => setEditing(false);
@@ -100,6 +100,7 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
   if (!enabled) return <Empty icon="flag" title="Initiatives need the Beluga app" detail="Open the Beluga app to drive one." />;
   if (!item) return <Empty icon="flag" title="That initiative is gone" detail="Its folder is no longer in the initiatives repo." />;
   const picked = item.suggestions.find((x) => x.id === pickedId);
+  const area = shownArea(item, kept);
   return (
     <div className={home.home} data-initiative-page={item.slug}>
       <div className={home.page}>
@@ -126,17 +127,17 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
               <RisksSection item={item} />
               {item.status === 'discovery' ? null : <SuccessSection item={item} />}
               <CheckInRow item={item} />
-              <Suggestions item={item} pickedId={picked?.id} onPick={handlePick} />
-              <DecisionLog item={item} pickedId={picked?.id} onPick={handlePick} />
             </>
           ) : null}
-          {area === 'work' ? (
+          {area === 'todo' ? (
             <>
-              {item.status === 'discovery' ? null : <TicketsTable item={item} />}
-              <TasksSection item={item} />
+              <Suggestions item={item} pickedId={picked?.id} onPick={handlePick} />
               <WatchesSection item={item} />
+              <TasksSection item={item} />
             </>
           ) : null}
+          {area === 'decisions' ? <DecisionLog item={item} pickedId={picked?.id} onPick={handlePick} /> : null}
+          {area === 'tickets' ? <TicketsTable item={item} /> : null}
           {area === 'people' ? (
             <>
               <PeopleSection item={item} />

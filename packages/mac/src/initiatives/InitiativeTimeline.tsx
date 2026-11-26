@@ -8,8 +8,6 @@ import { type ActivityCell, activityWeeks, activityWords, timelineDays } from '.
 import { Section } from './InitiativeParts.js';
 import s from './initiatives.module.css';
 
-const FIRST = 8;
-
 const WEEKS = 52;
 
 const LABELS = 30;
@@ -112,13 +110,10 @@ const ActivityGrid = ({ entries, picked, onPick }: { entries: readonly TimelineE
 
 export const Timeline = ({ item }: { item: InitiativeView }) => {
   const [picked, setPicked] = useState<string | undefined>(undefined);
-  const [all, setAll] = useState(false);
   const handlePick = (key: string): void => setPicked((was) => (was === key ? undefined : key));
   const handleClear = (): void => setPicked(undefined);
-  const handleAll = (): void => setAll((was) => !was);
-  const shown = picked ? item.timeline.filter((e) => e.day === picked) : all ? item.timeline : item.timeline.slice(0, FIRST);
+  const shown = picked ? item.timeline.filter((e) => e.day === picked) : item.timeline;
   const days = timelineDays(shown, new Date());
-  const more = !picked && item.timeline.length > FIRST;
   const aside = picked ? (
     <Button size="small" variant="quiet" icon="x" onClick={handleClear}>
       Show all days
@@ -151,11 +146,6 @@ export const Timeline = ({ item }: { item: InitiativeView }) => {
             </li>
           ))}
         </ol>
-        {more ? (
-          <Button size="small" variant="quiet" icon={all ? 'chevronUp' : 'chevronDown'} onClick={handleAll}>
-            {all ? 'Show fewer' : `Show all ${item.timeline.length}`}
-          </Button>
-        ) : null}
       </Section>
     </>
   );
