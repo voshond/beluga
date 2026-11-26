@@ -9,7 +9,7 @@ import { type CheckInHost, Initiatives } from '../src/core/initiatives/initiativ
 import { CHECK_IN_CHAT, type InitiativeView, type InitiativesSlice, initiativeChatChannel, initiativeChatTitle, timelineEntryOf } from '../src/core/initiatives/model.js';
 import { initiativeBrief } from '../src/core/initiatives/prompt.js';
 import { followUpNews } from '../src/core/initiatives/watch-notices.js';
-import { watchPrompt } from '../src/core/initiatives/watch-prompt.js';
+import { WATCHES_BRIEF, watchPrompt } from '../src/core/initiatives/watch-prompt.js';
 import { WATCH_CHAT, type Watch, WatchSchema, WatchesSchema, dueWatches, givesUpAt, isDue, needsNudge, nextLookAt, nextWakeAt, unreadNews, watchEvery, watchOfDraft, watchPlaceOf, workingTime } from '../src/core/initiatives/watches.js';
 import type { OnceTrigger, SentinelDraft, SentinelPatch } from '../src/core/sentinel/model.js';
 import { noticeTarget } from '../src/ui/notice-models.js';
@@ -304,6 +304,17 @@ describe('Initiatives follow-ups', () => {
     expect(prompt).toContain('conversations_history');
     expect(prompt).toContain('the thread of a later reminder');
     expect(prompt).toContain('conversations_replies');
+  });
+
+  it('a look reads from the start every time, so a reply an earlier look missed still counts', () => {
+    const since = iso(WED - DAY);
+    const prompt = watchPrompt([watch({ since, lastLook: iso(WED - HOUR), where: { kind: 'slack', channel: 'C1' } })], WED);
+    expect(prompt).toContain(`for everything since ${since}`);
+    expect(prompt).not.toContain(iso(WED - HOUR));
+    expect(prompt).toContain('a reply inside a thread is not in it');
+    expect(prompt).toContain('your own messages and reminders included');
+    expect(prompt).toContain('Never answer Nothing while a reply to a watch is missing from its news');
+    expect(WATCHES_BRIEF).toContain('in any chat, give that watch its "news"');
   });
 
   it('attaches an older sent message to an editable question without duplicating its existing watch', async () => {
