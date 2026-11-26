@@ -978,8 +978,21 @@ button.card:hover {
 }
 
 .outbox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   flex: none;
   padding: 0 12px 8px;
+}
+/* What a draft on its way says: two lines of it, the rest is in the chat. */
+.outboxSent {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 12.5px;
+  color: var(--text-3);
+  white-space: pre-wrap;
 }
 .outboxCard {
   display: flex;

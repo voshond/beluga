@@ -71,7 +71,7 @@ const AudienceRow = ({ item, audience, now, onEdit }: RowProps) => {
         <span>{last ? `${prep ? 'Last kept' : 'Last sent'} ${whenWords(Date.parse(last.at))}` : prep ? 'No prep sheet yet' : 'Nothing sent yet'}</span>
         <span>{nextWords}</span>
       </span>
-      {pending ? <OutboxCard key={pending.id} slug={item.slug} draft={pending} /> : null}
+      {pending ? <OutboxCard key={pending.id} item={item} draft={pending} /> : null}
     </div>
   );
 };

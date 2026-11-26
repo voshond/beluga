@@ -46,12 +46,20 @@ const receiptOf = (output: string): Receipt | undefined => {
   }
 };
 
+/** The slack-user MCP confirms a post in words, not JSON: "Successfully posted message to channel C042 (ts=1795609800.000010)". */
+const postedText = /^(?:successfully )?posted message to channel ([CDG][A-Z0-9]+) \(ts=(\d{10}\.\d{6})\)\.?$/i;
+
+const textReceiptOf = (output: string): Receipt | undefined => {
+  const posted = postedText.exec(output.trim());
+  return posted ? { ok: true, channel: posted[1], ts: posted[2] } : undefined;
+};
+
 export type Delivery = { error?: string; channel?: string; thread?: string; source?: string };
 
 const slackLinkOnly = /^(?:message (?:sent|posted)[: ]+)?(?:\[[^\]]+\]\()?((?:https:\/\/)(?:[^/.]+\.)*slack\.com\/archives\/[CDG][A-Z0-9]+\/p\d{16}(?:\?[^\s)]+)?)(?:\))?\.?$/i;
 
 export const deliveryOf = (to: OutboxTarget, output: string): Delivery => {
-  const top = receiptOf(output);
+  const top = receiptOf(output) ?? (to.kind === 'slack' ? textReceiptOf(output) : undefined);
   const receipt = top?.data ?? (top?.result ? receiptOf(top.result) : undefined) ?? top;
   if ([top, receipt].some((result) => result && (result.ok === false || result.success === false || result.error || result.errors?.length || result.errorMessages?.length))) {
     return { error: 'The destination rejected the send. Check the chat for details.' };
