@@ -1140,23 +1140,34 @@ button.card:hover {
 
 .risk {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 8px 12px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
 }
 .risk:hover {
   background: var(--bg-hover);
 }
-.riskText {
-  flex: 1 1 auto;
-  min-width: 0;
+.riskHead {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
 }
 .riskTitle {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 13px;
   font-weight: 500;
+}
+.riskLabel {
+  color: var(--text-3);
+  font-weight: 500;
+}
+.riskLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  font-size: 12.5px;
 }
 .risk[data-state='closed'] .riskTitle {
   color: var(--text-3);
