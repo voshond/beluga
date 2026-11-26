@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SuccessProposalSchema } from '../core/initiatives/success.js';
 import { CheckInScheduleSchema, GoalRefineSchema, INITIATIVE_CHAT_ID, INITIATIVE_SLUG, InitiativeDraftSchema, InitiativePatchSchema } from '../core/initiatives/model.js';
 
 const slug = z.string().regex(INITIATIVE_SLUG);
@@ -25,4 +26,6 @@ export const INITIATIVES_API = {
   'initiatives.discardDraft': { args: z.tuple([slug, z.number().int().min(1)]) },
   'initiatives.readFile': { args: z.tuple([slug, z.string().min(1).max(400)]) },
   'initiatives.readArtifact': { args: z.tuple([slug, z.number().int().min(1)]) },
+  'initiatives.defineSuccess': { args: z.tuple([slug]) },
+  'initiatives.acceptSuccess': { args: z.tuple([slug, SuccessProposalSchema]) },
 } as const;

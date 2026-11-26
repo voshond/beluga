@@ -438,6 +438,8 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'initiatives.discardDraft': INITIATIVES,
   'initiatives.readFile': INITIATIVES,
   'initiatives.readArtifact': INITIATIVES,
+  'initiatives.defineSuccess': INITIATIVES,
+  'initiatives.acceptSuccess': INITIATIVES,
   'dashboard.create': 'covered',
   'dashboard.update': 'covered',
   'dashboard.remove': 'covered',

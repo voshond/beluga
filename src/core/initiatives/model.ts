@@ -426,6 +426,7 @@ export type InitiativeView = {
   readonly timeline: readonly TimelineEntry[];
   readonly files: readonly string[];
   readonly checkIn?: string;
+  readonly success?: import('./success.js').SuccessFile;
   readonly chats: InitiativeChats;
   readonly trouble?: string;
 };

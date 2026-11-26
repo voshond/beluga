@@ -671,6 +671,8 @@ export interface AgentBackend {
   standIn?(req: import('./stand-in.js').StandInRequest): Promise<string>;
   /** An initiative's goal shaped into Markdown from what was typed and its Jira epics, read through your own Jira MCP (read-only; BLG-116). */
   refineGoal?(req: import('./goal-refiner.js').GoalRefineRequest): Promise<string | undefined>;
+  /** What success means for an initiative, proposed from its goal, tickets, the linked repos and BigQuery (read-only; BLG-141). */
+  defineSuccess?(req: import('./success-definer.js').SuccessDefineRequest): Promise<import('../core/initiatives/success.js').SuccessProposal | undefined>;
   /** Models this Claude Code offers, for the model picker. */
   listModels?(): Promise<ReadonlyArray<{ value: string; label: string; description: string; efforts?: readonly string[] }> | undefined>;
   /**

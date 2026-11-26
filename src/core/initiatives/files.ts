@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { z } from 'zod';
 import { type Artifact, ArtifactsSchema, type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, type InitiativeTasks, TasksSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type OutboxDraft, OutboxSchema, type Suggestion, SuggestionsSchema, type TimelineEntry, timelineOf } from './model.js';
 
-export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json', 'artifacts.json'] as const;
+export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json', 'artifacts.json', 'success.json'] as const;
 
 const MAX_FILES = 200;
 const MAX_READ = 512 * 1024;

@@ -1,4 +1,5 @@
 import type { AgentBackend, AgentRunInput, FollowUp, RoomBridge, ThreadTools } from './types.js';
+import { demoSuccessProposal } from '../core/initiatives/demo-success.js';
 import type { McpServerRow } from '../shared/mcp.js';
 import { demoAnswerFromPrompt } from '../core/chat/demo-answers.js';
 import { cleanPlanTitle, slugify } from './namer.js';
@@ -963,6 +964,10 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
       await new Promise((r) => setTimeout(r, 2500 * pace));
       const first = req.goal.trim().split('\n').find((l) => l.trim()) ?? `Ship ${req.name || 'it'}.`;
       return `${first}\n\n## Background\n\n${req.epics.length ? `Tracked in ${req.epics.join(', ')}.` : 'No epic is linked yet.'}\n\n## Scope\n\n- In: what the epic lists today\n- Out: anything not on it\n\n## Acceptance\n\n- Every ticket under the epic is done\n- It is live for every market\n\n## Open questions\n\n- Who signs off the launch?`;
+    },
+    defineSuccess: async (req) => {
+      await new Promise((r) => setTimeout(r, 2500 * pace));
+      return demoSuccessProposal(req.name);
     },
     describeProject: async (_dir, project) => {
       await new Promise((r) => setTimeout(r, 4000 * pace));
