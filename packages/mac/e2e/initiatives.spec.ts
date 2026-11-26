@@ -57,9 +57,9 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
 test('the Suggestions section lists decisions.md’s open questions and adds its settled notes to the decision log', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
   const section = page.getByRole('region', { name: 'Suggestions' });
-  await expect(section.getByText('Waiting on others · 2')).toBeVisible();
+  await expect(section.getByText('Waiting on others · 3')).toBeVisible();
   const open = section.getByRole('list', { name: 'Open questions' });
-  await expect(open.getByRole('listitem')).toHaveCount(2);
+  await expect(open.getByRole('listitem')).toHaveCount(3);
   await expect(open.getByRole('listitem').first()).toContainText('Does finance have the final NO tax table?');
   const log = section.getByRole('listbox', { name: 'Decision log' });
   const note = log.getByRole('option').filter({ hasText: 'Google Pay waits for v2.1.' });
@@ -69,6 +69,15 @@ test('the Suggestions section lists decisions.md’s open questions and adds its
   await expect(log.getByRole('option').filter({ hasText: 'Is Apple Pay in scope for launch?' })).toHaveCount(1);
   await section.scrollIntoViewIfNeeded();
   if (shots) await section.screenshot({ path: path.join(shots, '09-decisions.png') });
+});
+
+test('what was said in a meeting shows as a decision, a task to make and a no-notes line', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  await expect(page.getByRole('listbox', { name: 'Decision log' })).toContainText('Does the address form keep the manual-entry fallback?');
+  await expect(page.getByRole('listbox', { name: 'Open suggestions' })).toContainText('Create a task: send the address form copy to legal by Friday');
+  await expect(page.getByRole('region', { name: 'Timeline' })).toContainText('Checkout standup held, no notes found');
+  await page.getByRole('listbox', { name: 'Decision log' }).scrollIntoViewIfNeeded();
+  await shot(page, '01d-initiative-meeting-notes.png');
 });
 
 test('several epics group the tickets by epic', async ({ page }) => {
