@@ -34,6 +34,7 @@ export type WaitingQuestion = {
 };
 
 const WAITING_MARK = /\s*\((?:waiting on|waits on)\s*:?\s*([^)]+)\)\s*$/i;
+const LEADING_DAY = /^\**\s*\d{4}-\d{2}-\d{2}\s*\**\s*[:–—-]\s*/;
 
 /** decisions.md's "## Open" bullets that carry a "(waiting on: …)" mark. */
 export const waitingQuestionsOf = (markdown: string): WaitingQuestion[] => {
@@ -47,7 +48,7 @@ export const waitingQuestionsOf = (markdown: string): WaitingQuestion[] => {
     }
     const bullet = open ? /^\s*[-*]\s+(.+?)\s*$/.exec(line)?.[1] : undefined;
     const mark = bullet ? WAITING_MARK.exec(bullet) : null;
-    if (bullet && mark) out.push({ text: bullet.slice(0, mark.index).trim(), waitingOn: mark[1]!.trim() });
+    if (bullet && mark) out.push({ text: bullet.slice(0, mark.index).replace(LEADING_DAY, '').trim(), waitingOn: mark[1]!.trim() });
   }
   return out;
 };

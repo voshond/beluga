@@ -59,6 +59,7 @@ describe('people', () => {
   it('finds decisions.md open questions marked as waiting on someone', () => {
     const md = '# Decisions\n\n## Open\n\n- Who owns sample lists? (waiting on: Julia Barebysheva)\n- Plain question\n\n## Decided\n\n- Done thing (waiting on: Ana)\n';
     expect(waitingQuestionsOf(md)).toEqual([{ text: 'Who owns sample lists?', waitingOn: 'Julia Barebysheva' }]);
+    expect(waitingQuestionsOf('## Open\n\n- 2026-11-23: Flag guest checkout? (waiting on: Ana Ruiz)\n')).toEqual([{ text: 'Flag guest checkout?', waitingOn: 'Ana Ruiz' }]);
     expect(waitingQuestionsOf('no headings')).toEqual([]);
   });
 
