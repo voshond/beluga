@@ -684,7 +684,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `initiatives.chatDelete` | ✓ an initiative's chat › ⋯ › Delete Chat… (confirms; the Check-in chat stays) |
 | `initiatives.resolveSuggestion` | ✓ an initiative's page › Suggestions › a row › its record in the right panel › Approve (sends “Do suggestion N: …” into its chat, where outward steps ask as usual) · Dismiss · a decision's answers or Other… (keeps the answer, sends “Decided suggestion N: … Answer: …”); resolved ones stay in the Decision log with their outcome and proof |
 | `initiatives.clarifySuggestion` | ✓ an initiative's page › Suggestions › the selected record › Clarify in chat (sends “Clarify suggestion N: …” into its chat and opens that chat; the suggestion stays open, marked In chat) |
-| `initiatives.sendDraft` | ✓ an initiative's chat › Outbox card › Send (the text as edited; asks the chat to post exactly that, and allows only that call) |
+| `initiatives.sendDraft` | ✓ an initiative's chat › Outbox card › Send, and an initiative's page › Updates › an audience's draft › Send (the text as edited; asks the chat to post exactly that, and allows only that call: a Slack message, a Jira comment or a Confluence section; a prep sheet is refused) |
 | `initiatives.discardDraft` | ✓ an initiative's chat › Outbox card › Discard (kept as discarded, with a line in timeline.md) |
 | `initiatives.readFile` | ✓ an initiative's page › Memory: a file opens in a sheet (Markdown drawn, JSON as code) |
 | `initiatives.readArtifact` | ✓ an initiative's page › the right panel's Artifacts tab: a row opens in a sheet (text and Markdown drawn, a picture shown, any other file by its path on the daemon's computer) |
@@ -692,6 +692,10 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `initiatives.removePerson` | ✓ Initiatives › People › a card's trash (confirms; refused while an initiative still names them) |
 | `initiatives.setPerson` | ✓ an initiative's page › People › + (pick someone from the directory, then their role), a person's pencil (their role here) and × (takes them off; they stay in the directory) |
 | `initiatives.proposePeople` | ✓ an initiative's page › People › From people.md (shown until it has people or a people suggestion; its Check-in chat proposes people.md's people as one suggestion, and approving it writes the directory) |
+| `initiatives.saveAudience` | ✓ an initiative's page › Updates › + (New Audience…) and an audience's pencil: name, people from the directory, tone (Short for execs · Detailed for the team), cadence (time and weekday chips; none is on request), and where it goes (a Slack channel or thread, a Confluence page's section, or a prep sheet for a followed meeting) |
+| `initiatives.removeAudience` | ✓ an initiative's page › Updates › an audience's × (confirms; its sent updates stay in `updates/`) |
+| `initiatives.draftUpdate` | ✓ an initiative's page › Updates › an audience's Draft Now (its Check-in chat drafts the update into the outbox from the facts Beluga works out; due ones are drafted by the next check-in) |
+| `initiatives.keepPrep` | ✓ an initiative's page › Updates › a prep sheet's card › Done (never sent: kept in `updates/` with your edits, logged on the timeline as an update), beside Copy as Markdown · Discard; the chat's Outbox card shows the same |
 | `toolbox.list` | ✓ Project › Toolbox: all tools (personal + team) for the project, first on Project Home: each tool's name with its {{params}} and the last line it printed; the phone lists them read-only (BLG-75) |
 | `toolbox.create` | ✓ Project Settings › Toolbox › New Tool: name, command with {{params}}, personal or Share with team (saves to beluga.json) · Mac only |
 | `toolbox.update` | ✓ Project Settings › Toolbox › a tool's pencil: change its name, command, params or source · Mac only |
