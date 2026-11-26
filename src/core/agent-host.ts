@@ -109,6 +109,8 @@ export interface AgentHostDeps {
     from: string,
     opts?: { readonly woken?: boolean },
   ) => import('./initiatives/initiatives.js').InitiativeChatRun | undefined;
+  /** An initiative chat's model now (its own pick, or Settings' for Check-in and Follow-ups); undefined: your default. */
+  readonly initiativeModel?: (channel: string) => string | undefined;
   /** What a tool that always asks you (policy ALWAYS_ASK_YOU: deleting a sentinel or a dashboard) says on its card, in words. */
   readonly confirmTool?: (toolName: string, input: Record<string, unknown>) => { readonly title: string; readonly detail: string } | undefined;
   /** Sentinels (your own runs): their tools, and a sentinel run's brief in its Claude step's conversation (core/sentinel). */
@@ -2001,6 +2003,8 @@ export class AgentHost {
    * run: picked after the run started (the chat's model picker), the run switches to it first.
    */
   private modelNow(channel: string): string {
+    const initiative = this.deps.initiativeModel?.(channel);
+    if (initiative) return initiative;
     return this.modelFor(this.deps.workspaces?.inChannel(channel)?.model, this.deps.workspaces?.agentIn(channel)).model ?? '';
   }
 

@@ -1,4 +1,5 @@
 import type { AgentRef } from '../protocol.js';
+import { initiativeChatModel } from './initiative-chat-model.js';
 import type { RuntimeChoice, RuntimeModel } from './agent-runtimes.js';
 import { modelName } from './agent-label.js';
 import { latestModels } from './model-families.js';
@@ -16,10 +17,12 @@ export interface PickerState {
   readonly runtimes: readonly RuntimeChoice[];
   /** Claude Code's own models (the 'claude' runtime's). */
   readonly models: readonly RuntimeModel[];
-  readonly prefs: { readonly model?: string };
+  readonly prefs: { readonly model?: string; readonly initiativeModel?: string };
   readonly projects: ReadonlyArray<{ readonly workspaces: ReadonlyArray<{ readonly id: string; readonly agent?: AgentRef; readonly model?: string }> }>;
   /** Your Mac's chats, each with its own agent when it picked one. */
   readonly assistant?: { readonly chats: ReadonlyArray<{ readonly channel: string; readonly agent?: AgentRef }> };
+  /** The initiatives' chats, each with its own model when it picked one. */
+  readonly initiatives?: { readonly items: ReadonlyArray<{ readonly chats: { readonly chats: ReadonlyArray<{ readonly id: string; readonly channel: string; readonly model?: string }> } }> };
 }
 
 export interface PickerModel extends RuntimeModel {
@@ -62,9 +65,14 @@ export type PickAction = { readonly kind: 'model'; readonly value: string } | { 
 
 const DEFAULT_RUNTIME = 'claude';
 
-const workspaceOf = (state: PickerState, channel: string): { readonly agent?: AgentRef; readonly model?: string } | undefined => {
+const workspaceOf = (state: PickerState, channel: string, defaultRuntime: string): { readonly agent?: AgentRef; readonly model?: string } | undefined => {
   const chat = state.assistant?.chats.find((c) => c.channel === channel);
   if (chat) return chat.agent ? { agent: chat.agent, ...(chat.agent.model ? { model: chat.agent.model } : {}) } : {};
+  const initiative = state.initiatives?.items.flatMap((i) => i.chats.chats).find((c) => c.channel === channel);
+  if (initiative) {
+    const model = initiativeChatModel(initiative.id, initiative.model, defaultRuntime, state.prefs.initiativeModel);
+    return model ? { model } : {};
+  }
   const id = channel.startsWith('ws:') ? channel.slice(3) : undefined;
   return id ? state.projects.flatMap((p) => p.workspaces).find((w) => w.id === id) : undefined;
 };
@@ -87,7 +95,7 @@ export function effortIn(state: EffortState, channel: string): Effort | undefine
 
 /** The runtime a conversation runs on (its pick, else your default agent's). */
 export function runtimeOf(state: PickerState, channel: string, defaultRuntime = DEFAULT_RUNTIME): string {
-  return workspaceOf(state, channel)?.agent?.runtime ?? defaultRuntime;
+  return workspaceOf(state, channel, defaultRuntime)?.agent?.runtime ?? defaultRuntime;
 }
 
 function modelsOf(state: PickerState, r: RuntimeChoice, keep: readonly string[] = []): readonly RuntimeModel[] {
@@ -103,7 +111,7 @@ const withAuto = (models: readonly RuntimeModel[], auto: AutoChoice): readonly R
 
 export function agentPicker(state: PickerState, channel: string, defaultRuntime = DEFAULT_RUNTIME, draft?: AgentRef, auto?: AutoChoice): AgentPicker {
   const conversation = channel === 'room' || channel === 'draft' ? undefined : channel;
-  const ws = conversation ? workspaceOf(state, conversation) : undefined;
+  const ws = conversation ? workspaceOf(state, conversation, defaultRuntime) : undefined;
   const pinned = ws?.agent ?? (conversation ? undefined : draft);
   const runtime = pinned?.runtime ?? defaultRuntime;
   const model = (ws ? ws.model : draft?.model) ?? (runtime === defaultRuntime ? state.prefs.model : undefined) ?? '';

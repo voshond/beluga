@@ -73,6 +73,8 @@ export interface WorkbenchDeps {
   /** Pick a Your Mac chat's own agent, or its model on the agent it runs on (false: no such chat). */
   readonly setChatAgent?: (channel: string, agent: AgentRef | undefined) => boolean;
   readonly setChatModel?: (channel: string, model: string) => boolean;
+  /** Pick an initiative chat's own model (false: no such chat). */
+  readonly setInitiativeChatModel?: (channel: string, model: string) => boolean;
   readonly setPrefs: (prefs: Partial<Prefs>) => void;
   /** Ask you before something runs by itself the first time (e.g. a repo's own setup command). */
   /** `channel`: the conversation it's about (a worktree's), so its notification opens there and not Your Mac. */
@@ -436,6 +438,11 @@ export class Workbench {
     const label = this.deps.store.getState().models.find((m) => m.value === value)?.label ?? (value || 'Default');
     if (channel && isAssistant(channel)) {
       if (this.deps.setChatModel?.(channel, value)) this.deps.toast(`${label} in this chat from the next message`, 'success');
+      return;
+    }
+    // An initiative's chat keeps its own: picking there never changes the default for every conversation.
+    if (channel && initiativeChatOf(channel)) {
+      if (this.deps.setInitiativeChatModel?.(channel, value)) this.deps.toast(`${label} in this chat from the next message`, 'success');
       return;
     }
     const id = channel?.startsWith('ws:') ? channel.slice(3) : undefined;

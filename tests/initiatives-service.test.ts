@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveChat } from '../src/core/chat-links/resolve.js';
 import { chatToolsOf } from '../src/core/chat-links/transcript.js';
 import { type CheckInHost, Initiatives, OUTBOX_DENIED } from '../src/core/initiatives/initiatives.js';
-import { CHECK_IN_CHAT, type GoalRefine, initiativeChatChannel } from '../src/core/initiatives/model.js';
+import { CHECK_IN_CHAT, type GoalRefine, WATCH_CHAT, initiativeChatChannel } from '../src/core/initiatives/model.js';
 import { CHECK_IN_PROMPT, TASKS_PROMPT, TICKETS_PROMPT } from '../src/core/initiatives/prompt.js';
 import type { ScheduleTrigger, SentinelDraft } from '../src/core/sentinel/model.js';
 import { Store, initialState } from '../src/core/store.js';
@@ -176,6 +176,31 @@ describe('Initiatives', () => {
     expect(service.chatRun(channel, 'someone-else-123')).toBeUndefined();
     expect(service.chatRun(initiativeChatChannel('nope', 'main'), SELF)).toBeUndefined();
     expect(runInstructions({ prompt: 'x', initiativeBrief: run.brief } as Parameters<typeof runInstructions>[0], 'kay')).toContain('Two blockers left.');
+  });
+
+  it('runs Check-in and Follow-ups on the initiative model, and each chat on its own pick, never changing your default', async () => {
+    const { store, service } = await setup();
+    const { slug } = await service.create({ name: 'A' });
+    const main = initiativeChatChannel(slug, 'main');
+    const checkIn = initiativeChatChannel(slug, CHECK_IN_CHAT);
+    const watch = initiativeChatChannel(slug, WATCH_CHAT);
+    store.dispatch({ type: 'prefs', prefs: { model: 'opus', initiativeModel: 'sonnet' } });
+    expect(service.chatRun(main, SELF)!.place.model).toBeUndefined();
+    expect(service.chatRun(checkIn, SELF)!.place.model).toBe('sonnet');
+    expect(service.chatRun(watch, SELF, { woken: true })!.place.model).toBe('sonnet');
+    expect(service.chats.setModel(checkIn, 'haiku')).toBe(true);
+    expect(service.chats.setModel(main, 'fable')).toBe(true);
+    expect(service.chatRun(checkIn, SELF)!.place.model).toBe('haiku');
+    expect(service.chatRun(main, SELF)!.place.model).toBe('fable');
+    expect(store.getState().initiatives.items[0]!.chats.chats.find((c) => c.id === 'main')).toMatchObject({ model: 'fable' });
+    expect(store.getState().prefs.model).toBe('opus');
+    service.chats.setModel(main, '');
+    expect(service.chats.modelOf(main)).toBeUndefined();
+    store.dispatch({ type: 'prefs', prefs: { initiativeModel: '' } });
+    expect(service.chats.modelOf(watch)).toBeUndefined();
+    store.dispatch({ type: 'prefs', prefs: { initiativeModel: 'sonnet', defaultAgent: { runtime: 'codex', label: 'Codex' } } });
+    expect(service.chats.modelOf(watch)).toBeUndefined();
+    expect(service.chats.setModel(initiativeChatChannel('nope', 'main'), 'haiku')).toBe(false);
   });
 
   it('fetches the epic’s tickets when made with epics, when they change, and on Refresh', async () => {
