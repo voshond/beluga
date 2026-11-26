@@ -86,7 +86,8 @@ describe('what forks bring (carry)', () => {
     expect(note.secrets).toEqual(['.context/jev-bench/typesafe.env']);
     expect(note.left).toEqual([{ path: '.env', why: 'secret' }]);
     expect(existsSync(path.join(stage, 'carry', '.env'))).toBe(false);
-    expect(statSync(path.join(stage, 'carry', '.context/jev-bench/typesafe.env')).mode & 0o777).toBe(0o600);
+    // Windows keeps no Unix modes (every file reads 0o666): only elsewhere is the secret owner-only.
+    if (process.platform !== 'win32') expect(statSync(path.join(stage, 'carry', '.context/jev-bench/typesafe.env')).mode & 0o777).toBe(0o600);
 
     const fork = tmp('fork');
     write(fork, '.context/jev-bench/docs/doc-1.md', 'mine\n');

@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AUTONOMIES, AUTONOMY_INFO, type Autonomy, FULL_AUTOPILOT_INFO, MAX_PARALLEL, type Plan, type PlanRole, TESTS_AT, TESTS_AT_INFO, prRef, reviewState, shownBody } from '@beluga/core/plans/model.js';
+import { AUTONOMIES, AUTONOMY_INFO, type Autonomy, FULL_AUTOPILOT_INFO, MAX_PARALLEL, type Plan, type PlanRole, TESTS_AT, TESTS_AT_INFO, prRef, reviewState, shownBody, startsByItself } from '@beluga/core/plans/model.js';
 import { type PlanView, tidyOffer } from '@beluga/core/plans/progress.js';
 import { CONTINUE_PROMPT, decodeFailure, resetWords } from '@beluga/shared/run-failure.js';
 import { formatDuration } from '@beluga/shared/text.js';
@@ -164,7 +164,7 @@ function Page({ view, prefs, setPrefs, picked, setPicked }: { view: PlanView; pr
     // Yours never start in a worktree: their button is Decide…, which opens the plan's conversation (its card asks you).
     const yours = view.ready.filter((t) => t.forYou).map((t) => t.task.id);
     if (view.active.length >= plan.maxParallel) return new Set(yours);
-    const step = new Set(view.open.filter((m) => m.autonomy === 'step').map((m) => m.milestone.id));
+    const step = new Set(view.open.filter((m) => !startsByItself(plan, m.autonomy)).map((m) => m.milestone.id));
     return new Set([...yours, ...view.ready.filter((t) => !t.forYou && (plan.paused || step.has(t.milestoneId))).map((t) => t.task.id)]);
   }, [view, plan]);
   // The chat's width: dragged (live), else the one you left it at, never past half the plan's area.

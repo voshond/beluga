@@ -404,6 +404,35 @@ describe('running a plan', () => {
     await expect(t.work.startTask(t.plan.id, 'receipts')).rejects.toThrow(/can’t start: Waits on/);
   });
 
+  it.each(['autopilot', 'gated', 'full'] as const)('step by step, switched to %s: the switch starts nothing; your Start does, then it runs its new way', async (to) => {
+    const t = await running('step', 3, 'task');
+    if (to === 'full') t.work.setFullAuto(t.plan.id, true);
+    else t.work.setAutonomy(t.plan.id, to);
+    await tick(5);
+    await tick(5);
+    expect(t.made).toHaveLength(0);
+    const plan = t.plans.need(t.plan.id);
+    expect(plan.held).toBe(true);
+    expect(plan.activity.at(-1)?.text).toMatch(/nothing starts until the user presses Start$/);
+    expect(planView(plan, t.store.getState().board).next.kind).toBe('start');
+    // The plan's own agent can't start it either: that's the user's press.
+    await expect(t.work.pilot.startNow(t.plan.id, 'auth', t.claude)).rejects.toThrow(/waits for the user to press Start/);
+    // Start: that task, and from then on the rest starts by itself.
+    expect(await t.work.startTask(t.plan.id, 'auth')).toContain('Started');
+    expect(t.plans.need(t.plan.id).held).toBeUndefined();
+    await tick(5);
+    expect(t.made).toHaveLength(2);
+    // Switching again on a running plan holds nothing.
+    t.work.setAutonomy(t.plan.id, 'gated');
+    expect(t.plans.need(t.plan.id).held).toBeUndefined();
+  });
+
+  it('a plan approved on Autopilot starts at once: only a switch waits for Start', async () => {
+    const t = await running('autopilot');
+    expect(t.made).toHaveLength(1);
+    expect(t.plans.need(t.plan.id).held).toBeUndefined();
+  });
+
   it('a worktree per task (workers: task): what’s ready starts by itself, never a blocked task', async () => {
     const t = await running('gated', 3, 'task');
     expect(t.made.map((m) => m.quiet)).toEqual([true, true]);

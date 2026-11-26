@@ -485,6 +485,11 @@ export interface Plan {
   readonly checker?: AgentRef;
   /** Full Autopilot (BLG-981): it runs on Autopilot, and a stand-in agent answers what would wait on you. */
   readonly fullAuto?: boolean;
+  /**
+   * Switched off Step by Step: the new mode holds from now on, but nothing starts by itself until you
+   * press Start (a switch changes how it runs, it never starts the plan). Gone once you start a task.
+   */
+  readonly held?: boolean;
   readonly paused: boolean;
   readonly runs: Readonly<Record<string, MilestoneRun>>;
   /** Tasks whose start is being combined from several branches (by plan task id). */
@@ -799,6 +804,9 @@ export const planAutonomy = (plan: Pick<Plan, 'autonomy' | 'fullAuto'>): Autonom
 
 /** A milestone's own autonomy, else its plan's (Full Autopilot: every milestone's Autopilot). */
 export const autonomyOf = (plan: Plan, milestone: PlanMilestone | undefined): Autonomy => (plan.fullAuto ? 'autopilot' : (milestone?.autonomy ?? plan.autonomy));
+
+/** Whether a milestone run `autonomy` starts its ready tasks by itself: never Step by Step, nor while the plan waits for your Start. */
+export const startsByItself = (plan: Pick<Plan, 'held'>, autonomy: Autonomy): boolean => autonomy !== 'step' && !plan.held;
 
 /** The agent a plan picked for a part (BLG-982): the planner and checker are the builder's unless picked. Undefined: your default. */
 export function roleAgent(plan: Pick<Plan, 'agent' | 'planner' | 'checker'>, role: PlanRole): AgentRef | undefined {

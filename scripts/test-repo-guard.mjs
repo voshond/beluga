@@ -12,6 +12,7 @@
 // repository made bare, the run fails and says so, instead of the loss going unnoticed.
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import path from 'node:path';
 
 /** Git's own list of the variables it sets for what it runs (`git rev-parse --local-env-vars`). */
 export function gitLocalEnvNames() {
@@ -45,7 +46,8 @@ export function repoSnapshot(dir, env = process.env) {
   const top = gitOut(dir, ['rev-parse', '--show-toplevel'], env);
   const gitDir = gitOut(dir, ['rev-parse', '--absolute-git-dir'], env);
   if (!top || !gitDir) return undefined;
-  return { top, gitDir, bare: gitOut(dir, ['config', '--bool', 'core.bare'], env) === 'true' };
+  // Git says C:/Users/… on Windows: in the computer's own form, as every other path here is.
+  return { top: path.resolve(top), gitDir: path.resolve(gitDir), bare: gitOut(dir, ['config', '--bool', 'core.bare'], env) === 'true' };
 }
 
 /** What happened to the worktree since `before` (nothing: []). */

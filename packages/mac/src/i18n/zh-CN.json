@@ -1695,7 +1695,6 @@
  "Code God": "代码之神",
  "Codex can’t change {0} from here. Edit ~/.codex/config.toml instead.": "无法从这里更改 Codex 的 {0}。请改为编辑 ~/.codex/config.toml。",
  "Codex can’t check each step, so it can’t answer guests. Switch this conversation to Claude for them.": "Codex 无法检查每个步骤，所以不能回答访客。请把这段对话切换到 Claude 来回答他们。",
- "Codex compacts its own context when it fills up, so there’s no Compact on Codex.": "Codex 会在上下文满时自行压缩，所以 Codex 没有“压缩”功能。",
  "Codex didn’t give a page to sign in on.": "Codex 没有提供登录页面。",
  "Codex exited before the turn ended": "Codex 在轮次结束前退出了",
  "Codex finished before getting to this message": "Codex 在处理到这条消息之前就完成了",

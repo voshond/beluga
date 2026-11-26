@@ -1,5 +1,5 @@
 import { type BoardState, type Issue, issueById } from '../board/model.js';
-import { type Autonomy, type Combining, type MilestoneAgent, type MilestoneRun, type Plan, type PlanBody, type PlanMerge, type PlanMilestone, type PlanPr, type PlanShipped, type PlanTask, type TaskWatch, autonomyOf, isMultiRepo, milestoneDeps, milestoneRepos, openMilestones, planBranchFor, planPrFor, shipOrder, shippedIn, shownBody } from './model.js';
+import { type Autonomy, type Combining, type MilestoneAgent, type MilestoneRun, type Plan, type PlanBody, type PlanMerge, type PlanMilestone, type PlanPr, type PlanShipped, type PlanTask, type TaskWatch, autonomyOf, isMultiRepo, milestoneDeps, milestoneRepos, openMilestones, planBranchFor, planPrFor, shipOrder, shippedIn, shownBody, startsByItself } from './model.js';
 import { type RunInfo, type TaskPulse, type WaitingMessage, messageState, pulseOf, pulseWords } from './watchdog.js';
 
 /**
@@ -405,12 +405,12 @@ function nextStep(plan: Plan, v: Omit<PlanView, 'next'>): NextStep {
   if (merging?.merging) return { kind: 'merging', milestone: merging, text: mergingText(merging.merging, merging.milestone.title, plan.branch) };
   // Yours to pass only once there's something to go on: Claude's check came back (or there's
   // nothing to check). While the head Claude checks, on every mode, the plan waits on Claude.
-  // On Autopilot only once its merge failed: Autopilot won't pass it again, so Pass Again is yours.
-  const yoursToPass = v.open.find((m) => m.state === 'gate' && (m.run.check || !m.milestone.criteria.length) && (m.run.mergeFailed || !(m.autonomy === 'autopilot' && m.milestone.criteria.length)));
+  // On Autopilot only once its merge failed (Autopilot won't pass it again, so Pass Again is yours), or while it waits for your Start.
+  const yoursToPass = v.open.find((m) => m.state === 'gate' && (m.run.check || !m.milestone.criteria.length) && (m.run.mergeFailed || plan.held || !(m.autonomy === 'autopilot' && m.milestone.criteria.length)));
   if (yoursToPass) return { kind: 'pass', milestone: yoursToPass };
   const autonomyOfTask = new Map(v.open.map((m) => [m.milestone.id, m.autonomy]));
-  // Tasks for you, or (step by step) every task, wait for your click.
-  const yours = v.ready.filter((t) => !t.queued && (t.forYou || autonomyOfTask.get(t.milestoneId) === 'step'));
+  // Tasks for you, or (step by step, or switched and waiting for your Start) every task, wait for your click.
+  const yours = v.ready.filter((t) => !t.queued && (t.forYou || !startsByItself(plan, autonomyOfTask.get(t.milestoneId) ?? plan.autonomy)));
   if (yours.length && v.active.length < plan.maxParallel) return { kind: 'start', tasks: yours };
   const checking = v.open.find((m) => m.state === 'checking' || (m.state === 'gate' && m.milestone.criteria.length && !m.run.check));
   if (checking) return { kind: 'checking', milestone: checking };
@@ -431,7 +431,7 @@ function nextStep(plan: Plan, v: Omit<PlanView, 'next'>): NextStep {
 export function startable(view: PlanView, skip: ReadonlySet<string> = new Set(), starting = 0): readonly TaskView[] {
   const { plan } = view;
   if (plan.paused || plan.status !== 'active' || plan.draft) return [];
-  const auto = new Set(view.open.filter((m) => m.state === 'running' && m.autonomy !== 'step').map((m) => m.milestone.id));
+  const auto = new Set(view.open.filter((m) => m.state === 'running' && startsByItself(plan, m.autonomy)).map((m) => m.milestone.id));
   const room = Math.max(0, plan.maxParallel - view.active.length - starting);
   return view.ready.filter((t) => auto.has(t.milestoneId) && !t.forYou && !t.queued && !(t.issue && skip.has(t.issue.id))).slice(0, room);
 }

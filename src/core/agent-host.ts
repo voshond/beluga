@@ -452,7 +452,7 @@ export class AgentHost {
     return this.links.sends;
   }
 
-  /** Why this conversation's runtime can't be compacted by Beluga (Codex compacts itself); undefined when it can. */
+  /** Why this conversation's runtime can't be compacted by Beluga (an ACP agent keeps its own); undefined when it can. */
   private noCompact(channel: string): string | undefined {
     if (this.deps.terminalDriving?.(channel)) return TERMINAL_DRIVING;
     return fallbackFor(this.deps.agentRef?.(channel).runtime, 'compact');
