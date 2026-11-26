@@ -8,7 +8,9 @@ import { type Artifact, ArtifactsSchema, type EpicStatus, EpicStatusSchema, type
 import { type Watch, WatchesSchema } from './watches.js';
 import { type Risk, RisksSchema } from './risks.js';
 
-export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json', 'watches.json', 'artifacts.json', 'updates.json', 'risks.json', 'success.json'] as const;
+import { type Question, QuestionsSchema } from './questions.js';
+
+export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'questions.json', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json', 'watches.json', 'artifacts.json', 'updates.json', 'risks.json', 'success.json'] as const;
 
 const MAX_FILES = 200;
 const MAX_READ = 512 * 1024;
@@ -29,6 +31,7 @@ export type InitiativeFolder = {
   readonly risks: readonly Risk[];
   readonly timeline: readonly TimelineEntry[];
   readonly decisions?: DecisionNotes;
+  readonly questions: readonly Question[];
   readonly waitingQuestions: readonly WaitingQuestion[];
   readonly files: readonly string[];
   readonly trouble?: string;
@@ -114,11 +117,12 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
   const outbox = parseJson(file('outbox.json'), OutboxSchema, 'outbox.json');
   const artifacts = parseJson(file('artifacts.json'), ArtifactsSchema, 'artifacts.json');
   const decisions = decisionsOf(file('decisions.md') ?? '');
+  const questions = parseJson(file('questions.json'), QuestionsSchema, 'questions.json');
   const updates = parseJson(file('updates.json'), UpdatesSchema, 'updates.json');
   const watches = parseJson(file('watches.json'), WatchesSchema, 'watches.json');
   const risks = parseJson(file('risks.json'), RisksSchema, 'risks.json');
   const missing = config.value || config.trouble ? undefined : 'initiative.json is missing';
-  const troubles = [config.trouble ?? missing, status.trouble, tickets.trouble, tasks.trouble, suggestions.trouble, outbox.trouble, artifacts.trouble, updates.trouble, watches.trouble, risks.trouble].filter((t): t is string => Boolean(t));
+  const troubles = [config.trouble ?? missing, status.trouble, tickets.trouble, tasks.trouble, suggestions.trouble, questions.trouble, outbox.trouble, artifacts.trouble, updates.trouble, watches.trouble, risks.trouble].filter((t): t is string => Boolean(t));
   return {
     slug,
     folder,
@@ -135,6 +139,7 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
     risks: risks.value ?? [],
     timeline: timelineOf(file('timeline.md') ?? ''),
     ...(decisions ? { decisions } : {}),
+    questions: questions.value ?? [],
     waitingQuestions: waitingQuestionsOf(file('decisions.md') ?? ''),
     files: memoryFiles(folder),
     ...(troubles.length ? { trouble: troubles.join('; ') } : {}),
@@ -150,6 +155,7 @@ export const writeTasks = (root: string, slug: string, tasks: InitiativeTasks): 
 export const writeOutbox = (root: string, slug: string, outbox: readonly OutboxDraft[]): void => writeText(path.join(folderOf(root, slug), 'outbox.json'), `${JSON.stringify(outbox, null, 2)}\n`);
 
 export const writeUpdates = (root: string, slug: string, updates: readonly UpdateRecord[]): void => writeText(path.join(folderOf(root, slug), 'updates.json'), `${JSON.stringify(updates, null, 2)}\n`);
+export const writeQuestions = (root: string, slug: string, questions: readonly Question[]): void => writeJsonFile(path.join(folderOf(root, slug), 'questions.json'), questions);
 export const writeWatches = (root: string, slug: string, watches: readonly Watch[]): void => writeText(path.join(folderOf(root, slug), 'watches.json'), `${JSON.stringify(watches, null, 2)}\n`);
 export const writeRisks = (root: string, slug: string, risks: readonly Risk[]): void => writeText(path.join(folderOf(root, slug), 'risks.json'), `${JSON.stringify(risks, null, 2)}\n`);
 

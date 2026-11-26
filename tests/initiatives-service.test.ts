@@ -362,6 +362,7 @@ describe('Initiatives', () => {
     expect(run.preApproved('mcp__plugin_slack_slack__slack_send_message', post('Who owns SHOP-150 now, Ana?'))).toBe(false);
     expect(run.vetTool('mcp__plugin_slack_slack__slack_send_message', post('Who owns SHOP-150 now, Ana?'))).toBe(OUTBOX_DENIED);
 
+    run.onStep({ id: 'send-1', kind: 'tool', title: 'Send', tool: 'mcp__plugin_slack_slack__slack_send_message', status: 'done', startedAt: 1, input: post('Who owns SHOP-150 now, Ana?'), output: '{"ok":true,"channel":"C042","ts":"1795609800.000010"}' });
     await service.discardDraft(slug, 2);
     const saved = JSON.parse(readFileSync(path.join(root, slug, 'outbox.json'), 'utf8')) as Array<{ state: string; text: string; sentText?: string; resolvedAt?: string }>;
     expect(saved[0]).toMatchObject({ state: 'sent', text: 'Who owns SHOP-150 now?', sentText: 'Who owns SHOP-150 now, Ana?' });

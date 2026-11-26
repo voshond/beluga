@@ -522,6 +522,8 @@ export const MACHINE: Record<Method, MachineSide> = {
   'initiatives.removeAudience': 'drive',
   'initiatives.draftUpdate': 'drive',
   'initiatives.keepPrep': 'drive',
+  'initiatives.saveQuestion': 'drive',
+  'initiatives.draftQuestion': 'drive',
   'initiatives.addWatch': 'drive',
   'initiatives.stopWatch': 'drive',
   'initiatives.lookNow': 'drive',

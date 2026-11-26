@@ -159,6 +159,7 @@ describe('the discovery stage', () => {
     await service.sendDraft(slug, 1, 'The PRD as a page in SHOP');
     expect(run.vetTool('mcp__jira__confluence_create_page', { ...create, content: 'Something else' })).toBe(OUTBOX_DENIED);
     expect(run.vetTool('mcp__jira__confluence_create_page', create)).toBeUndefined();
+    run.onStep({ id: 'send-1', kind: 'tool', title: 'Send', tool: 'mcp__jira__confluence_create_page', status: 'done', startedAt: 1, input: create, output: '{"id":"2201"}' });
     expect(item(slug).outbox[0]!.state).toBe('sent');
     expect(item(slug).watches ?? []).toEqual([]);
     expect(matchesDraft({ kind: 'confluence-page', file: 'prd.md', title: 'T', page: '42' }, 'x', 'confluence_update_page_section', { page_id: '42', heading_text: 'T', new_content: 'x' })).toBe(false);

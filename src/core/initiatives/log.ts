@@ -21,6 +21,7 @@ export const suggestionHistory = (item: Pick<InitiativeView, 'suggestions'>): Su
 const sentProof = (draft: OutboxDraft): LogProof => ({
   label: `${DRAFT_KIND_WORDS[draft.to.kind]} sent to ${targetWords(draft.to)}`,
   from: 'outbox',
+  ...(draft.source ? { url: draft.source } : {}),
 });
 
 export const proofOf = (suggestion: Pick<Suggestion, 'id' | 'proof'>, outbox: readonly OutboxDraft[]): LogProof[] => [

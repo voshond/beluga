@@ -1,10 +1,13 @@
+import { STEERED_IN } from '../../shared/claude-notices.js';
+import { isDeepStrictEqual } from 'node:util';
+import { boundInput, type StepRecord } from '../../shared/steps.js';
 import type { PeopleEnrichRequest } from '../../agent/people-enricher.js';
 import { PeopleEnricher } from './enricher.js';
 import type { EnrichField, EnrichProposal } from './enrichment.js';
 import { type Fetcher, PeopleAvatars } from './people-avatars.js';
 import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
-import type { AgentPlace } from '../../agent/types.js';
+import type { AgentPlace, InitiativeQuestionTools } from '../../agent/types.js';
 import type { ScheduleTrigger, SentinelDraft } from '../sentinel/model.js';
 import { formatBytes } from '../../shared/format.js';
 import { isSecretPath } from '../shares.js';
@@ -67,6 +70,9 @@ import { RiskKeeper } from './risk-keeper.js';
 import type { RiskDraft } from './risks.js';
 import type { SuccessDefineRequest } from '../../agent/success-definer.js';
 import type { SuccessDefinition, SuccessDraft, SuccessProposal, SuccessProposalInput } from './success.js';
+import { captureQuestionAnswers, isQuestionTarget, questionDecisions, questionsOf, saveQuestionRecord } from './question-records.js';
+import { type Question, type QuestionDraft } from './questions.js';
+import { deliveryOf, type Delivery } from './delivery.js';
 import { InitiativeSuccess, type SuccessHost } from './success-service.js';
 
 export type CheckInHost = {
@@ -102,14 +108,17 @@ export type InitiativesDeps = {
 export type InitiativeChatRun = {
   readonly place: AgentPlace;
   readonly brief: string;
+  readonly questions?: InitiativeQuestionTools;
   /** Denies a message sent outward that isn't a draft the user sent; lets that one through. */
-  readonly vetTool: (toolName: string, input: Record<string, unknown>) => string | undefined;
+  readonly vetTool: (toolName: string, input: Record<string, unknown>, toolUseId?: string) => string | undefined;
   /** The draft call vetTool just let through: the user already said Send, so no second card. */
   readonly preApproved: (toolName: string, input: Record<string, unknown>) => boolean;
+  readonly onStep: (step: StepRecord) => void;
+  readonly finish: () => void;
 };
 
 /** A draft the user sent: the one call it allows, kept here, never in a file the agent can write. */
-type Send = { readonly slug: string; readonly id: number; readonly to: OutboxTarget; readonly text: string };
+type Send = { readonly slug: string; readonly id: number; readonly to: OutboxTarget; readonly text: string; readonly channel: string; requestId?: string };
 
 const SENT_WORDS: Readonly<Record<OutboxTarget['kind'], string>> = { slack: 'a Slack message', jira: 'a Jira comment', confluence: 'a Confluence update', 'confluence-page': 'a Confluence page', prep: 'a prep sheet' };
 
@@ -149,7 +158,7 @@ export class Initiatives {
   private readonly avatars: PeopleAvatars;
   private readonly locals = new Map<string, Local>();
   private readonly sends = new Map<string, Send>();
-  private cleared: Send[] = [];
+  private readonly sending = new Set<string>();
   private readonly offAction: () => void;
   private stopped = false;
 
@@ -262,6 +271,15 @@ export class Initiatives {
     const checkIn = this.local(slug).checkIn;
     const success = this.success.read(slug);
     const discovery = readDiscovery(folder.folder, config?.status ?? 'active');
+    const questions = questionsOf(folder);
+    const decisions = questionDecisions(folder);
+    const waitingQuestions = questions.flatMap((question) => {
+      if (question.answer || !question.waitingOn) return [];
+      const waiting = folder.watches.some((watch) => watch.question === question.id && watch.state === 'watching');
+      return waiting || !folder.questions.some((stored) => stored.id === question.id)
+        ? question.waitingOn.split(',').map((person) => person.trim()).filter(Boolean).map((waitingOn) => ({ text: question.text, waitingOn }))
+        : [];
+    });
     return {
       slug,
       folder: folder.folder,
@@ -286,8 +304,9 @@ export class Initiatives {
       risks: folder.risks,
       ...(discovery ? { discovery } : {}),
       timeline: folder.timeline,
-      ...(folder.decisions ? { decisions: folder.decisions } : {}),
-      ...(folder.waitingQuestions.length ? { waitingQuestions: folder.waitingQuestions } : {}),
+      questions,
+      ...(decisions ? { decisions } : {}),
+      ...(waitingQuestions.length ? { waitingQuestions } : {}),
       files: folder.files,
       ...(checkIn ? { checkIn } : {}),
       ...(success.definition || success.shippedAt ? { success } : {}),
@@ -568,22 +587,30 @@ export class Initiatives {
     if (!final) throw new Error('Write the message first');
     if (final.length > textMaxOf(to)) throw new Error(`That is ${final.length} characters: a ${DRAFT_KIND_WORDS[to.kind]} takes ${textMaxOf(to)} at most`);
     const allowed = draft.to.kind === 'confluence-page' ? this.readFile(slug, draft.to.file).text : final;
-    this.sends.set(`${slug}:${id}`, { slug, id, to: draft.to, text: allowed });
+    const key = `${slug}:${id}`;
+    if (this.sending.has(key)) throw new Error('This draft is already on its way');
+    const channel = this.workChannel(item);
+    const send: Send = { slug, id, to: draft.to, text: allowed, channel };
+    this.sends.set(key, send);
     const edited = final !== draft.text.trim();
     this.putDraft(slug, item.outbox, id, (d) => {
-      const { sentText: _sent, ...rest } = d;
+      const { sentText: _sent, sendError: _error, ...rest } = d;
       return { ...rest, state: 'approved', ...(edited ? { sentText: final } : {}) };
     });
-    await this.commit(slug, `${slug}: draft ${id} approved`);
     this.refresh(slug);
-    const channel = this.workChannel(item);
-    if (this.deps.ask(sendDraftMessage({ id: draft.id, to }, final), channel) === undefined) throw new Error('The chat could not take it now');
+    send.requestId = this.deps.ask(sendDraftMessage({ id: draft.id, to }, final), channel);
+    if (send.requestId === undefined) {
+      this.sends.delete(key);
+      throw new Error('The chat could not take it now');
+    }
+    await this.commit(slug, `${slug}: draft ${id} approved`);
     return { channel };
   }
 
   async discardDraft(slug: string, id: number): Promise<void> {
     const item = this.need(slug);
     const draft = this.openDraft(item, id);
+    if (this.sending.has(`${slug}:${id}`)) throw new Error('This draft is already on its way');
     this.sends.delete(`${slug}:${id}`);
     this.putDraft(slug, item.outbox, id, (d) => ({ ...d, state: 'discarded', resolvedAt: new Date(this.now).toISOString() }));
     addTimeline(this.deps.root, slug, `${dayOf(this.now)} [message]: discarded a draft to ${targetWords(draft.to)}`);
@@ -603,36 +630,127 @@ export class Initiatives {
   }
 
   private workChannel(item: InitiativeView): string {
-    return initiativeChatChannel(item.slug, item.chats.active === CHECK_IN_CHAT ? FIRST_INITIATIVE_CHAT : item.chats.active);
+    const chat = item.chats.active;
+    return initiativeChatChannel(item.slug, chat === CHECK_IN_CHAT || chat === WATCH_CHAT ? FIRST_INITIATIVE_CHAT : chat);
   }
 
-  private vetSend(slug: string, toolName: string, input: Record<string, unknown>): string | undefined {
-    if (!isSendingTool(toolName)) return undefined;
-    const send = [...this.sends.values()].find((s) => s.slug === slug && matchesDraft(s.to, s.text, toolName, input));
-    if (!send) return OUTBOX_DENIED;
-    this.sends.delete(`${slug}:${send.id}`);
-    this.cleared.push(send);
-    this.markSent(send);
-    return undefined;
+  private recordSendError(send: Send, error: string): void {
+    const folder = readFolder(this.deps.root, send.slug);
+    this.putDraft(send.slug, folder.outbox, send.id, (draft) => ({ ...draft, sendError: error }));
+    this.refresh(send.slug);
   }
 
-  private preApproved(slug: string, toolName: string, input: Record<string, unknown>): boolean {
-    const at = this.cleared.findIndex((s) => s.slug === slug && matchesDraft(s.to, s.text, toolName, input));
-    if (at === -1) return false;
-    this.cleared.splice(at, 1);
-    return true;
+  private sendHooks(slug: string, channel: string): Pick<InitiativeChatRun, 'vetTool' | 'preApproved' | 'onStep' | 'finish'> {
+    type Attempt = { send: Send; tool: string; toolUseId?: string; input: ReturnType<typeof boundInput>['input']; preApproved: boolean };
+    const attempts = new Map<string, Attempt>();
+    const keyOf = (id: number): string => `${slug}:${id}`;
+    return {
+      vetTool: (tool, input, toolUseId) => {
+        if (!isSendingTool(tool)) return undefined;
+        const send = [...this.sends.values()].find((entry) => entry.slug === slug && entry.channel === channel && matchesDraft(entry.to, entry.text, tool, input));
+        if (!send) return OUTBOX_DENIED;
+        const matchingAttempt = [...attempts.values()].some((attempt) => toolUseId !== undefined
+          ? attempt.toolUseId === toolUseId
+          : attempt.tool === tool && matchesDraft(attempt.send.to, attempt.send.text, tool, input));
+        if (matchingAttempt) return OUTBOX_DENIED;
+        const key = keyOf(send.id);
+        this.sends.delete(key);
+        const folder = readFolder(this.deps.root, slug);
+        const draft = folder.outbox.find((entry) => entry.id === send.id);
+        if (draft?.state !== 'approved') return OUTBOX_DENIED;
+        if (draft.reminderFor && !folder.watches.some((watch) => watch.id === draft.reminderFor && watch.state === 'watching' && watch.news.length === 0)) {
+          this.recordSendError(send, 'The follow-up no longer needs a reminder.');
+          return 'The follow-up no longer needs a reminder.';
+        }
+
+        this.sending.add(key);
+        attempts.set(key, { send, tool, toolUseId, input: boundInput(input).input, preApproved: true });
+        return undefined;
+      },
+      preApproved: (tool, input) => {
+        const attempt = [...attempts.values()].find((entry) => entry.preApproved && entry.tool === tool && matchesDraft(entry.send.to, entry.send.text, tool, input));
+        if (!attempt) return false;
+        attempt.preApproved = false;
+        return true;
+      },
+      onStep: (step) => {
+        if (step.kind !== 'tool' || step.status === 'running') return;
+        const match = [...attempts].find(([, attempt]) => attempt.tool === step.tool && (attempt.toolUseId !== undefined ? attempt.toolUseId === step.id : isDeepStrictEqual(attempt.input, step.input)));
+        if (!match) return;
+        const [key, { send }] = match;
+        attempts.delete(key);
+        this.sending.delete(key);
+        if (step.status === 'error' || step.isError) {
+          this.recordSendError(send, 'The send failed. Check the chat for details.');
+          return;
+        }
+        if (step.output === undefined) {
+          this.recordSendError(send, 'Delivery was not confirmed. Check the destination before retrying.');
+          return;
+        }
+        const delivery = deliveryOf(send.to, step.output);
+        if (delivery.error) this.recordSendError(send, delivery.error);
+        else this.markSent(send, delivery);
+      },
+      finish: () => {
+        for (const [key, attempt] of attempts) {
+          this.sending.delete(key);
+          this.recordSendError(attempt.send, 'Delivery was not confirmed. Check the destination before retrying.');
+        }
+        attempts.clear();
+      },
+    };
   }
 
-  private markSent(send: Send): void {
+  private markSent(send: Send, delivery: Delivery): void {
     const folder = readFolder(this.deps.root, send.slug);
     const draft = folder.outbox.find((d) => d.id === send.id);
-    if (!draft) return;
-    this.putDraft(send.slug, folder.outbox, send.id, (d) => ({ ...d, state: 'sent', resolvedAt: new Date(this.now).toISOString() }));
+    if (!draft || draft.state !== 'approved') return;
+    const sent = { ...draft, state: 'sent' as const, resolvedAt: new Date(this.now).toISOString(), deliveryChannel: delivery.channel, deliveryThread: delivery.thread, source: delivery.source };
+    this.putDraft(send.slug, folder.outbox, send.id, () => sent);
     if (draft.audience) this.keepUpdate(send.slug, draft, send.text);
-    else addTimeline(this.deps.root, send.slug, `${dayOf(this.now)} [message]: sent ${SENT_WORDS[send.to.kind]} to ${targetWords(send.to)}`);
-    const sent = readFolder(this.deps.root, send.slug).outbox.find((d) => d.id === send.id);
-    if (sent) this.watching.fromDraft(send.slug, sent);
+    else {
+      const recipient = folder.questions.find((question) => question.id === draft.question)?.waitingOn;
+      addTimeline(this.deps.root, send.slug, `${dayOf(this.now)} [message]: sent ${SENT_WORDS[send.to.kind]} to ${targetWords(send.to)}${recipient ? ` (asked ${recipient.replace(/\s+/g, ' ')})` : ''}`);
+    }
+    this.watching.fromDraft(send.slug, sent);
     this.refresh(send.slug);
+    void this.watching.sync(send.slug).catch(() => undefined);
+  }
+
+  async saveQuestion(slug: string, input: QuestionDraft): Promise<Question> {
+    this.need(slug);
+    const folder = readFolder(this.deps.root, slug);
+    if (folder.trouble?.includes('questions.json:')) throw new Error(folder.trouble);
+    const question = saveQuestionRecord(this.deps.root, folder, input, this.now);
+    await this.commit(slug, `${slug}: question saved`);
+    this.refresh(slug);
+    await this.watching.sync(slug);
+    return question;
+  }
+
+  private async trackQuestion(slug: string, input: Parameters<InitiativeQuestionTools['track']>[0]): Promise<{ id: string; answered: boolean }> {
+    const folder = readFolder(this.deps.root, slug);
+    const normalized = (text: string): string => text.trim().replace(/\s+/g, ' ').toLowerCase();
+    const known = questionsOf(folder).find((question) => input.id ? question.id === input.id : normalized(question.text) === normalized(input.text ?? ''));
+    if (input.id && !known) throw new Error('That question no longer exists');
+    if (known && folder.questions.includes(known)) return { id: known.id, answered: Boolean(known.answer) };
+    const text = known?.text ?? input.text;
+    if (!text) throw new Error('Provide the question or its ID');
+    const tracked = await this.saveQuestion(slug, { id: known?.id, text, waitingOn: known?.waitingOn || input.waitingOn });
+    return { id: tracked.id, answered: Boolean(tracked.answer) };
+  }
+
+  draftQuestion(slug: string, id: string): { readonly channel: string } {
+    const item = this.need(slug);
+    const question = readFolder(this.deps.root, slug).questions.find((entry) => entry.id === id);
+    if (!question || question.answer || question.mergedInto) throw new Error('Choose an open question');
+    if (item.outbox.some((draft) => draft.question === id && (draft.state === 'draft' || draft.state === 'approved'))) throw new Error('A draft for this question is already in the outbox');
+    const channel = this.workChannel(item);
+    const prompt = `Prepare a Slack message or Jira comment asking this initiative question. Use the initiative’s sources and directory to verify the destination. If the destination is unclear, ask me. Put one draft in outbox.json with "question": "${id}". Question: ${question.text}${question.waitingOn ? `
+Ask: ${question.waitingOn}` : ''}`;
+    if (this.deps.ask(prompt, channel) === undefined) throw new Error('The chat could not take it now');
+    return { channel };
   }
 
   /** A stakeholder update the user sent, or a prep sheet they kept: its text in updates/, a record with the tickets as they stand (the next one's delta), and a timeline line. */
@@ -837,8 +955,8 @@ export class Initiatives {
     return {
       place,
       brief: initiativeBrief(item, brief, this.repos(item), of.chat, readDirectory(this.deps.root), this.now) + this.success.brief(item, of.chat === CHECK_IN_CHAT),
-      vetTool: (toolName, input) => this.vetSend(of.slug, toolName, input),
-      preApproved: (toolName, input) => this.preApproved(of.slug, toolName, input),
+      ...(of.chat !== WATCH_CHAT ? { questions: { track: (input) => this.trackQuestion(of.slug, input) } } : {}),
+      ...this.sendHooks(of.slug, channel),
     };
   }
 
@@ -934,7 +1052,15 @@ export class Initiatives {
     if (action.type !== 'agent_event' || !FINAL_EVENTS.has(action.event)) return;
     const of = initiativeChatOf(action.channel);
     if (!of || !this.known(of.slug)) return;
-    if (of.chat === WATCH_CHAT) this.watching.turnEnded(of.slug);
+    if (action.text !== STEERED_IN) {
+      for (const [key, send] of this.sends) {
+        if (send.channel !== action.channel || send.requestId !== action.requestId) continue;
+        this.sends.delete(key);
+        this.recordSendError(send, 'The agent finished without sending this draft.');
+      }
+    }
+    if (of.chat === WATCH_CHAT) this.watching.turnEnded(of.slug, action.event === 'done' && action.text !== STEERED_IN);
+    if (action.event === 'done' && action.text !== STEERED_IN) captureQuestionAnswers(this.deps.root, readFolder(this.deps.root, of.slug));
     this.risks.settle(of.slug, new Date(this.now).toISOString(), dayOf(this.now));
     const message = of.chat === CHECK_IN_CHAT ? `${of.slug}: check-in ${dayOf(this.now)}` : of.chat === WATCH_CHAT ? `${of.slug}: follow-ups ${dayOf(this.now)}` : `${of.slug}: chat ${dayOf(this.now)}`;
     void this.keepSizing(of.slug)

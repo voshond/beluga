@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { waitFor } from './helpers.js';
 import { readFolder } from '../src/core/initiatives/files.js';
 import { type CheckInHost, Initiatives } from '../src/core/initiatives/initiatives.js';
 import { type InitiativeView, type InitiativesSlice, initiativeChatChannel, initiativeChatTitle, timelineEntryOf } from '../src/core/initiatives/model.js';
@@ -163,6 +164,7 @@ describe('Initiatives follow-ups', () => {
     await service.sendDraft(slug, 1, 'Blocked on Safari.');
     const run = service.chatRun(initiativeChatChannel(slug, 'main'), SELF)!;
     expect(run.vetTool('mcp__jira__jira_add_comment', { issue_key: 'SHOP-150', body: 'Blocked on Safari.' })).toBeUndefined();
+    run.onStep({ id: 'send-1', kind: 'tool', title: 'Send', tool: 'mcp__jira__jira_add_comment', status: 'done', startedAt: 1, input: { issue_key: 'SHOP-150', body: 'Blocked on Safari.' }, output: '{"id":"17"}' });
     expect(watches()).toMatchObject([{ id: 1, draft: 1, suggestion: 2, where: { kind: 'jira', issue: 'SHOP-150' }, state: 'watching' }]);
     turnEnds('main');
     await settle();
@@ -171,6 +173,94 @@ describe('Initiatives follow-ups', () => {
     expect(made.steps![0]).toMatchObject({ kind: 'chat', to: `${SELF}/${initiativeChatChannel(slug, WATCH_CHAT)}` });
     expect(host.paused.get('sn2')).toBe(false);
     expect(service.view(slug).watches).toHaveLength(1);
+  });
+
+  it('merges legacy questions, waits for a confirmed Slack post, and makes one reminder after a successful check', async () => {
+    const { root, service, slug, watches, turnEnds, at } = await setup();
+    const dir = path.join(root, slug);
+    const put = (file: string, value: string): void => writeFileSync(path.join(dir, file), value);
+    put('decisions.md', '## Open\n- 2026-11-25: Nobody has asked Finance yet\n- 2026-11-25: Ask Finance about the rollback (waiting on: Daria)\n');
+    put('outbox.json', JSON.stringify([{ id: 1, to: { kind: 'slack', channel: 'D123' }, text: 'What does Finance need before rollback?' }]));
+    service.refresh(slug);
+    const [original, duplicate] = service.view(slug).questions!;
+    const question = await service.saveQuestion(slug, { id: original!.id, text: 'What does Finance need before rollback?', merge: duplicate!.id, draft: 1 });
+    expect(service.view(slug).questions).toMatchObject([{ id: question.id, waitingOn: 'Daria' }]);
+    expect(service.view(slug).waitingQuestions).toBeUndefined();
+    expect(service.view(slug).decisions?.open).toEqual([]);
+    expect(watches()).toEqual([]);
+
+    const send = async (id: number, message: string, output: string, thread?: string): Promise<void> => {
+      const run = service.chatRun(initiativeChatChannel(slug, 'main'), SELF)!;
+      const tool = 'mcp__slack__slack_send_message';
+      const input = { channel_id: 'D123', message, ...(thread ? { thread_ts: thread } : {}) };
+      await service.sendDraft(slug, id, message);
+      expect(run.vetTool(tool, input, 'send')).toBeUndefined();
+      expect(service.view(slug).outbox.find((draft) => draft.id === id)?.state).toBe('approved');
+      run.onStep({ id: 'unapproved-duplicate', kind: 'tool', title: 'Send', tool, status: 'error', startedAt: WED, input, output: 'Denied' });
+      expect(service.view(slug).outbox.find((draft) => draft.id === id)?.sendError).toBeUndefined();
+      run.onStep({ id: 'send', kind: 'tool', title: 'Send', tool, status: 'done', startedAt: WED, input, output });
+      run.finish();
+    };
+    await send(1, question.text, '{"ok":false,"error":"not_in_channel"}');
+    expect(watches()).toEqual([]);
+    expect(service.view(slug).outbox[0]).toMatchObject({ state: 'approved', sendError: expect.any(String) });
+
+    const thread = '1795600800.000001';
+    await send(1, question.text, JSON.stringify({ ok: true, channel: 'D123', ts: thread }));
+    expect(watches()).toMatchObject([{ id: 1, question: question.id, where: { kind: 'slack', channel: 'D123', thread }, waitingOn: 'Daria', state: 'watching' }]);
+    expect(service.view(slug).waitingQuestions).toMatchObject([{ text: question.text, waitingOn: 'Daria' }]);
+    const due = WED + 7 * DAY;
+    at(due);
+    turnEnds(WATCH_CHAT);
+    expect(readFolder(root, slug).outbox).toHaveLength(1);
+    expect(watches()[0]?.checkFailed).toBe(true);
+
+    at(due + HOUR);
+    const saveWatch = (patch: Partial<Watch>): void => put('watches.json', JSON.stringify([{ ...watches()[0], ...patch }]));
+    saveWatch({ checkedAt: iso(due + HOUR) });
+    service.lookNow(slug, 1);
+    turnEnds(WATCH_CHAT);
+    const reminder = readFolder(root, slug).outbox[1]!;
+    expect(reminder).toMatchObject({ state: 'draft', reminderFor: 1, question: question.id, to: { kind: 'slack', thread } });
+    await send(reminder.id, reminder.text, JSON.stringify({ ok: true, channel: 'D123', ts: '1796205600.000001' }), thread);
+    expect(watches()).toHaveLength(1);
+
+    const partial = { at: iso(due + HOUR), from: 'Daria', text: 'Checking with the team.', read: false };
+    saveWatch({ news: [partial], state: 'answered' });
+    turnEnds(WATCH_CHAT);
+    expect(service.view(slug).questions?.[0]?.answer).toBeUndefined();
+    expect(watches()[0]?.state).toBe('watching');
+    expect(readFolder(root, slug).outbox).toHaveLength(2);
+
+    const source = 'https://example.slack.com/archives/D123/p1796205600000002';
+    saveWatch({ state: 'answered', answer: { text: 'Issue a credit note first.', at: iso(due + HOUR), source } });
+    turnEnds(WATCH_CHAT);
+    await waitFor(() => service.view(slug).questions?.[0]?.answer?.text === 'Issue a credit note first.');
+    expect(service.view(slug).decisions?.decided).toMatchObject([{ text: question.text, why: 'Issue a credit note first.', source }]);
+    expect(service.view(slug).waitingQuestions).toBeUndefined();
+  });
+
+  it('uses one question ID when the agent asks to track the same ask more than once', async () => {
+    const { service, slug, watches } = await setup();
+    const run = service.chatRun(initiativeChatChannel(slug, 'main'), SELF)!;
+    const first = await run.questions!.track({ text: 'Will this ship Friday?', waitingOn: 'Ana, Daria' });
+    const again = await run.questions!.track({ text: 'will this   ship Friday?' });
+    expect(again).toEqual(first);
+    expect(service.view(slug).questions).toMatchObject([{ id: first.id, waitingOn: 'Ana, Daria' }]);
+    expect(service.view(slug).waitingQuestions).toBeUndefined();
+    expect(watches()).toHaveLength(0);
+    expect(service.chatRun(initiativeChatChannel(slug, WATCH_CHAT), SELF)?.questions).toBeUndefined();
+  });
+
+  it('attaches an older sent message to an editable question without duplicating its existing watch', async () => {
+    const { root, service, slug, watches } = await setup();
+    const link = 'https://example.slack.com/archives/D123/p1763990000000200?thread_ts=1763990000.000100';
+    const watch = await service.addWatch(slug, { what: 'Follow the DM', where: { kind: 'slack', channel: 'D123', thread: '1763990000.000100' } });
+    const question = await service.saveQuestion(slug, { text: 'Will this ship?', waitingOn: 'Ana', outreach: { ref: link } });
+    expect(watches()).toMatchObject([{ id: watch.id, state: 'watching', source: link, question: question.id, since: iso(1763990000000), waitingOn: 'Ana' }]);
+    await service.saveQuestion(slug, { id: question.id, text: 'Will this ship?', answer: { text: 'Yes, on Friday.' } });
+    expect(watches()).toMatchObject([{ id: watch.id, state: 'answered' }]);
+    expect(readFolder(root, slug).questions[0]?.answer?.text).toBe('Yes, on Friday.');
   });
 
   it('spends no turn while nothing is due, and a quiet look only moves the last look', async () => {

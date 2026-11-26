@@ -88,7 +88,7 @@ export interface AgentRunInput {
    * Checked before every tool call, before any other rule (a friend's task: what its owner's
    * capabilities and rules forbid). A reason: denied, whatever else would allow it.
    */
-  readonly vetTool?: (toolName: string, input: Record<string, unknown>) => string | undefined;
+  readonly vetTool?: (toolName: string, input: Record<string, unknown>, toolUseId?: string) => string | undefined;
   /** Ask the owner whether a non-preapproved tool may run. */
   readonly canUseTool: (toolName: string, input: Record<string, unknown>) => Promise<boolean>;
   /** An external agent asked for this run, and it is your own run: never a friend's limits or a friend's sandbox. */
@@ -188,6 +188,7 @@ export interface AgentRunInput {
   readonly honchoTools?: HonchoTools;
   /** Your own worktree runs, when there are initiatives: send what the work made to one (core/initiatives/report.ts). */
   readonly initiativeReport?: InitiativeReportTools;
+  readonly initiativeQuestions?: InitiativeQuestionTools;
   /** Your own runs: dashboards and the numbers sentinels keep (server `beluga_dashboard`; sentinel_measure inside a run). */
   readonly dashboardTools?: DashboardTools;
   /** Your own runs: the notes of calls you were in (core/calls, BLG-715), to look up, never pasted in. */
@@ -788,6 +789,10 @@ export interface MemoryTools {
 }
 
 /** Your own worktree runs: send a file the work made to an initiative (core/initiatives/report.ts, server `beluga_initiatives`). */
+export type InitiativeQuestionTools = {
+  readonly track: (input: { id?: string; text?: string; waitingOn?: string }) => Promise<{ readonly id: string; readonly answered: boolean }>;
+};
+
 export interface InitiativeReportTools {
   readonly brief: string;
   report(input: { readonly file: string; readonly title: string; readonly why?: string; readonly initiative?: string }): Promise<string>;

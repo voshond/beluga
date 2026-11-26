@@ -165,6 +165,7 @@ describe('stakeholder updates', () => {
     expect(run.vetTool('mcp__jira__confluence_update_page_section', { ...call, new_content: 'Draft text' })).toBe(OUTBOX_DENIED);
     expect(run.vetTool('mcp__jira__confluence_update_page_section', call)).toBeUndefined();
     expect(run.preApproved('mcp__jira__confluence_update_page_section', call)).toBe(true);
+    run.onStep({ id: 'send-1', kind: 'tool', title: 'Send', tool: 'mcp__jira__confluence_update_page_section', status: 'done', startedAt: 1, input: call, output: '{"id":"2201"}' });
     const sent = store.getState().initiatives.items[0]!;
     expect(sent.outbox[0]).toMatchObject({ state: 'sent', sentText: 'Edited text', text: 'Draft text' });
     expect(sent.updates).toEqual([{ audience: 'team', at: new Date(NOW).toISOString(), draft: 1, to: { kind: 'confluence', page: '2201', section: 'Status' }, file: 'updates/2026-11-26-team-1.md', tickets: [{ key: 'A-1', summary: '', status: 'To Do', done: false }] }]);
