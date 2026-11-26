@@ -18,15 +18,16 @@ const openInitiative = async (page: Page, name: string): Promise<void> => {
 test('an initiative’s page shows the epic’s tickets, open first, with their pull requests', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
   const tickets = page.getByRole('region', { name: 'Tickets' });
-  await expect(tickets.getByRole('listitem')).toHaveCount(4);
-  await expect(tickets.getByRole('listitem').first()).toHaveAttribute('data-category', 'inProgress');
-  await expect(tickets.getByRole('listitem').last()).toHaveAttribute('data-ticket', 'SHOP-133');
+  const topTickets = tickets.locator('[data-ticket][data-sub-task="false"]');
+  await expect(topTickets).toHaveCount(4);
+  await expect(topTickets.first()).toHaveAttribute('data-category', 'inProgress');
+  await expect(topTickets.last()).toHaveAttribute('data-ticket', 'SHOP-133');
   await expect(tickets.getByRole('button', { name: 'Open SHOP-150 in Jira: 3DS challenge fails on Safari' })).toBeVisible();
   await expect(tickets.locator('[data-ticket="SHOP-141"]')).toContainText('Ana Ruiz');
   await expect(tickets.locator('[data-ticket="SHOP-141"]')).toContainText('Blocked');
   await expect(tickets.getByRole('button', { name: /Open pull request #412 in example\/shop: Open/ })).toBeVisible();
   await expect(tickets.getByRole('button', { name: /Open pull request #398 in example\/shop: Merged/ })).toBeVisible();
-  await expect(tickets.getByText(/4 tickets · 1 done · 1 open pull request/)).toBeVisible();
+  await expect(tickets.getByText(/4 tickets · 1 done · 2 sub-tasks, 1 done · 1 open pull request/)).toBeVisible();
   await expect(tickets.getByRole('button', { name: 'Refresh the tickets from Jira' })).toBeEnabled();
   await expect(page.getByRole('region', { name: 'Goal' }).getByRole('heading', { name: 'Scope' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Slack conversations' }).getByRole('button', { name: 'Open 3DS on Safari in Slack' })).toBeVisible();
@@ -47,7 +48,7 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
   expect((await bar.locator('[data-part="done"]').boundingBox())!.width).toBeGreaterThan(100);
   expect((await bar.locator('[data-part="inProgress"]').boundingBox())!.width).toBeGreaterThan(30);
   await page.setViewportSize({ width: 2300, height: 1000 });
-  await expect(tickets.getByText('Ana Ruiz')).toBeVisible();
+  await expect(tickets.getByText('Ana Ruiz').first()).toBeVisible();
   await shot(page, '01b-initiative-page-wide.png');
   if (shots) await tickets.screenshot({ path: path.join(shots, '08-tickets-dark-wide.png') });
 });
@@ -151,4 +152,48 @@ test('an initiative’s page shows its tasks, ticks one off through the chat, li
   await expect(days.getByRole('button', { name: 'Fri' })).toHaveAttribute('aria-pressed', 'false');
   await days.scrollIntoViewIfNeeded();
   await shot(page, '08-initiative-check-in-time.png');
+});
+
+test('an initiative’s page lists its people with what is open both ways, and People shows them across initiatives', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  const people = page.getByRole('region', { name: 'People' });
+  const rows = people.locator('[data-person]');
+  await expect(rows).toHaveCount(2);
+  const ana = people.locator('[data-person="ana-ruiz"]');
+  await expect(ana).toContainText('Payments engineer');
+  await expect(ana.getByRole('list', { name: 'Waiting on them' }).getByRole('listitem')).toHaveCount(2);
+  const kai = people.locator('[data-person="kai-jensen"]');
+  await expect(kai.getByRole('list', { name: 'They wait on you' })).toContainText('go/no-go agenda');
+  await expect(kai).toContainText('Last talked: Yesterday');
+  await people.scrollIntoViewIfNeeded();
+  await shot(page, '09-initiative-people.png');
+  await kai.getByRole('button', { name: 'Edit Kai Jensen' }).click();
+  const sheet = page.getByRole('dialog');
+  await sheet.getByLabel('Role in Checkout v2').fill('Finance lead');
+  await sheet.getByRole('button', { name: 'Save' }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(kai).toContainText('Finance lead');
+  await people.getByRole('button', { name: 'Add a person' }).click();
+  await page.getByRole('menuitem', { name: 'New Person…' }).click();
+  await page.getByRole('dialog').getByLabel('Name').fill('Mia Chen');
+  await page.getByRole('dialog').getByLabel('Role in Checkout v2').fill('Design');
+  await page.getByRole('dialog').getByRole('button', { name: 'Add Person' }).click();
+  await expect(rows).toHaveCount(3);
+  await people.getByRole('button', { name: 'Take Mia Chen off' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Take Off' }).click();
+  await expect(rows).toHaveCount(2);
+  await page.getByRole('button', { name: 'More for Checkout v2' }).click();
+  await page.getByRole('menuitem', { name: 'People Across Initiatives' }).click();
+  const all = page.getByRole('list', { name: 'People', exact: true });
+  await expect(all.locator('[data-person]')).toHaveCount(3);
+  await expect(all.locator('[data-person]').first()).toHaveAttribute('data-person', 'ana-ruiz');
+  await expect(all.locator('[data-person="mia-chen"]').getByRole('button', { name: 'Remove Mia Chen' })).toBeVisible();
+  await shot(page, '10-people-across.png');
+});
+
+test('a fresh initiative offers the people.md pass', async ({ page }) => {
+  await openInitiative(page, 'Mobile Onboarding');
+  const people = page.getByRole('region', { name: 'People' });
+  await expect(people.getByRole('status')).toContainText('Nobody yet');
+  await expect(people.getByRole('button', { name: 'Propose people from people.md' })).toBeVisible();
 });
