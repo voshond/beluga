@@ -160,6 +160,8 @@ describe('the discovery stage', () => {
     expect(run.vetTool('mcp__jira__confluence_create_page', { ...create, content: 'Something else' })).toBe(OUTBOX_DENIED);
     expect(run.vetTool('mcp__jira__confluence_create_page', create)).toBeUndefined();
     expect(item(slug).outbox[0]!.state).toBe('sent');
+    expect(item(slug).watches ?? []).toEqual([]);
+    expect(matchesDraft({ kind: 'confluence-page', file: 'prd.md', title: 'T', page: '42' }, 'x', 'confluence_update_page_section', { page_id: '42', heading_text: 'T', new_content: 'x' })).toBe(false);
     expect(matchesDraft({ kind: 'confluence-page', file: 'prd.md', title: 'T', page: '42' }, 'x', 'confluence_update_page', { page_id: '42', title: 'T', content: 'x' })).toBe(true);
     expect(matchesDraft({ kind: 'confluence-page', file: 'prd.md', title: 'T', page: '42' }, 'x', 'confluence_create_page', { space_key: 'S', title: 'T', content: 'x' })).toBe(false);
   });

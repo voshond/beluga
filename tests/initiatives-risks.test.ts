@@ -111,7 +111,7 @@ describe('Initiatives risks', () => {
     expect(item().timeline[0]).toMatchObject({ kind: 'risk', text: 'added risk 1 “Finance is late” on the page' });
     writeFileSync(file('risks.json'), JSON.stringify([{ id: 1, title: 'Finance is late', severity: 'low', state: 'closed' }, { id: 2, title: 'Agent risk' }]));
     turnEnds();
-    await waitFor(() => riskOf(item().risks?.[0] ?? risks([{ id: 9, title: 'x' }])[0]!).severity === 'high');
+    await waitFor(() => item().risks?.length === 2 && riskOf(item().risks![0]!).severity === 'high');
     expect(riskOf(item().risks![0]!)).toMatchObject({ state: 'open', owner: 'Ana' });
     expect(item().risks).toHaveLength(2);
     await service.saveRisk(slug, { id, title: 'Finance is late', severity: 'high', state: 'closed' });
