@@ -821,6 +821,7 @@ export const PHONE: Record<Method, Side> = {
   'initiatives.keepPrep': 'mac',
   'initiatives.saveQuestion': 'mac',
   'initiatives.draftQuestion': 'mac',
+  'initiatives.removeQuestion': 'mac',
   'initiatives.addWatch': 'mac',
   'initiatives.stopWatch': 'mac',
   'initiatives.lookNow': 'mac',

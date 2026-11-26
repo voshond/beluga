@@ -75,6 +75,7 @@ const ALWAYS_OK = new Set([
   // report_to_initiative: your own worktree runs, into your own initiatives repo.
   'mcp__beluga_initiatives__report_to_initiative',
   'mcp__beluga_initiatives__track_question',
+  'mcp__beluga_initiatives__resolve_question',
   // Child threads (core/threads): only your own runs have them, with the flag on. They start and follow your own chats, under limits; no tool archives or deletes one.
   ...['thread_start', 'thread_status', 'thread_message', 'thread_stop'].map((n) => `mcp__beluga_threads__${n}`),
   // A friend's task only has these when its owner allowed them for that request (core/gateway/serve.ts).

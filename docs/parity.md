@@ -701,7 +701,8 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `initiatives.removeAudience` | ✓ an initiative's page › Updates › an audience's × (confirms; its sent updates stay in `updates/`) |
 | `initiatives.draftUpdate` | ✓ an initiative's page › Updates › an audience's Draft Now (its Check-in chat drafts the update into the outbox from the facts Beluga works out; due ones are drafted by the next check-in) |
 | `initiatives.keepPrep` | ✓ an initiative's page › Updates › a prep sheet's card › Done (never sent: kept in `updates/` with your edits, logged on the timeline as an update), beside Copy as Markdown · Discard; the chat's Outbox card shows the same |
-| `initiatives.saveQuestion` | ✓ an initiative’s page › Suggestions › Add question or Edit (merge a duplicate, link outreach or record an answer) |
+| `initiatives.saveQuestion` | ✓ an initiative’s page › To-do › Add question, Resolve or Edit (merge a duplicate, link outreach or record an answer) |
+| `initiatives.removeQuestion` | ✓ an initiative’s page › To-do › Open questions › Delete (stops its follow-up, drops unsent drafts) |
 | `initiatives.draftQuestion` | ✓ an initiative’s question editor › Draft outreach with agent (opens the chat to prepare an outbox draft) |
 | `initiatives.addWatch` | ✓ an initiative's page › Waiting for › Watch for an Answer… (what, where: a Slack link, a Jira key, a doc or pull request link, and who it waits on); sending an outbox draft adds one by itself, and the chat adds one on your word |
 | `initiatives.stopWatch` | ✓ an initiative's page › Waiting for › a row's Stop (it stays in watches.json as stopped) |

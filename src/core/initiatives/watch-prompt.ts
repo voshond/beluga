@@ -10,7 +10,11 @@ export const WATCHES_BRIEF = `watches.json: follow-ups Beluga keeps looking for 
 export const WATCHES_CHECK_IN = 'Read watches.json too: news on a watch the follow-up runs already brought in counts as what happened, so do not report it again; a watch whose answer you find in what you read gets its news and "state": "answered". A watch with a "question" id also needs "answer": {"text": the complete answer, "source": the exact reply URL, "at": ISO datetime}. Keep it watching if the reply is partial or no reply URL is available.';
 
 const placeHow = (where: WatchPlace): string => {
-  if (where.kind === 'slack') return where.thread ? `the Slack thread ${where.thread} in ${where.channel}${where.label ? ` (${where.label})` : ''}: read its replies (conversations_replies, or slack_read_thread)` : `the Slack conversation ${where.channel}${where.label ? ` (${where.label})` : ''}: read its history (conversations_history)`;
+  if (where.kind === 'slack') {
+    const label = where.label ? ` (${where.label})` : '';
+    const threads = 'Replies often land in threads, including the thread of a later reminder: also read the history since then (conversations_history), and the replies (conversations_replies, or slack_read_thread) of every message there that has replies';
+    return where.thread ? `the Slack thread ${where.thread} in ${where.channel}${label}: read its replies (conversations_replies, or slack_read_thread). ${threads}` : `the Slack conversation ${where.channel}${label}: read its history (conversations_history). ${threads}`;
+  }
   if (where.kind === 'jira') return `the Jira ticket ${where.issue}: its comments, status and assignee (jira_get_issue)`;
   if (where.kind === 'pr') return `the pull request ${where.url}: its reviews, comments and state (gh pr view --comments)`;
   return `the doc ${where.ref}${where.label ? ` (${where.label})` : ''}: read it as its doc source line says, and compare with its snapshot in sources/docs/ when there is one`;
