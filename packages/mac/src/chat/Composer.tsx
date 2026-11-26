@@ -42,7 +42,7 @@ import { QueueTray } from './QueueTray.js';
 import { BtwCard, askBtw } from './BtwCard.js';
 import { expectClaude, launchFlight } from './flight.js';
 import { lastMineIn } from './starting-model.js';
-import { type WorktreeChoice, WorktreeDraft, landsOnBase } from './WorktreeDraft.js';
+import { type WorktreeChoice, WorktreeDraft, baseOf, landsOnBase } from './WorktreeDraft.js';
 import { sendSteerNow, stopClaude } from '../lib/commands.js';
 import { useAttachments } from './use-attachments.js';
 import { useKeyPaste } from './KeyPasteCard.js';
@@ -477,7 +477,9 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     const builder = draftBuilder(client.store.getState(), mode);
     // Straight to main (BLG-973): picked here, else as last time in this project.
     const land = landsOnBase(worktree, projectId) ? { land: true } : {};
-    const opts = { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...(builder ? { builder } : {}), ...mode, ...land };
+    // Based on: picked here, else as last time in this project (BLG-1034).
+    const base = baseOf(worktree, projectId);
+    const opts = { ...(base ? { base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...(builder ? { builder } : {}), ...mode, ...land };
     // Runs on one of your computers (BLG-788): made there, in the same project, and opened at once.
     // Held (the computer Runs on names can't take it now): nothing starts, the words stay in the box.
     const sent = sendToComputer(startDeps, projectId, worktreeAgent?.runtime ?? myRuntime(client.store.getState().prefs), { kind: 'worktree', text, opts });
@@ -490,10 +492,10 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     // Its row and "Making…" page show at once (BLG-942), whatever the daemon is busy with; a failure takes them away again.
     // The draft's words went with it: forgotten now, as the page changes in this same moment (no render in between to do it).
     drafts.delete(boxKey);
-    const ahead = makeAhead(client, projectId, name || text || 'worktree', { ...(worktree.base ? { base: worktree.base } : {}), asked: text });
+    const ahead = makeAhead(client, projectId, name || text || 'worktree', { ...(base ? { base } : {}), asked: text });
     // Keys pasted into this message and kept (BLG-965) are the worktree's own before it starts (held until it's made).
     const vars = heldFor(boxKey, text);
-    void api.workspaces.startWorktree(projectId, text, { ...(worktree.base ? { base: worktree.base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...(builder ? { builder } : {}), ...mode, ...land, ...(ahead ? { id: ahead.id } : {}), ...(vars.length ? { vars } : {}) }).then(() => forgetHeld(boxKey), (err: unknown) => {
+    void api.workspaces.startWorktree(projectId, text, { ...(base ? { base } : {}), ...(name ? { name } : {}), ...(worktree.agent ? { agent: worktree.agent } : {}), ...(builder ? { builder } : {}), ...mode, ...land, ...(ahead ? { id: ahead.id } : {}), ...(vars.length ? { vars } : {}) }).then(() => forgetHeld(boxKey), (err: unknown) => {
       ahead?.drop();
       keepWords(text);
       toast(client, `Couldn't create the worktree: ${errorText(err)}`, 'error');

@@ -10,6 +10,7 @@ import { type GitSetup, type GitTroubleKind, classifyGitError, httpsRemoteOf } f
 import { rememberSshRoute, sshArgsFor, withSshRoutes } from './ssh-routes.js';
 import { type GitHubRepo, PR_TARGET_KEY, ghRepoEnv, gitCommonDir, originRepo, originRepoEnv, prTargetOf, pullOfBranch, repoSlug } from './github.js';
 export { describePr } from '../shared/format.js';
+import { prTitleRuleText } from '../shared/naming.js';
 
 /**
  * What Claude does when you click PR. Edit it in Settings → Claude → Pull request
@@ -79,6 +80,8 @@ export interface PrContext {
   readonly ticket?: string;
   /** The project's review guide (review-guide.ts): the work is checked against it before it's pushed. */
   readonly reviewGuide?: string;
+  /** The title rule in force (shared/naming.ts: the project's, else Settings'; BLG-1033). */
+  readonly titleRule?: string;
 }
 
 /** The full prompt Claude gets for one PR. */
@@ -87,10 +90,11 @@ export function buildPrPrompt(ctx: PrContext, template = customPrPrompt() ?? DEF
   const filled = template.replaceAll('{{branch}}', ctx.branch).replaceAll('{{baseBranch}}', baseBranch).replaceAll('{{base}}', ctx.base).replaceAll('{{project}}', ctx.project);
   const project = ctx.projectPrompt?.trim() ? `\n\nProject guidelines for pull requests (from the project's beluga.json):\n${ctx.projectPrompt.trim()}` : '';
   const yours = ctx.yourPrompt?.trim() ? `\n\nThe owner's own instructions for this project's pull requests:\n${ctx.yourPrompt.trim()}` : '';
+  const title = ctx.titleRule?.trim() ? `\n\n${prTitleRuleText(ctx.titleRule)}` : '';
   const extra = ctx.extra?.trim() ? `\n\nFor this pull request, also: ${ctx.extra.trim()}` : '';
   const ticket = ctx.ticket ? `\n\nThis work is for ticket ${ctx.ticket}: start the pull request's title with "${ctx.ticket}: " so the tracker links it.` : '';
   const guide = ctx.reviewGuide ? `\n\n${buildReviewGuidePrStep(ctx.reviewGuide)}` : '';
-  return `${filled}${guide}${project}${yours}${extra}${ticket}`;
+  return `${filled}${guide}${project}${yours}${title}${extra}${ticket}`;
 }
 
 /** Ask Claude to fix the failing checks on a PR. */

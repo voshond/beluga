@@ -496,6 +496,7 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `local.openFolder` | ✓ |
 | `local.statFiles` | ✓ ⌘V of file paths attaches the files (⌘⇧V keeps the words) |
 | `projects.add` | ✓ Add projects sheet, Choose Folders…, drop folders on the sidebar |
+| `projects.setNaming` | ✓ Project Settings › General: Branch prefix and PR titles, yours or “Save to beluga.json” (BLG-1033) |
 | `projects.origin` | ✓ new work sent to one of your computers: its project found there by origin, or cloned from it (BLG-788) |
 | `projects.addFolder` | ✓ (a dropped folder of projects is watched) |
 | `projects.initGit` | ✓ Add projects sheet: a plain folder’s row offers Set Up Git |

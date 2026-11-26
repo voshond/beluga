@@ -7,10 +7,12 @@ import { branchOptions } from './branch-options.js';
 import { Tip } from '../components/ui.js';
 import { useApi, useApp } from '../lib/beluga.js';
 import s from './draft.module.css';
+import { baseChoice, liveBaseChoice, pruneBaseChoice, rememberBase } from './base-choice.js';
 import { landChoice, rememberLand } from './land-choice.js';
 
 /** What a new worktree starts from and is called (empty name: Beluga names it from the task). */
 export interface WorktreeChoice {
+  /** Unset: your last pick in this project (BLG-1034), else its default branch. */
   readonly base?: string;
   readonly name: string;
   /** Its own agent (the composer's picker, BLG-446); unset: your default. */
@@ -21,6 +23,9 @@ export interface WorktreeChoice {
 
 /** Whether this new worktree goes straight to main: picked in its box, else your last pick in the project. */
 export const landsOnBase = (choice: WorktreeChoice, projectId: string): boolean => choice.land ?? landChoice(projectId);
+
+/** The branch this new worktree starts from: picked in its box, else your last pick in the project (unset: its default). */
+export const baseOf = (choice: WorktreeChoice, projectId: string): string | undefined => choice.base ?? baseChoice(projectId);
 
 /** The branch it would land on: the base, without its remote ("origin/main" → "main"). */
 export const landTarget = (base: string): string => base.replace(/^origin\//, '') || 'main';
@@ -54,7 +59,11 @@ export function WorktreeDraft({ projectId, choice, onChange }: { projectId: stri
       alive = false;
     };
   }, [projectId]);
-  const base = choice.base ?? branches?.base ?? project?.base ?? '';
+  useEffect(() => {
+    if (branches) pruneBaseChoice(projectId, branches.branches);
+  }, [projectId, branches]);
+  const fallback = branches?.base ?? project?.base;
+  const base = choice.base ?? liveBaseChoice(projectId, branches?.branches) ?? fallback ?? '';
   const options = branches?.branches.length ? branches.branches : base ? [base] : [];
   return (
     <div className={s.draft} role="group" aria-label="New worktree">
@@ -65,7 +74,10 @@ export function WorktreeDraft({ projectId, choice, onChange }: { projectId: stri
       <label className={s.field}>
         <span className={s.fieldLabel}>Based on</span>
         <Tip label="The branch the new one starts from (origin branches are fetched first, so it's the latest)">
-          <Select className={s.select} size="small" mono label="Based on" value={base} onChange={(b) => onChange({ ...choice, base: b })} options={branchOptions(options, branches?.base, branches?.remotes)} searchPlaceholder="Find a branch" />
+          <Select className={s.select} size="small" mono label="Based on" value={base} onChange={(b) => {
+              rememberBase(projectId, b, fallback);
+              onChange({ ...choice, base: b });
+            }} options={branchOptions(options, branches?.base, branches?.remotes)} searchPlaceholder="Find a branch" />
         </Tip>
       </label>
       <label className={s.field}>

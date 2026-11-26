@@ -26,6 +26,8 @@ import './styles/base.css';
 // Dockview's own styles, then Beluga's look for them (the window's frame and the panel's dock).
 import 'dockview-react/dist/styles/dockview.css';
 import './styles/dock.css';
+// Last: a phone-wide window's sizes win (BLG-6).
+import './styles/phone.css';
 
 apply();
 if (native('look')) document.documentElement.dataset.app = 'tauri';

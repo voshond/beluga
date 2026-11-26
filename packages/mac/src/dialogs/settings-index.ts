@@ -189,7 +189,8 @@ export const SETTINGS: readonly Entry[] = [
   // Workspaces
   ...rows('workspaces', undefined, [
     ['Run setup in new worktrees', 'The project’s setup command runs in each new worktree.', 'npm install setup command auto setup'],
-    ['Branch prefix', 'What new worktrees’ branches start with.', 'git branch name prefix'],
+    ['Branch prefix', 'What new worktrees’ branches start with.', 'git branch name prefix naming rule worktree'],
+    ['Pull request titles', 'A rule your agent follows when it titles a pull request.', 'pr title naming rule conventional commits format'],
     ['New projects go in', 'The folder new projects and clones start in.', 'default projects folder path clone location home directory github'],
     ['Fetch in the background', 'How often Beluga fetches each project’s remote on its own, or never.', 'git fetch remote origin interval minutes ssh key vault password prompt popup off'],
     ['Keep open pull requests current', 'Your agent pushes its commits to an open pull request when its turn ends.', 'push pr pull request git agent commits'],

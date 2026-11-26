@@ -1182,6 +1182,7 @@ describe('the plan’s branch: tasks start from it, milestones merge into it, on
         log.inRepo.push(`mergelocal ${p}`);
         return { ok: true };
       },
+      notIn: async (_p, _into, branches) => branches.filter((b) => !log.merged.some((m) => m.branches.includes(b))),
     };
     const setPr = (pr: PlanPr | undefined, repo = 'api') => (pr ? prs.set(repo, pr) : prs.delete(repo));
     const bodyOf = (repo: string): string | undefined => edited.filter((e) => e.repo === repo).at(-1)?.body;
@@ -1273,6 +1274,24 @@ describe('the plan’s branch: tasks start from it, milestones merge into it, on
     t.work.pass(t.plan.id, 'safe');
     await t.settle();
     expect(t.log.retired).toHaveLength(1);
+  });
+
+  it('passed anyway with its tasks not In Review: passes, but says their branch isn’t in the plan’s branch, and they don’t read as merged', async () => {
+    const t = await running();
+    const keys = ['Auth on payment routes', 'Idempotent webhooks', 'Receipts once'].map((x) => t.issue(x));
+    const branch = keys.find((i) => i.branch)!.branch!;
+    // Their worktree deleted before they finished, back in Todo, the plan paused (the branch is still there): nothing In Review, nothing at work.
+    t.work.setPaused(t.plan.id, true);
+    for (const ws of new Set(keys.flatMap((i) => i.worktrees.slice(-1)))) t.board.worktreeGone(ws, true, 'deleted');
+    for (const i of keys) t.board.update(i.id, { status: 'todo' }, t.claude);
+    await tick(10);
+    t.work.pass(t.plan.id, 'safe');
+    await t.settle();
+    expect(t.log.merged).toEqual([]);
+    expect(t.plans.need(t.plan.id).runs.safe?.passedAt).toBeDefined();
+    const problem = t.plans.need(t.plan.id).activity.find((e) => e.kind === 'problem' && e.text.startsWith('passed “Safe payments” without'));
+    expect(problem?.text).toContain(`${branch} isn’t in plan/payments`);
+    for (const i of keys) expect(t.issue(i.title).status).not.toBe('in_plan');
   });
 
   it('tidy up answered No: nothing is merged or cleared away, and it isn’t offered again', async () => {
@@ -1833,6 +1852,35 @@ describe('the plan’s branch: tasks start from it, milestones merge into it, on
       expect(planBranchFor(t.plans.need(t.plan.id), 'api')).toBe('plan/payments');
       expect(planBranchFor(t.plans.need(t.plan.id), 'cal')).toBeUndefined();
     });
+  });
+});
+
+describe('a milestone that can’t start says why when the plan goes quiet over it', () => {
+  it('the plan’s limit is full: “couldn’t start … again”, never “started again” over nothing', async () => {
+    let clock = 1_000_000;
+    const t = setup({ rescueMs: 3 * 60_000, now: () => clock });
+    const plan = t.plans.create({ projectId: 'api', home: 'ws:main', autonomy: 'autopilot' }, t.claude);
+    t.plans.setMaxParallel(plan.id, 1, t.me);
+    t.work.forRun('ws:main', 'p-me')!.tools!.write({
+      title: 'Two at once',
+      goal: 'Both',
+      milestones: [
+        { id: 'a', title: 'A', criteria: ['A works'], dependsOn: [], tasks: [{ id: 'a1', title: 'A one' }] },
+        { id: 'b', title: 'B', criteria: ['B works'], dependsOn: [], tasks: [{ id: 'b1', title: 'B one' }] },
+      ],
+    } as BodyInput);
+    t.work.approve(plan.id);
+    await tick(5);
+    expect(t.made).toHaveLength(1);
+    for (let i = 0; i < 5; i++) {
+      clock += 60_000;
+      t.work.pilot.tick();
+      await tick(3);
+    }
+    const said = t.plans.need(plan.id).activity.map((a) => a.text);
+    expect(said).toContain('the work of “B” (nothing of it is running) went quiet: couldn’t start “B” again: 1 milestone is already at work (the plan’s limit)');
+    expect(said.some((x) => x.includes('started “B” again'))).toBe(false);
+    t.work.stop();
   });
 });
 

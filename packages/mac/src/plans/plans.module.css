@@ -2507,3 +2507,32 @@ textarea.goalBox {
 .fullAuto {
   margin: -2px 0 10px;
 }
+
+/* A phone (BLG-8): the plan fills the screen; its chat covers it while open (its × brings the plan back). */
+@media (max-width: 700px) {
+  .split.splitChat {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .chatSide {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    background: var(--bg);
+  }
+  .chatEdge {
+    display: none;
+  }
+  .pageHead {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px 10px;
+  }
+  .headMain {
+    flex: 1 1 100%;
+  }
+  .headActions {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+}

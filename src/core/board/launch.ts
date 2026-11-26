@@ -1,3 +1,4 @@
+import { namingFor } from '../../shared/naming.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -103,7 +104,8 @@ export function launchBoard(host: BoardHost): () => void {
     askClaude: askForTask(session),
     prPrompt: (ws) => {
       const project = projectOf(ws.projectId);
-      return buildPrPrompt({ branch: ws.branch ?? ws.name, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', ...(project?.scripts?.prPrompt ? { projectPrompt: project.scripts.prPrompt } : {}), ...(project?.scripts?.yourPrPrompt ? { yourPrompt: project.scripts.yourPrPrompt } : {}), ...(ws.ticket ? { ticket: ws.ticket } : {}), ...(project?.root && project.scripts?.reviewGuide ? { reviewGuide: reviewGuideFile(project.root) } : {}) });
+      const titleRule = namingFor(store.getState().prefs, project).prTitle?.value;
+      return buildPrPrompt({ branch: ws.branch ?? ws.name, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', ...(project?.scripts?.prPrompt ? { projectPrompt: project.scripts.prPrompt } : {}), ...(project?.scripts?.yourPrPrompt ? { yourPrompt: project.scripts.yourPrPrompt } : {}), ...(titleRule ? { titleRule } : {}), ...(ws.ticket ? { ticket: ws.ticket } : {}), ...(project?.root && project.scripts?.reviewGuide ? { reviewGuide: reviewGuideFile(project.root) } : {}) });
     },
   });
   attachIssues(session, issues);

@@ -9,7 +9,8 @@ import { AutonomyCards, FullAutoBox, fullAutoChange } from './PlanSheets.js';
 import { modeChange } from './plans-model.js';
 import { usePlanActions, usePlanView, usePlans } from './use-plans.js';
 import p from './plans.module.css';
-import { picksOfPlan, roleChanges, runsChange } from './plan-settings-model.js';
+import { agentsAtWork } from '@beluga/core/plans/progress.js';
+import { keptAgentWords, picksOfPlan, roleChanges, runsChange } from './plan-settings-model.js';
 
 /**
  * Plan Settings: what New Plan asked, in one place once the plan exists. Its project, shown;
@@ -39,6 +40,9 @@ export function PlanSettingsSheet({ planId, close }: { planId: string; close: ()
   // What changes, in How It Runs' words: Never wait for me on or off alone, else the new way to run.
   const change = !runs ? undefined : 'fullAuto' in runs && mode === was.autonomy ? fullAutoChange(runs.fullAuto) : modeChange(view, mode);
   const roles = roleChanges(rolesInput(was.picks, runtimes, mine), rolesInput(picks, runtimes, mine));
+  // A new builder: the milestones already at work keep theirs, said before Save (with how to move one now).
+  const milestones = agentsAtWork(view);
+  const kept = milestones.length ? keptAgentWords(roles, milestones.map((m) => m.milestone.title)) : keptAgentWords(roles, view.active.filter((t) => t.worktree).map((t) => t.task.title), 'task');
   const dirty = Boolean(runs) || testsAt !== was.testsAt || roles.length > 0;
   const save = async (): Promise<void> => {
     close();
@@ -95,6 +99,11 @@ export function PlanSettingsSheet({ planId, close }: { planId: string; close: ()
         )}
         <div className={p.newPlanLabel}>Agents</div>
         <AgentRoles value={picks} onChange={setPicks} />
+        {kept ? (
+          <p className={p.newPlanHint} role="status">
+            {kept}
+          </p>
+        ) : null}
         <div className={p.newPlanRow}>
           <span className={p.newPlanLabel}>When to run tests</span>
           <Popup label="When to run tests" value={testsAt} options={TESTS_AT.map((t) => ({ value: t, label: TESTS_AT_INFO[t].label }))} onChange={setTestsAt} />

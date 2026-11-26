@@ -165,8 +165,8 @@ export class WorkspaceManager {
   /** Worktree branches (root and branch) already checked for a fork pull request's head to follow: git asked once each. */
   private readonly pullHeadsChecked = new Set<string>();
 
-  /** What new branches start with (Settings › Workspaces; the session points this at your choice). */
-  branchPrefix: () => string = () => BRANCH_PREFIX;
+  /** What new branches in the project at `root` start with (its naming rule, else Settings › Workspaces; the session points this at your choice). */
+  branchPrefix: (root: string) => string = () => BRANCH_PREFIX;
 
   constructor(readonly store: WorkspaceStore = new WorkspaceStore()) {
     // No standing main conversation (BLG-70): one from before becomes a chat in its project, once.
@@ -716,7 +716,7 @@ export class WorkspaceManager {
     if (needed.length < 2) return { ok: true, branch: needed[0] ?? main };
     const dir = path.join(this.basesDir, `${slug(project.name)}-${project.id.slice(0, 4)}`, name);
     mkdirSync(path.dirname(dir), { recursive: true });
-    return g.combineBranches(project.root, dir, `${this.branchPrefix()}${name}`, needed);
+    return g.combineBranches(project.root, dir, `${this.branchPrefix(project.root)}${name}`, needed);
   }
 
   // ------------------------------------------------------------- a plan's branch
@@ -769,7 +769,11 @@ export class WorkspaceManager {
 
   /** Delete a branch whose work is merged into `into` (git refuses one that isn't, or that's checked out). */
   async dropBranch(projectId: string, branch: string, into: string): Promise<void> {
-    await g.deleteMergedBranch(this.repoProject(projectId).root, branch, into);
+    const { root } = this.repoProject(projectId);
+    await g.deleteMergedBranch(root, branch, into);
+    // A worktree that built on it (a task's blocked_by) now builds on where its work went: its
+    // base never names a branch that's gone (merged "into" nothing, 0 commits, no word of it).
+    for (const r of this.records) if (r.projectRoot === root && r.base === branch && r.branch !== branch) this.patchRecord(r.id, { base: into });
   }
 
   /** Merge a branch into the main folder, which must be on the default branch. */
@@ -839,7 +843,7 @@ export class WorkspaceManager {
     if (!(await g.isCommit(project.root, startPoint))) throw new WorkspaceError(`There’s no commit ${startPoint.slice(0, 12)} here`);
     const s = slug(name);
     const dir = this.freeDir(project, s);
-    const branch = await this.freeBranch(project.root, `${this.branchPrefix()}${s}`);
+    const branch = await this.freeBranch(project.root, `${this.branchPrefix(project.root)}${s}`);
     await g.git(project.root, ['worktree', 'add', '-b', branch, dir, startPoint]);
     await g.excludeProjectDir(dir);
     await copyEnvFiles(project.root, dir);
@@ -942,7 +946,7 @@ export class WorkspaceManager {
     const from = base ?? project.base;
     const s = slug(name);
     const dir = this.freeDir(project, s);
-    const branch = await this.freeBranch(project.root, this.wantedBranch(s, opts.ticket));
+    const branch = await this.freeBranch(project.root, this.wantedBranch(project.root, s, opts.ticket));
     await g.addWorktree(project.root, dir, branch, from);
     await g.excludeProjectDir(dir);
     await copyEnvFiles(project.root, dir);
@@ -1141,7 +1145,7 @@ export class WorkspaceManager {
     const at = opts.at ?? now;
     try {
       const from = at ? await snapshotBase(source.path, at) : (opts.base ?? (source.kind === 'chat' ? project.base : (source.branch ?? 'HEAD')));
-      const branch = await this.freeBranch(project.root, `${this.branchPrefix()}${s}`);
+      const branch = await this.freeBranch(project.root, `${this.branchPrefix(project.root)}${s}`);
       await g.addWorktree(project.root, dir, branch, from);
       await g.excludeProjectDir(dir);
       if (at) await applySnapshot(dir, at);
@@ -1213,7 +1217,7 @@ export class WorkspaceManager {
     const s = slug(name);
     const dir = this.freeDir(project, s);
     const from = opts.base ?? project.base;
-    const branch = await this.freeBranch(project.root, `${this.branchPrefix()}${s}`);
+    const branch = await this.freeBranch(project.root, `${this.branchPrefix(project.root)}${s}`);
     await g.addWorktree(project.root, dir, branch, from);
     await g.excludeProjectDir(dir);
     await copyEnvFiles(project.root, dir);
@@ -1610,13 +1614,13 @@ export class WorkspaceManager {
   }
 
   /** The branch a worktree of this name wants: RUN-117/<name> for a ticket's, else beluga/<name> (or your prefix). */
-  private wantedBranch(name: string, ticket?: string): string {
-    return ticket ? ticketBranch(ticket, name) : `${this.branchPrefix()}${name}`;
+  private wantedBranch(projectRoot: string, name: string, ticket?: string): string {
+    return ticket ? ticketBranch(ticket, name) : `${this.branchPrefix(projectRoot)}${name}`;
   }
 
   /** A free local branch name like beluga/<name>, beluga/<name>-2… */
   freeBranchName(projectRoot: string, name: string): Promise<string> {
-    return this.freeBranch(projectRoot, `${this.branchPrefix()}${slug(name)}`);
+    return this.freeBranch(projectRoot, `${this.branchPrefix(projectRoot)}${slug(name)}`);
   }
 
   forgetSession(id: string): void {
@@ -1640,8 +1644,8 @@ export class WorkspaceManager {
     const s = slug(name);
     // You named it meanwhile: yours stays.
     if (ws.kind !== 'worktree' || ws.nameSetByUser || !s || s === ws.name) return;
-    const prefix = this.branchPrefix();
-    const branch = ws.branch && isOwnBranch(ws.branch, ws.name, prefix, ws.ticket) && !(await this.onRemote(ws.path, ws.branch)) ? await this.freeBranch(ws.path, this.wantedBranch(s, ws.ticket), ws.branch) : undefined;
+    const prefix = this.branchPrefix(ws.projectRoot);
+    const branch = ws.branch && isOwnBranch(ws.branch, ws.name, prefix, ws.ticket) && !(await this.onRemote(ws.path, ws.branch)) ? await this.freeBranch(ws.path, this.wantedBranch(ws.projectRoot, s, ws.ticket), ws.branch) : undefined;
     if (branch && branch !== ws.branch) await g.git(ws.path, ['branch', '-m', ws.branch!, branch]);
     this.patchRecord(id, { name: s, ...(branch ? { branch } : {}) });
     await this.refresh();
@@ -1668,8 +1672,8 @@ export class WorkspaceManager {
     const kept = !old ? undefined : (await this.onRemote(ws.path, old)) ? ('pushed' as const) : undefined;
     let branch = old;
     if (old && !kept) {
-      const prefix = this.branchPrefix();
-      const wanted = exact ?? (isOwnBranch(old, ws.name, prefix, ws.ticket) ? this.wantedBranch(s, ws.ticket) : `${old.slice(0, old.lastIndexOf('/') + 1)}${s}`);
+      const prefix = this.branchPrefix(ws.projectRoot);
+      const wanted = exact ?? (isOwnBranch(old, ws.name, prefix, ws.ticket) ? this.wantedBranch(ws.projectRoot, s, ws.ticket) : `${old.slice(0, old.lastIndexOf('/') + 1)}${s}`);
       branch = exact ? await this.takenOrFree(ws.path, exact, old) : await this.freeBranch(ws.path, wanted, old);
       if (branch !== old) await g.git(ws.path, ['branch', '-m', old, branch]);
     }
@@ -1688,7 +1692,7 @@ export class WorkspaceManager {
     const ws = this.require(id);
     if (ws.kind !== 'worktree' || !ws.branch) throw new WorkspaceError('Only a worktree’s branch can have a pull request of its own');
     if (!(await g.followsPull(ws.path, ws.branch))) return ws.branch;
-    const wanted = `${this.branchPrefix()}${slug(ws.name) || 'pull-request'}`;
+    const wanted = `${this.branchPrefix(ws.projectRoot)}${slug(ws.name) || 'pull-request'}`;
     let branch = wanted;
     for (let i = 2; (await g.isCommit(ws.path, `refs/heads/${branch}`)) || (await this.onRemote(ws.path, branch)); i++) branch = `${wanted}-${i}`;
     await g.git(ws.path, ['branch', '-m', ws.branch, branch]);
@@ -1780,6 +1784,8 @@ export class WorkspaceManager {
     const ws = this.require(id);
     if (ws.kind !== 'worktree' || !ws.branch) throw new WorkspaceError('Only worktrees can be merged');
     const into = this.mergeTarget(ws);
+    // A base that's gone (a branch it built on, merged and deleted) is said, never "0 commits, no conflicts".
+    if (into && !(await g.tryGit(ws.projectRoot, ['rev-parse', '--verify', '--quiet', `${into}^{commit}`]))) throw new WorkspaceError(`${ws.name} merges into ${into}, which isn’t there any more (merged and deleted?): nothing to compare it with`);
     return mergePreview({ folder: ws.projectRoot, from: ws.branch, ...(into ? { into } : {}), uncommitted: ws.status?.changed ?? 0 });
   }
 

@@ -212,6 +212,7 @@ export const PHONE: Record<Method, Side> = {
   'workbench.generateReviewGuide': 'mac',
   'workbench.openReviewGuide': 'mac',
   'workbench.removeReviewGuide': 'mac',
+  'projects.setNaming': 'mac',
   'workbench.setModel': 'phone',
   'workbench.setEffort': 'mac',
   'workbench.setAgent': 'phone',

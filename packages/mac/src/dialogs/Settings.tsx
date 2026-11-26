@@ -3,6 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { TRUST_INFO, trustOf } from '@beluga/core/trust.js';
 import { BRANCH_PREFIX_RE, EFFORTS, type LowPower } from '@beluga/shared/settings-schema.js';
+import { PR_TITLE_RULE_MAX } from '@beluga/shared/naming.js';
 import { FETCH_EVERY_CHOICES, FETCH_EVERY_DEFAULT, fetchEveryWords } from '@beluga/shared/background-fetch.js';
 import { agentChoices, agentForChoice, choiceForAgent } from '@beluga/ui/agent-choice.js';
 import { EFFORT_INFO, agentEntries, modelInfo, myModel, myRuntime, setMyAgent } from '../chat/ModelPicker.js';
@@ -530,7 +531,7 @@ function BranchPrefixRow() {
     if (ok && value !== saved) void api.session.setPrefs({ branchPrefix: value });
   };
   return (
-    <Row label="Branch prefix" detail={ok ? `New worktrees get branches like ${value}fix-login. Leave it empty for no prefix.` : 'Use letters, digits and . _ - / only.'}>
+    <Row label="Branch prefix" detail={ok ? `New worktrees get branches like ${value}fix-login. Leave it empty for no prefix. A project can have its own in Project Settings.` : 'Use letters, digits and . _ - / only.'}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -538,6 +539,30 @@ function BranchPrefixRow() {
         }}
       >
         <input aria-label="Branch prefix" className={s.text} value={value} placeholder="none" spellCheck={false} onChange={(e) => setValue(e.target.value.trim())} onBlur={save} />
+      </form>
+    </Row>
+  );
+}
+
+/** How your agent titles pull requests, in your words (BLG-1033): saved when you leave the field; empty: no rule. */
+function PrTitleRow() {
+  const api = useApi();
+  const saved = useApp((st) => st.prefs.prTitleRule) ?? '';
+  const [value, setValue] = useState(saved);
+  useEffect(() => setValue(saved), [saved]);
+  const save = (): void => {
+    const next = value.trim().slice(0, PR_TITLE_RULE_MAX);
+    if (next !== saved) void api.session.setPrefs({ prTitleRule: next || null });
+  };
+  return (
+    <Row label="Pull request titles" detail="A rule your agent follows when it titles a pull request, for example “Conventional commits: feat(scope): summary”. A project can have its own in Project Settings.">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          save();
+        }}
+      >
+        <input aria-label="Pull request titles" className={s.text} value={value} maxLength={PR_TITLE_RULE_MAX} placeholder="No rule" spellCheck={false} onChange={(e) => setValue(e.target.value)} onBlur={save} />
       </form>
     </Row>
   );
@@ -572,6 +597,7 @@ function Workspaces() {
         </Row>
         <BranchPrefixRow />
         <ProjectsHomeRow />
+        <PrTitleRow />
         <FetchEveryRow />
         <Row label="Keep open pull requests current" detail="When your agent commits in a worktree whose pull request is open, it pushes there as its turn ends. Off: it commits here, and you push from the toolbar.">
           <Switch label="Keep open pull requests current" on={p.pushToPr} onChange={(v) => void api.session.setPrefs({ pushToPr: v })} />

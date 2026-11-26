@@ -1,3 +1,4 @@
+import { setProjectNaming } from '../core/naming-rules.js';
 import { git, tryGit } from '../workspaces/git.js';
 import { byYourHand } from '../core/by-hand.js';
 import { type WorktreeMover, worktreeMover } from '../core/worktree-move.js';
@@ -482,6 +483,14 @@ export const HANDLERS = {
     const root = rootOf(s, projectId);
     if (!root) return null;
     return (await git(root, ['remote', 'get-url', 'origin'], 5_000).catch(() => '')).trim() || null;
+  },
+  'projects.setNaming': async (s, projectId, patch, team) => {
+    const project = s.store.getState().projects.find((p) => p.id === projectId && p.root);
+    if (!project) throw new Error('No such project');
+    const where = setProjectNaming({ project, yours: s.store.getState().prefs.projectNaming, setYours: (all) => s.setPrefs({ projectNaming: all }) }, patch, team);
+    // beluga.json changed: the project reads it again, so its rule shows (and counts) at once.
+    if (where !== 'yours') await ctl(s)?.refresh();
+    return where;
   },
   'projects.iconAt': (_s, dir) => readProjectIcon(expandHome(dir)),
   // Every repo found (the sheet shows the newest, and its Filter searches them all).

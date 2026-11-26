@@ -241,7 +241,7 @@ export const panelKey = (view: View): string => (view.kind === 'workspace' ? `ws
  * The room the center (the conversation and its toolbar) always keeps beside the panel: its name
  * gives way to … first, down to this, and then the panel stops growing instead of covering it.
  */
-export const CENTER_MIN = 690;
+export const CENTER_MIN = 480;
 /** The least the center is ever squeezed to, in a window too small for all three (the frame's own floor). */
 export const CENTER_FLOOR = 360;
 

@@ -1,5 +1,6 @@
 import { githubId, runId, setupId, shellId, terminalLabel } from '@beluga/shared/terminal-keys.js';
 import { findWorkspace } from '@beluga/ui/workspace-models.js';
+import { useState } from 'react';
 import { Icon } from '../components/Icon.js';
 import { Button, Dot, Empty, IconButton, Tip } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
@@ -134,6 +135,9 @@ export function ShellTabs({ shells }: { shells: GlobalShells }) {
 /** Whether a running terminal started before you changed its variables (it remounts once restarted). */
 export const useEnvStale = (termKey: string | undefined): boolean => useApp((st) => Boolean(termKey && st.termEnvStale.includes(termKey)));
 
+/** Shells whose note you closed: it stays closed for them until they start again (a new one shows it). */
+const envStaleClosed = new Set<string>();
+
 /**
  * A running shell (or the run command) keeps the variables it started with: after you change them
  * in Settings › Environment, this offers to start it again with the new ones.
@@ -141,7 +145,17 @@ export const useEnvStale = (termKey: string | undefined): boolean => useApp((st)
 export function EnvStale({ termKey }: { termKey: string }) {
   const api = useApi();
   const stale = useEnvStale(termKey);
-  if (!stale) return null;
+  const [, closed] = useState(0);
+  // Up to date again (restarted): a later change shows the note again.
+  if (!stale) {
+    envStaleClosed.delete(termKey);
+    return null;
+  }
+  if (envStaleClosed.has(termKey)) return null;
+  const close = (): void => {
+    envStaleClosed.add(termKey);
+    closed((n) => n + 1);
+  };
   const what = termKey.endsWith(':run') ? 'It' : 'This shell';
   return (
     <div className={s.envStale} role="status">
@@ -150,6 +164,7 @@ export function EnvStale({ termKey }: { termKey: string }) {
       <Button size="small" onClick={() => void api.terminals.restart(termKey)}>
         Restart
       </Button>
+      <IconButton size="small" icon="x" label="Not now" onClick={close} />
     </div>
   );
 }

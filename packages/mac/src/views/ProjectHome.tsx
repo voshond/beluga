@@ -48,6 +48,7 @@ import { StatusIcon } from "../tasks/marks.js";
 import { useTaskActions } from "../tasks/use-tasks.js";
 import { branchOptions } from "../chat/branch-options.js";
 import { ThenField } from "../chat/WorktreeDraft.js";
+import { liveBaseChoice, pruneBaseChoice, rememberBase } from "../chat/base-choice.js";
 import { landChoice } from "../chat/land-choice.js";
 import { useBoxSuggestions } from "../chat/BoxSuggestions.js";
 import { useAttachments } from "../chat/use-attachments.js";
@@ -300,7 +301,13 @@ function HomeComposer({ project }: { project: Project }) {
   const ready = worktree
     ? Boolean(task || name.trim() || att.images.length || att.files.length)
     : plan || Boolean(task || att.images.length || att.files.length);
-  const chosen = base ?? branches?.base ?? project.base;
+  // Based on: picked here, else as last time in this project (BLG-1034), else its default.
+  const fallback = branches?.base ?? project.base;
+  const picked = base ?? liveBaseChoice(project.id, branches?.branches);
+  const chosen = picked ?? fallback;
+  useEffect(() => {
+    if (branches) pruneBaseChoice(project.id, branches.branches);
+  }, [project.id, branches]);
   const options = branches?.branches.length
     ? branches.branches
     : chosen
@@ -361,7 +368,7 @@ function HomeComposer({ project }: { project: Project }) {
     const there: WorkToStart = plan
       ? { kind: "plan", input: { goal: message, autonomy } }
       : worktree
-        ? { kind: "worktree", text: message, opts: { ...(base ? { base } : {}), ...(named ? { name: named } : {}), ...(agent ? { agent } : {}), ...straight } }
+        ? { kind: "worktree", text: message, opts: { ...(picked ? { base: picked } : {}), ...(named ? { name: named } : {}), ...(agent ? { agent } : {}), ...straight } }
         : { kind: "chat", text: message };
     const sent = sendToComputer(startDeps, project.id, agent?.runtime ?? myRuntime(client.store.getState().prefs), there);
     // Held (the computer Runs on names can't take it now): nothing starts, the words stay.
@@ -386,10 +393,10 @@ function HomeComposer({ project }: { project: Project }) {
       // The worktree is made in the background, its row and "Making…" page there at once (BLG-942): you can go on right away.
       setText("");
       setName("");
-      const ahead = makeAhead(client, project.id, named || message || "worktree", { ...(base ? { base } : {}), asked: message });
+      const ahead = makeAhead(client, project.id, named || message || "worktree", { ...(picked ? { base: picked } : {}), asked: message });
       void api.workspaces
         .startWorktree(project.id, message, {
-          ...(base ? { base } : {}),
+          ...(picked ? { base: picked } : {}),
           ...(named ? { name: named } : {}),
           ...(agent ? { agent } : {}),
           ...straight,
@@ -558,7 +565,10 @@ function HomeComposer({ project }: { project: Project }) {
                     mono
                     label="Based on"
                     value={chosen}
-                    onChange={setBase}
+                    onChange={(b) => {
+                      rememberBase(project.id, b, fallback);
+                      setBase(b);
+                    }}
                     options={branchOptions(options, branches?.base, branches?.remotes)}
                     searchPlaceholder="Find a branch"
                   />

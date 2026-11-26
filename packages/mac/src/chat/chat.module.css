@@ -48,6 +48,10 @@
 .logEmpty {
   flex: 1;
   display: flex;
+  /* Shorter than what it says (a phone with its keyboard up: BLG-7), it scrolls in its place
+     rather than spilling under the banner and the message box. */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .message {

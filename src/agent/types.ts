@@ -62,6 +62,11 @@ export interface AgentRunInput {
   readonly maxTurns?: number;
   /** Your environment variables for this run, over Beluga's own (only for runs you asked for). */
   readonly env?: Readonly<Record<string, string>>;
+  /**
+   * The sign-in variables in `env` are Claude Code's own (a local model's endpoint key, agent/runtime/local.ts),
+   * not a project's: Claude Code signs in with them, and they are never held back for its shell (sign-in-env.ts).
+   */
+  readonly signsInFromEnv?: boolean;
   /** Your own runs: your own MCP servers from Claude Code (agent/owner-mcp.ts); never a friend's or a guest's. */
   readonly ownerMcp?: boolean;
   /**
@@ -578,6 +583,8 @@ export interface AgentPlace {
   readonly openPr?: OpenPr;
   /** Straight to main (no open PR): when its turn ends, Beluga lands its commits on this branch in the main folder. */
   readonly landsOn?: string;
+  /** How its pull request titles are written (the project's naming rule, else Settings'; BLG-1033). */
+  readonly prTitleRule?: string;
   /** A fork of a friend's worktree (BLG-1017): what came with it, and what stayed on their computer (its `.beluga/fork.json`). */
   readonly forked?: ForkedPlace;
 }

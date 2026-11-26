@@ -494,3 +494,17 @@
   /* Even all round: a drop below would fill the track's gap under it, and the segment would look pushed up. */
   box-shadow: 0 0 1.5px rgba(0, 0, 0, 0.14), var(--control-sheen);
 }
+
+/* A phone (BLG-6): a row of choices wider than the screen scrolls sideways, never runs off it. */
+@media (max-width: 700px) {
+  .segmented {
+    max-width: 100%;
+    /* Scrolls (never shrinks to a sliver beside other controls: those wrap, or the row scrolls). */
+    min-width: min(100%, 14rem);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .segment {
+    flex: none;
+  }
+}

@@ -166,6 +166,8 @@ export function onEndpoint(input: AgentRunInput, target: LocalTarget, resolve: (
     model: target.model,
     onEvent: onEvent(input.onEvent),
     env: { ...input.env, ...endpointEnv(target, home.dir, wire) },
+    // Its key is how Claude Code signs in to the endpoint: kept for Claude Code, not held for the shell (BLG-1027).
+    signsInFromEnv: true,
     ...(input.onFollowUps ? { onFollowUps: (send) => input.onFollowUps!(send && ((f) => send(mapFollowUp(f)))) } : {}),
     ...(input.onSteer ? { onSteer: (steer) => input.onSteer!(steer && wrapSteer(steer, mapFollowUp)) } : {}),
   };

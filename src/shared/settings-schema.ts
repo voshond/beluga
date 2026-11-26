@@ -9,6 +9,8 @@ import { MAX_AGENT_ARGS, MAX_AGENT_ARG_LENGTH } from './agent-args.js';
 import { THREAD_LIMITS_DEFAULT, THREAD_LIMITS_MAX } from './threads.js';
 import { FETCH_EVERY_DEFAULT, fetchEveryMinutes } from './background-fetch.js';
 import { AUTOPILOT_WAIT_DEFAULT, autopilotWaitMinutes } from './autopilot-wait.js';
+import { BRANCH_PREFIX_DEFAULT, BRANCH_PREFIX_RE } from './branch-prefix.js';
+import { NamingRules, PR_TITLE_RULE_MAX } from './naming.js';
 import { coercePerKind, coerceSound, DEFAULT_SOUND, DEFAULT_VOLUME, PerKindSounds, SoundChoice } from './notify-sound.js';
 
 // Settings as data (no file access), so the reducer and the clients can use them anywhere.
@@ -34,10 +36,7 @@ export type AgentPick = z.infer<typeof AgentPick>;
 export const BuildWithPick = z.union([AgentPick, z.literal('here')]);
 export type BuildWithPick = z.infer<typeof BuildWithPick>;
 
-/** What new worktrees' branches start with (`beluga/fix-login`); empty: just the name. */
-export const BRANCH_PREFIX_DEFAULT = 'beluga/';
-/** A prefix git accepts in front of a slug: letters, digits, `. _ - /`, no `..`, `//`, or part starting with `.` `-` `/`. */
-export const BRANCH_PREFIX_RE = /^(?![./-])(?!.*\.\.)(?!.*\/\/)(?!.*\/[.-])[\w./-]{0,40}$/;
+export { BRANCH_PREFIX_DEFAULT, BRANCH_PREFIX_RE } from './branch-prefix.js';
 
 /** How many days without activity settle a chat (core/triage); 0: never. */
 export const SETTLE_IDLE_DAYS_DEFAULT = 3;
@@ -154,6 +153,10 @@ export const Settings = z.object({
   branchPrefix: z.string().regex(BRANCH_PREFIX_RE).catch(BRANCH_PREFIX_DEFAULT),
   /** Where new projects and clones go (Settings › Workspaces); unset: the first code folder found in your home (workspaces/new-project.ts). */
   projectsHome: z.string().min(1).max(4096).optional(),
+  /** How pull request titles are written, in your words (for every project without a rule of its own; BLG-1033). */
+  prTitleRule: z.string().trim().max(PR_TITLE_RULE_MAX).optional().catch(undefined),
+  /** A project's own naming rules (by project name), over the two above; a bad one is dropped. */
+  projectNaming: z.record(z.string().min(1).max(80), NamingRules.catch({})).optional().catch(undefined),
   /** Run the project's setup script (e.g. npm install) in every new worktree. */
   autoSetup: z.boolean().default(true),
   /** Show how full each conversation's context is. */

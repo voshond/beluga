@@ -3,7 +3,9 @@ import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } fro
 import { cx } from '../components/ui.js';
 import { CENTER_FLOOR, PANEL_DEFAULT, PANEL_MIN, SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, clampPanelWidth } from '../lib/panel-model.js';
 import { getPrefs, setPrefs, usePrefs } from '../lib/prefs.js';
+import { usePhoneLayout } from '../lib/phone-layout.js';
 import { FrameContext } from './frame.js';
+import { PhoneFrame } from './PhoneFrame.js';
 import { CenterPane, PanelPane } from '../machines/MachinePane.js';
 import { DOCK_THEME } from './RightPanel.js';
 import { Sidebar } from './Sidebar.js';
@@ -67,13 +69,18 @@ const REGIONS = { sidebar: SidebarRegion, center: CenterRegion, panel: PanelRegi
 
 const regionApi = (frame: GridviewApi, id: keyof typeof REGIONS): GridviewPanelApi | undefined => frame.getPanel(id)?.api as GridviewPanelApi | undefined;
 
+/** The window's frame: the desktop's three regions, or one column on a phone-wide window (BLG-6). */
+export function Workbench() {
+  return usePhoneLayout() ? <PhoneFrame /> : <DesktopFrame />;
+}
+
 /**
- * The window's frame (Dockview's Gridview, as VS Code's workbench is laid out): the sidebar, the
+ * The desktop frame (Dockview's Gridview, as VS Code's workbench is laid out): the sidebar, the
  * center and the right panel, side by side with a divider to drag between them. The sidebar and the
  * panel keep the width you give them and show or hide in one step; the center takes the rest.
  * Inside the panel is a dock of its own (RightPanel).
  */
-export function Workbench() {
+function DesktopFrame() {
   const prefs = usePrefs();
   const [panelOpen, setPanelOpen] = useState(false);
   const windowWidth = useWindowWidth();

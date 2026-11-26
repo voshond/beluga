@@ -1,3 +1,4 @@
+import { namingFor } from '../shared/naming.js';
 import { existsSync } from 'node:fs';
 import { chmod, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -510,7 +511,8 @@ export class Workbench {
     // Read now, not from the last refresh: instructions saved a moment ago (the PR sheet) apply to this one.
     const scripts = project ? this.manager.scripts(project.id) : {};
     const guide = project?.root && scripts.reviewGuide ? reviewGuideFile(project.root) : undefined;
-    const prompt = buildPrPrompt({ branch: ws.branch, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', projectPrompt: scripts.prPrompt, yourPrompt: scripts.yourPrPrompt, extra, ...(ws.ticket ? { ticket: ws.ticket } : {}), ...(guide ? { reviewGuide: guide } : {}) });
+    const titleRule = namingFor(this.deps.store.getState().prefs, project).prTitle?.value;
+    const prompt = buildPrPrompt({ branch: ws.branch, base: ws.base ?? project?.base ?? 'origin/main', project: project?.name ?? '', projectPrompt: scripts.prPrompt, yourPrompt: scripts.yourPrPrompt, extra, ...(titleRule ? { titleRule } : {}), ...(ws.ticket ? { ticket: ws.ticket } : {}), ...(guide ? { reviewGuide: guide } : {}) });
     if (!this.deps.store.getState().prs[ws.id]) this.prAsked.add(ws.id);
     if (!opts.auto) this.deps.controller.open(ws.id);
     const ask = (): void => this.deps.askClaude(prompt, `ws:${ws.id}`);

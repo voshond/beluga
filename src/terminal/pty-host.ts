@@ -118,9 +118,14 @@ export class PtyProcess {
     for (const l of [...this.exitListeners]) l(exit);
   }
 
-  /** What it wrote lately (up to BACKLOG_BYTES), for a screen attaching now: without its queries, or that screen would answer them again. */
+  /** What it wrote lately (up to BACKLOG_BYTES), for a screen attaching now. */
   backlog(): string {
-    return withoutQueries(this.chunks.join(''));
+    return this.chunks.join('');
+  }
+
+  /** The backlog for a screen to draw again: without the program's queries, or they'd be answered twice (into its input). */
+  replay(): string {
+    return withoutQueries(this.backlog());
   }
 
   /** Input bytes (keyboard). Ignored once the program has exited. */

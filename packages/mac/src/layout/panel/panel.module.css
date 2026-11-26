@@ -639,7 +639,7 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  height: 34px;
+  height: 38px;
   padding: 0 6px 0 8px;
   border-bottom: 0.5px solid var(--hairline);
   background: var(--bg);
@@ -649,27 +649,42 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   overflow-x: auto;
   scrollbar-width: none;
 }
+/* Quiet tabs; the open one is a raised chip with a hairline edge (no fill on the others). */
 .termTab {
   flex: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 22px;
-  padding: 0 9px;
-  border-radius: 6px;
-  color: var(--text-2);
+  height: 26px;
+  padding: 0 10px;
+  border: 0.5px solid transparent;
+  border-radius: 7px;
+  color: var(--text-3);
   font-size: 0.9rem;
   font-weight: 500;
   white-space: nowrap;
+  cursor: default;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
-.termTab:hover,
-.termTabOn {
+.termTab > :first-child {
+  transform: scale(0.85);
+}
+.termTab:hover {
   background: var(--bg-hover);
+  color: var(--text-2);
+}
+.termTabOn,
+.termTabOn:hover {
+  border-color: var(--hairline-strong);
+  background: var(--bg-raised);
   color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 .termAdd {
   flex: none;

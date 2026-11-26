@@ -261,7 +261,7 @@ export function localLink(pty: PtyProcess): PtyLink {
     write: (data) => pty.write(data),
     resize: (cols, rows) => pty.resize(cols, rows),
     onData: (listener) => {
-      const backlog = pty.backlog();
+      const backlog = pty.replay();
       if (backlog) listener(backlog);
       return pty.onData(listener);
     },

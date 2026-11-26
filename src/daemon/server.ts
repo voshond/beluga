@@ -444,7 +444,7 @@ export class DaemonServer {
       send({ t: 'term_data', term, data });
       gate?.sent(data.length);
     };
-    const backlog = pty.backlog();
+    const backlog = pty.replay();
     if (backlog) out(backlog);
     send({ t: 'term_status', term, running: pty.running, ...(pty.exited ? { exited: pty.exited } : {}) });
     const offData = pty.onData(out);
