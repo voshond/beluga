@@ -440,25 +440,27 @@ button.card:hover {
 }
 
 .grid {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: 14px repeat(7, auto);
+  grid-template-columns: auto repeat(var(--weeks), minmax(10px, 1fr));
   gap: 3px;
   overflow-x: auto;
   padding-bottom: 2px;
 }
 .gridDays,
 .gridWeek {
-  display: grid;
-  grid-template-rows: 14px repeat(7, 10px);
-  gap: 3px;
+  display: contents;
 }
-.gridDays {
+.gridDays > span {
+  align-self: center;
   padding-right: 4px;
   font-size: 9px;
   line-height: 10px;
   color: var(--text-3);
 }
 .gridMonth {
-  width: 10px;
+  width: 0;
   overflow: visible;
   white-space: nowrap;
   font-size: 10px;
@@ -466,8 +468,8 @@ button.card:hover {
   color: var(--text-3);
 }
 .gridCell {
-  width: 10px;
-  height: 10px;
+  width: 100%;
+  aspect-ratio: 1;
   padding: 0;
   border: 0;
   border-radius: 2px;
