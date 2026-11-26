@@ -18,15 +18,16 @@ const openInitiative = async (page: Page, name: string): Promise<void> => {
 test('an initiative’s page shows the epic’s tickets, open first, with their pull requests', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
   const tickets = page.getByRole('region', { name: 'Tickets' });
-  await expect(tickets.getByRole('listitem')).toHaveCount(4);
-  await expect(tickets.getByRole('listitem').first()).toHaveAttribute('data-category', 'inProgress');
-  await expect(tickets.getByRole('listitem').last()).toHaveAttribute('data-ticket', 'SHOP-133');
+  const rows = tickets.locator('[role="listitem"][data-sub-task="false"]');
+  await expect(rows).toHaveCount(4);
+  await expect(rows.first()).toHaveAttribute('data-category', 'inProgress');
+  await expect(rows.last()).toHaveAttribute('data-ticket', 'SHOP-133');
   await expect(tickets.getByRole('button', { name: 'Open SHOP-150 in Jira: 3DS challenge fails on Safari' })).toBeVisible();
   await expect(tickets.locator('[data-ticket="SHOP-141"]')).toContainText('Ana Ruiz');
   await expect(tickets.locator('[data-ticket="SHOP-141"]')).toContainText('Blocked');
   await expect(tickets.getByRole('button', { name: /Open pull request #412 in example\/shop: Open/ })).toBeVisible();
   await expect(tickets.getByRole('button', { name: /Open pull request #398 in example\/shop: Merged/ })).toBeVisible();
-  await expect(tickets.getByText(/4 tickets · 1 done · 1 open pull request/)).toBeVisible();
+  await expect(tickets.getByText(/4 tickets · 1 done · 2 sub-tasks, 1 done · 1 open pull request/)).toBeVisible();
   await expect(tickets.getByRole('button', { name: 'Refresh the tickets from Jira' })).toBeEnabled();
   await expect(page.getByRole('region', { name: 'Goal' }).getByRole('heading', { name: 'Scope' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Slack conversations' }).getByRole('button', { name: 'Open 3DS on Safari in Slack' })).toBeVisible();
@@ -47,7 +48,7 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
   expect((await bar.locator('[data-part="done"]').boundingBox())!.width).toBeGreaterThan(100);
   expect((await bar.locator('[data-part="inProgress"]').boundingBox())!.width).toBeGreaterThan(30);
   await page.setViewportSize({ width: 2300, height: 1000 });
-  await expect(tickets.getByText('Ana Ruiz')).toBeVisible();
+  await expect(tickets.locator('[data-ticket="SHOP-141"]').getByText('Ana Ruiz')).toBeVisible();
   await shot(page, '01b-initiative-page-wide.png');
   if (shots) await tickets.screenshot({ path: path.join(shots, '08-tickets-dark-wide.png') });
 });
@@ -151,4 +152,33 @@ test('an initiative’s page shows its tasks, ticks one off through the chat, li
   await expect(days.getByRole('button', { name: 'Fri' })).toHaveAttribute('aria-pressed', 'false');
   await days.scrollIntoViewIfNeeded();
   await shot(page, '08-initiative-check-in-time.png');
+});
+
+test('an initiative’s page shows what it waits for and what came in, and adds and stops a follow-up', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  const fresh = page.getByRole('region', { name: 'New since you asked' });
+  await expect(fresh.locator('[data-news="2"]')).toContainText('Ana Ruiz: Finance signed off the new table');
+  await expect(fresh.locator('[data-news="2"]')).toContainText('About: Finance’s final Norway tax table');
+  const waiting = page.getByRole('region', { name: 'Waiting for' });
+  await expect(waiting.getByRole('listitem')).toHaveCount(1);
+  const row = waiting.locator('[data-watch="1"]');
+  await expect(row).toContainText('Who picks up SHOP-150 now that Ana is out');
+  await expect(row).toContainText('Jonas');
+  await expect(row).toContainText(/looked 2 h ago · next/);
+  await expect(row.getByRole('button', { name: /Look now/ })).toBeVisible();
+  await waiting.scrollIntoViewIfNeeded();
+  await shot(page, '09-initiative-follow-ups.png');
+  await fresh.getByRole('button', { name: /Mark read/ }).click();
+  await expect(fresh).toHaveCount(0);
+  await waiting.getByRole('button', { name: 'Watch for an Answer…' }).click();
+  await page.getByLabel('What it waits for').fill('Jonas on the address lookup fallback');
+  await page.getByLabel('Where to look').fill('SHOP-152');
+  await page.getByLabel('Waiting on').fill('Jonas');
+  await page.getByRole('button', { name: 'Watch', exact: true }).click();
+  const added = waiting.locator('[data-watch="3"]');
+  await expect(added).toContainText('Jonas on the address lookup fallback');
+  await expect(added).toContainText('a comment on SHOP-152');
+  await expect(added).toContainText('not looked yet');
+  await added.getByRole('button', { name: /Stop watching/ }).click();
+  await expect(added).toHaveCount(0);
 });
