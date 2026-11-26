@@ -3,6 +3,7 @@ import { writeText } from './files.js';
 import type { Initiatives } from './initiatives.js';
 import type { EpicStatus, EpicTickets, InitiativeDraft, InitiativeTasks, OutboxDraft, Suggestion } from './model.js';
 import { dayOf } from './repo.js';
+import { type Risk, RisksSchema } from './risks.js';
 
 type DemoInitiative = {
   readonly draft: InitiativeDraft;
@@ -14,6 +15,7 @@ type DemoInitiative = {
   readonly timeline: readonly string[];
   readonly suggestions: readonly Suggestion[];
   readonly outbox?: readonly OutboxDraft[];
+  readonly risks?: readonly Risk[];
 };
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -29,10 +31,10 @@ const demos = (now: number): DemoInitiative[] => {
         at: iso,
         epics: [{ key: 'SHOP-120', url: 'https://example.atlassian.net/browse/SHOP-120', title: 'One-page checkout' }],
         tickets: [
-          { key: 'SHOP-141', url: 'https://example.atlassian.net/browse/SHOP-141', summary: 'Tax rates for Norway', status: 'Blocked', statusCategory: 'inProgress', assignee: 'Ana Ruiz', updated: at(4), epic: 'SHOP-120', parent: undefined, prs: [] },
+          { key: 'SHOP-141', url: 'https://example.atlassian.net/browse/SHOP-141', summary: 'Tax rates for Norway', status: 'Blocked', statusCategory: 'inProgress', assignee: 'Ana Ruiz', updated: at(4), epic: 'SHOP-120', parent: undefined, prs: [], links: [{ type: 'blockedBy', key: 'FIN-88', summary: 'Norway VAT rates for 2027', status: 'In Progress', statusCategory: 'inProgress', url: 'https://example.atlassian.net/browse/FIN-88' }] },
           { key: 'SHOP-158', url: 'https://example.atlassian.net/browse/SHOP-158', summary: 'Norway VAT table from finance', status: 'Done', statusCategory: 'done', assignee: 'Ana Ruiz', updated: at(5), epic: 'SHOP-120', parent: 'SHOP-141', prs: [] },
           { key: 'SHOP-159', url: 'https://example.atlassian.net/browse/SHOP-159', summary: 'Show tax per line on the summary', status: 'To Do', statusCategory: 'todo', assignee: 'Ana Ruiz', updated: at(4), epic: 'SHOP-120', parent: 'SHOP-141', prs: [] },
-          { key: 'SHOP-150', url: 'https://example.atlassian.net/browse/SHOP-150', summary: '3DS challenge fails on Safari', status: 'In Review', statusCategory: 'inProgress', assignee: undefined, updated: at(1), epic: 'SHOP-120', parent: undefined, prs: [{ url: 'https://github.com/example/shop/pull/412', number: 412, state: 'open', repo: 'example/shop', title: 'Retry the 3DS frame on Safari' }] },
+          { key: 'SHOP-150', url: 'https://example.atlassian.net/browse/SHOP-150', summary: '3DS challenge fails on Safari', status: 'In Review', statusCategory: 'inProgress', assignee: undefined, updated: at(1), epic: 'SHOP-120', parent: undefined, prs: [{ url: 'https://github.com/example/shop/pull/412', number: 412, state: 'open', repo: 'example/shop', title: 'Retry the 3DS frame on Safari' }], links: [{ type: 'blocks', key: 'SHOP-152', summary: 'Address lookup falls back to manual entry', status: 'To Do', statusCategory: 'todo', url: 'https://example.atlassian.net/browse/SHOP-152' }] },
           { key: 'SHOP-152', url: 'https://example.atlassian.net/browse/SHOP-152', summary: 'Address lookup falls back to manual entry', status: 'To Do', statusCategory: 'todo', assignee: 'Jonas Berg', updated: at(6), epic: 'SHOP-120', parent: undefined, prs: [] },
           { key: 'SHOP-133', url: 'https://example.atlassian.net/browse/SHOP-133', summary: 'Apple Pay button on the one-page form', status: 'Done', statusCategory: 'done', assignee: 'Mia Chen', updated: at(2), epic: 'SHOP-120', parent: undefined, prs: [{ url: 'https://github.com/example/shop/pull/398', number: 398, state: 'merged', repo: 'example/shop', title: 'Apple Pay on one page' }] },
         ],
@@ -58,6 +60,12 @@ const demos = (now: number): DemoInitiative[] => {
         { id: 5, text: 'Is Apple Pay in scope for launch?', why: 'Design has it in the mockups, the epic does not', kind: 'decision', options: ['In scope', 'After launch'], answer: 'After launch', state: 'approved', createdAt: iso, resolvedAt: iso, outcome: 'Recorded in decisions.md and posted to #checkout-v2.' },
         { id: 6, text: 'Remind Ana about the Safari repro steps', why: 'SHOP-150 has no repro', kind: 'slack', state: 'dismissed', createdAt: iso, resolvedAt: iso },
       ],
+      risks: RisksSchema.parse([
+        { id: 1, title: 'Blocked by FIN-88, outside the initiative', why: 'SHOP-141 (tax rates for Norway) waits on finance’s FIN-88, which is not under the epic and has no date.', severity: 'high', owner: 'Ana Ruiz', mitigation: 'Launch Norway with the old tax table and patch it after the freeze.', state: 'open', sources: [{ label: 'FIN-88: Norway VAT rates for 2027', url: 'https://example.atlassian.net/browse/FIN-88' }], blocker: 'FIN-88', createdAt: at(4) },
+        { id: 2, title: 'The Safari 3DS fix may miss the freeze', why: 'SHOP-150 has an open pull request but nobody assigned, and it blocks SHOP-152.', severity: 'medium', mitigation: 'Find an owner in #checkout-v2 this week.', state: 'watching', sources: [{ label: '#412 Retry the 3DS frame on Safari', url: 'https://github.com/example/shop/pull/412' }], createdAt: at(3) },
+        { id: 3, title: 'The address lookup contract runs out in January', why: 'Procurement has not started the renewal.', severity: 'low', owner: 'Jonas Berg', state: 'open', sources: [], createdAt: at(2), owned: { title: 'The address lookup contract runs out in January', why: 'Procurement has not started the renewal.', severity: 'low', owner: 'Jonas Berg', mitigation: '', state: 'open', at: at(2) } },
+        { id: 4, title: 'No designer for the address form', why: 'Mia picked it up in the design review.', severity: 'medium', state: 'closed', sources: [], createdAt: at(8), closedAt: at(2) },
+      ]),
       outbox: [
         { id: 1, to: { kind: 'slack', channel: 'C0CHECKOUT', label: '#checkout-v2' }, text: 'Hey team, with Ana out, who can pick up SHOP-150 (the Safari payment bug)? It has been blocked for 4 days and it is on the launch path.', why: 'From suggestion 1', suggestion: 1, state: 'draft', createdAt: iso },
         { id: 2, to: { kind: 'jira', issue: 'SHOP-150', label: 'Safari payment bug' }, text: 'Still blocked on Safari 17: the payment sheet closes before the token comes back. Looking for an owner in #checkout-v2.', state: 'draft', createdAt: iso },
@@ -94,6 +102,7 @@ export const seedDemoInitiatives = async (initiatives: Initiatives, root: string
     writeText(path.join(folder, 'timeline.md'), `# Timeline\n\nNewest first.\n\n${demo.timeline.map((t) => `- ${t}`).join('\n')}\n`);
     writeText(path.join(folder, 'suggestions.json'), `${JSON.stringify(demo.suggestions, null, 2)}\n`);
     if (demo.tasks) writeText(path.join(folder, 'tasks.json'), `${JSON.stringify(demo.tasks, null, 2)}\n`);
+    if (demo.risks) writeText(path.join(folder, 'risks.json'), `${JSON.stringify(demo.risks, null, 2)}\n`);
     if (demo.outbox) writeText(path.join(folder, 'outbox.json'), `${JSON.stringify(demo.outbox, null, 2)}\n`);
     if (slug === 'checkout-v2') {
       writeText(path.join(folder, 'artifacts', '1-3ds-safari-retry.md'), '# 3DS on Safari: retry check\n\n- 40 test payments on Safari 18, 3DS challenge forced\n- 38 passed on the first frame, 2 after one retry, none failed\n');

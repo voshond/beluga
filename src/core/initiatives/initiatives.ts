@@ -43,6 +43,8 @@ import {
 } from './model.js';
 import { CHECK_IN_PROMPT, type LinkedRepo, TASKS_PROMPT, TICKETS_PROMPT, initiativeBrief } from './prompt.js';
 import { type PushResult, commitFolder, dayOf, ensureRepo, pushIfTracked, unpushedCount } from './repo.js';
+import { RiskKeeper } from './risk-keeper.js';
+import type { RiskDraft } from './risks.js';
 
 export type CheckInHost = {
   readonly create: (draft: SentinelDraft) => { readonly id: string };
@@ -106,6 +108,7 @@ const CHECK_IN_TRIGGER: ScheduleTrigger = { kind: 'schedule', every: 'week', at:
 
 export class Initiatives {
   readonly chats: InitiativeChats;
+  private readonly risks: RiskKeeper;
   private readonly locals = new Map<string, Local>();
   private readonly sends = new Map<string, Send>();
   private cleared: Send[] = [];
@@ -123,6 +126,7 @@ export class Initiatives {
       ...(deps.claudeDir ? { claudeDir: deps.claudeDir } : {}),
       ...(deps.codexDir ? { codexDir: deps.codexDir } : {}),
     });
+    this.risks = new RiskKeeper(deps.root, deps.dir);
     this.offAction = deps.store.onAction((action) => this.onAction(action));
   }
 
@@ -202,6 +206,7 @@ export class Initiatives {
       suggestions: folder.suggestions,
       outbox: folder.outbox,
       artifacts: folder.artifacts,
+      risks: folder.risks,
       timeline: folder.timeline,
       files: folder.files,
       ...(checkIn ? { checkIn } : {}),
@@ -484,6 +489,15 @@ export class Initiatives {
     this.refresh(send.slug);
   }
 
+  /** The owner adds, changes or closes a risk on the page; the check-ins keep their edit. */
+  async saveRisk(slug: string, draft: RiskDraft): Promise<{ readonly id: number }> {
+    this.need(slug);
+    const risk = this.risks.save(slug, draft, new Date(this.now).toISOString(), dayOf(this.now));
+    await this.commit(slug, `${slug}: risk ${risk.id} ${draft.id === undefined ? 'added' : 'changed'}`);
+    this.refresh(slug);
+    return { id: risk.id };
+  }
+
   /** Keeps a file a worktree made: copied into artifacts/, or, too big for the repo, noted where it is. */
   async reportArtifact(slug: string, report: ArtifactReport): Promise<string> {
     const item = this.need(slug);
@@ -585,6 +599,7 @@ export class Initiatives {
     if (action.type !== 'agent_event' || !FINAL_EVENTS.has(action.event)) return;
     const of = initiativeChatOf(action.channel);
     if (!of || !this.known(of.slug)) return;
+    this.risks.settle(of.slug, new Date(this.now).toISOString(), dayOf(this.now));
     const message = of.chat === CHECK_IN_CHAT ? `${of.slug}: check-in ${dayOf(this.now)}` : `${of.slug}: chat ${dayOf(this.now)}`;
     void this.commit(of.slug, message).then(() => this.refresh(of.slug));
   }

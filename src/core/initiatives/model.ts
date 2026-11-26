@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { Risk } from './risks.js';
 
 export const INITIATIVE_SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const INITIATIVE_CHAT_ID = /^[a-z0-9]{1,24}$/;
@@ -211,6 +212,28 @@ export const TicketPrSchema = z.object({
 });
 export type TicketPr = z.infer<typeof TicketPrSchema>;
 
+export const TICKET_LINK_TYPES = ['blocks', 'blockedBy'] as const;
+export type TicketLinkType = (typeof TICKET_LINK_TYPES)[number];
+
+/** A Jira "Blocks" link as either side says it; any other link type reads as none. */
+export const ticketLinkTypeOf = (said: string): TicketLinkType | undefined => {
+  const word = squashed(said);
+  if (word === 'blockedby' || word === 'isblockedby') return 'blockedBy';
+  return word === 'blocks' ? 'blocks' : undefined;
+};
+
+export const TicketLinkSchema = z.object({
+  type: z.string().max(40).transform(ticketLinkTypeOf),
+  key: z.string().min(1).max(40),
+  summary: maybe(500),
+  status: maybe(80),
+  statusCategory: z.string().max(40).default('todo').transform(ticketCategoryOf),
+  url: maybe(500),
+});
+export type TicketLink = Omit<z.infer<typeof TicketLinkSchema>, 'type'> & { readonly type: TicketLinkType };
+
+const isTicketLink = (link: z.infer<typeof TicketLinkSchema>): link is TicketLink => link.type !== undefined;
+
 export const TicketSchema = z.object({
   key: z.string().min(1).max(40),
   url: maybe(500),
@@ -222,6 +245,11 @@ export const TicketSchema = z.object({
   epic: maybe(40),
   parent: maybe(40),
   prs: z.array(TicketPrSchema).max(30).default([]),
+  links: z
+    .array(TicketLinkSchema)
+    .max(50)
+    .transform((links) => links.filter(isTicketLink))
+    .optional(),
 });
 export type Ticket = z.infer<typeof TicketSchema>;
 
@@ -423,6 +451,7 @@ export type InitiativeView = {
   readonly suggestions: readonly Suggestion[];
   readonly outbox: readonly OutboxDraft[];
   readonly artifacts: readonly Artifact[];
+  readonly risks?: readonly Risk[];
   readonly timeline: readonly TimelineEntry[];
   readonly files: readonly string[];
   readonly checkIn?: string;
@@ -531,7 +560,7 @@ const bullet = (line: string): string | undefined => {
   return match?.[1];
 };
 
-export const TIMELINE_KINDS = ['check-in', 'decision', 'message', 'ticket', 'said', 'doc', 'meeting', 'artifact', 'created', 'event'] as const;
+export const TIMELINE_KINDS = ['check-in', 'decision', 'message', 'ticket', 'said', 'doc', 'meeting', 'artifact', 'created', 'risk', 'event'] as const;
 export type TimelineKind = (typeof TIMELINE_KINDS)[number];
 
 /** One bullet of timeline.md: "- 2026-11-25 [check-in]: …", the kind and even the day optional. */

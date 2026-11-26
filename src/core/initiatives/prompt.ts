@@ -1,4 +1,5 @@
 import { CHECK_IN_CHAT, DOC_KIND_NAME, type DocRef, type InitiativeView, type MeetingRef, type SlackRef, confluencePageIdOf, googleFileIdOf, meetingKindOf, slackKindOf } from './model.js';
+import { LINKS_HOW, RISKS_HOW, RISKS_MEMORY } from './risks.js';
 
 export type LinkedRepo = {
   readonly name: string;
@@ -61,6 +62,7 @@ export const TICKETS_SHAPE =
 const TICKETS_HOW = [
   'For each Jira epic, list every issue under it with the Jira MCP (jira_search with the JQL "parent = KEY", or the epic link field on older projects): key, link, summary, status, status category, assignee and last update.',
   'Then list their sub-tasks the same way (jira_search with the JQL "parent in (KEY-1, KEY-2, …)" for those tickets) and keep each one as a ticket of its own, with "parent" set to its parent’s key and "epic" to the parent’s epic.',
+  LINKS_HOW,
   'Find each ticket’s pull requests two ways and merge them by link: Jira’s development info (jira_get_issues_development_info for the keys), and in each linked repo’s folder `gh pr list --state all --search KEY --json number,url,state,isDraft,title` for a pull request whose title or branch names the key.',
   `Write tickets.json: ${TICKETS_SHAPE}. Leave out what a ticket does not have; a ticket without pull requests gets "prs": [].`,
 ].join(' ');
@@ -97,6 +99,7 @@ export const CHECK_IN_PROMPT = [
   'Read the artifacts worktrees sent since the last check-in (artifacts.json, newest first, and their files in artifacts/): note in timeline.md what each one shows, and when one bears on a decision or shows a problem (failing checks, a gap against the acceptance criteria), say so in a suggestion with the artifact in its "sources".',
   'For each meeting: one that is coming gets prep notes (what to raise, what is open, who to ask), one that happened gets its follow-ups (what was agreed, who owes what), both in sources/meetings/.',
   'Then update the rest of the memory: snapshots in sources/ (jira.md, slack/, meetings/, docs/, prs.md), status.json (counts across the epics: total, done, inProgress, blocked, stale for open tickets untouched in 7 days, with "at" set to now as an ISO date), brief.md (where it stands, in a few lines), timeline.md (what happened since last time, newest first), decisions.md (your own notes, which the page does not show: new open questions under "## Open", settled ones moved to "## Decided" with the date and why) and suggestions.json (what you propose next; every open question only the user can settle is also a "decision" with its "options", one per question and never a second one while it is open, and a question that only waits on someone else stays in decisions.md, named in a decision’s "why" when it bears on it; a message worth sending can be drafted straight into outbox.json).',
+  RISKS_HOW,
   'Do not post, comment, transition, invite or change anything outside this folder: write it as a suggestion instead. Answer with one line on how it stands, then what needs the user.',
 ].join(' ');
 
@@ -134,6 +137,7 @@ Your working folder is the initiative's memory, a folder in a git repository Bel
 - suggestions.json: an array of {"id" (a number, never reused), "text", "why", "kind" ("jira" | "slack" | "calendar" | "task" | "doc" | "decision" | "other"), "state": "open", "createdAt", "sources" ([{"label", "url"}]: the tickets, Slack threads and docs it is about, so the page can link them)}. When the next step is the user's call (in or out of scope, which way to go), make it a "decision" with "options": 2 to 4 short answers to pick from ("In scope", "Out of scope"); the page shows them as buttons, with Other… for an answer of their own. "state" is only ever "open", "approved" or "dismissed", and Beluga sets it when the user acts (an answered decision is "approved", with its "answer"): never change it. Keep the ones the user resolved as they are, except: once you did what an approved one asked, or what followed from a decision's answer, set its "outcome" (one line on what came of it) and "proof" ([{"label", "url"}]: the Jira comment, the Slack permalink, the pull request, the doc), which the page keeps as its decision log.
 - outbox.json: messages you prepared for the user to send, an array of {"id" (a number, never reused), "to", "text", "why", "suggestion" (the suggestion's id it comes from, if any), "state": "draft", "createdAt"}. "to" is {"kind": "slack", "channel" (the channel, DM or group DM id, C… or D…), "thread" (the parent's ts, only for a reply), "label" ("#checkout-v2", "DM with Julia")} or {"kind": "jira", "issue" ("RUN-12"), "label"}. Write the text exactly as it should go out, in the voice of the user. Leave the others as they are: the user sends, edits or discards each one from the chat.
 - artifacts.json and artifacts/: what worktrees working on its tickets sent (reports, test output, screenshots, specs), each {"id", "title", "why", "file" (in artifacts/) or "path" (too big for the repo: where it is on this computer), "name", "bytes", "ticket", "worktree", "project", "createdAt"}. Beluga writes them: read them, never change or remove them.
+- ${RISKS_MEMORY}
 - sources/: snapshots of what you read (meetings/ holds each meeting’s prep notes before it and follow-ups after it).
 Other files here now: ${others.length ? others.join(', ') : 'none'}.
 

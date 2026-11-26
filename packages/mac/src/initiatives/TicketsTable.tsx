@@ -1,6 +1,6 @@
 import { activityOf } from '@beluga/ui/workspace-models.js';
 import type { IssueStatus } from '@beluga/core/board/model.js';
-import { CHECK_IN_CHAT, type InitiativeView, type Ticket, type TicketCategory, type TicketPr, initiativeChatChannel, subTasksOf, ticketGroups } from '@beluga/core/initiatives/model.js';
+import { CHECK_IN_CHAT, type EpicTickets, type InitiativeView, type Ticket, type TicketCategory, type TicketPr, initiativeChatChannel, subTasksOf, ticketGroups } from '@beluga/core/initiatives/model.js';
 import { Button } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
 import { openExternal } from '../lib/system.js';
@@ -11,6 +11,7 @@ import { StatusIcon } from '../tasks/marks.js';
 import { ago } from '../tasks/tasks-model.js';
 import { CATEGORY_LABEL, PR_STATE_LABEL, prName, subTasksWords, ticketsWords } from './initiatives-model.js';
 import { EpicLink, Section } from './InitiativeParts.js';
+import { TicketBlockers } from './TicketBlockers.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import s from './initiatives.module.css';
 
@@ -38,7 +39,7 @@ const TICKET_STATUS: Readonly<Record<TicketCategory, IssueStatus>> = { todo: 'to
 
 const TICKET_TONE: Readonly<Record<TicketCategory, Tone>> = { todo: 'neutral', inProgress: 'claude', done: 'ok' };
 
-const TicketRow = ({ ticket, subTasks = [], nested = false, now }: { ticket: Ticket; subTasks?: readonly Ticket[]; nested?: boolean; now: number }) => {
+const TicketRow = ({ ticket, read, subTasks = [], nested = false, now }: { ticket: Ticket; read: EpicTickets; subTasks?: readonly Ticket[]; nested?: boolean; now: number }) => {
   const url = ticket.url;
   const progress = subTasksWords(subTasks);
   const who = [ticket.assignee ?? 'Unassigned', whenOf(ticket.updated, now)].filter(Boolean).join(' · ');
@@ -53,6 +54,7 @@ const TicketRow = ({ ticket, subTasks = [], nested = false, now }: { ticket: Tic
         <span className={s.ticketSummary}>{ticket.summary}</span>
       </button>
       <span className={s.ticketEnd}>
+        <TicketBlockers ticket={ticket} tickets={read} />
         {ticket.prs.map((pr) => (
           <PrLink key={pr.url} pr={pr} />
         ))}
@@ -64,11 +66,11 @@ const TicketRow = ({ ticket, subTasks = [], nested = false, now }: { ticket: Tic
   );
 };
 
-const TicketList = ({ tickets, all, name, now }: { tickets: readonly Ticket[]; all: readonly Ticket[]; name: string; now: number }) => (
+const TicketList = ({ tickets, read, name, now }: { tickets: readonly Ticket[]; read: EpicTickets; name: string; now: number }) => (
   <div className={s.ticketList} role="list" aria-label={name}>
     {tickets.flatMap((ticket) => {
-      const subTasks = subTasksOf(ticket.key, all);
-      return [<TicketRow key={ticket.key} ticket={ticket} subTasks={subTasks} now={now} />, ...subTasks.map((sub) => <TicketRow key={sub.key} ticket={sub} nested now={now} />)];
+      const subTasks = subTasksOf(ticket.key, read.tickets);
+      return [<TicketRow key={ticket.key} ticket={ticket} read={read} subTasks={subTasks} now={now} />, ...subTasks.map((sub) => <TicketRow key={sub.key} ticket={sub} read={read} nested now={now} />)];
     })}
   </div>
 );
@@ -102,7 +104,7 @@ export const TicketsTable = ({ item }: { item: InitiativeView }) => {
           {groups.map((group) => (
             <div key={group.epic ?? 'other'} className={s.ticketGroup} data-epic={group.epic ?? 'other'}>
               {group.epic ? <EpicLink epic={group.epic} item={item} /> : groups.length > 1 ? <span className={s.epicName}>Other tickets</span> : null}
-              <TicketList tickets={group.tickets} all={item.tickets?.tickets ?? []} name={group.epic ? `Tickets under ${group.epic}` : 'Tickets under the epic'} now={now} />
+              <TicketList tickets={group.tickets} read={item.tickets ?? { at: '', epics: [], tickets: [] }} name={group.epic ? `Tickets under ${group.epic}` : 'Tickets under the epic'} now={now} />
             </div>
           ))}
         </div>

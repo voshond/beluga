@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RiskDraftSchema } from '../core/initiatives/risks.js';
 import { CheckInScheduleSchema, GoalRefineSchema, INITIATIVE_CHAT_ID, INITIATIVE_SLUG, InitiativeDraftSchema, InitiativePatchSchema } from '../core/initiatives/model.js';
 
 const slug = z.string().regex(INITIATIVE_SLUG);
@@ -25,4 +26,5 @@ export const INITIATIVES_API = {
   'initiatives.discardDraft': { args: z.tuple([slug, z.number().int().min(1)]) },
   'initiatives.readFile': { args: z.tuple([slug, z.string().min(1).max(400)]) },
   'initiatives.readArtifact': { args: z.tuple([slug, z.number().int().min(1)]) },
+  'initiatives.saveRisk': { args: z.tuple([slug, RiskDraftSchema]) },
 } as const;

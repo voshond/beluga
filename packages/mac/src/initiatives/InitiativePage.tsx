@@ -13,6 +13,7 @@ import { Timeline } from './InitiativeTimeline.js';
 import { CheckInRow, MemoryFiles, Repos } from './InitiativeSettings.js';
 import { InitiativePanel, type PanelTab } from './InitiativePanel.js';
 import { NewInitiativeSheet } from './NewInitiativeSheet.js';
+import { RisksSection } from './RisksSection.js';
 import { Suggestions } from './SuggestionLog.js';
 import { TasksSection } from './TasksSection.js';
 import { TicketsTable } from './TicketsTable.js';
@@ -106,6 +107,7 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
             <ProgressBar progress={item.progress} />
             <Facts item={item} />
           </div>
+          <RisksSection item={item} />
           <TicketsTable item={item} />
           <CheckInRow item={item} />
           <Suggestions item={item} pickedId={picked?.id} onPick={handlePick} />

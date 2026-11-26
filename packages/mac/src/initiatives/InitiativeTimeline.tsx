@@ -32,6 +32,7 @@ const KIND: Readonly<Record<TimelineKind, { readonly icon?: IconName; readonly l
   meeting: { icon: 'calendar', label: 'Meeting' },
   artifact: { icon: 'clip', label: 'Artifact' },
   created: { icon: 'flag', label: 'Created' },
+  risk: { icon: 'alert', label: 'Risk' },
   event: { label: '' },
 };
 
