@@ -510,6 +510,10 @@ export const MACHINE: Record<Method, MachineSide> = {
   'initiatives.discardDraft': 'drive',
   'initiatives.readFile': 'drive',
   'initiatives.readArtifact': 'drive',
+  'initiatives.savePerson': 'drive',
+  'initiatives.removePerson': 'drive',
+  'initiatives.setPerson': 'drive',
+  'initiatives.proposePeople': 'drive',
   // ---- dashboard
   'dashboard.create': 'drive',
   'dashboard.update': 'drive',
