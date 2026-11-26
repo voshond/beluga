@@ -1,4 +1,4 @@
-import { type CSSProperties, useState } from 'react';
+import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import { type LinkKind, type SourceContext, linkParts } from '@beluga/core/initiatives/log.js';
 import { type InitiativeView, type TimelineEntry, type TimelineKind } from '@beluga/core/initiatives/model.js';
 import { Icon, type IconName } from '../components/Icon.js';
@@ -11,6 +11,14 @@ import s from './initiatives.module.css';
 const FIRST = 8;
 
 const WEEKS = 52;
+
+const LABELS = 30;
+
+const CELL = 12;
+
+const GAP = 3;
+
+const fittingWeeks = (width: number): number => Math.max(1, Math.min(WEEKS, Math.floor((width - LABELS + GAP) / (CELL + GAP))));
 
 const WEEKDAYS = ['Mon', '', 'Wed', '', 'Fri', '', ''] as const;
 
@@ -62,8 +70,17 @@ const Entry = ({ entry, item }: { entry: TimelineEntry; item: SourceContext }) =
 };
 
 const ActivityGrid = ({ entries, picked, onPick }: { entries: readonly TimelineEntry[]; picked: string | undefined; onPick: (key: string) => void }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [count, setCount] = useState(WEEKS);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => setCount(fittingWeeks(el.clientWidth)));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const now = new Date();
-  const weeks = activityWeeks(entries, now, WEEKS);
+  const weeks = activityWeeks(entries, now, count);
   const cell = (c: ActivityCell) => {
     if (c.future) return <span key={c.key} className={s.gridCell} data-future />;
     const handleClick = (): void => onPick(c.key);
@@ -71,7 +88,7 @@ const ActivityGrid = ({ entries, picked, onPick }: { entries: readonly TimelineE
     return <button key={c.key} type="button" className={s.gridCell} data-level={c.level} data-picked={picked === c.key || undefined} onClick={handleClick} disabled={!c.count} title={words} aria-label={words} aria-pressed={picked === c.key} />;
   };
   return (
-    <div className={s.grid} style={{ '--weeks': WEEKS } as CSSProperties} role="group" aria-label="Activity by day">
+    <div ref={ref} className={s.grid} style={{ '--weeks': count, '--labels': `${LABELS}px`, '--gap': `${GAP}px` } as CSSProperties} role="group" aria-label="Activity by day">
       <div className={s.gridDays} aria-hidden>
         <span />
         {WEEKDAYS.map((d, i) => (
