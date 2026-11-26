@@ -55,6 +55,8 @@ import { UPDATES_DIR, UpdateRecordSchema, audienceIdOf, ticketMarks } from './up
 import { draftUpdatePrompt } from './updates-prompt.js';
 import { InitiativeWatches, type WatchHost } from './watching.js';
 import { WATCH_CHAT, type Watch, type WatchDraft } from './watches.js';
+import { RiskKeeper } from './risk-keeper.js';
+import type { RiskDraft } from './risks.js';
 
 export type CheckInHost = {
   readonly create: (draft: SentinelDraft) => { readonly id: string };
@@ -122,6 +124,7 @@ const CHECK_IN_TRIGGER: ScheduleTrigger = { kind: 'schedule', every: 'week', at:
 export class Initiatives {
   readonly chats: InitiativeChats;
   readonly watching: InitiativeWatches;
+  private readonly risks: RiskKeeper;
   private readonly locals = new Map<string, Local>();
   private readonly sends = new Map<string, Send>();
   private cleared: Send[] = [];
@@ -157,6 +160,7 @@ export class Initiatives {
         return { name: config?.name ?? slug, active: Boolean(config) && config?.status !== 'archived' };
       },
     });
+    this.risks = new RiskKeeper(deps.root, deps.dir);
     this.offAction = deps.store.onAction((action) => this.onAction(action));
   }
 
@@ -240,6 +244,7 @@ export class Initiatives {
       outbox: folder.outbox,
       watches: folder.watches,
       artifacts: folder.artifacts,
+      risks: folder.risks,
       timeline: folder.timeline,
       ...(folder.decisions ? { decisions: folder.decisions } : {}),
       ...(folder.waitingQuestions.length ? { waitingQuestions: folder.waitingQuestions } : {}),
@@ -622,6 +627,15 @@ export class Initiatives {
     await this.watching.markRead(slug, id);
   }
 
+  /** The owner adds, changes or closes a risk on the page; the check-ins keep their edit. */
+  async saveRisk(slug: string, draft: RiskDraft): Promise<{ readonly id: number }> {
+    this.need(slug);
+    const risk = this.risks.save(slug, draft, new Date(this.now).toISOString(), dayOf(this.now));
+    await this.commit(slug, `${slug}: risk ${risk.id} ${draft.id === undefined ? 'added' : 'changed'}`);
+    this.refresh(slug);
+    return { id: risk.id };
+  }
+
   /** Keeps a file a worktree made: copied into artifacts/, or, too big for the repo, noted where it is. */
   async reportArtifact(slug: string, report: ArtifactReport): Promise<string> {
     const item = this.need(slug);
@@ -792,6 +806,7 @@ export class Initiatives {
     const of = initiativeChatOf(action.channel);
     if (!of || !this.known(of.slug)) return;
     if (of.chat === WATCH_CHAT) this.watching.turnEnded(of.slug);
+    this.risks.settle(of.slug, new Date(this.now).toISOString(), dayOf(this.now));
     const message = of.chat === CHECK_IN_CHAT ? `${of.slug}: check-in ${dayOf(this.now)}` : of.chat === WATCH_CHAT ? `${of.slug}: follow-ups ${dayOf(this.now)}` : `${of.slug}: chat ${dayOf(this.now)}`;
     void this.commit(of.slug, message)
       .then(() => this.refresh(of.slug))

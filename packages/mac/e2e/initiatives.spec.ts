@@ -295,3 +295,33 @@ test('an initiative’s page shows what it waits for and what came in, and adds 
   await added.getByRole('button', { name: /Stop watching/ }).click();
   await expect(added).toHaveCount(0);
 });
+
+test('an initiative’s page lists its risks by severity, keeps closed ones aside, and shows what blocks a ticket', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  const risks = page.getByRole('region', { name: 'Risks' });
+  const open = risks.getByRole('list', { name: 'Open risks' });
+  await expect(open.getByRole('listitem')).toHaveCount(3);
+  await expect(open.getByRole('listitem').first()).toHaveAttribute('data-risk', '1');
+  await expect(open.getByRole('listitem').last()).toHaveAttribute('data-severity', 'low');
+  await expect(open.locator('[data-risk="3"]')).toContainText('Edited by you');
+  await expect(risks.getByRole('list', { name: 'Closed risks' })).toHaveCount(0);
+  await risks.getByRole('button', { name: 'Show Closed · 1' }).click();
+  await expect(risks.getByRole('list', { name: 'Closed risks' }).getByRole('listitem')).toHaveCount(1);
+  const tickets = page.getByRole('region', { name: 'Tickets' });
+  await expect(tickets.locator('[data-ticket="SHOP-141"]').getByRole('button', { name: 'Blocked by FIN-88 (outside the initiative): In Progress' })).toBeVisible();
+  await expect(tickets.locator('[data-ticket="SHOP-152"]').getByRole('button', { name: 'Blocked by SHOP-150: In Review' })).toBeVisible();
+  await risks.scrollIntoViewIfNeeded();
+  await shot(page, '09-initiative-risks.png');
+  await risks.getByRole('button', { name: 'Add Risk' }).click();
+  const sheet = page.getByRole('dialog');
+  await sheet.getByLabel('Risk', { exact: true }).fill('Legal has not read the Norway terms');
+  await sheet.getByLabel('Owner', { exact: true }).fill('Mia Chen');
+  await sheet.getByRole('button', { name: 'Add Risk' }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(open.getByRole('listitem')).toHaveCount(4);
+  await expect(open.locator('[data-risk="5"]')).toContainText('Owner: Mia Chen');
+  await open.getByRole('button', { name: 'Close risk 2' }).click();
+  await expect(open.getByRole('listitem')).toHaveCount(3);
+  await expect(risks.getByRole('list', { name: 'Closed risks' }).getByRole('listitem')).toHaveCount(2);
+  await shot(page, '10-initiative-risk-closed.png');
+});

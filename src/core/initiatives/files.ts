@@ -6,8 +6,9 @@ import { PEOPLE_DIR, type WaitingQuestion, waitingQuestionsOf } from './people.j
 import { type UpdateRecord, UpdatesSchema } from './updates.js';
 import { type Artifact, ArtifactsSchema, type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, type InitiativeTasks, TasksSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type OutboxDraft, OutboxSchema, type Suggestion, SuggestionsSchema, type TimelineEntry, timelineOf } from './model.js';
 import { type Watch, WatchesSchema } from './watches.js';
+import { type Risk, RisksSchema } from './risks.js';
 
-export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json', 'watches.json', 'artifacts.json', 'updates.json'] as const;
+export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json', 'watches.json', 'artifacts.json', 'updates.json', 'risks.json'] as const;
 
 const MAX_FILES = 200;
 const MAX_READ = 512 * 1024;
@@ -25,6 +26,7 @@ export type InitiativeFolder = {
   readonly watches: readonly Watch[];
   readonly artifacts: readonly Artifact[];
   readonly updates: readonly UpdateRecord[];
+  readonly risks: readonly Risk[];
   readonly timeline: readonly TimelineEntry[];
   readonly decisions?: DecisionNotes;
   readonly waitingQuestions: readonly WaitingQuestion[];
@@ -114,8 +116,9 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
   const decisions = decisionsOf(file('decisions.md') ?? '');
   const updates = parseJson(file('updates.json'), UpdatesSchema, 'updates.json');
   const watches = parseJson(file('watches.json'), WatchesSchema, 'watches.json');
+  const risks = parseJson(file('risks.json'), RisksSchema, 'risks.json');
   const missing = config.value || config.trouble ? undefined : 'initiative.json is missing';
-  const troubles = [config.trouble ?? missing, status.trouble, tickets.trouble, tasks.trouble, suggestions.trouble, outbox.trouble, artifacts.trouble, updates.trouble, watches.trouble].filter((t): t is string => Boolean(t));
+  const troubles = [config.trouble ?? missing, status.trouble, tickets.trouble, tasks.trouble, suggestions.trouble, outbox.trouble, artifacts.trouble, updates.trouble, watches.trouble, risks.trouble].filter((t): t is string => Boolean(t));
   return {
     slug,
     folder,
@@ -129,6 +132,7 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
     watches: watches.value ?? [],
     artifacts: artifacts.value ?? [],
     updates: updates.value ?? [],
+    risks: risks.value ?? [],
     timeline: timelineOf(file('timeline.md') ?? ''),
     ...(decisions ? { decisions } : {}),
     waitingQuestions: waitingQuestionsOf(file('decisions.md') ?? ''),
@@ -147,6 +151,7 @@ export const writeOutbox = (root: string, slug: string, outbox: readonly OutboxD
 
 export const writeUpdates = (root: string, slug: string, updates: readonly UpdateRecord[]): void => writeText(path.join(folderOf(root, slug), 'updates.json'), `${JSON.stringify(updates, null, 2)}\n`);
 export const writeWatches = (root: string, slug: string, watches: readonly Watch[]): void => writeText(path.join(folderOf(root, slug), 'watches.json'), `${JSON.stringify(watches, null, 2)}\n`);
+export const writeRisks = (root: string, slug: string, risks: readonly Risk[]): void => writeText(path.join(folderOf(root, slug), 'risks.json'), `${JSON.stringify(risks, null, 2)}\n`);
 
 export const writeArtifacts = (root: string, slug: string, artifacts: readonly Artifact[]): void => writeText(path.join(folderOf(root, slug), 'artifacts.json'), `${JSON.stringify(artifacts, null, 2)}\n`);
 
@@ -194,6 +199,7 @@ export const scaffoldFolder = (root: string, slug: string, config: InitiativeCon
   put('people.md', `# People\n\nWho is involved and what they own.\n`);
   put('suggestions.json', '[]\n');
   put('outbox.json', '[]\n');
+  put('risks.json', '[]\n');
   put('sources/README.md', `# Sources\n\nSnapshots the check-in keeps: jira.md, slack/, meetings/, docs/, prs.md.\n`);
 };
 

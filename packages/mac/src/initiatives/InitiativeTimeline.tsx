@@ -33,6 +33,7 @@ const KIND: Readonly<Record<TimelineKind, { readonly icon?: IconName; readonly l
   artifact: { icon: 'clip', label: 'Artifact' },
   created: { icon: 'flag', label: 'Created' },
   update: { icon: 'bell', label: 'Update' },
+  risk: { icon: 'alert', label: 'Risk' },
   event: { label: '' },
   'follow-up': { icon: 'eye', label: 'Follow-up' },
 };

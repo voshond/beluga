@@ -450,6 +450,7 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'initiatives.stopWatch': INITIATIVES,
   'initiatives.lookNow': INITIATIVES,
   'initiatives.readNews': INITIATIVES,
+  'initiatives.saveRisk': INITIATIVES,
   'dashboard.create': 'covered',
   'dashboard.update': 'covered',
   'dashboard.remove': 'covered',

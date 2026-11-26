@@ -46,4 +46,5 @@ export const INITIATIVES_HANDLERS = {
   'initiatives.stopWatch': (s, slug, id) => needInitiatives(s).stopWatch(slug, id),
   'initiatives.lookNow': (s, slug, id) => needInitiatives(s).lookNow(slug, id),
   'initiatives.readNews': (s, slug, id) => needInitiatives(s).readNews(slug, id),
+  'initiatives.saveRisk': (s, slug, draft) => needInitiatives(s).saveRisk(slug, draft),
 } satisfies InitiativesHandlers;
