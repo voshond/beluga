@@ -19,10 +19,14 @@ export const QuestionSchema = z.object({
   createdAt: z.string().max(40),
   answer: QuestionAnswerSchema.optional(),
   mergedInto: QuestionIdSchema.optional(),
+  removedAt: z.string().max(40).optional(),
 });
 
 export const QuestionsSchema = z.array(QuestionSchema);
 export type Question = z.infer<typeof QuestionSchema>;
+
+/** Merged into another question or deleted by the user: kept in questions.json, never shown or asked again. */
+export const isRetired = (question: Question): boolean => Boolean(question.mergedInto || question.removedAt);
 
 export const QuestionDraftSchema = z.object({
   id: QuestionIdSchema.optional(),

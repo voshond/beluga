@@ -48,6 +48,7 @@ export const INITIATIVES_HANDLERS = {
   'initiatives.keepPrep': (s, slug, id, text) => needInitiatives(s).keepPrep(slug, id, text),
   'initiatives.saveQuestion': (s, slug, draft) => needInitiatives(s).saveQuestion(slug, draft),
   'initiatives.draftQuestion': (s, slug, id) => needInitiatives(s).draftQuestion(slug, id),
+  'initiatives.removeQuestion': (s, slug, id) => needInitiatives(s).removeQuestion(slug, id),
   'initiatives.addWatch': (s, slug, draft) => needInitiatives(s).addWatch(slug, draft),
   'initiatives.stopWatch': (s, slug, id) => needInitiatives(s).stopWatch(slug, id),
   'initiatives.lookNow': (s, slug, id) => needInitiatives(s).lookNow(slug, id),

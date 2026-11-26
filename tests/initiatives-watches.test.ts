@@ -272,6 +272,40 @@ describe('Initiatives follow-ups', () => {
     expect(service.chatRun(initiativeChatChannel(slug, WATCH_CHAT), SELF)?.questions).toBeUndefined();
   });
 
+  it('a chat closes a legacy question with resolve_question', async () => {
+    const { root, service, slug } = await setup();
+    writeFileSync(path.join(root, slug, 'decisions.md'), '## Open\n- 2026-11-25: Anything to cover in Salesforce?\n');
+    service.refresh(slug);
+    const [legacy] = service.view(slug).questions!;
+    const run = service.chatRun(initiativeChatChannel(slug, 'main'), SELF)!;
+    await run.questions!.answer({ id: legacy!.id, answer: 'Florian: nothing to cover.', source: 'https://example.slack.com/archives/C1/p1763990000000200' });
+    expect(service.view(slug).questions?.filter((question) => !question.answer)).toEqual([]);
+    expect(readFolder(root, slug).questions).toMatchObject([{ id: legacy!.id, answer: { text: 'Florian: nothing to cover.' } }]);
+  });
+
+  it('a deleted question stays gone, stops its follow-up and drops its unsent drafts', async () => {
+    const { root, service, slug, watches } = await setup();
+    writeFileSync(path.join(root, slug, 'decisions.md'), '## Open\n- 2026-11-25: Anything to cover in Salesforce?\n');
+    service.refresh(slug);
+    const [legacy] = service.view(slug).questions!;
+    const question = await service.saveQuestion(slug, { text: 'Will this ship?', outreach: { ref: 'SHOP-1' } });
+    writeFileSync(path.join(root, slug, 'outbox.json'), JSON.stringify([{ id: 1, to: { kind: 'jira', issue: 'SHOP-1' }, text: 'Any news?', question: question.id }]));
+    service.refresh(slug);
+    await service.removeQuestion(slug, legacy!.id);
+    await service.removeQuestion(slug, question.id);
+    expect(service.view(slug).questions).toEqual([]);
+    expect(watches()).toMatchObject([{ question: question.id, state: 'stopped' }]);
+    expect(readFolder(root, slug).outbox).toMatchObject([{ id: 1, state: 'discarded' }]);
+    await expect(service.removeQuestion(slug, question.id)).rejects.toThrow('gone already');
+  });
+
+  it('a Slack look reads the threads in the conversation, so a reply under a reminder counts', () => {
+    const prompt = watchPrompt([watch({ since: iso(WED - DAY), where: { kind: 'slack', channel: 'C1' } })], WED);
+    expect(prompt).toContain('conversations_history');
+    expect(prompt).toContain('the thread of a later reminder');
+    expect(prompt).toContain('conversations_replies');
+  });
+
   it('attaches an older sent message to an editable question without duplicating its existing watch', async () => {
     const { root, service, slug, watches } = await setup();
     const link = 'https://example.slack.com/archives/D123/p1763990000000200?thread_ts=1763990000.000100';

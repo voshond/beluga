@@ -798,6 +798,7 @@ export interface MemoryTools {
 /** Your own worktree runs: send a file the work made to an initiative (core/initiatives/report.ts, server `beluga_initiatives`). */
 export type InitiativeQuestionTools = {
   readonly track: (input: { id?: string; text?: string; waitingOn?: string }) => Promise<{ readonly id: string; readonly answered: boolean }>;
+  readonly answer: (input: { id: string; answer: string; source?: string }) => Promise<{ readonly id: string; readonly answered: boolean }>;
 };
 
 export interface InitiativeReportTools {

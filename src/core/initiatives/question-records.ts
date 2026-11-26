@@ -3,7 +3,7 @@ import type { DecisionNote, DecisionNotes } from './decisions.js';
 import { writeOutbox, writeQuestions, writeWatches, type InitiativeFolder } from './files.js';
 import type { OutboxDraft } from './model.js';
 import { waitingQuestionsOf } from './people.js';
-import { type Question, type QuestionDraft, QuestionDraftSchema, questionWatch } from './questions.js';
+import { type Question, type QuestionDraft, QuestionDraftSchema, isRetired, questionWatch } from './questions.js';
 import { slackMessageTime, watchOfDraft, watchPlaceOf, WatchSchema, nextWatchId, type Watch } from './watches.js';
 
 export const isQuestionTarget = (to: OutboxDraft['to']) => to.kind === 'slack' || to.kind === 'jira';
@@ -28,11 +28,11 @@ export const questionsOf = (folder: InitiativeFolder): Question[] => {
     stored.add(question.id);
     return true;
   });
-  return [...folder.questions.filter((question) => !question.mergedInto), ...legacy];
+  return [...folder.questions.filter((question) => !isRetired(question)), ...legacy];
 };
 
 export const questionDecisions = (folder: InitiativeFolder): DecisionNotes | undefined => {
-  const answered = folder.questions.flatMap((question): DecisionNote[] => question.answer && !question.mergedInto
+  const answered = folder.questions.flatMap((question): DecisionNote[] => question.answer && !isRetired(question)
     ? [{ text: question.text, why: question.answer.text, day: question.answer.at.slice(0, 10), source: question.answer.source, question: true }]
     : []);
   if (!folder.decisions && !answered.length) return undefined;
@@ -127,9 +127,26 @@ export const saveQuestionRecord = (root: string, folder: InitiativeFolder, input
   return question;
 };
 
+/** The user deleted a question: kept as removed (a legacy one stays out of decisions.md's open list), its follow-ups stop and its unsent drafts are dropped. */
+export const removeQuestionRecord = (root: string, folder: InitiativeFolder, id: string, now: number): Question => {
+  const question = questionsOf(folder).find((entry) => entry.id === id);
+  if (!question) throw new Error('That question is gone already');
+  const at = new Date(now).toISOString();
+  const removed: Question = { ...question, removedAt: at };
+  const stored = folder.questions.some((entry) => entry.id === id);
+  writeQuestions(root, folder.slug, stored ? folder.questions.map((entry) => entry.id === id ? removed : entry) : [...folder.questions, removed]);
+  if (folder.watches.some((watch) => watch.question === id && watch.state === 'watching')) {
+    writeWatches(root, folder.slug, folder.watches.map((watch): Watch => watch.question === id && watch.state === 'watching' ? { ...watch, state: 'stopped' } : watch));
+  }
+  if (folder.outbox.some((entry) => entry.question === id && entry.state === 'draft')) {
+    writeOutbox(root, folder.slug, folder.outbox.map((entry) => entry.question === id && entry.state === 'draft' ? { ...entry, state: 'discarded', resolvedAt: at } : entry));
+  }
+  return removed;
+};
+
 export const captureQuestionAnswers = (root: string, folder: InitiativeFolder): boolean => {
   const questions = folder.questions.map((question) => {
-    if (question.answer || question.mergedInto) return question;
+    if (question.answer || isRetired(question)) return question;
     const solved = folder.watches.find((watch) => watch.question === question.id && watch.state === 'answered' && watch.answer?.source);
     return solved?.answer ? { ...question, answer: solved.answer } : question;
   });

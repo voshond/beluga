@@ -6,6 +6,7 @@ import type { DecisionNote } from '@beluga/core/initiatives/decisions.js';
 import type { InitiativeView } from '@beluga/core/initiatives/model.js';
 import { EntryText } from './InitiativeTimeline.js';
 import { Button } from '../components/ui.js';
+import { openSheet } from '../lib/sheets.js';
 import { QuestionSheet } from './QuestionSheet.js';
 import { QuestionRow } from './QuestionRow.js';
 import { useInitiativeActions } from './use-initiatives.js';
@@ -35,15 +36,25 @@ export const NoteRow = ({ note, item, chip, badge, heading, inListbox }: NotePro
   </div>
 );
 
+type Editing = { readonly question?: Question; readonly resolving?: boolean };
+
 export const OpenQuestions = ({ item }: { item: InitiativeView }) => {
   const actions = useInitiativeActions();
-  const [editing, setEditing] = useState<Question | 'new'>();
+  const [editing, setEditing] = useState<Editing>();
   const open = (item.questions ?? []).filter((question) => !question.answer);
-  const handleAdd = (): void => setEditing('new');
+  const handleAdd = (): void => setEditing({});
   const handleClose = (): void => setEditing(undefined);
   const handleOpenChat = (channel: string): void => {
     actions.open(item, initiativeChatOf(channel)?.chat);
   };
+  const handleDelete = (question: Question): void =>
+    openSheet({
+      kind: 'confirm',
+      title: 'Delete this question?',
+      message: 'Its follow-up stops and unsent drafts for it are dropped. Questions you resolve go to the decision log instead.',
+      confirm: 'Delete',
+      run: () => void actions.act(() => actions.api.removeQuestion(item.slug, question.id), 'Question deleted'),
+    });
 
   return (
     <>
@@ -53,15 +64,15 @@ export const OpenQuestions = ({ item }: { item: InitiativeView }) => {
         <Button size="small" variant="quiet" icon="plus" onClick={handleAdd}>Add question</Button>
       </div>
       {open.length ? (
-        <div role="list" aria-label="Open questions" className={s.ticketList}>
+        <div role="list" aria-label="Open questions" className={s.logOpen}>
           {open.map((question) => (
             <QuestionRow key={question.id} question={question} item={item} watch={questionWatch(question.id, item.watches ?? [])}
               hasDraft={item.outbox.some((draft) => draft.question === question.id && (draft.state === 'draft' || draft.state === 'approved'))}
-              onEdit={() => setEditing(question)} />
+              onEdit={() => setEditing({ question })} onResolve={() => setEditing({ question, resolving: true })} onDelete={() => handleDelete(question)} />
           ))}
         </div>
       ) : null}
-      {editing ? <QuestionSheet key={editing === 'new' ? 'new' : editing.id} item={item} question={editing === 'new' ? undefined : editing} close={handleClose} openChat={handleOpenChat} /> : null}
+      {editing ? <QuestionSheet key={editing.question?.id ?? 'new'} item={item} question={editing.question} resolving={editing.resolving} close={handleClose} openChat={handleOpenChat} /> : null}
     </>
   );
 };

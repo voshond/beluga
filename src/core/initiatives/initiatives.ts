@@ -70,8 +70,8 @@ import { RiskKeeper } from './risk-keeper.js';
 import type { RiskDraft } from './risks.js';
 import type { SuccessDefineRequest } from '../../agent/success-definer.js';
 import type { SuccessDefinition, SuccessDraft, SuccessProposal, SuccessProposalInput } from './success.js';
-import { captureQuestionAnswers, isQuestionTarget, questionDecisions, questionsOf, saveQuestionRecord } from './question-records.js';
-import { type Question, type QuestionDraft } from './questions.js';
+import { captureQuestionAnswers, isQuestionTarget, questionDecisions, questionsOf, removeQuestionRecord, saveQuestionRecord } from './question-records.js';
+import { type Question, type QuestionDraft, isRetired } from './questions.js';
 import { deliveryOf, type Delivery } from './delivery.js';
 import { InitiativeSuccess, type SuccessHost } from './success-service.js';
 
@@ -731,6 +731,24 @@ export class Initiatives {
     return question;
   }
 
+  async removeQuestion(slug: string, id: string): Promise<void> {
+    this.need(slug);
+    const folder = readFolder(this.deps.root, slug);
+    if (folder.trouble?.includes('questions.json:')) throw new Error(folder.trouble);
+    removeQuestionRecord(this.deps.root, folder, id, this.now);
+    await this.commit(slug, `${slug}: question removed`);
+    this.refresh(slug);
+    await this.watching.sync(slug);
+  }
+
+  /** A chat settled a question (a reply it read, or the user's word): it closes with that answer, like Record an answer on the page. */
+  private async answerQuestion(slug: string, input: Parameters<InitiativeQuestionTools['answer']>[0]): Promise<{ id: string; answered: boolean }> {
+    const known = questionsOf(readFolder(this.deps.root, slug)).find((question) => question.id === input.id);
+    if (!known) throw new Error('That question no longer exists');
+    const answered = await this.saveQuestion(slug, { id: known.id, text: known.text, waitingOn: known.waitingOn, answer: { text: input.answer, source: input.source } });
+    return { id: answered.id, answered: true };
+  }
+
   private async trackQuestion(slug: string, input: Parameters<InitiativeQuestionTools['track']>[0]): Promise<{ id: string; answered: boolean }> {
     const folder = readFolder(this.deps.root, slug);
     const normalized = (text: string): string => text.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -746,7 +764,7 @@ export class Initiatives {
   draftQuestion(slug: string, id: string): { readonly channel: string } {
     const item = this.need(slug);
     const question = readFolder(this.deps.root, slug).questions.find((entry) => entry.id === id);
-    if (!question || question.answer || question.mergedInto) throw new Error('Choose an open question');
+    if (!question || question.answer || isRetired(question)) throw new Error('Choose an open question');
     if (item.outbox.some((draft) => draft.question === id && (draft.state === 'draft' || draft.state === 'approved'))) throw new Error('A draft for this question is already in the outbox');
     const channel = this.workChannel(item);
     const prompt = `Prepare a Slack message or Jira comment asking this initiative question. Use the initiative’s sources and directory to verify the destination. If the destination is unclear, ask me. Put one draft in outbox.json with "question": "${id}". Question: ${question.text}${question.waitingOn ? `
@@ -958,7 +976,7 @@ Ask: ${question.waitingOn}` : ''}`;
     return {
       place,
       brief: initiativeBrief(item, brief, this.repos(item), of.chat, readDirectory(this.deps.root), this.now) + this.success.brief(item, of.chat === CHECK_IN_CHAT),
-      ...(of.chat !== WATCH_CHAT ? { questions: { track: (input) => this.trackQuestion(of.slug, input) } } : {}),
+      ...(of.chat !== WATCH_CHAT ? { questions: { track: (input) => this.trackQuestion(of.slug, input), answer: (input) => this.answerQuestion(of.slug, input) } } : {}),
       ...this.sendHooks(of.slug, channel),
     };
   }

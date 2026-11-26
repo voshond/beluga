@@ -5,13 +5,13 @@ import { EntryText } from './InitiativeTimeline.js';
 import { Field, FormSheet, Popup, TextArea, TextInput } from '../components/FormSheet.js';
 import { useInitiativeActions } from './use-initiatives.js';
 
-type Props = { readonly question?: Question; readonly item: InitiativeView; readonly close: () => void; readonly openChat: (channel: string) => void };
+type Props = { readonly question?: Question; readonly item: InitiativeView; readonly close: () => void; readonly openChat: (channel: string) => void; readonly resolving?: boolean };
 
-export const QuestionSheet = ({ question, item, close, openChat }: Props) => {
+export const QuestionSheet = ({ question, item, close, openChat, resolving }: Props) => {
   const { api, act } = useInitiativeActions();
   const [text, setText] = useState(question?.text ?? '');
   const [waitingOn, setWaitingOn] = useState(question?.waitingOn ?? '');
-  const [action, setAction] = useState('save');
+  const [action, setAction] = useState(resolving ? 'answer' : 'save');
   const [draft, setDraft] = useState('');
   const [ref, setRef] = useState('');
   const [sentOn, setSentOn] = useState('');
@@ -59,9 +59,9 @@ export const QuestionSheet = ({ question, item, close, openChat }: Props) => {
     if (result) openChat(result.channel);
   };
   return (
-    <FormSheet title={question ? 'Edit question' : 'Add question'} icon="chat" onCancel={close} onSubmit={handleSubmit} canSubmit={Boolean(ready)} submitLabel={action === 'draft' ? 'Save and draft' : 'Save'}>
+    <FormSheet title={resolving ? 'Resolve question' : question ? 'Edit question' : 'Add question'} icon="chat" onCancel={close} onSubmit={handleSubmit} canSubmit={Boolean(ready)} submitLabel={action === 'draft' ? 'Save and draft' : resolving ? 'Resolve' : 'Save'}>
       <Field label="Question" htmlFor="initiative-question-text">
-        <TextArea id="initiative-question-text" value={text} onChange={setText} maxLength={4000} data-autofocus />
+        <TextArea id="initiative-question-text" value={text} onChange={setText} maxLength={4000} data-autofocus={!resolving || undefined} />
       </Field>
       <Field label="Who can answer?" htmlFor="initiative-question-person" hint="Separate multiple names with commas.">
         <TextInput id="initiative-question-person" value={waitingOn} onChange={setWaitingOn} maxLength={120} />
@@ -97,7 +97,7 @@ export const QuestionSheet = ({ question, item, close, openChat }: Props) => {
       {action === 'answer' ? (
         <>
           <Field label="Answer" htmlFor="initiative-question-answer">
-            <TextArea id="initiative-question-answer" value={answer} onChange={setAnswer} maxLength={4000} />
+            <TextArea id="initiative-question-answer" value={answer} onChange={setAnswer} maxLength={4000} data-autofocus={resolving || undefined} />
           </Field>
           <Field label="Source link" htmlFor="initiative-question-source" hint="Optional when you enter the answer yourself.">
             <TextInput id="initiative-question-source" value={source} onChange={setSource} maxLength={1000} />

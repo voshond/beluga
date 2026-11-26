@@ -3,6 +3,7 @@ import { addTimeline, readFolder, writeOutbox, writeWatches } from './files.js';
 import { type OutboxDraft, initiativeChatChannel } from './model.js';
 import { dayOf } from './repo.js';
 import { captureQuestionAnswers, linkSentQuestionDraft } from './question-records.js';
+import { isRetired } from './questions.js';
 import { watchPrompt } from './watch-prompt.js';
 import { WATCH_CHAT, type Watch, type WatchDraft, WatchDraftSchema, WatchSchema, dueWatches, needsNudge, isExpired, isWatching, nextLookWhen, nextWakeAt, nextWatchId, watchOfDraft } from './watches.js';
 
@@ -73,7 +74,7 @@ export class InitiativeWatches {
     const folder = readFolder(this.deps.root, slug);
     const watches = folder.watches;
     if (draft.question) {
-      const question = folder.questions.find((entry) => entry.id === draft.question && !entry.mergedInto);
+      const question = folder.questions.find((entry) => entry.id === draft.question && !isRetired(entry));
       if (!question) return;
       const linked = linkSentQuestionDraft(watches, question, draft, this.deps.now());
       if (linked.some((watch, index) => watch !== watches[index])) writeWatches(this.deps.root, slug, linked);
@@ -131,7 +132,7 @@ export class InitiativeWatches {
     let id = outbox.reduce((max, draft) => Math.max(max, draft.id), 0);
     for (const watch of folder.watches) {
       const question = folder.questions.find((entry) => entry.id === watch.question);
-      if (!ids.has(watch.id) || !question || question.answer || question.mergedInto || !needsNudge(watch, now) || isExpired(watch, now)) continue;
+      if (!ids.has(watch.id) || !question || question.answer || isRetired(question) || !needsNudge(watch, now) || isExpired(watch, now)) continue;
       if (watch.checkFailed || !watch.checkedAt || !needsNudge(watch, Date.parse(watch.checkedAt)) || Date.parse(watch.checkedAt) > now) continue;
       if ((watch.where.kind !== 'slack' && watch.where.kind !== 'jira') || outbox.length >= 500) continue;
       if (!outbox.some((draft) => draft.reminderFor === watch.id)) {
@@ -155,7 +156,7 @@ export class InitiativeWatches {
     const linked = new Set(folder.watches.map((watch) => watch.draft));
     const restored = folder.outbox.reduce((watches, draft) => {
       if (!draft.question || draft.state !== 'sent' || draft.reminderFor || linked.has(draft.id)) return watches;
-      const question = folder.questions.find((record) => record.id === draft.question && !record.mergedInto);
+      const question = folder.questions.find((record) => record.id === draft.question && !isRetired(record));
       return question ? linkSentQuestionDraft(watches, question, draft, now) : watches;
     }, folder.watches);
     if (restored !== folder.watches) writeWatches(this.deps.root, slug, restored);
