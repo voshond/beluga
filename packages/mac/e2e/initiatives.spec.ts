@@ -287,7 +287,7 @@ test('an initiative’s page shows what it waits for and what came in, and adds 
   await waiting.getByRole('button', { name: 'Watch for an Answer…' }).click();
   await page.getByLabel('What it waits for').fill('Jonas on the address lookup fallback');
   await page.getByLabel('Where to look').fill('SHOP-152');
-  await page.getByLabel('Waiting on').fill('Jonas');
+  await page.getByRole('textbox', { name: 'Waiting on', exact: true }).fill('Jonas');
   await page.getByRole('button', { name: 'Watch', exact: true }).click();
   const added = waiting.locator('[data-watch="3"]');
   await expect(added).toContainText('Jonas on the address lookup fallback');
