@@ -580,7 +580,7 @@ export class Initiatives {
   }
 
   /** The user sends a draft (edited or not): the chat is asked to post it, and only that call is allowed. */
-  async sendDraft(slug: string, id: number, text: string): Promise<{ readonly channel: string }> {
+  async sendDraft(slug: string, id: number, text: string, expectsReply?: boolean): Promise<{ readonly channel: string }> {
     const item = this.need(slug);
     const draft = this.openDraft(item, id);
     const to = draft.to;
@@ -597,7 +597,7 @@ export class Initiatives {
     const edited = final !== draft.text.trim();
     this.putDraft(slug, item.outbox, id, (d) => {
       const { sentText: _sent, sendError: _error, ...rest } = d;
-      return { ...rest, state: 'approved', ...(edited ? { sentText: final } : {}) };
+      return { ...rest, state: 'approved', ...(edited ? { sentText: final } : {}), ...(expectsReply === undefined ? {} : { expectsReply }) };
     });
     this.refresh(slug);
     send.requestId = this.deps.ask(sendDraftMessage({ id: draft.id, to }, final), channel);

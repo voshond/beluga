@@ -5,7 +5,7 @@ import { dayOf } from './repo.js';
 import { captureQuestionAnswers, linkSentQuestionDraft } from './question-records.js';
 import { isRetired } from './questions.js';
 import { watchPrompt } from './watch-prompt.js';
-import { WATCH_CHAT, type Watch, type WatchDraft, WatchDraftSchema, WatchSchema, dueWatches, needsNudge, isExpired, isWatching, nextLookWhen, nextWakeAt, nextWatchId, watchOfDraft } from './watches.js';
+import { WATCH_CHAT, type Watch, type WatchDraft, WatchDraftSchema, WatchSchema, dueWatches, needsNudge, isExpired, isWatching, nextLookWhen, nextWakeAt, nextWatchId, watchOfDraft, watchesReply } from './watches.js';
 
 /** What the watch sentinel needs from Sentinel (launch.ts builds it, as the check-in's). */
 export type WatchHost = {
@@ -70,7 +70,7 @@ export class InitiativeWatches {
 
   /** A sent Slack message or Jira comment: watch its place for the answer (written now; the chat turn's end commits it). A Confluence section gets none. */
   fromDraft(slug: string, draft: OutboxDraft): void {
-    if ((draft.to.kind !== 'slack' && draft.to.kind !== 'jira') || draft.reminderFor) return;
+    if (!watchesReply(draft) || draft.reminderFor) return;
     const folder = readFolder(this.deps.root, slug);
     const watches = folder.watches;
     if (draft.question) {

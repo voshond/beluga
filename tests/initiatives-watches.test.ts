@@ -10,7 +10,7 @@ import { CHECK_IN_CHAT, type InitiativeView, type InitiativesSlice, initiativeCh
 import { initiativeBrief } from '../src/core/initiatives/prompt.js';
 import { followUpNews } from '../src/core/initiatives/watch-notices.js';
 import { WATCHES_BRIEF, watchPrompt } from '../src/core/initiatives/watch-prompt.js';
-import { WATCH_CHAT, type Watch, WatchSchema, WatchesSchema, dueWatches, givesUpAt, isDue, needsNudge, nextLookAt, nextWakeAt, unreadNews, watchEvery, watchOfDraft, watchPlaceOf, workingTime } from '../src/core/initiatives/watches.js';
+import { WATCH_CHAT, type Watch, WatchSchema, WatchesSchema, dueWatches, givesUpAt, isDue, needsNudge, nextLookAt, nextWakeAt, unreadNews, watchEvery, watchOfDraft, watchPlaceOf, watchesReply, workingTime } from '../src/core/initiatives/watches.js';
 import type { OnceTrigger, SentinelDraft, SentinelPatch } from '../src/core/sentinel/model.js';
 import { noticeTarget } from '../src/ui/notice-models.js';
 import { Store, initialState } from '../src/core/store.js';
@@ -85,6 +85,16 @@ describe('watches.json', () => {
       { ...w, id: 4, news: [{ at: iso(WED + 2), text: 'c', read: false }] },
     ]);
     expect(news.map((n) => n.news.text)).toEqual(['c', 'a']);
+  });
+
+  it('watches a reply unless the draft only tells, and never a prep sheet', () => {
+    const slack = { kind: 'slack', channel: 'C1' } as const;
+    expect(watchesReply({ to: slack })).toBe(true);
+    expect(watchesReply({ to: slack, expectsReply: false })).toBe(false);
+    expect(watchesReply({ to: slack, audience: 'leads' })).toBe(false);
+    expect(watchesReply({ to: slack, audience: 'leads', expectsReply: true })).toBe(true);
+    expect(watchesReply({ to: slack, question: 'q-1', expectsReply: false } as Parameters<typeof watchesReply>[0])).toBe(true);
+    expect(watchesReply({ to: { kind: 'prep', meeting: 'Go/no-go' } } as Parameters<typeof watchesReply>[0])).toBe(false);
   });
 
   it('a follow-up line is its own timeline kind, and the Follow-ups chat has its title', () => {
@@ -174,6 +184,27 @@ describe('Initiatives follow-ups', () => {
     expect(made.steps![0]).toMatchObject({ kind: 'chat', to: `${SELF}/${initiativeChatChannel(slug, WATCH_CHAT)}` });
     expect(host.paused.get('sn2')).toBe(false);
     expect(service.view(slug).watches).toHaveLength(1);
+  });
+
+  it('sending a draft that only tells starts no follow-up, and Watch for an answer overrides the agent', async () => {
+    const { root, service, slug, watches } = await setup();
+    const decided = 'Decided: blended price per unit.';
+    writeFileSync(path.join(root, slug, 'outbox.json'), JSON.stringify([
+      { id: 1, to: { kind: 'jira', issue: 'SHOP-150' }, text: decided, expectsReply: false },
+      { id: 2, to: { kind: 'jira', issue: 'SHOP-151' }, text: decided, expectsReply: false },
+    ]));
+    service.refresh(slug);
+    const send = async (id: number, issue: string, expectsReply?: boolean): Promise<void> => {
+      await service.sendDraft(slug, id, decided, expectsReply);
+      const run = service.chatRun(initiativeChatChannel(slug, 'main'), SELF)!;
+      expect(run.vetTool('mcp__jira__jira_add_comment', { issue_key: issue, body: decided })).toBeUndefined();
+      run.onStep({ id: `send-${id}`, kind: 'tool', title: 'Send', tool: 'mcp__jira__jira_add_comment', status: 'done', startedAt: 1, input: { issue_key: issue, body: decided }, output: '{"id":"17"}' });
+    };
+    await send(1, 'SHOP-150');
+    expect(service.view(slug).outbox[0]?.state).toBe('sent');
+    expect(watches()).toEqual([]);
+    await send(2, 'SHOP-151', true);
+    expect(watches()).toMatchObject([{ draft: 2, where: { kind: 'jira', issue: 'SHOP-151' }, state: 'watching' }]);
   });
 
   it('lists the Follow-ups chat when it arms, so the sentinel finds the chat it wakes', async () => {

@@ -207,6 +207,13 @@ export const watchOfDraft = (draft: Pick<OutboxDraft, 'id' | 'to' | 'text' | 'se
   });
 };
 
-export const nextWatchId = (watches: readonly Watch[]): number => watches.reduce((n, w) => Math.max(n, w.id), 0) + 1;
+/** Whether sending it starts a follow-up: a tracked question always does, a stakeholder update never unless asked, the rest unless marked as expecting no reply. */
+export const watchesReply = (draft: Pick<OutboxDraft, 'to' | 'question' | 'audience' | 'expectsReply'>): boolean => {
+  if (draft.to.kind !== 'slack' && draft.to.kind !== 'jira') return false;
+  if (draft.question) return true;
+  return draft.expectsReply ?? !draft.audience;
+};
+
+export const nextWatchId =(watches: readonly Watch[]): number => watches.reduce((n, w) => Math.max(n, w.id), 0) + 1;
 
 export const isWatchChat = (channel: string | undefined): boolean => initiativeChatOf(channel)?.chat === WATCH_CHAT;
