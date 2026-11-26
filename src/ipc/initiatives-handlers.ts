@@ -38,4 +38,8 @@ export const INITIATIVES_HANDLERS = {
   'initiatives.removePerson': (s, person) => needInitiatives(s).removePerson(person),
   'initiatives.setPerson': (s, slug, person, role) => needInitiatives(s).setPerson(slug, person, role ?? null),
   'initiatives.proposePeople': (s, slug) => needInitiatives(s).proposePeople(slug),
+  'initiatives.saveAudience': (s, slug, draft) => needInitiatives(s).saveAudience(slug, draft),
+  'initiatives.removeAudience': (s, slug, id) => needInitiatives(s).removeAudience(slug, id),
+  'initiatives.draftUpdate': (s, slug, id) => needInitiatives(s).draftUpdate(slug, id),
+  'initiatives.keepPrep': (s, slug, id, text) => needInitiatives(s).keepPrep(slug, id, text),
 } satisfies InitiativesHandlers;

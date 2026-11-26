@@ -3,9 +3,10 @@ import path from 'node:path';
 import type { z } from 'zod';
 import { type DecisionNotes, decisionsOf } from './decisions.js';
 import { PEOPLE_DIR, type WaitingQuestion, waitingQuestionsOf } from './people.js';
+import { type UpdateRecord, UpdatesSchema } from './updates.js';
 import { type Artifact, ArtifactsSchema, type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, type InitiativeTasks, TasksSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type OutboxDraft, OutboxSchema, type Suggestion, SuggestionsSchema, type TimelineEntry, timelineOf } from './model.js';
 
-export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json', 'artifacts.json'] as const;
+export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json', 'artifacts.json', 'updates.json'] as const;
 
 const MAX_FILES = 200;
 const MAX_READ = 512 * 1024;
@@ -21,6 +22,7 @@ export type InitiativeFolder = {
   readonly suggestions: readonly Suggestion[];
   readonly outbox: readonly OutboxDraft[];
   readonly artifacts: readonly Artifact[];
+  readonly updates: readonly UpdateRecord[];
   readonly timeline: readonly TimelineEntry[];
   readonly decisions?: DecisionNotes;
   readonly waitingQuestions: readonly WaitingQuestion[];
@@ -108,8 +110,9 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
   const outbox = parseJson(file('outbox.json'), OutboxSchema, 'outbox.json');
   const artifacts = parseJson(file('artifacts.json'), ArtifactsSchema, 'artifacts.json');
   const decisions = decisionsOf(file('decisions.md') ?? '');
+  const updates = parseJson(file('updates.json'), UpdatesSchema, 'updates.json');
   const missing = config.value || config.trouble ? undefined : 'initiative.json is missing';
-  const troubles = [config.trouble ?? missing, status.trouble, tickets.trouble, tasks.trouble, suggestions.trouble, outbox.trouble, artifacts.trouble].filter((t): t is string => Boolean(t));
+  const troubles = [config.trouble ?? missing, status.trouble, tickets.trouble, tasks.trouble, suggestions.trouble, outbox.trouble, artifacts.trouble, updates.trouble].filter((t): t is string => Boolean(t));
   return {
     slug,
     folder,
@@ -121,6 +124,7 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
     suggestions: suggestions.value ?? [],
     outbox: outbox.value ?? [],
     artifacts: artifacts.value ?? [],
+    updates: updates.value ?? [],
     timeline: timelineOf(file('timeline.md') ?? ''),
     ...(decisions ? { decisions } : {}),
     waitingQuestions: waitingQuestionsOf(file('decisions.md') ?? ''),
@@ -136,6 +140,8 @@ export const writeSuggestions = (root: string, slug: string, suggestions: readon
 export const writeTasks = (root: string, slug: string, tasks: InitiativeTasks): void => writeJsonFile(path.join(folderOf(root, slug), 'tasks.json'), tasks);
 
 export const writeOutbox = (root: string, slug: string, outbox: readonly OutboxDraft[]): void => writeText(path.join(folderOf(root, slug), 'outbox.json'), `${JSON.stringify(outbox, null, 2)}\n`);
+
+export const writeUpdates = (root: string, slug: string, updates: readonly UpdateRecord[]): void => writeText(path.join(folderOf(root, slug), 'updates.json'), `${JSON.stringify(updates, null, 2)}\n`);
 
 export const writeArtifacts = (root: string, slug: string, artifacts: readonly Artifact[]): void => writeText(path.join(folderOf(root, slug), 'artifacts.json'), `${JSON.stringify(artifacts, null, 2)}\n`);
 
