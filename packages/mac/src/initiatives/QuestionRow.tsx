@@ -1,7 +1,7 @@
 import type { SourceContext } from '@beluga/core/initiatives/log.js';
 import { type Question, questionState } from '@beluga/core/initiatives/questions.js';
 import type { Watch } from '@beluga/core/initiatives/watches.js';
-import { Button } from '../components/ui.js';
+import { IconButton } from '../components/ui.js';
 import { openExternal } from '../lib/system.js';
 import { EntryText } from './InitiativeTimeline.js';
 import s from './initiatives.module.css';
@@ -27,18 +27,20 @@ export const QuestionRow = ({ question, watch, item, hasDraft, onEdit }: Props) 
     if (source) void openExternal(source);
   };
 
+  const asked = watch ? `Asked ${watch.since.slice(0, 10)}` : undefined;
+  const checkFailed = state === 'waiting' && watch?.checkFailed;
   return (
-    <div role="listitem" className={s.noteItem}>
-      <span className={s.logItemTop}>
-        <span className={s.kindChip} data-kind="note">{label}</span>
-        {watch ? <span className={s.quiet}>{`Asked ${watch.since.slice(0, 10)}`}</span> : null}
-        <span className={s.grow} />
-        <Button size="small" variant="quiet" icon="pencil" aria-label="Edit question" onClick={onEdit}>Edit</Button>
+    <div role="listitem" className={s.task}>
+      <span className={s.taskText}>
+        <span className={s.taskTitle}><EntryText text={question.text} item={item} /></span>
+        <span className={s.taskNotes}>
+          <span>{label}</span>
+          {asked ? <> · <span>{asked}</span></> : null}
+        </span>
+        {checkFailed ? <span className={s.riskLine}>Check has no confirmed result.</span> : null}
       </span>
-      <EntryText text={question.text} item={item} />
-      {state === 'waiting' && watch?.checkFailed
-        ? <span className={s.quiet}>Check has no confirmed result.</span> : null}
-      {source ? <Button size="small" variant="quiet" icon="external" onClick={handleOpen}>Open sent message</Button> : null}
+      {source ? <IconButton size="small" icon="external" label="Open sent message" onClick={handleOpen} /> : null}
+      <IconButton size="small" icon="pencil" label="Edit question" onClick={onEdit} />
     </div>
   );
 };

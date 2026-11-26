@@ -53,7 +53,7 @@ export const OpenQuestions = ({ item }: { item: InitiativeView }) => {
         <Button size="small" variant="quiet" icon="plus" onClick={handleAdd}>Add question</Button>
       </div>
       {open.length ? (
-        <div role="list" aria-label="Open questions" className={s.logOpen}>
+        <div role="list" aria-label="Open questions" className={s.ticketList}>
           {open.map((question) => (
             <QuestionRow key={question.id} question={question} item={item} watch={questionWatch(question.id, item.watches ?? [])}
               hasDraft={item.outbox.some((draft) => draft.question === question.id && (draft.state === 'draft' || draft.state === 'approved'))}
