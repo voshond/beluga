@@ -241,6 +241,8 @@ export class PlanPilot {
   private readonly starting = new Set<string>();
   /** Board tasks that failed to start: not tried again by themselves (you can start them). */
   private readonly failed = new Set<string>();
+  /** Why a task (its issue id) last couldn't start: said when the plan goes quiet over it, never swallowed. */
+  private readonly startFailure = new Map<string, string>();
   /** Started tasks whose Claude stopped without finishing: woken once, then yours. */
   private readonly watchdog: TaskWatchdog;
   private heartbeat: ReturnType<typeof setInterval> | undefined;
@@ -783,8 +785,15 @@ export class PlanPilot {
     const ready = todo.filter((t) => t.state === 'ready' || t.state === 'idle' || t.state === 'running');
     if (!ready.length) return undefined;
     if (!m.agent || !this.byMilestone) {
+      // What stopped it the last time it tried, and what stops it now: said, not "started again" over nothing.
+      const last = todo.map((t) => (t.issue ? this.startFailure.get(t.issue.id) : undefined)).find(Boolean);
+      for (const t of todo) if (t.issue) this.startFailure.delete(t.issue.id);
+      const lastWords = last ? ` (its last start failed: ${last})` : '';
+      const room = plan.maxParallel - (this.byMilestone ? agentsAtWork(view).length + this.launchingIn(plan) : view.active.length + this.startingIn(plan));
+      const unit = this.byMilestone ? 'milestone' : 'task';
+      if (room <= 0) return `couldn’t start “${m.milestone.title}” again: ${plan.maxParallel} ${unit}${plan.maxParallel === 1 ? ' is' : 's are'} already at work (the plan’s limit)${lastWords}`;
       this.schedule();
-      return `started “${m.milestone.title}” again`;
+      return `started “${m.milestone.title}” again${lastWords}`;
     }
     const channel = `${WS_PREFIX}${m.agent.worktree}`;
     const send = (): void => {
@@ -946,6 +955,7 @@ export class PlanPilot {
     } catch (err) {
       for (const id of ids) this.failed.add(id);
       const why = err instanceof Error ? err.message : String(err);
+      for (const id of ids) this.startFailure.set(id, why.split('\n')[0]!.slice(0, 200));
       this.deps.plans.note(plan.id, 'problem', `couldn’t start the agent for “${milestoneName(plan, milestoneId)}”: ${why}`, { kind: 'beluga' });
       throw err;
     } finally {
@@ -1309,6 +1319,7 @@ export class PlanPilot {
       if (t.bases?.length && this.deps.plans.need(plan.id).combining?.[t.task.id]) this.deps.plans.setCombining(plan.id, t.task.id, undefined);
       this.failed.add(issue.id);
       const why = err instanceof Error ? err.message : String(err);
+      this.startFailure.set(issue.id, why.split('\n')[0]!.slice(0, 200));
       this.deps.plans.note(plan.id, 'problem', `couldn’t start ${issue.key}: ${why}`, { kind: 'beluga' });
       throw err;
     } finally {
@@ -1555,6 +1566,15 @@ export class PlanPilot {
         this.deps.plans.note(planId, 'problem', `merging “${m.milestone.title}” into ${this.branchIn(plan, repo)}: the conflict in ${res.files.join(', ')} is still there; fix it in ${res.dir} and the milestone passes`, beluga);
       }
       return;
+    }
+    // Passed past tasks that weren't In Review: their branches stay out of the plan's branch. Said, never
+    // left to look merged (their state says what they are, not "merged into the plan's branch").
+    const mergedNow = new Set(tasks.map((t) => t.issue!.branch!));
+    const skipped = [...new Set(m.tasks.flatMap((t) => (t.issue?.branch && !mergedNow.has(t.issue.branch) && t.state !== 'done' && t.state !== 'planned' && t.state !== 'canceled' ? [t.issue.branch] : [])))];
+    const without = skipped.length && git.notIn ? await git.notIn(plan.projectId, branch, skipped).catch(() => []) : [];
+    if (without.length) {
+      const keys = m.tasks.filter((t) => t.issue?.branch && without.includes(t.issue.branch)).map((t) => t.issue!.key);
+      this.deps.plans.note(planId, 'problem', `passed “${m.milestone.title}” without ${keys.join(', ')}: ${without.join(', ')} ${without.length > 1 ? 'aren’t' : 'isn’t'} in ${branch}. What builds on ${keys.length > 1 ? 'them' : 'it'} starts without that work: finish ${keys.length > 1 ? 'them' : 'it'} and reopen the milestone, or merge ${without.length > 1 ? 'them' : 'it'} into ${branch}.`, beluga);
     }
     // In: its tasks are Merged into Plan, the milestone passes, and their worktrees go.
     if (merge.conflict) this.endFixup(planId, { merging: milestoneId });

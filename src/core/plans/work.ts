@@ -588,7 +588,7 @@ export class PlansWork {
     if (chat && !chatRunsOn(chat, agent ?? undefined, was)) this.deps.followAgent?.(plan.home, agent ?? undefined);
     const who = agent ? agentName(agent, { model: true }) : 'your default agent';
     const busy = Object.values(plan.runs).filter((r) => r?.agent && !r.passedAt).length;
-    return busy ? `${who} works what starts next; the ${busy === 1 ? 'milestone' : `${busy} milestones`} already at work keep${busy === 1 ? 's' : ''} ${busy === 1 ? 'its' : 'their'} agent` : `${who} works this plan’s milestones and tasks`;
+    return busy ? `${who} works what starts next; the ${busy === 1 ? 'milestone' : `${busy} milestones`} already at work keep${busy === 1 ? 's' : ''} ${busy === 1 ? 'its' : 'their'} agent (to switch ${busy === 1 ? 'it' : 'one'} now, pick an agent in its conversation)` : `${who} works this plan’s milestones and tasks`;
   }
 
   /**

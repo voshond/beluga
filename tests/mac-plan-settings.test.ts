@@ -12,7 +12,7 @@ import type { WorkspaceController, WorktreeEvent } from '../src/core/workspace-c
 import type { AgentRef } from '../src/protocol.js';
 import type { Workspace } from '../src/workspaces/types.js';
 import { agentModelItems } from '../packages/mac/src/plans/agent-menu-model.js';
-import { picksOfPlan, roleChanges, runsChange } from '../packages/mac/src/plans/plan-settings-model.js';
+import { keptAgentWords, picksOfPlan, roleChanges, runsChange } from '../packages/mac/src/plans/plan-settings-model.js';
 import { waitFor } from './helpers.js';
 
 /** Plan Settings: a plan's agents changed after it's made, with New Plan's own pickers; the header's Agents menu says and picks the same. */
@@ -55,6 +55,28 @@ describe('what Save sends', () => {
 
   it('the builder goes first', () => {
     expect(roleChanges({}, { planner: opus, agent: codex, checker: claude }).map(([role]) => role)).toEqual(['builder', 'planner', 'checker']);
+  });
+});
+
+describe('the milestones at work keep their agent, said before Save', () => {
+  const HAIKU: AgentRef = { runtime: 'claude', label: 'Claude', model: 'claude-haiku-5-5' };
+  const SONNET: AgentRef = { runtime: 'claude', label: 'Claude', model: 'claude-sonnet-5-5' };
+  it('names the one at work, or counts several, and says how to switch one now', () => {
+    expect(keptAgentWords([['builder', HAIKU]], ['H6 盘点'])).toBe('“H6 盘点” is already at work and keeps its agent. To switch it now, pick an agent in its conversation.');
+    expect(keptAgentWords([['builder', null]], ['A', 'B'])).toBe('2 milestones already at work keep their agent. To switch one now, pick an agent in its conversation.');
+  });
+  it('a plan with a worktree per task counts its tasks', () => {
+    expect(keptAgentWords([['builder', HAIKU]], ['A', 'B', 'C'], 'task')).toBe('3 tasks already at work keep their agent. To switch one now, pick an agent in its conversation.');
+  });
+  it('says nothing when the builder stays, or nothing is at work', () => {
+    expect(keptAgentWords([['checker', SONNET]], ['A'])).toBeUndefined();
+    expect(keptAgentWords([['builder', HAIKU]], [])).toBeUndefined();
+  });
+  it('the sheet shows it under Agents', () => {
+    const sheet = readFileSync(join(import.meta.dirname, '../packages/mac/src/plans/PlanSettingsSheet.tsx'), 'utf8');
+    expect(sheet).toMatch(/agentsAtWork\(view\)/);
+    expect(sheet).toMatch(/keptAgentWords\(roles, view\.active/);
+    expect(sheet.indexOf('{kept}')).toBeGreaterThan(sheet.indexOf('<AgentRoles'));
   });
 });
 
@@ -171,7 +193,7 @@ describe('after Save, the work', () => {
       ['checker', SONNET],
     ]);
     const said = changes.map(([role, agent]) => t.work.setRoleAgent(plan.id, role, agent));
-    expect(said[0]).toBe('Claude (Haiku 5.5) works what starts next; the milestone already at work keeps its agent');
+    expect(said[0]).toBe('Claude (Haiku 5.5) works what starts next; the milestone already at work keeps its agent (to switch it now, pick an agent in its conversation)');
     expect(t.plans.need(plan.id)).toMatchObject({ agent: HAIKU, planner: OPUS, checker: SONNET });
     // The milestone at work keeps its worktree, its agent and its model.
     expect(t.worktrees).toHaveLength(1);

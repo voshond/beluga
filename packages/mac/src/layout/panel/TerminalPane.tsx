@@ -84,10 +84,9 @@ function WorkspaceScripts({ wsId }: { wsId: string }) {
   );
 }
 
-/** The terminal's ⋯: where ⌘J shows it, moving it there now, the full-size view, the project's commands. */
+/** The terminal's ⋯: where ⌘J shows it, moving it there now, the project's commands. */
 function useMenuItems(where: 'drawer' | 'panel', wsId: string | undefined): ActionItem[] {
   const { client, ui } = useBeluga();
-  const actions = useActions();
   const prefs = usePrefs();
   const project = useApp((st) => (wsId ? st.projects.find((p) => p.workspaces.some((w) => w.id === wsId)) : undefined));
   const other = where === 'drawer' ? 'panel' : 'drawer';
@@ -102,12 +101,19 @@ function useMenuItems(where: 'drawer' | 'panel', wsId: string | undefined): Acti
         { label: 'In the Right Panel', checked: prefs.termIn === 'panel', onSelect: () => moveTerminal(client.store.getState(), 'panel') },
       ],
     },
-    wsId
-      ? { label: 'Show Full Size', icon: 'expand', separate: true, onSelect: () => openFocus('terminal', wsId) }
-      : { label: 'Open the Terminal View', icon: 'expand', separate: true, onSelect: () => actions.run({ type: 'view', view: { kind: 'terminal' } }) },
-    ...(project?.root ? [{ label: 'Commands…', icon: 'terminal' as const, onSelect: () => ui.openMenu({ kind: 'scripts', projectId: project.id }) }] : []),
+    ...(project?.root ? [{ label: 'Commands…', icon: 'terminal' as const, separate: true, onSelect: () => ui.openMenu({ kind: 'scripts', projectId: project.id }) }] : []),
     { label: 'Terminal Settings…', icon: 'gear', onSelect: () => ui.patch({ settings: 'terminal' }) },
   ];
+}
+
+/** The terminal across the whole center (a workspace's), or the Terminal view (your own shells). */
+function FullSize({ wsId }: { wsId: string | undefined }) {
+  const actions = useActions();
+  return wsId ? (
+    <IconButton size="small" icon="expand" label="Show Full Size" onClick={() => openFocus('terminal', wsId)} />
+  ) : (
+    <IconButton size="small" icon="expand" label="Open the Terminal View" onClick={() => actions.run({ type: 'view', view: { kind: 'terminal' } })} />
+  );
 }
 
 /** Workspace terminals and your own shells, as one shape. */
@@ -203,6 +209,7 @@ export function TerminalPane({ where, onClose }: { where: 'drawer' | 'panel'; on
           {tabbed.openSsh ? <SshMenu onOpen={tabbed.openSsh} className={s.termAdd} /> : null}
         </div>
         {wsId ? <WorkspaceScripts wsId={wsId} /> : null}
+        {elsewhere ? null : <FullSize wsId={wsId} />}
         <ActionsDropdown items={items}>
           <IconButton size="small" icon="more" label="Terminal options" />
         </ActionsDropdown>

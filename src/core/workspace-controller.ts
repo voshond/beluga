@@ -1,3 +1,4 @@
+import { namingFor } from '../shared/naming.js';
 import { existsSync } from 'node:fs';
 import type { ArchiveManifest, ArchivePhase, ArchivePreview } from '../workspaces/archive.js';
 import { formatBytes } from '../workspaces/disk.js';
@@ -788,6 +789,7 @@ export class WorkspaceController {
       ...this.forkedOf(ws),
       ...this.openPrOf(ws),
       ...this.landsOnOf(ws),
+      ...this.prTitleRuleOf(ws),
       ...(syncMain ? { syncMain } : {}),
       ...(ws.askOnly && this.fixups.has(ws.id) ? { fixup: this.fixups.get(ws.id)! } : {}),
     };
@@ -815,6 +817,13 @@ export class WorkspaceController {
   private landsOnOf(ws: Workspace): { landsOn?: string } {
     if (ws.kind !== 'worktree' || !ws.landOnBase || ws.askOnly || this.deps.store.getState().prs[ws.id]?.state === 'OPEN') return {};
     return { landsOn: this.deps.manager.mergeTarget(ws) ?? 'main' };
+  }
+
+  /** A worktree's pull request title rule (its project's, else Settings'; BLG-1033), so a PR opened from chat follows it too. */
+  private prTitleRuleOf(ws: Workspace): { prTitleRule?: string } {
+    if (ws.kind !== 'worktree' || ws.askOnly) return {};
+    const rule = namingFor(this.deps.store.getState().prefs, this.deps.manager.list.find((p) => p.id === ws.projectId)).prTitle?.value;
+    return rule ? { prTitleRule: rule } : {};
   }
 
   /** The agent a workspace conversation runs on: its pick, else yours (undefined: not a workspace, or the daemon's own runtime). */

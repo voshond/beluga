@@ -223,3 +223,16 @@
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
+
+/* A phone (BLG-6): a row is its kind, its name and where it stands (the branch, the PR and when are on its page). */
+@media (max-width: 700px) {
+  .row {
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    height: 44px;
+  }
+  .row > .branch,
+  .row > .extra,
+  .row > .when {
+    display: none;
+  }
+}

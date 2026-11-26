@@ -1,3 +1,4 @@
+import { namingFor } from '../shared/naming.js';
 import { actingVia, asActingAgent } from './acting-agent.js';
 import { takeYourHand } from './by-hand.js';
 import { closePreviews } from '../preview/off.js';
@@ -265,7 +266,11 @@ export class Session {
   private readonly namedAsks = new Map<string, { readonly peer: string; readonly agent: AgentRef }>();
 
   constructor(private readonly opts: SessionOptions) {
-    if (opts.workspaces) opts.workspaces.branchPrefix = () => opts.store.getState().prefs.branchPrefix;
+    // The project's naming rule (yours, else its beluga.json), else Settings' prefix (BLG-1033).
+    if (opts.workspaces) {
+      const manager = opts.workspaces;
+      manager.branchPrefix = (root) => namingFor(opts.store.getState().prefs, manager.list.find((p) => p.root === root)).branchPrefix.value;
+    }
     this.bridge = createRoomBridge(this, () => opts.agentCwd);
     const parts = createSessionParts(this, opts);
     this.workspaces = parts.workspaces;

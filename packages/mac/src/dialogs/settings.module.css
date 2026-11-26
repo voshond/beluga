@@ -478,3 +478,64 @@
 .fullWarning {
   color: var(--error, #b3261e);
 }
+
+/* A phone (BLG-8): the whole screen. The pane's title and Close on top, the panes as a row that
+   scrolls sideways under them, and each setting's control under its words. */
+@media (max-width: 700px) {
+  .window {
+    inset: 0;
+    transform: none;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    flex-direction: column;
+    animation: none;
+  }
+  .body {
+    display: contents;
+  }
+  .bodyHead {
+    order: -1;
+    flex: none;
+    height: 56px;
+    padding: 0 6px 0 16px;
+  }
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    flex: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 8px;
+    border-right: 0;
+    border-bottom: 0.5px solid var(--hairline);
+    scrollbar-width: none;
+  }
+  .title {
+    display: none;
+  }
+  .nav > :not(button) {
+    flex: 0 0 180px;
+  }
+  .navItem {
+    flex: none;
+    width: auto;
+    white-space: nowrap;
+  }
+  .scroll {
+    padding: 12px 14px 28px;
+  }
+  .row {
+    flex-wrap: wrap;
+    gap: 8px 16px;
+  }
+  .rowText {
+    flex: 1 1 100%;
+  }
+  .control {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+}

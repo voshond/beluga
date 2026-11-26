@@ -12,6 +12,7 @@ import { buildSyncMainAppend } from './sync-main.js';
 import { reviewGuideAppend } from '../workspaces/review-guide.js';
 import { buildTerminalAppend } from './terminal-prompt.js';
 import type { AgentRunInput } from './types.js';
+import { prTitleRuleText } from '../shared/naming.js';
 import { buildChatLinkAppend, buildViewAppend } from './view-prompt.js';
 
 type PieceContext = {
@@ -102,6 +103,14 @@ export const INSTRUCTION_PIECES: readonly InstructionPiece[] = [
   },
   { id: 'keep', label: 'Processes that keep running', when: 'Worktree runs', source: 'src/agent/prompt.ts', text: (c) => (c.worktree ? buildKeepAppend(c.agent) : ''), sample: () => buildKeepAppend() },
   { id: 'commit', label: 'Commit before ending', when: 'Worktree runs (not a plan’s, not in a main folder)', source: 'src/agent/prompt.ts', text: (c) => (c.worktree && !c.input.planBrief && !c.askOnly ? buildCommitAppend(c.input.place?.openPr, c.input.place?.landsOn) : ''), sample: () => buildCommitAppend() },
+  {
+    id: 'pr-title',
+    label: 'Pull request title rule',
+    when: 'Worktree runs, with a title rule in Settings, Project Settings or beluga.json',
+    source: 'src/shared/naming.ts',
+    text: (c) => (c.worktree && !c.askOnly && c.input.place?.prTitleRule ? `\n${prTitleRuleText(c.input.place.prTitleRule)}` : ''),
+    sample: () => `\n${prTitleRuleText('Start with the ticket key.')}`,
+  },
   {
     id: 'shipped',
     label: 'Continue after merge',

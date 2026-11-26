@@ -185,7 +185,7 @@ export class BoardWork {
     const who = agent ? agentName(agent, { model: true }) : `${this.agent()} (your default)`;
     const doing = worktreeDoing(issue, (id) => this.workspaces().some((w) => w.id === id && !w.archived));
     const ws = doing ? this.workspaces().find((w) => w.id === doing) : undefined;
-    return ws ? `${ws.name} keeps the agent it started with; ${who} works ${issue.key} from its next start` : `${who} works ${issue.key} when it starts`;
+    return ws ? `${ws.name} keeps the agent it started with (to switch it now, pick an agent in its conversation); ${who} works ${issue.key} from its next start` : `${who} works ${issue.key} when it starts`;
   }
 
   /**

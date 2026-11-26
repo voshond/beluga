@@ -362,7 +362,8 @@ export function createClaudeBackend(opts: ClaudeBackendOptions): AgentBackend {
       const compat = zshCompatEnv(baseLaunchEnv ?? process.env);
       // A project's or chat's Anthropic key is for its code: Claude Code keeps its own sign-in, and with it
       // Claude in Chrome and the claude.ai connectors; its commands still get the key (sign-in-env.ts, BLG-1027).
-      const holds = Boolean(compat.CLAUDE_ENV_FILE) && inheritsDaemonEnv(input);
+      // A local model's endpoint key is Claude Code's own sign-in there, never held back.
+      const holds = Boolean(compat.CLAUDE_ENV_FILE) && inheritsDaemonEnv(input) && !input.signsInFromEnv;
       const launchEnv = withAppsHost(holds ? holdSignIn(withZshCompat(baseLaunchEnv, compat), input.env) : withZshCompat(baseLaunchEnv, compat), input);
       const signIn = signedInWith(launchEnv ?? process.env);
       const browser = chromeLaunch({ allowed: Boolean(input.chrome), noChromeFlag: chromeOffByFlags(input.launchArgs?.claude), ...(signIn ? { signIn, signInFromPlace: signInChanges(input.env).includes(signIn) } : {}) });

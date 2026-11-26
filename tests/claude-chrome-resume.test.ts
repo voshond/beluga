@@ -8,6 +8,7 @@ import type { AgentRunInput, McpTools } from '../src/agent/types.js';
 import { CHROME_SERVER, chromeLaunch, chromeNote, chromeRow, withChrome } from '../src/agent/runtime/claude/chrome-status.js';
 import { SHELL_RESTORE, holdSignIn, signInChanges, signedInWith } from '../src/agent/runtime/claude/sign-in-env.js';
 import { ZSH_COMPAT } from '../src/agent/runtime/claude/zsh-compat.js';
+import { onEndpoint, usageMeter } from '../src/agent/runtime/local.js';
 import { room } from './runtime-conformance.js';
 
 /**
@@ -109,6 +110,22 @@ describe.skipIf(process.platform === 'win32')('a resumed chat keeps Claude in Ch
     expect(resumed?.env?.CLAUDE_ENV_FILE).toBeTruthy();
     const append = (resumed?.systemPrompt as { append?: string }).append ?? '';
     expect(append).not.toContain('Claude in Chrome isn’t available');
+  });
+
+  it('a local model’s endpoint key signs Claude Code in, never held for the shell', async () => {
+    vi.stubEnv('CLAUDE_ENV_FILE', '');
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    vi.stubEnv('ANTHROPIC_AUTH_TOKEN', '');
+    vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', '');
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'beluga-endpoint-sign-in-'));
+    const backend = createClaudeBackend({ cwd: dir, autoEdit: true, additionalDirectories: [], bridge: room });
+    const target = { label: 'sandu18', baseUrl: 'http://127.0.0.1:9/v1', key: 'endpoint-key', model: 'Deepseek-V4.1-Flash' };
+    await backend.run(onEndpoint(input(dir, { env: { BELUGA_WORKTREE: dir } }), target, () => undefined, usageMeter(), { dir, missed: [] }));
+    const env = sdk.options.at(-1)?.env ?? {};
+    expect(env.CLAUDE_ENV_FILE).toBeTruthy();
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBe('endpoint-key');
+    expect(env.ANTHROPIC_BASE_URL).toBe(target.baseUrl);
+    expect(Object.keys(env).filter((name) => name.startsWith('BELUGA_SHELL_'))).toEqual([]);
   });
 
   it('with a sign-in it can’t hold back, the run is told why it has no Chrome', async () => {

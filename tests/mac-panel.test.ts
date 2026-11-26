@@ -217,9 +217,10 @@ describe('the right panel’s tabs', () => {
     expect(clampPanelWidth(100, 1440)).toBe(PANEL_MIN);
     // A wide window: 60% of it.
     expect(clampPanelWidth(4000, 2560)).toBe(1536);
-    // Narrower: the center keeps its 690 (CENTER_MIN) first, beside the sidebar too.
-    expect(clampPanelWidth(2000, 1440)).toBe(750);
-    expect(clampPanelWidth(2000, 1440, 240)).toBe(510);
+    // Narrower: the center keeps its 480 (CENTER_MIN) first, beside the sidebar too.
+    expect(clampPanelWidth(2000, 1440)).toBe(864);
+    expect(clampPanelWidth(2000, 1440, 240)).toBe(720);
+    expect(clampPanelWidth(2000, 1280, 248)).toBe(552);
     expect(clampPanelWidth(400, 1440)).toBe(400);
     // A tiny window still gets the minimum.
     expect(clampPanelWidth(400, 400)).toBe(PANEL_MIN);

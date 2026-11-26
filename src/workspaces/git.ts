@@ -563,8 +563,11 @@ export async function mergeInto(mainDir: string, branch: string, target?: string
   }
 }
 
-/** The files a merge (or stash apply) left conflicted in `dir`. */
-export const conflictedFiles = async (dir: string): Promise<string[]> => ((await tryGit(dir, ['diff', '--name-only', '--diff-filter=U'])) ?? '').split('\n').filter(Boolean);
+/**
+ * The files a merge (or stash apply) left conflicted in `dir`, as paths: -z, so a name git would
+ * quote (`"docs/\345\257\271.md"`, core.quotepath) comes as it is and can be read and added.
+ */
+export const conflictedFiles = async (dir: string): Promise<string[]> => [...new Set(((await tryGit(dir, ['diff', '--name-only', '-z', '--diff-filter=U'])) ?? '').split('\0').filter(Boolean))];
 
 export const isAncestor = async (cwd: string, a: string, b: string): Promise<boolean> => (await tryGit(cwd, ['merge-base', '--is-ancestor', a, b])) !== undefined;
 
@@ -619,8 +622,14 @@ export async function combineBranches(repo: string, dir: string, branch: string,
       const msg = await readFile(path.join((await git(dir, ['rev-parse', '--path-format=absolute', '--git-dir'])).trim(), 'MERGE_MSG'), 'utf8').catch(() => '');
       return { ok: false, branch, dir, merging: /'([^']+)'/.exec(msg)?.[1] ?? 'a branch', files: marked };
     }
-    if (files.length) await git(dir, ['add', '--', ...files]);
-    await git(dir, ['commit', '--no-edit']);
+    try {
+      if (files.length) await git(dir, ['add', '--', ...files]);
+      await git(dir, ['commit', '--no-edit']);
+    } catch (err) {
+      // Never left half-merged: the next merge starts clean, and a conflict shows again as one.
+      await tryGit(dir, ['merge', '--abort']);
+      throw err;
+    }
   }
   for (const b of branches) {
     if (await isAncestor(dir, b, 'HEAD')) continue;

@@ -713,6 +713,7 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'plans.moveUndo': { refused: COMPUTERS },
   'projects.clone': { refused: NO_TOOL },
   'projects.origin': { refused: NO_TOOL },
+  'projects.setNaming': { refused: NO_TOOL },
   'sentinel.moveCheck': { refused: COMPUTERS },
   'sentinel.moveChunk': { refused: COMPUTERS },
   'sentinel.moveDrop': { refused: COMPUTERS },
