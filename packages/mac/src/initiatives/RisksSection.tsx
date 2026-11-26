@@ -21,39 +21,46 @@ const RiskRow = ({ slug, risk, onEdit }: RiskRowProps) => {
   const closed = risk.state === 'closed';
   const handleEdit = (): void => onEdit(risk);
   const handleState = (): void => void a.act(() => a.api.saveRisk(slug, draftOf(risk, closed ? 'open' : 'closed')), closed ? `Reopened risk ${risk.id}` : `Closed risk ${risk.id}`);
-  const meta = [risk.owner ? `Owner: ${risk.owner}` : '', risk.mitigation ? `Mitigation: ${risk.mitigation}` : ''].filter(Boolean);
+  const parts = [
+    { label: 'Why', text: risk.why },
+    { label: 'Owner', text: risk.owner },
+    { label: 'Mitigation', text: risk.mitigation },
+  ].filter((line) => line.text);
   const links = risk.sources.filter((source) => source.url);
   return (
     <div role="listitem" className={s.risk} data-risk={risk.id} data-severity={risk.severity} data-state={risk.state}>
-      <TonePill tone={closed ? 'muted' : SEVERITY_TONE[risk.severity]}>{SEVERITY_LABEL[risk.severity]}</TonePill>
-      <span className={s.riskText}>
+      <span className={s.riskHead}>
+        <TonePill tone={closed ? 'muted' : SEVERITY_TONE[risk.severity]}>{SEVERITY_LABEL[risk.severity]}</TonePill>
         <span className={s.riskTitle}>{risk.title}</span>
-        {risk.why ? <span className={s.riskLine}>{risk.why}</span> : null}
-        {meta.map((line) => (
-          <span key={line} className={s.riskLine}>
-            {line}
-          </span>
-        ))}
-        {links.length ? (
-          <span className={s.proofList}>
+        <span className={s.riskEnd}>
+          {risk.state === 'watching' ? <TonePill tone="info">{RISK_STATE_LABEL.watching}</TonePill> : null}
+          {risk.owned ? (
+            <span className={s.riskOwned} title="You edited it on the page: the check-ins keep your edit">
+              Edited by you
+            </span>
+          ) : null}
+          <IconButton size="small" icon="pencil" label={`Edit risk ${risk.id}`} onClick={handleEdit} />
+          <IconButton size="small" icon={closed ? 'refresh' : 'check'} label={`${closed ? 'Reopen' : 'Close'} risk ${risk.id}`} onClick={handleState} />
+        </span>
+      </span>
+      {parts.map((part) => (
+        <span key={part.label} className={s.riskPart}>
+          <span className={s.riskLabel}>{part.label}</span>
+          <span className={s.riskLine}>{part.text}</span>
+        </span>
+      ))}
+      {links.length ? (
+        <span className={s.riskPart}>
+          <span className={s.riskLabel}>Sources</span>
+          <span className={s.riskLinks}>
             {links.map((source) => (
-              <button key={source.label} type="button" className={s.proofLink} onClick={() => void openExternal(source.url ?? '')} aria-label={`Open ${source.label}`}>
+              <button key={source.label} type="button" className={s.riskSource} onClick={() => void openExternal(source.url ?? '')} aria-label={`Open ${source.label}`}>
                 {source.label}
               </button>
             ))}
           </span>
-        ) : null}
-      </span>
-      <span className={s.riskEnd}>
-        {risk.state === 'watching' ? <TonePill tone="info">{RISK_STATE_LABEL.watching}</TonePill> : null}
-        {risk.owned ? (
-          <span className={s.riskOwned} title="You edited it on the page: the check-ins keep your edit">
-            Edited by you
-          </span>
-        ) : null}
-        <IconButton size="small" icon="pencil" label={`Edit risk ${risk.id}`} onClick={handleEdit} />
-        <IconButton size="small" icon={closed ? 'refresh' : 'check'} label={`${closed ? 'Reopen' : 'Close'} risk ${risk.id}`} onClick={handleState} />
-      </span>
+        </span>
+      ) : null}
     </div>
   );
 };
