@@ -38,7 +38,7 @@ export const launchInitiatives = (host: InitiativesHost): (() => void) => {
     root,
     dir: demo ? null : path.join(belugaHome(), 'initiatives'),
     selfId: () => session.selfId,
-    ask: (prompt, channel) => session.askOwnClaude(prompt, channel, false),
+    ask: (prompt, channel) => session.askOwnClaude(prompt, channel, false, true, undefined, undefined, 'initiative'),
     checkIns: () => checkInsOf(session),
     refine: (input) => session.refineGoal(input),
     commit: !demo,

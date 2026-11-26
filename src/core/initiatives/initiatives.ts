@@ -4,7 +4,8 @@ import type { AgentPlace } from '../../agent/types.js';
 import type { ScheduleTrigger, SentinelDraft } from '../sentinel/model.js';
 import { formatBytes } from '../../shared/format.js';
 import { isSecretPath } from '../shares.js';
-import type { Action, Store } from '../store.js';
+import type { Action, LogItem, Store } from '../store.js';
+import { initiativeChatPlace } from './chat-ref.js';
 import { InitiativeChats } from './chats.js';
 import { addTimeline, artifactPath, folderOf, keepArtifactFile, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeArtifacts, writeConfig, writeOutbox, writeSuggestions, writeTasks, writeText } from './files.js';
 import {
@@ -563,6 +564,15 @@ export class Initiatives {
     return item.repos.map((repo) => {
       const project = projects.find((p) => p.id === repo || p.name === repo);
       return project ? { name: project.name, ...(project.root ? { root: project.root } : {}) } : { name: repo };
+    });
+  }
+
+  /** Every initiative chat outside `loaded`, from disk, with where it is: search reads them. */
+  savedChats(loaded: ReadonlySet<string>): Array<{ readonly channel: string; readonly place: string; readonly items: readonly LogItem[] }> {
+    const items = this.deps.store.getState().initiatives.items;
+    return listSlugs(this.deps.root).flatMap((slug) => {
+      const name = items.find((i) => i.slug === slug)?.name ?? slug;
+      return this.chats.savedChats(slug, loaded).map((chat) => ({ ...chat, place: initiativeChatPlace(name, chat.channel, chat.items) }));
     });
   }
 

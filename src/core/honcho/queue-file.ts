@@ -19,7 +19,7 @@ const Item = z.object({
   conversation: z.object({
     channel: z.string().max(500),
     session: z.string().max(512),
-    kind: z.enum(['worktree', 'chat', 'main', 'your-mac']),
+    kind: z.enum(['worktree', 'chat', 'main', 'your-mac', 'initiative']),
     projectId: z.string().max(500).optional(),
     projectName: z.string().max(500).optional(),
     title: z.string().max(2000).optional(),
