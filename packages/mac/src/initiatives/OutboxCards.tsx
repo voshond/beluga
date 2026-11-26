@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { DRAFT_KIND_WORDS, type InitiativeView, type OutboxDraft, pendingDrafts, targetWords, textMaxOf } from '@beluga/core/initiatives/model.js';
+import { watchesReply } from '@beluga/core/initiatives/watches.js';
+import { Checkbox } from '../components/Alert.js';
 import { TextArea } from '../components/FormSheet.js';
 import { Icon, type IconName } from '../components/Icon.js';
 import { Button } from '../components/ui.js';
@@ -20,10 +22,12 @@ type CardProps = {
 export const OutboxCard = ({ slug, draft, place, onLater }: CardProps) => {
   const a = useInitiativeActions();
   const [text, setText] = useState(draft.sentText ?? draft.text);
+  const [watch, setWatch] = useState(watchesReply(draft));
   const sending = draft.state === 'approved';
   const prep = draft.to.kind === 'prep';
   const max = textMaxOf(draft.to);
-  const handleSend = (): void => void a.act(() => a.api.sendDraft(slug, draft.id, text), 'Sending it from the chat');
+  const canWatch = (draft.to.kind === 'slack' || draft.to.kind === 'jira') && !draft.question && !draft.reminderFor;
+  const handleSend = (): void => void a.act(() => a.api.sendDraft(slug, draft.id, text, canWatch ? watch : undefined), 'Sending it from the chat');
   const handleDiscard = (): void => void a.act(() => a.api.discardDraft(slug, draft.id), 'Discarded the draft');
   const handleCopy = (): void => void a.act(() => copyText(text), 'Copied the prep sheet');
   const handleDone = (): void => void a.act(() => a.api.keepPrep(slug, draft.id, text), 'Kept the prep sheet');
@@ -48,6 +52,7 @@ export const OutboxCard = ({ slug, draft, place, onLater }: CardProps) => {
       {draft.sendError ? <span role="alert" className={s.why}>{draft.sendError}</span> : null}
       {sending && !draft.sendError ? <span className={s.why}>Delivery is pending. Check the destination before sending again.</span> : null}
       {prep ? <span className={s.why}>Never sent: take it into the meeting, then mark it Done.</span> : null}
+      {canWatch ? <Checkbox checked={watch} onChange={setWatch} label="Watch for an answer" /> : null}
       <span className={s.answers}>
         {prep ? (
           <>

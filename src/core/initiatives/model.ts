@@ -469,6 +469,8 @@ export const OutboxDraftSchema = z.object({
   suggestion: z.number().int().min(1).optional(),
   question: QuestionIdSchema.optional(),
   reminderFor: z.number().int().positive().optional(),
+  /** false: an announcement, a recorded decision or an FYI, so sending it starts no follow-up. */
+  expectsReply: z.boolean().optional(),
   source: QuestionSourceSchema.optional(),
   deliveryChannel: z.string().max(80).optional(),
   deliveryThread: z.string().max(40).optional(),
