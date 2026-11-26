@@ -1,3 +1,4 @@
+import { DISCOVERY_CHECK_IN_PROMPT, discoveryBrief } from './discovery-prompt.js';
 import { CHECK_IN_CHAT, DOC_KIND_NAME, type DocRef, type InitiativeView, type MeetingRef, type SlackRef, confluencePageIdOf, googleFileIdOf, meetingKindOf, slackKindOf } from './model.js';
 
 export type LinkedRepo = {
@@ -100,13 +101,19 @@ export const CHECK_IN_PROMPT = [
   'Do not post, comment, transition, invite or change anything outside this folder: write it as a suggestion instead. Answer with one line on how it stands, then what needs the user.',
 ].join(' ');
 
+/** What wakes the check-in of an initiative made in discovery: the brief holds the check-in, which changes when it moves to delivery. */
+export const CHECK_IN_WAKE = 'Check in on this initiative, the whole check-in as your instructions say.';
+
+/** The check-in an initiative does: an initiative in discovery has no tickets to read. */
+export const checkInPromptFor = (item: Pick<InitiativeView, 'status'>): string => (item.status === 'discovery' ? DISCOVERY_CHECK_IN_PROMPT : CHECK_IN_PROMPT);
+
 export const initiativeBrief = (item: InitiativeView, briefMd: string, repos: readonly LinkedRepo[], chat: string): string => {
   const brief = briefMd.length > BRIEF_MAX ? `${briefMd.slice(0, BRIEF_MAX)}\n…(cut: read brief.md for the rest)` : briefMd;
   const others = item.files.filter((f) => f !== 'brief.md');
   const repoLines = repos.length ? repos.map((r) => `- ${r.name}${r.root ? ` (${r.root})` : ''}`).join('\n') : '- none linked yet';
   const checkIn =
     chat === CHECK_IN_CHAT
-      ? `\n\nThis is the initiative’s Check-in chat: a schedule wakes it with the check-in prompt, and Refresh sends it a ticket or task refresh. Do the whole check-in each time it is asked for, as it is written here even when the message that wakes you is an older wording:\n${CHECK_IN_PROMPT}`
+      ? `\n\nThis is the initiative’s Check-in chat: a schedule wakes it with the check-in prompt, and Refresh sends it a ticket or task refresh. Do the whole check-in each time it is asked for, as it is written here even when the message that wakes you is an older wording:\n${checkInPromptFor(item)}`
       : '';
   return `
 
@@ -145,7 +152,7 @@ Rules:
 - "Complete task ID: …" or "Reopen task ID: …" means the user ticked it on the page: read it with get_task for its version, call complete_task or reopen_task with that id, then set its "done" in tasks.json and drop its "pending". Answer with one line. When the user asks you in chat to tick a task off, do the same.
 - Record every decision the user makes here in decisions.md, and every notable event in timeline.md.
 - Linked repos, where code work happens (task_create with project set to the repo's name, then task_start when the user wants it started):
-${repoLines}${checkIn}
+${repoLines}${discoveryBrief(item)}${checkIn}
 
 <initiative-brief>
 ${fence(brief.trim() || 'brief.md is empty.')}

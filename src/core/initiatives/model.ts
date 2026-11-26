@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ARTIFACT_ABOUT, type Discovery } from './discovery-model.js';
 
 export const INITIATIVE_SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const INITIATIVE_CHAT_ID = /^[a-z0-9]{1,24}$/;
@@ -10,7 +11,7 @@ export const DEFAULT_INITIATIVES_DIR = 'Documents/GitHub/initiatives';
 
 export const EPIC_KEY = /^[A-Z][A-Z0-9_]{0,19}-\d{1,7}$/;
 
-export const INITIATIVE_STATUSES = ['active', 'paused', 'shipped', 'archived'] as const;
+export const INITIATIVE_STATUSES = ['discovery', 'active', 'paused', 'shipped', 'archived'] as const;
 export const InitiativeStatusSchema = z.enum(INITIATIVE_STATUSES);
 export type InitiativeStatus = z.infer<typeof InitiativeStatusSchema>;
 
@@ -126,6 +127,7 @@ export const InitiativeDraftSchema = z.object({
   docs: docRefs.optional(),
   repos: z.array(z.string().min(1).max(120)).max(30).optional(),
   meetings: meetingRefs.optional(),
+  status: z.enum(['discovery', 'active']).optional(),
 });
 export type InitiativeDraft = z.input<typeof InitiativeDraftSchema>;
 
@@ -319,6 +321,7 @@ export const ArtifactSchema = z.object({
   worktree: maybe(200),
   project: maybe(200),
   from: maybe(120),
+  about: z.enum(ARTIFACT_ABOUT).optional().catch(undefined),
   createdAt: z.string().max(40),
 });
 export type Artifact = z.infer<typeof ArtifactSchema>;
@@ -368,10 +371,13 @@ export type OutboxState = (typeof OUTBOX_STATES)[number];
 
 const JIRA_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 
-/** Where a draft goes: a Slack channel, DM or thread (by its ids), or a comment on a Jira ticket. */
+const PAGE_ID = /^\d{1,20}$/;
+
+/** Where a draft goes: a Slack channel, DM or thread (by its ids), a comment on a Jira ticket, or a file of the folder as a Confluence page (new in a space, or over a page). */
 export const OutboxTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('slack'), channel: z.string().min(1).max(80), thread: z.string().max(40).optional(), label: z.string().max(200).optional() }),
   z.object({ kind: z.literal('jira'), issue: z.string().regex(JIRA_KEY), label: z.string().max(200).optional() }),
+  z.object({ kind: z.literal('confluence'), file: z.string().min(1).max(400), title: z.string().trim().min(1).max(255), space: z.string().max(80).optional(), page: z.string().regex(PAGE_ID).optional(), parent: z.string().regex(PAGE_ID).optional(), label: z.string().max(200).optional() }),
 ]);
 export type OutboxTarget = z.infer<typeof OutboxTargetSchema>;
 
@@ -423,6 +429,7 @@ export type InitiativeView = {
   readonly suggestions: readonly Suggestion[];
   readonly outbox: readonly OutboxDraft[];
   readonly artifacts: readonly Artifact[];
+  readonly discovery?: Discovery;
   readonly timeline: readonly TimelineEntry[];
   readonly files: readonly string[];
   readonly checkIn?: string;
@@ -581,10 +588,12 @@ const OUTBOX_TOOL_LIST: readonly OutboxTool[] = [
   { name: 'slack_send_message', kind: 'slack', field: 'message' },
   { name: 'conversations_add_message', kind: 'slack', field: 'text' },
   { name: 'jira_add_comment', kind: 'jira', field: 'body' },
+  { name: 'confluence_create_page', kind: 'confluence', field: 'content' },
+  { name: 'confluence_update_page', kind: 'confluence', field: 'content' },
 ];
 
 /** The tool the chat is first told to post a draft with. */
-export const OUTBOX_TOOLS: Readonly<Record<OutboxTarget['kind'], string>> = { slack: 'slack_send_message', jira: 'jira_add_comment' };
+export const OUTBOX_TOOLS: Readonly<Record<OutboxTarget['kind'], string>> = { slack: 'slack_send_message', jira: 'jira_add_comment', confluence: 'confluence_create_page' };
 
 const nameIs = (toolName: string, name: string): boolean => toolName === name || toolName.endsWith(`__${name}`);
 
@@ -599,11 +608,19 @@ const same = (a: unknown, b: string | undefined): boolean => (typeof a === 'stri
 export const matchesDraft = (to: OutboxTarget, text: string, toolName: string, input: Record<string, unknown>): boolean => {
   const tool = OUTBOX_TOOL_LIST.find((t) => t.kind === to.kind && nameIs(toolName, t.name));
   if (!tool || input.blocks !== undefined) return false;
-  const where = to.kind === 'slack' ? same(input.channel_id, to.channel) && same(input.thread_ts, to.thread) : same(input.issue_key, to.issue);
-  return where && same(input[tool.field], text);
+  return placeMatches(to, toolName, input) && same(input[tool.field], text);
+};
+
+const placeMatches = (to: OutboxTarget, toolName: string, input: Record<string, unknown>): boolean => {
+  if (to.kind === 'slack') return same(input.channel_id, to.channel) && same(input.thread_ts, to.thread);
+  if (to.kind === 'jira') return same(input.issue_key, to.issue);
+  if (!same(input.title, to.title)) return false;
+  if (to.page) return nameIs(toolName, 'confluence_update_page') && same(input.page_id, to.page);
+  return nameIs(toolName, 'confluence_create_page') && same(input.space_key, to.space) && same(input.parent_id, to.parent);
 };
 
 export const targetWords = (to: OutboxTarget): string => {
+  if (to.kind === 'confluence') return to.label ?? `“${to.title}”${to.space ? ` in ${to.space}` : ''}`;
   if (to.kind === 'jira') return to.label ? `${to.issue}: ${to.label}` : `a comment on ${to.issue}`;
   const where = to.label ?? to.channel;
   return to.thread ? `${where} (in a thread)` : where;
@@ -611,11 +628,19 @@ export const targetWords = (to: OutboxTarget): string => {
 
 /** What the chat is told when the user sends a draft: the call to make, word for word. */
 export const sendDraftMessage = (draft: Pick<OutboxDraft, 'id' | 'to'>, text: string): string => {
+  if (draft.to.kind === 'confluence') return confluenceDraftMessage(draft.id, draft.to);
   const call =
     draft.to.kind === 'slack'
       ? `${OUTBOX_TOOLS.slack} (or conversations_add_message, with the message as text and no blocks) with channel_id ${draft.to.channel}${draft.to.thread ? ` and thread_ts ${draft.to.thread}` : ''}`
       : `${OUTBOX_TOOLS.jira} with issue_key ${draft.to.issue}`;
   return `Send draft ${draft.id} from the outbox now: ${call}, and the ${draft.to.kind === 'slack' ? 'message' : 'body'} exactly as below, nothing added or changed.\n\n${text}`;
+};
+
+const confluenceDraftMessage = (id: number, to: Extract<OutboxTarget, { kind: 'confluence' }>): string => {
+  const call = to.page
+    ? `confluence_update_page with page_id ${to.page}`
+    : `confluence_create_page with space_key ${to.space ?? '(ask me which space first)'}${to.parent ? ` and parent_id ${to.parent}` : ''}`;
+  return `Send draft ${id} from the outbox now: ${call}, title “${to.title}”, content_format markdown, and as content exactly the text of ${to.file} as it is now, nothing added or changed.`;
 };
 
 /** A suggestion the user answers instead of approving: a decision kind, or one with answers to pick. */
