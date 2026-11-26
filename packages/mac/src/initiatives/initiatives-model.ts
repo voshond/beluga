@@ -1,4 +1,4 @@
-import { type DocRef, type EpicStatus, type EpicTickets, type InitiativeTask, type InitiativeTasks, type InitiativeView, type MeetingRef, type PrState, type SlackRef, type Ticket, type TicketCategory, type TimelineEntry, docKindOf, isSubTask, lastCheckInAt, openSuggestions, progressShare } from '../../../../src/core/initiatives/model.js';
+import { type DocRef, type EpicStatus, type EpicTickets, type InitiativeTask, type InitiativeTasks, type InitiativeView, type MeetingRef, type PrState, type SlackRef, type Ticket, type TicketCategory, type TimelineEntry, docKindOf, isSubTask, lastCheckInAt, progressShare } from '../../../../src/core/initiatives/model.js';
 
 export const INITIATIVE_VIEWS: ReadonlySet<string> = new Set(['initiatives', 'initiative_page', 'initiative_people']);
 
@@ -28,14 +28,6 @@ export const splitList = (text: string): string[] =>
     .filter(Boolean);
 
 export const epicKeys = (text: string): string[] => splitList(text).map((key) => key.toUpperCase());
-
-export const sidebarLine = (items: readonly InitiativeView[]): string => {
-  const live = items.filter((i) => i.status !== 'archived');
-  if (!live.length) return 'Drive a thing to ship';
-  const asks = live.reduce((n, i) => n + openSuggestions(i).length, 0);
-  const count = `${live.length} ${live.length === 1 ? 'initiative' : 'initiatives'}`;
-  return asks ? `${count} · ${asks} ${asks === 1 ? 'suggestion' : 'suggestions'}` : count;
-};
 
 export const lastCheckInWords = (item: Pick<InitiativeView, 'progress'>, ago: (at: number) => string): string => {
   const at = lastCheckInAt(item);

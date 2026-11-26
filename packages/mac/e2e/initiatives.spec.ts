@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { SocketClient } from '../../../src/ipc/socket-client.js';
 import { expect, test, type Page } from './fixtures.js';
 
 const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' });
@@ -10,7 +11,7 @@ const shot = async (page: Page, name: string): Promise<void> => {
 const openInitiative = async (page: Page, name: string): Promise<void> => {
   await page.goto('/');
   await expect(sidebar(page)).toBeVisible();
-  await sidebar(page).getByRole('button', { name: /Initiatives/ }).first().click();
+  await sidebar(page).getByRole('button', { name: 'All Initiatives' }).click();
   await page.getByRole('button', { name: `Open ${name}` }).click();
   await expect(page.getByRole('heading', { name })).toBeVisible();
 };
@@ -324,4 +325,45 @@ test('an initiative’s page lists its risks by severity, keeps closed ones asid
   await expect(open.getByRole('listitem')).toHaveCount(3);
   await expect(risks.getByRole('list', { name: 'Closed risks' }).getByRole('listitem')).toHaveCount(2);
   await shot(page, '10-initiative-risk-closed.png');
+});
+
+const sectionTitles = (page: Page): Promise<string[]> => sidebar(page).locator('button[aria-expanded]').evaluateAll((buttons) => buttons.map((b) => (b.textContent ?? '').replace(/\d+/g, '').trim()));
+
+test('the sidebar’s Initiatives section sits between Chats and Projects, opens each initiative and folds', async ({ page, demo }) => {
+  await page.goto('/');
+  await expect(sidebar(page)).toBeVisible();
+  const titles = await sectionTitles(page);
+  expect(titles.indexOf('Initiatives')).toBe(titles.indexOf('Chats') + 1);
+  expect(titles.indexOf('Projects')).toBe(titles.indexOf('Initiatives') + 1);
+  const row = sidebar(page).locator('[data-initiative-row="checkout-v2"]');
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('Checkout v2');
+  await row.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Checkout v2' })).toBeVisible();
+  await expect(row).toHaveAttribute('aria-current', 'page');
+  await shot(page, '09-sidebar-section.png');
+  const title = sidebar(page).getByRole('button', { name: /^Initiatives/ });
+  await title.click();
+  await expect(title).toHaveAttribute('aria-expanded', 'false');
+  await expect(row).toBeVisible();
+  await expect(sidebar(page).locator('[data-initiative-row="mobile-onboarding"]')).toHaveCount(0);
+  await page.reload();
+  await expect(sidebar(page).getByRole('button', { name: /^Initiatives/ })).toHaveAttribute('aria-expanded', 'false');
+  await sidebar(page).getByRole('button', { name: /^Initiatives/ }).click();
+  await sidebar(page).getByRole('button', { name: 'All Initiatives' }).click();
+  await expect(page.getByRole('heading', { name: 'Initiatives', exact: true })).toBeVisible();
+  await expect(sidebar(page).getByRole('button', { name: 'All Initiatives' })).toHaveAttribute('aria-current', 'page');
+  await sidebar(page).getByRole('button', { name: 'New Initiative' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+  const client = await SocketClient.connect({ url: demo.endpoint.url, token: demo.endpoint.token, kind: 'test', version: 'e2e' });
+  await client.api.session.setPrefs({ chatCategories: true });
+  await expect.poll(() => sectionTitles(page)).toContain('Inbox');
+  const categoryTitles = await sectionTitles(page);
+  expect(categoryTitles.indexOf('Projects')).toBe(categoryTitles.indexOf('Initiatives') + 1);
+  expect(categoryTitles.indexOf('Initiatives')).toBeGreaterThan(categoryTitles.indexOf('Inbox'));
+  await shot(page, '10-sidebar-section-categories.png');
+  await client.api.session.setPrefs({ chatCategories: false });
+  client.close();
 });

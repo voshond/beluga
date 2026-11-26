@@ -29,7 +29,7 @@ import { RequestsNav } from '../gateway/RequestsNav.js';
 import { WorkNav } from '../work/WorkNav.js';
 import { PlansNav } from '../plans/PlansNav.js';
 import { SentinelNav } from '../sentinel/SentinelNav.js';
-import { InitiativesNav } from '../initiatives/InitiativesNav.js';
+import { InitiativesSection } from '../initiatives/InitiativesSection.js';
 import { AssistantNav } from './AssistantNav.js';
 import { LaterRows, laterOf, notLater, useLater } from './later-rows.js';
 import { footerStatus } from '../views/room/connection-model.js';
@@ -157,7 +157,6 @@ export function Sidebar() {
           <WorkNav />
           <PlansNav />
           <SentinelNav />
-          <InitiativesNav />
           {/* Files: folders friends share with you (over the network), and the room's (BLG-205). */}
           <Row
             icon={<Icon name="folder" size={14} />}
@@ -196,6 +195,8 @@ export function Sidebar() {
             </Section>
           </>
         )}
+
+        <InitiativesSection />
 
         <Section id="projects" title="Projects" action={<ProjectsAddMenu />}>
           <Projects />
