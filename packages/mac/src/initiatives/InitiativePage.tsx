@@ -14,6 +14,7 @@ import { CheckInRow, MemoryFiles, Repos } from './InitiativeSettings.js';
 import { InitiativePanel, type PanelTab } from './InitiativePanel.js';
 import { NewInitiativeSheet } from './NewInitiativeSheet.js';
 import { Suggestions } from './SuggestionLog.js';
+import { SuccessSection } from './SuccessSection.js';
 import { TasksSection } from './TasksSection.js';
 import { TicketsTable } from './TicketsTable.js';
 import { useInitiativeActions } from './use-initiatives.js';
@@ -107,6 +108,7 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
             <Facts item={item} />
           </div>
           <TicketsTable item={item} />
+          <SuccessSection item={item} />
           <CheckInRow item={item} />
           <Suggestions item={item} pickedId={picked?.id} onPick={handlePick} />
           <TasksSection item={item} />

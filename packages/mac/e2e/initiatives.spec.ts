@@ -18,7 +18,7 @@ const openInitiative = async (page: Page, name: string): Promise<void> => {
 test('an initiative’s page shows the epic’s tickets, open first, with their pull requests', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
   const tickets = page.getByRole('region', { name: 'Tickets' });
-  await expect(tickets.getByRole('listitem')).toHaveCount(4);
+  await expect(tickets.locator('[data-ticket][data-sub-task="false"]')).toHaveCount(4);
   await expect(tickets.getByRole('listitem').first()).toHaveAttribute('data-category', 'inProgress');
   await expect(tickets.getByRole('listitem').last()).toHaveAttribute('data-ticket', 'SHOP-133');
   await expect(tickets.getByRole('button', { name: 'Open SHOP-150 in Jira: 3DS challenge fails on Safari' })).toBeVisible();
@@ -26,7 +26,7 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
   await expect(tickets.locator('[data-ticket="SHOP-141"]')).toContainText('Blocked');
   await expect(tickets.getByRole('button', { name: /Open pull request #412 in example\/shop: Open/ })).toBeVisible();
   await expect(tickets.getByRole('button', { name: /Open pull request #398 in example\/shop: Merged/ })).toBeVisible();
-  await expect(tickets.getByText(/4 tickets · 1 done · 1 open pull request/)).toBeVisible();
+  await expect(tickets.getByText(/4 tickets · 1 done · 2 sub-tasks, 1 done · 1 open pull request/)).toBeVisible();
   await expect(tickets.getByRole('button', { name: 'Refresh the tickets from Jira' })).toBeEnabled();
   await expect(page.getByRole('region', { name: 'Goal' }).getByRole('heading', { name: 'Scope' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Slack conversations' }).getByRole('button', { name: 'Open 3DS on Safari in Slack' })).toBeVisible();
@@ -47,7 +47,7 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
   expect((await bar.locator('[data-part="done"]').boundingBox())!.width).toBeGreaterThan(100);
   expect((await bar.locator('[data-part="inProgress"]').boundingBox())!.width).toBeGreaterThan(30);
   await page.setViewportSize({ width: 2300, height: 1000 });
-  await expect(tickets.getByText('Ana Ruiz')).toBeVisible();
+  await expect(tickets.locator('[data-ticket="SHOP-141"]').getByText('Ana Ruiz').first()).toBeVisible();
   await shot(page, '01b-initiative-page-wide.png');
   if (shots) await tickets.screenshot({ path: path.join(shots, '08-tickets-dark-wide.png') });
 });
@@ -151,4 +151,32 @@ test('an initiative’s page shows its tasks, ticks one off through the chat, li
   await expect(days.getByRole('button', { name: 'Fri' })).toHaveAttribute('aria-pressed', 'false');
   await days.scrollIntoViewIfNeeded();
   await shot(page, '08-initiative-check-in-time.png');
+});
+
+test('Define Success proposes metrics with their first rows, and Accept keeps them with a dashboard', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  const defined = page.getByRole('region', { name: 'Success' });
+  await expect(defined.locator('[data-success-metric="conversion"]')).toContainText('Checkout conversion');
+  await expect(defined.getByRole('button', { name: 'Open Dashboard' })).toBeVisible();
+  await openInitiative(page, 'Mobile Onboarding');
+  const success = page.getByRole('region', { name: 'Success' });
+  await expect(success.getByText('Not defined yet')).toBeVisible();
+  await success.getByRole('button', { name: 'Define success with your agent' }).click();
+  await expect(success.getByRole('status')).toContainText('BigQuery schema');
+  const draft = success.getByLabel('The agent’s proposal of what success means');
+  await expect(draft.locator('[data-success-metric]')).toHaveCount(2);
+  const first = draft.getByLabel('Metric Checkout conversion');
+  await expect(first.getByRole('table', { name: 'First rows' })).toContainText('value');
+  await first.getByRole('textbox', { name: 'Target', exact: true }).fill('70');
+  await shot(page, '09-success-proposal.png');
+  await draft.getByRole('button', { name: 'Reject' }).click();
+  await expect(draft).toHaveCount(0);
+  await success.getByRole('button', { name: 'Define success with your agent' }).click();
+  await success.getByLabel('The agent’s proposal of what success means').getByRole('button', { name: 'Accept' }).click();
+  await expect(success.locator('[data-success="defined"] [data-success-metric]')).toHaveCount(2);
+  await expect(success.getByRole('button', { name: /Open its sentinel, paused/ })).toBeVisible();
+  await success.scrollIntoViewIfNeeded();
+  await shot(page, '10-success-defined.png');
+  await success.getByRole('button', { name: 'Open Dashboard' }).click();
+  await expect(page.getByText('Mobile Onboarding outcome').first()).toBeVisible();
 });
