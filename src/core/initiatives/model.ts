@@ -402,6 +402,10 @@ export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
 const TEXT_EXTENSIONS: ReadonlySet<string> = new Set(['md', 'markdown', 'txt', 'log', 'json', 'xml', 'csv', 'tsv', 'yaml', 'yml', 'html', 'htm', 'diff', 'patch', 'sql', 'ts', 'tsx', 'js', 'py', 'sh']);
 const IMAGE_EXTENSIONS: ReadonlySet<string> = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']);
 
+/** A graph kept as its `beluga-graph` JSON (`initiatives.keepGraph`, or a worktree's report): the page draws it live. */
+export const GRAPH_ARTIFACT_EXT = '.graph.json';
+export const isGraphArtifact = (name: string): boolean => name.toLowerCase().endsWith(GRAPH_ARTIFACT_EXT);
+
 export const artifactKindOf = (name: string): ArtifactKind => {
   const ext = name.toLowerCase().split('.').pop() ?? '';
   if (TEXT_EXTENSIONS.has(ext)) return 'text';

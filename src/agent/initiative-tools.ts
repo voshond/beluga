@@ -11,7 +11,7 @@ export function createInitiativeToolDefs(tools: InitiativeReportTools) {
   return [
     tool(
       'report_to_initiative',
-      'Send a file this work made (a report, test or validation output, a screenshot as proof, a generated spec) to the initiative it belongs to, which keeps it on its page and in its memory. Its ticket picks the initiative; name one when it is not linked.',
+      'Send a file this work made (a report, test or validation output, a screenshot as proof, a generated spec) to the initiative it belongs to, which keeps it on its page and in its memory. Its ticket picks the initiative; name one when it is not linked. A diagram goes as its beluga-graph JSON in a file named <title>.graph.json: the page draws it live.',
       {
         file: z.string().trim().min(1).max(4096).describe('The file: a path in this worktree, or a full path on this computer'),
         title: z.string().trim().min(1).max(200).describe('A short title, e.g. "veraPDF report for the golden suite"'),

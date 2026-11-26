@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Initiatives } from '../src/core/initiatives/initiatives.js';
-import { ARTIFACT_KEEP_MAX, ArtifactsSchema, artifactKindOf, initiativeOfTicket, sortedArtifacts, ticketKeyIn } from '../src/core/initiatives/model.js';
+import { ARTIFACT_KEEP_MAX, ArtifactsSchema, artifactKindOf, initiativeOfTicket, isGraphArtifact, sortedArtifacts, ticketKeyIn } from '../src/core/initiatives/model.js';
 import { initiativeReportFor, linkedInitiative } from '../src/core/initiatives/report.js';
 import { Store, initialState } from '../src/core/store.js';
 
@@ -68,6 +68,18 @@ describe('initiative artifacts', () => {
     await expect(service.reportArtifact(slug, { file: dir, title: 'Folder' })).rejects.toThrow('is a folder');
     await expect(service.reportArtifact(slug, { file: path.join(dir, 'gone.md'), title: 'Gone' })).rejects.toThrow('There is no file');
     expect(() => service.readArtifact(slug, 9)).toThrow('That artifact is gone');
+  });
+
+  it('keeps a graph as its JSON, named after its title, for the page to draw', async () => {
+    const { root, service, slug, items } = await setup();
+    const graph = { title: 'Service case statuses: Öffnen/Schließen', summary: 'One path for every case type', nodes: [{ id: 'open', label: 'Open' }, { id: 'done', label: 'Done' }], edges: [{ from: 'open', to: 'done' }] };
+    await service.keepGraph(slug, JSON.stringify(graph));
+    const [kept] = items()[0]!.artifacts;
+    expect(kept).toMatchObject({ id: 1, title: graph.title, why: graph.summary, name: 'Service case statuses Öffnen Schließen.graph.json', from: 'a graph you kept' });
+    expect(isGraphArtifact(kept!.name)).toBe(true);
+    expect(JSON.parse(readFileSync(path.join(root, slug, kept!.file!), 'utf8'))).toEqual(graph);
+    expect(service.readArtifact(slug, 1)).toMatchObject({ kind: 'text', cut: false });
+    await expect(service.keepGraph(slug, '{"nodes": [{"id": "a"}]}')).rejects.toThrow('can’t be drawn');
   });
 });
 

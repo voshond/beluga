@@ -172,6 +172,15 @@ export const keepArtifactFile = (root: string, slug: string, id: number, source:
   return rel;
 };
 
+/** An artifact Beluga writes itself (a kept graph), like a copied one. */
+export const writeArtifactFile = (root: string, slug: string, id: number, name: string, text: string): string => {
+  const rel = `artifacts/${id}-${safeName(name)}`;
+  const target = path.join(folderOf(root, slug), rel);
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, text);
+  return rel;
+};
+
 /** An artifact's file in the folder, refused when it would lead outside it. */
 export const artifactPath = (root: string, slug: string, rel: string): string => {
   const folder = folderOf(root, slug);
