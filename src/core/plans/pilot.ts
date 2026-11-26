@@ -6,7 +6,7 @@ import type { BoardWork } from '../board/work.js';
 import type { Action, Store } from '../store.js';
 import { openMilestone } from './apply.js';
 import { openMilestoneEpic } from './epics.js';
-import { type MilestoneAlong, type Plan, type PlanMerge, type PlanMilestone, type PlanPr, allTasks, isMultiRepo, milestoneRepos, openMilestones, planAutonomy, planBranchFor, planBranchName, planPrFor, planRepos, prRef, shipOrder, shippedIn } from './model.js';
+import { type MilestoneAlong, type Plan, type PlanMerge, type PlanMilestone, type PlanPr, allTasks, isMultiRepo, milestoneRepos, openMilestones, planAutonomy, planBranchFor, planBranchName, planPrFor, planRepos, prRef, shipOrder, shippedIn, startsByItself } from './model.js';
 import type { PlanGit } from './plan-git.js';
 import type { Plans } from './plans.js';
 import { FINISHED, type MilestoneView, type PlanView, type TaskState, type TaskView, agentTasks, agentsAtWork, liveFrom, planView, startable, tidyOffer, waitingOnYou } from './progress.js';
@@ -169,7 +169,7 @@ export function stallOf(view: PlanView, m: MilestoneView): StallKind | undefined
   if (m.tasks.some((t) => t.state === 'asking')) return undefined;
   if (m.tasks.some((t) => t.state === 'stalled')) return 'stalled';
   if (m.state === 'checking' || (m.state === 'gate' && m.milestone.criteria.length && !m.run.check)) return 'checking';
-  if (m.state !== 'running' || m.autonomy === 'step') return undefined;
+  if (m.state !== 'running' || !startsByItself(view.plan, m.autonomy)) return undefined;
   const todo = agentTasks(m).filter((t) => !FINISHED.has(t.state));
   return todo.some((t) => t.state === 'ready' || t.state === 'idle' || t.state === 'running') ? 'working' : undefined;
 }
@@ -430,12 +430,14 @@ export class PlanPilot {
     if (t.forYou) throw new Error(`${t.issue?.key ?? t.task.id} “${t.task.title}” is the user’s: it’s answered in the plan’s conversation, not started in a worktree`);
     // Claude starts nothing on a paused plan, nor on one you run step by step (you do).
     const autonomy = view.milestones.find((m) => m.milestone.id === t.milestoneId)?.autonomy ?? plan.autonomy;
-    if (by.kind === 'claude' && (plan.paused || autonomy === 'step')) throw new Error(`${plan.paused ? 'The plan is paused: the user resumes it' : 'This plan runs step by step: the user starts each task'}. ${NO_AGAIN}`);
+    if (by.kind === 'claude' && (plan.paused || !startsByItself(plan, autonomy))) throw new Error(`${plan.paused ? 'The plan is paused: the user resumes it' : autonomy === 'step' ? 'This plan runs step by step: the user starts each task' : 'The plan waits for the user to press Start'}. ${NO_AGAIN}`);
     // A combine that stopped at a conflict: Start tries it again (fixed since, or asks anew).
     if (t.combining && t.issue) {
       this.fixAsked.delete(t.issue.id);
       this.deps.plans.setCombining(plan.id, t.task.id, { ...t.combining, ...(t.combining.conflict ? { conflict: { ...t.combining.conflict, stuck: false } } : {}) });
     } else if (t.state !== 'ready') throw new Error(`“${t.task.title}” can’t start: ${t.why ?? t.state}`);
+    // Your Start is what starts a plan switched off Step by Step: from here on it runs its new way.
+    if (plan.held && by.kind !== 'claude') this.deps.plans.release(plan.id, by);
     if (this.byMilestone) return this.startInMilestone(plan, view, t, by, agent);
     if (view.active.length + this.startingIn(plan) >= plan.maxParallel) throw new PlanLimitError(`${plan.maxParallel} tasks are already running (the plan’s limit)`);
     this.failed.delete(t.issue!.id);
@@ -464,7 +466,7 @@ export class PlanPilot {
     if (STARTED.has(t.state)) return `${name} is already started (${t.state}): nothing to do. To tell its agent something, use plan_message_task. ${NO_AGAIN}`;
     if (FINISHED.has(t.state)) return `${name} is ${t.state}: nothing to start. ${NO_AGAIN}`;
     const autonomy = view.milestones.find((m) => m.milestone.id === t.milestoneId)?.autonomy ?? plan.autonomy;
-    const byItself = !plan.paused && autonomy !== 'step';
+    const byItself = !plan.paused && startsByItself(plan, autonomy);
     if (WAITING.has(t.state)) return `${name} can’t start yet: ${t.why ?? (t.state === 'later' ? 'its milestone hasn’t opened' : 'it waits on other tasks')}. ${byItself ? 'Beluga starts it by itself once that’s done' : 'The user starts it once that’s done'}: nothing to do now. ${NO_AGAIN}`;
     try {
       return await this.startNow(planId, taskId, by);
@@ -839,13 +841,13 @@ export class PlanPilot {
       const unbegun = todo.filter((t) => t.state === 'ready' || t.state === 'blocked');
       if (!agent) {
         const ready = todo.some((t) => t.state === 'ready' && !this.failed.has(t.issue!.id));
-        if (m.autonomy === 'step' || !ready || room <= 0) continue;
+        if (!startsByItself(plan, m.autonomy) || !ready || room <= 0) continue;
         room--;
         void this.launch(plan, m.milestone.id, { kind: 'beluga' }).catch(() => undefined);
         continue;
       }
-      // Step by step: you hand it each task (Start).
-      if (m.autonomy === 'step') continue;
+      // Step by step (or waiting for your Start): you hand it each task.
+      if (!startsByItself(plan, m.autonomy)) continue;
       const fresh = unbegun.filter((t) => !t.issue!.worktrees.includes(agent.worktree));
       if (fresh.length) this.hand(plan, m, fresh);
       const channel = `ws:${agent.worktree}`;
@@ -986,7 +988,7 @@ export class PlanPilot {
     if (m.state !== 'gate' && m.state !== 'checking') return;
     // Nothing to check (no pass criteria, and its tasks' criteria are all settled): autopilot moves on, otherwise it's yours to pass.
     if (!m.milestone.criteria.length && !criteriaNeedCheck(view, m)) {
-      if (m.autonomy === 'autopilot') this.autoPass(plan.id, m.milestone.id, { kind: 'beluga' });
+      if (m.autonomy === 'autopilot' && !plan.held) this.autoPass(plan.id, m.milestone.id, { kind: 'beluga' });
       return;
     }
     if (m.run.checkAsked === undefined) {
@@ -1011,7 +1013,7 @@ export class PlanPilot {
       return;
     }
     const check = m.run.check;
-    if (m.autonomy === 'autopilot' && check?.verdict === 'pass' && check.at >= m.run.checkAsked) this.autoPass(plan.id, m.milestone.id, check.by);
+    if (m.autonomy === 'autopilot' && !plan.held && check?.verdict === 'pass' && check.at >= m.run.checkAsked) this.autoPass(plan.id, m.milestone.id, check.by);
     else if (m.state === 'checking') this.watchCheck(plan, m);
   }
 

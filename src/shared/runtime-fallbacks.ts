@@ -19,7 +19,6 @@ export interface RuntimeFallback {
 /** Per runtime, what it does differently. A runtime (or a feature) missing here works as Claude's does. */
 export const RUNTIME_FALLBACKS: Readonly<Record<string, Readonly<Partial<Record<FallbackId, RuntimeFallback>>>>> = {
   codex: {
-    compact: { capability: 'hasCompaction', reason: 'Codex compacts its own context when it fills up, so there’s no Compact on Codex.' },
     fork: { capability: 'canFork', reason: 'On Codex a fork starts a new conversation: the files come along, the chat so far doesn’t.' },
     rewind: { capability: 'canFork', reason: 'On Codex, going back puts the files back but starts a new conversation from your edited message.' },
     skills: { capability: 'skills', reason: 'Skills and commands are translated for Codex; what can’t be says “Not on Codex”.' },
