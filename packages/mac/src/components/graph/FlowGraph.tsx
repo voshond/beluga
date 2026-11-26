@@ -22,6 +22,7 @@ import { PACK_FROM, packedLayout, startView } from './graph-pack.js';
 import { cachedLayout, rememberLayout } from './layout-cache.js';
 import { layout } from './layout.js';
 import { useSharpZoom } from './sharp-zoom.js';
+import { PICTURE_PAD } from './graph-picture.js';
 import { BUSY_FROM, detailAt } from './detail.js';
 import { NODE_TYPES, type FlowNode, drawingOf } from './nodes.js';
 import { EDGE_TYPES, EdgeMarkers, type FlowEdge } from './edges.js';
@@ -47,6 +48,7 @@ export interface FlowGraphProps {
   /** Open this graph in the whole window (inline only). */
   readonly onExpand?: () => void;
   readonly onCopy?: () => void;
+  readonly onCopyImage?: () => void;
   /** Start in the walkthrough (the full window opened from a step). */
   readonly startStep?: number;
   /** The laid-out graph's size (the card fits its height to it). */
@@ -67,6 +69,10 @@ export interface FlowGraphProps {
   readonly pack?: boolean;
   /** What a graph too big to read whole opens on (the work going on), in the whole window. */
   readonly startAt?: readonly string[];
+  /** Drawn off screen for its picture (GraphPicture): whole, at 1:1, with nothing over it. */
+  readonly picture?: boolean;
+  /** The picture's drawing is done: every node placed and every line drawn. */
+  readonly onPictureReady?: () => void;
 }
 
 /** A fresh canvas for each graph (Claude rewrote the block, the file changed): nothing carries over. */
@@ -127,10 +133,10 @@ const sameNode = (a: GraphNode, b: GraphNode): boolean => a === b || JSON.string
 /** How small you can zoom out: always far enough to see the whole graph. */
 const MIN_ZOOM = 0.15;
 
-function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidOut, cacheKey, onOpen, openLabel, live, pack, startAt }: FlowGraphProps) {
+function Canvas({ graph, mode, localImages, onExpand, onCopy, onCopyImage, startStep, onLaidOut, cacheKey, onOpen, openLabel, live, pack, startAt, picture, onPictureReady }: FlowGraphProps) {
   const uid = useId().replace(/[^\w-]/g, '');
   const theme = useDocTheme();
-  const motion = !reducedMotion();
+  const motion = !picture && !reducedMotion();
   const flow = useReactFlow<FlowNode, FlowEdge>();
   useSharpZoom();
   const updateInternals = useUpdateNodeInternals();
@@ -230,7 +236,8 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
     const anchors = [...new Set(ids.map(outermost))].flatMap((id) => boxOf(id) ?? []);
     void flow.setViewport(startView(b, { width: box.clientWidth, height: box.clientHeight }, wanted, anchors), { duration: ms });
   };
-  const frame = (ms: number): void => (stepRef.current >= 0 ? frameStep(stepRef.current, ms) : frameStart(ms));
+  // The picture keeps its 1:1 view, the drawing at its corner.
+  const frame = (ms: number): void => (picture ? undefined : stepRef.current >= 0 ? frameStep(stepRef.current, ms) : frameStart(ms));
 
   // The same shape with new words or statuses (shapeKey, or a live graph): only the nodes that changed take them, where they are.
   const first = useRef(graph);
@@ -340,8 +347,16 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
   useEffect(() => {
     if (!initialized || phase !== 'measuring' || !allMeasured()) return;
     measure();
-    void lay(direction, true);
+    void lay(direction, !picture);
   }, [initialized, phase]);
+
+  // The picture is drawn once its nodes are placed and measured, and its lines follow them.
+  const pictured = useRef(false);
+  useEffect(() => {
+    if (!picture || pictured.current || phase !== 'ready' || !initialized) return;
+    pictured.current = true;
+    requestAnimationFrame(() => requestAnimationFrame(() => onPictureReady?.()));
+  }, [phase, initialized]);
 
   // A live graph changed shape: once its new nodes are measured, lay it out again where you are.
   useEffect(() => {
@@ -483,7 +498,8 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
         nodes={shown}
         edges={edges}
         // A busy graph laid out draws only what's in view (all of it while new nodes wait to be measured).
-        onlyRenderVisibleElements={busy && phase === 'ready' && !pending.size}
+        onlyRenderVisibleElements={!picture && busy && phase === 'ready' && !pending.size}
+        {...(picture ? { defaultViewport: { x: PICTURE_PAD, y: PICTURE_PAD, zoom: 1 } } : {})}
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
         onNodesChange={onNodesChange}
@@ -524,22 +540,25 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, startStep, onLaidO
         deleteKeyCode={null}
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1.2} className={g.dots} />
-        {!inline ? <MiniMap pannable zoomable className={g.minimap} nodeClassName={(n) => (n.type === 'group' ? g.miniGroup! : g.miniNode!)} /> : null}
-        <Panel position="top-right" className={g.tools}>
-          {steps.length ? <IconButton size="small" icon="play" label={step >= 0 ? 'Leave the Walkthrough' : 'Walk Me Through It'} active={step >= 0} onClick={() => goStep(step >= 0 ? -1 : 0)} /> : null}
-          <IconButton size="small" icon={across ? 'chevronDown' : 'chevronRight'} label={across ? 'Lay Out Top to Bottom' : 'Lay Out Left to Right'} onClick={turn} />
-          <IconButton size="small" icon="outline" label="Fit to View" onClick={() => frameAll(duration)} />
-          {onCopy ? <IconButton size="small" icon="copy" label="Copy as JSON" onClick={onCopy} /> : null}
-          {onExpand ? <IconButton size="small" icon="expand" label="Open in Full Window" onClick={onExpand} /> : null}
-        </Panel>
-        {!inline ? (
+        {!inline && !picture ? <MiniMap pannable zoomable className={g.minimap} nodeClassName={(n) => (n.type === 'group' ? g.miniGroup! : g.miniNode!)} /> : null}
+        {picture ? null : (
+          <Panel position="top-right" className={g.tools}>
+            {steps.length ? <IconButton size="small" icon="play" label={step >= 0 ? 'Leave the Walkthrough' : 'Walk Me Through It'} active={step >= 0} onClick={() => goStep(step >= 0 ? -1 : 0)} /> : null}
+            <IconButton size="small" icon={across ? 'chevronDown' : 'chevronRight'} label={across ? 'Lay Out Top to Bottom' : 'Lay Out Left to Right'} onClick={turn} />
+            <IconButton size="small" icon="outline" label="Fit to View" onClick={() => frameAll(duration)} />
+            {onCopyImage ? <IconButton size="small" icon="image" label="Copy as Image" onClick={onCopyImage} /> : null}
+            {onCopy ? <IconButton size="small" icon="copy" label="Copy as JSON" onClick={onCopy} /> : null}
+            {onExpand ? <IconButton size="small" icon="expand" label="Open in Full Window" onClick={onExpand} /> : null}
+          </Panel>
+        )}
+        {!inline && !picture ? (
           <Panel position="bottom-left" className={g.zoom}>
             <IconButton size="small" icon="minus" label="Zoom Out" onClick={() => void flow.zoomOut({ duration })} />
             <IconButton size="small" icon="plus" label="Zoom In" onClick={() => void flow.zoomIn({ duration })} />
           </Panel>
         ) : null}
       </ReactFlow>
-      {phase === 'failed' ? <div className={g.overlayNote}>Couldn’t lay this graph out.</div> : phase !== 'ready' ? <div className={g.overlayNote}>Laying out…</div> : null}
+      {picture ? null : phase === 'failed' ? <div className={g.overlayNote}>Couldn’t lay this graph out.</div> : phase !== 'ready' ? <div className={g.overlayNote}>Laying out…</div> : null}
       {current ? <Walkthrough steps={steps} index={step} onGo={goStep} /> : null}
       {picked ? <Inspector graph={graph} node={picked} onPick={focusNode} onClose={() => setSelected(undefined)} wide={!inline} {...(onOpen ? { onOpen: () => onOpen(picked.id), openLabel: openLabel ?? 'Open' } : {})} /> : null}
     </div>

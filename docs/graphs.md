@@ -17,6 +17,7 @@ Your agent can draw. When a picture explains better than prose, it adds a fenced
 - **Turn the layout** between left-to-right and top-to-bottom.
 - **Drag** nodes around. Their lines follow.
 - **Open in Full Window:** room to explore, a minimap, zoom buttons, two-finger scroll to pan, pinch to zoom. Esc closes.
+- **Copy as Image**, and in the right-click menu **Save as Image…**: the whole graph at twice its size, on its dotted background, whatever part of it the card shows. The window draws it again off screen (`GraphPicture.tsx`, `graph-picture.ts` with html-to-image), so the picture is made on the computer you sit at: the app as a client of a Beluga server copies to its own clipboard and saves with its own Save panel (`save_image`), never the server's.
 - **Copy as JSON** (also in the right-click menu).
 
 In a conversation, scrolling still scrolls the conversation: pinch to zoom, drag to pan. A graph is laid out the way that reads biggest in its frame: as the agent drew it if it fits, else turned top-to-bottom, and a very long chain wraps onto more rows. The card's height follows the graph.

@@ -346,7 +346,8 @@ pub fn run() {
             frame::own_title_bar,
             frame::window_control,
             clipboard::clipboard_image_types,
-            clipboard::clipboard_image
+            clipboard::clipboard_image,
+            export::save_image
         ]))
         .manage(quit::Quitting::default())
         .manage(updater::Updates::default())
@@ -399,6 +400,7 @@ pub fn run() {
             device::device_prompt,
             device::device_prompt_answer,
             export::save_export,
+            export::save_image,
             sounds::sound_install,
             sounds::sound_prune,
             sounds::sound_play_system,

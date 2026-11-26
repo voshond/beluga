@@ -4,11 +4,14 @@ import { type Graph, parseGraph } from '@beluga/shared/graph-spec.js';
 import { ActionsContext, type ActionItem } from '../SpecMenu.js';
 import { CodeLines } from '../markdown/CodeLines.js';
 import { IconButton } from '../ui.js';
-import { copyText } from '../../lib/copy.js';
+import { copyPng, copyText } from '../../lib/copy.js';
+import { saveImageAs } from '../../lib/save-image.js';
 import { toast, useBeluga } from '../../lib/beluga.js';
 import { type Size, fittedHeight, inlineHeight } from './graph-model.js';
 import { cachedLayout } from './layout-cache.js';
 import { GraphGlyph } from './marks.js';
+import { GraphPicture } from './GraphPicture.js';
+import { pictureName } from './graph-picture.js';
 import g from './graph.module.css';
 
 /**
@@ -60,9 +63,37 @@ function useWidth(): [React.RefObject<HTMLElement | null>, number] {
   return [ref, width];
 }
 
+type Mode = 'inline' | 'full';
+type Shot = { readonly mode: Mode; readonly resolve: (png: Blob) => void; readonly reject: (err: Error) => void };
+
+const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
 function GraphCard({ graph, code, warnings, localImages, shapeKey }: { graph: Graph; code: string; warnings: readonly string[]; localImages: boolean; shapeKey?: string }) {
   const { client } = useBeluga();
   const [full, setFull] = useState(false);
+  // The picture being drawn off screen (GraphPicture), one at a time.
+  const [shot, setShot] = useState<Shot>();
+  const drawing = useRef(false);
+  const picture = (mode: Mode): Promise<Blob> => {
+    if (drawing.current) return Promise.reject(new Error('Still drawing the last one'));
+    drawing.current = true;
+    return new Promise<Blob>((resolve, reject) => setShot({ mode, resolve, reject })).finally(() => {
+      drawing.current = false;
+      setShot(undefined);
+    });
+  };
+  const copyImage = (mode: Mode): void =>
+    void copyPng(picture(mode)).then(
+      () => toast(client, 'Copied the graph as a picture', 'success'),
+      (err: unknown) => toast(client, `Couldn’t copy the picture: ${errorText(err)}`, 'warn'),
+    );
+  const saveImage = (mode: Mode): void =>
+    void picture(mode)
+      .then((png) => saveImageAs(pictureName(graph.title), png))
+      .then(
+        (to) => (to ? toast(client, `Saved ${to}`, 'success') : undefined),
+        (err: unknown) => toast(client, `Couldn’t save the picture: ${errorText(err)}`, 'warn'),
+      );
   const [ref, width] = useWidth();
   const [laid, setLaid] = useState<Size | undefined>(() => cachedLayout(shapeKey ?? code, 'inline')?.bounds);
   const height = laid ? fittedHeight(laid, width) : inlineHeight(graph, width);
@@ -70,6 +101,8 @@ function GraphCard({ graph, code, warnings, localImages, shapeKey }: { graph: Gr
   const copy = (): void => void copyText(JSON.stringify(JSON.parse(code), null, 2)).then(() => toast(client, 'Copied the graph as JSON', 'success'));
   const items: ActionItem[] = [
     { label: 'Open in Full Window', icon: 'expand', onSelect: () => setFull(true) },
+    { label: 'Copy as Image', icon: 'image', onSelect: () => copyImage('inline') },
+    { label: 'Save as Image…', icon: 'download', onSelect: () => saveImage('inline') },
     { label: 'Copy as JSON', icon: 'copy', onSelect: copy },
   ];
   const meta = [`${parts} ${parts === 1 ? 'part' : 'parts'}`, graph.steps.length ? `${graph.steps.length} ${graph.steps.length === 1 ? 'step' : 'steps'}` : ''].filter(Boolean).join(' · ');
@@ -92,18 +125,19 @@ function GraphCard({ graph, code, warnings, localImages, shapeKey }: { graph: Gr
         </figcaption>
         <div className={g.inlineFrame} style={{ height }}>
           <Suspense fallback={<div className={g.overlayNote}>Laying out…</div>}>
-            <FlowGraph graph={graph} mode="inline" localImages={localImages} onExpand={() => setFull(true)} onCopy={copy} onLaidOut={setLaid} cacheKey={shapeKey ?? code} {...(shapeKey ? { shapeKey } : {})} />
+            <FlowGraph graph={graph} mode="inline" localImages={localImages} onExpand={() => setFull(true)} onCopy={copy} onCopyImage={() => copyImage('inline')} onLaidOut={setLaid} cacheKey={shapeKey ?? code} {...(shapeKey ? { shapeKey } : {})} />
           </Suspense>
         </div>
       </figure>
       </ActionsContext>
-      {full ? <FullWindow graph={graph} code={shapeKey ?? code} localImages={localImages} onClose={() => setFull(false)} onCopy={copy} {...(shapeKey ? { shapeKey } : {})} /> : null}
+      {full ? <FullWindow graph={graph} code={shapeKey ?? code} localImages={localImages} onClose={() => setFull(false)} onCopy={copy} onCopyImage={() => copyImage('full')} {...(shapeKey ? { shapeKey } : {})} /> : null}
+      {shot ? <GraphPicture graph={graph} mode={shot.mode} cacheKey={shapeKey ?? code} localImages={localImages} onDone={shot.resolve} onFail={shot.reject} {...(shapeKey ? { shapeKey } : {})} /> : null}
     </>
   );
 }
 
 /** The graph in the whole window: a minimap, zoom buttons and room for its details. Esc closes. */
-function FullWindow({ graph, code, localImages, onClose, onCopy, shapeKey }: { graph: Graph; code: string; localImages: boolean; onClose: () => void; onCopy: () => void; shapeKey?: string }) {
+function FullWindow({ graph, code, localImages, onClose, onCopy, onCopyImage, shapeKey }: { graph: Graph; code: string; localImages: boolean; onClose: () => void; onCopy: () => void; onCopyImage: () => void; shapeKey?: string }) {
   return (
     <Dialog.Root open onOpenChange={(open) => (open ? undefined : onClose())}>
       <Dialog.Portal>
@@ -122,7 +156,7 @@ function FullWindow({ graph, code, localImages, onClose, onCopy, shapeKey }: { g
           </header>
           <div className={g.fullFrame}>
             <Suspense fallback={<div className={g.overlayNote}>Laying out…</div>}>
-              <FlowGraph graph={graph} mode="full" localImages={localImages} onCopy={onCopy} cacheKey={code} {...(shapeKey ? { shapeKey } : {})} />
+              <FlowGraph graph={graph} mode="full" localImages={localImages} onCopy={onCopy} onCopyImage={onCopyImage} cacheKey={code} {...(shapeKey ? { shapeKey } : {})} />
             </Suspense>
           </div>
         </Dialog.Content>
