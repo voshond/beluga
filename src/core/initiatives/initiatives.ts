@@ -1,12 +1,20 @@
-import { mkdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { AgentPlace } from '../../agent/types.js';
 import type { ScheduleTrigger, SentinelDraft } from '../sentinel/model.js';
 import { formatBytes } from '../../shared/format.js';
 import { isSecretPath } from '../shares.js';
-import type { Action, Store } from '../store.js';
+import type { Action, LogItem, Store } from '../store.js';
+import { initiativeChatPlace } from './chat-ref.js';
+import { type AudienceDraft, AudienceDraftSchema } from './audience.js';
 import { InitiativeChats } from './chats.js';
-import { addTimeline, artifactPath, folderOf, keepArtifactFile, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeArtifacts, writeConfig, writeOutbox, writeSuggestions, writeTasks, writeText } from './files.js';
+import { keepProposal, readDirectory, removePersonFile, writePerson } from './directory.js';
+import { PEOPLE_DIR, type PersonDraft } from './people.js';
+import { PEOPLE_PASS } from './people-prompt.js';
+import { findingTitle, readDiscovery, sizingFiles } from './discovery.js';
+import { type ArtifactAbout, type DiscoveryStep, DiscoveryStepSchema, proposedEpicKeys } from './discovery-model.js';
+import { discoveryStepPrompt } from './discovery-prompt.js';
+import { addTimeline, artifactPath, folderOf, keepArtifactFile, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeArtifacts, writeConfig, writeOutbox, writeSuggestions, writeTasks, writeText, writeUpdates } from './files.js';
 import {
   ARTIFACT_KEEP_MAX,
   type ArtifactRead,
@@ -24,6 +32,7 @@ import {
   InitiativeDraftSchema,
   type InitiativePatch,
   InitiativePatchSchema,
+  type InitiativeStatus,
   type InitiativeView,
   INITIATIVE_SLUG,
   initiativeChatChannel,
@@ -37,12 +46,24 @@ import {
   targetWords,
   clarifyMessage,
   decisionMessage,
+  DRAFT_KIND_WORDS,
+  isSentTarget,
   suggestionMessage,
+  textMaxOf,
   taskMessage,
   uniqueSlug,
 } from './model.js';
-import { CHECK_IN_PROMPT, type LinkedRepo, TASKS_PROMPT, TICKETS_PROMPT, initiativeBrief } from './prompt.js';
+import { CHECK_IN_PROMPT, CHECK_IN_WAKE, type LinkedRepo, checkInPromptFor, TASKS_PROMPT, TICKETS_PROMPT, initiativeBrief } from './prompt.js';
 import { type PushResult, commitFolder, dayOf, ensureRepo, pushIfTracked, unpushedCount } from './repo.js';
+import { UPDATES_DIR, UpdateRecordSchema, audienceIdOf, ticketMarks } from './updates.js';
+import { draftUpdatePrompt } from './updates-prompt.js';
+import { InitiativeWatches, type WatchHost } from './watching.js';
+import { WATCH_CHAT, type Watch, type WatchDraft } from './watches.js';
+import { RiskKeeper } from './risk-keeper.js';
+import type { RiskDraft } from './risks.js';
+import type { SuccessDefineRequest } from '../../agent/success-definer.js';
+import type { SuccessDefinition, SuccessDraft, SuccessProposal, SuccessProposalInput } from './success.js';
+import { InitiativeSuccess, type SuccessHost } from './success-service.js';
 
 export type CheckInHost = {
   readonly create: (draft: SentinelDraft) => { readonly id: string };
@@ -51,6 +72,8 @@ export type CheckInHost = {
   readonly runNow: (id: string) => void;
   readonly reschedule: (id: string, trigger: ScheduleTrigger) => void;
   readonly remove: (id: string) => void;
+  /** Rewrites a sentinel's trigger and steps (the watch sentinel, re-armed for its next look). */
+  readonly rewrite?: WatchHost['rewrite'];
 };
 
 export type InitiativesDeps = {
@@ -61,6 +84,8 @@ export type InitiativesDeps = {
   readonly ask: (prompt: string, channel: string) => string | undefined;
   readonly checkIns?: () => CheckInHost | undefined;
   readonly refine?: (input: GoalRefine) => Promise<string | undefined>;
+  readonly successHost?: () => SuccessHost | undefined;
+  readonly defineSuccess?: (req: SuccessDefineRequest) => Promise<SuccessProposal | undefined>;
   readonly commit?: boolean;
   readonly now?: () => number;
   readonly claudeDir?: string;
@@ -79,6 +104,8 @@ export type InitiativeChatRun = {
 /** A draft the user sent: the one call it allows, kept here, never in a file the agent can write. */
 type Send = { readonly slug: string; readonly id: number; readonly to: OutboxTarget; readonly text: string };
 
+const SENT_WORDS: Readonly<Record<OutboxTarget['kind'], string>> = { slack: 'a Slack message', jira: 'a Jira comment', confluence: 'a Confluence update', 'confluence-page': 'a Confluence page', prep: 'a prep sheet' };
+
 export const OUTBOX_DENIED = 'In an initiative, messages go out through its outbox: write this as a draft in outbox.json, and the user sends it from the chat.';
 
 /** A file a worktree's agent sends an initiative (report_to_initiative), with where it came from. */
@@ -90,6 +117,7 @@ export type ArtifactReport = {
   readonly worktree?: string;
   readonly project?: string;
   readonly from?: string;
+  readonly about?: ArtifactAbout;
 };
 
 const IMAGE_READ_MAX = 15 * 1024 * 1024;
@@ -98,6 +126,7 @@ const MEDIA_TYPES: Readonly<Record<string, string>> = { png: 'image/png', jpg: '
 
 type Local = {
   readonly checkIn?: string;
+  readonly watch?: string;
 };
 
 const FINAL_EVENTS: ReadonlySet<string> = new Set(['done', 'error', 'denied']);
@@ -106,6 +135,9 @@ const CHECK_IN_TRIGGER: ScheduleTrigger = { kind: 'schedule', every: 'week', at:
 
 export class Initiatives {
   readonly chats: InitiativeChats;
+  readonly watching: InitiativeWatches;
+  private readonly risks: RiskKeeper;
+  readonly success: InitiativeSuccess;
   private readonly locals = new Map<string, Local>();
   private readonly sends = new Map<string, Send>();
   private cleared: Send[] = [];
@@ -123,6 +155,26 @@ export class Initiatives {
       ...(deps.claudeDir ? { claudeDir: deps.claudeDir } : {}),
       ...(deps.codexDir ? { codexDir: deps.codexDir } : {}),
     });
+    this.watching = new InitiativeWatches({
+      root: deps.root,
+      now: () => this.now,
+      selfId: deps.selfId,
+      ask: deps.ask,
+      host: () => {
+        const host = deps.checkIns?.();
+        return host?.rewrite ? { ...host, rewrite: host.rewrite } : undefined;
+      },
+      sentinel: (slug) => this.local(slug).watch,
+      keepSentinel: (slug, id) => this.saveLocal(slug, { ...this.local(slug), watch: id }),
+      commit: (slug, message) => this.commit(slug, message),
+      refresh: (slug) => this.refresh(slug),
+      about: (slug) => {
+        const config = readFolder(deps.root, slug).config;
+        return { name: config?.name ?? slug, active: Boolean(config) && config?.status !== 'archived' };
+      },
+    });
+    this.risks = new RiskKeeper(deps.root, deps.dir);
+    this.success = new InitiativeSuccess({ root: deps.root, host: () => deps.successHost?.(), ...(deps.defineSuccess ? { propose: deps.defineSuccess } : {}), now: () => this.now });
     this.offAction = deps.store.onAction((action) => this.onAction(action));
   }
 
@@ -135,8 +187,9 @@ export class Initiatives {
     else mkdirSync(this.deps.root, { recursive: true });
     if (this.stopped) return;
     const items = listSlugs(this.deps.root).map((slug) => this.view(slug));
-    this.deps.store.dispatch({ type: 'initiatives_init', state: { enabled: true, root: this.deps.root, items } });
+    this.deps.store.dispatch({ type: 'initiatives_init', state: { enabled: true, root: this.deps.root, items, people: readDirectory(this.deps.root) } });
     await this.pushPending().catch(() => undefined);
+    for (const item of items) await this.watching.sync(item.slug).catch(() => undefined);
   }
 
   stop(): void {
@@ -164,8 +217,8 @@ export class Initiatives {
     const file = this.localFile(slug);
     let read: Local = {};
     try {
-      const raw: { checkIn?: string } = file ? JSON.parse(readFileSync(file, 'utf8')) : {};
-      read = typeof raw.checkIn === 'string' ? { checkIn: raw.checkIn } : {};
+      const raw: { checkIn?: string; watch?: string } = file ? JSON.parse(readFileSync(file, 'utf8')) : {};
+      read = { ...(typeof raw.checkIn === 'string' ? { checkIn: raw.checkIn } : {}), ...(typeof raw.watch === 'string' ? { watch: raw.watch } : {}) };
     } catch {
       read = {};
     }
@@ -184,6 +237,8 @@ export class Initiatives {
     const config = folder.config;
     const chats = this.chats.load(slug);
     const checkIn = this.local(slug).checkIn;
+    const success = this.success.read(slug);
+    const discovery = readDiscovery(folder.folder, config?.status ?? 'active');
     return {
       slug,
       folder: folder.folder,
@@ -196,15 +251,23 @@ export class Initiatives {
       repos: config?.repos ?? [],
       meetings: config?.meetings ?? [],
       people: config?.people ?? [],
+      audiences: config?.audiences ?? [],
+      updates: folder.updates,
       ...(folder.progress ? { progress: folder.progress } : {}),
       ...(folder.tickets ? { tickets: folder.tickets } : {}),
       ...(folder.tasks ? { tasks: folder.tasks } : {}),
       suggestions: folder.suggestions,
       outbox: folder.outbox,
+      watches: folder.watches,
       artifacts: folder.artifacts,
+      risks: folder.risks,
+      ...(discovery ? { discovery } : {}),
       timeline: folder.timeline,
+      ...(folder.decisions ? { decisions: folder.decisions } : {}),
+      ...(folder.waitingQuestions.length ? { waitingQuestions: folder.waitingQuestions } : {}),
       files: folder.files,
       ...(checkIn ? { checkIn } : {}),
+      ...(success.definition || success.shippedAt ? { success } : {}),
       chats,
       ...(folder.trouble ? { trouble: folder.trouble } : {}),
     };
@@ -246,21 +309,21 @@ export class Initiatives {
     if (result) this.pushed(result);
   }
 
-  private checkInDraft(slug: string, name: string): SentinelDraft {
+  private checkInDraft(slug: string, name: string, status: InitiativeStatus): SentinelDraft {
     return {
       name: `${name} check-in`.slice(0, 80),
       icon: 'calendar',
       projectId: null,
       trigger: CHECK_IN_TRIGGER,
-      steps: [{ kind: 'chat', to: `${this.deps.selfId()}/${initiativeChatChannel(slug, CHECK_IN_CHAT)}`, text: CHECK_IN_PROMPT }],
+      steps: [{ kind: 'chat', to: `${this.deps.selfId()}/${initiativeChatChannel(slug, CHECK_IN_CHAT)}`, text: status === 'discovery' ? CHECK_IN_WAKE : CHECK_IN_PROMPT }],
       access: 'look',
     };
   }
 
-  private makeCheckIn(slug: string, name: string): string | undefined {
+  private makeCheckIn(slug: string, name: string, status: InitiativeStatus): string | undefined {
     const host = this.deps.checkIns?.();
     if (!host) return undefined;
-    const made = host.create(this.checkInDraft(slug, name));
+    const made = host.create(this.checkInDraft(slug, name, status));
     this.saveLocal(slug, { ...this.local(slug), checkIn: made.id });
     return made.id;
   }
@@ -312,12 +375,12 @@ export class Initiatives {
 
   async create(draft: InitiativeDraft, opts: { readonly quiet?: boolean } = {}): Promise<{ readonly slug: string }> {
     const parsed = InitiativeDraftSchema.parse(draft);
-    const slug = uniqueSlug(parsed.name, new Set(listSlugs(this.deps.root)));
-    const config = InitiativeConfigSchema.parse({ ...parsed, status: 'active', createdAt: new Date(this.now).toISOString() });
+    const slug = uniqueSlug(parsed.name, new Set([...listSlugs(this.deps.root), PEOPLE_DIR]));
+    const config = InitiativeConfigSchema.parse({ ...parsed, status: parsed.status ?? 'active', createdAt: new Date(this.now).toISOString() });
     scaffoldFolder(this.deps.root, slug, config, dayOf(this.now));
     this.chats.load(slug);
     try {
-      this.makeCheckIn(slug, config.name);
+      this.makeCheckIn(slug, config.name, config.status);
     } catch {
       this.saveLocal(slug, {});
     }
@@ -333,10 +396,37 @@ export class Initiatives {
     const was = this.config(slug);
     const next = InitiativeConfigSchema.parse({ ...was, ...parsed });
     writeConfig(this.deps.root, slug, next);
+    if (was.status !== next.status) this.statusChanged(slug, was.status, next.status);
     await this.commit(slug, `${slug}: updated`);
     this.refresh(slug);
     if (next.epics.length && !sameKeys(was.epics, next.epics)) this.fetchTickets(slug);
+    if (was.status !== next.status) await this.watching.sync(slug).catch(() => undefined);
     return this.view(slug);
+  }
+
+  /** Shipped: the ship date is noted and the check-in goes weekly (an outcome review); back to work, it goes back to weekdays. */
+  private statusChanged(slug: string, was: InitiativeStatus, next: InitiativeStatus): void {
+    this.success.statusChanged(slug, was, next);
+    const weekly = next === 'shipped';
+    if (weekly === (was === 'shipped') || next === 'archived') return;
+    const host = this.deps.checkIns?.();
+    const id = this.local(slug).checkIn;
+    if (!host || !id || !host.exists(id)) return;
+    host.reschedule(id, weekly ? { ...CHECK_IN_TRIGGER, days: [1] } : CHECK_IN_TRIGGER);
+  }
+
+  /** Your agent's proposal of what success means, with each query's first rows (nothing is saved yet). */
+  async defineSuccess(slug: string): Promise<SuccessDraft> {
+    const item = this.need(slug);
+    return this.success.draft(item, this.repos(item));
+  }
+
+  /** The owner accepts a definition: kept in success.json, with its sentinel (paused when new) and its dashboard. */
+  async acceptSuccess(slug: string, proposal: SuccessProposalInput): Promise<SuccessDefinition> {
+    const definition = await this.success.accept(this.need(slug), proposal);
+    await this.commit(slug, `${slug}: success defined`);
+    this.refresh(slug);
+    return definition;
   }
 
   async archive(slug: string): Promise<void> {
@@ -354,7 +444,7 @@ export class Initiatives {
   private checkInHost(item: InitiativeView): { readonly host: CheckInHost; readonly id: string | undefined } {
     const host = this.deps.checkIns?.();
     if (!host) throw new Error('Check-ins need the Beluga app (its Sentinel)');
-    return { host, id: item.checkIn && host.exists(item.checkIn) ? item.checkIn : this.makeCheckIn(item.slug, item.name) };
+    return { host, id: item.checkIn && host.exists(item.checkIn) ? item.checkIn : this.makeCheckIn(item.slug, item.name, item.status) };
   }
 
   setCheckIn(slug: string, on: boolean): void {
@@ -379,8 +469,37 @@ export class Initiatives {
       host.runNow(item.checkIn);
       return { channel };
     }
-    if (this.deps.ask(CHECK_IN_PROMPT, channel) === undefined) throw new Error('The check-in could not start');
+    if (this.deps.ask(checkInPromptFor(item), channel) === undefined) throw new Error('The check-in could not start');
     return { channel };
+  }
+
+  /** A discovery step from the page (Size It, Draft PRD, Start Demo…): its prompt goes into the work chat, which does it and asks for anything outward. */
+  discoveryStep(slug: string, input: DiscoveryStep): { readonly channel: string } {
+    const step = DiscoveryStepSchema.parse(input);
+    const item = this.need(slug);
+    if (item.status !== 'discovery') throw new Error('That step is for an initiative in discovery');
+    if (step.step === 'demo' && !item.repos.includes(step.repo)) throw new Error(`Link ${step.repo} first: Repos › +`);
+    const channel = this.workChannel(item);
+    if (this.deps.ask(discoveryStepPrompt(step), channel) === undefined) throw new Error('The chat could not take it now');
+    return { channel };
+  }
+
+  /** Discovery is over: the epics the agent created (proposal.json) are linked and the initiative is active. */
+  async promote(slug: string): Promise<InitiativeView> {
+    const item = this.need(slug);
+    if (item.status !== 'discovery') throw new Error('Only an initiative in discovery moves to delivery');
+    const epics = [...new Set([...item.epics, ...proposedEpicKeys(item.discovery?.proposal)])].slice(0, 20);
+    if (!epics.length) throw new Error('No epics yet: Propose Epics, approve creating them, then move it to delivery');
+    addTimeline(this.deps.root, slug, `${dayOf(this.now)} [decision]: moved from discovery to delivery with ${epics.join(', ')}`);
+    return this.update(slug, { status: 'active', epics });
+  }
+
+  /** Each finding the agent left in sizing/ becomes an artifact, moved out of there. */
+  private async keepSizing(slug: string): Promise<void> {
+    for (const file of sizingFiles(folderOf(this.deps.root, slug))) {
+      await this.reportArtifact(slug, { file, title: findingTitle(file), why: 'A sizing finding, with its query', from: 'Size It', about: 'sizing' });
+      rmSync(file, { force: true });
+    }
   }
 
   /** Approve or dismiss a suggestion; `answer` is what the user decided, for a decision. */
@@ -393,6 +512,7 @@ export class Initiatives {
     const state = decision === 'approve' ? 'approved' : 'dismissed';
     const decided = decision === 'approve' && answer ? answer.trim() : undefined;
     writeSuggestions(this.deps.root, slug, item.suggestions.map((s) => (s.id === id ? { ...s, state, resolvedAt, ...(decided ? { answer: decided } : {}) } : s)));
+    if (decision === 'approve' && suggestion.people?.length) return this.keepPeople(slug, id);
     await this.commit(slug, `${slug}: suggestion ${id} ${decided ? 'decided' : state}`);
     this.refresh(slug);
     if (decision === 'dismiss') return {};
@@ -419,9 +539,13 @@ export class Initiatives {
   async sendDraft(slug: string, id: number, text: string): Promise<{ readonly channel: string }> {
     const item = this.need(slug);
     const draft = this.openDraft(item, id);
+    const to = draft.to;
+    if (!isSentTarget(to)) throw new Error('A prep sheet is never sent: copy it into the meeting, then mark it Done');
     const final = text.trim();
     if (!final) throw new Error('Write the message first');
-    this.sends.set(`${slug}:${id}`, { slug, id, to: draft.to, text: final });
+    if (final.length > textMaxOf(to)) throw new Error(`That is ${final.length} characters: a ${DRAFT_KIND_WORDS[to.kind]} takes ${textMaxOf(to)} at most`);
+    const allowed = draft.to.kind === 'confluence-page' ? this.readFile(slug, draft.to.file).text : final;
+    this.sends.set(`${slug}:${id}`, { slug, id, to: draft.to, text: allowed });
     const edited = final !== draft.text.trim();
     this.putDraft(slug, item.outbox, id, (d) => {
       const { sentText: _sent, ...rest } = d;
@@ -430,7 +554,7 @@ export class Initiatives {
     await this.commit(slug, `${slug}: draft ${id} approved`);
     this.refresh(slug);
     const channel = this.workChannel(item);
-    if (this.deps.ask(sendDraftMessage(draft, final), channel) === undefined) throw new Error('The chat could not take it now');
+    if (this.deps.ask(sendDraftMessage({ id: draft.id, to }, final), channel) === undefined) throw new Error('The chat could not take it now');
     return { channel };
   }
 
@@ -478,10 +602,112 @@ export class Initiatives {
 
   private markSent(send: Send): void {
     const folder = readFolder(this.deps.root, send.slug);
-    if (!folder.outbox.some((d) => d.id === send.id)) return;
+    const draft = folder.outbox.find((d) => d.id === send.id);
+    if (!draft) return;
     this.putDraft(send.slug, folder.outbox, send.id, (d) => ({ ...d, state: 'sent', resolvedAt: new Date(this.now).toISOString() }));
-    addTimeline(this.deps.root, send.slug, `${dayOf(this.now)} [message]: sent ${send.to.kind === 'slack' ? 'a Slack message' : 'a Jira comment'} to ${targetWords(send.to)}`);
+    if (draft.audience) this.keepUpdate(send.slug, draft, send.text);
+    else addTimeline(this.deps.root, send.slug, `${dayOf(this.now)} [message]: sent ${SENT_WORDS[send.to.kind]} to ${targetWords(send.to)}`);
+    const sent = readFolder(this.deps.root, send.slug).outbox.find((d) => d.id === send.id);
+    if (sent) this.watching.fromDraft(send.slug, sent);
     this.refresh(send.slug);
+  }
+
+  /** A stakeholder update the user sent, or a prep sheet they kept: its text in updates/, a record with the tickets as they stand (the next one's delta), and a timeline line. */
+  private keepUpdate(slug: string, draft: OutboxDraft, text: string): void {
+    const folder = readFolder(this.deps.root, slug);
+    const audience = folder.config?.audiences.find((a) => a.id === draft.audience);
+    const name = audience?.name ?? draft.audience ?? 'an audience';
+    const day = dayOf(this.now);
+    const prep = draft.to.kind === 'prep';
+    if (draft.audience) {
+      const file = `${UPDATES_DIR}/${day}-${draft.audience}-${draft.id}.md`;
+      writeText(path.join(folder.folder, file), `# ${name}: ${DRAFT_KIND_WORDS[draft.to.kind]} · ${targetWords(draft.to)}\n\n${day}\n\n${text.trim()}\n`);
+      const record = UpdateRecordSchema.parse({ audience: draft.audience, at: new Date(this.now).toISOString(), draft: draft.id, to: draft.to, file, tickets: ticketMarks(folder.tickets?.tickets ?? []) });
+      writeUpdates(this.deps.root, slug, [...folder.updates, record]);
+    }
+    addTimeline(this.deps.root, slug, prep ? `${day} [update]: prep sheet for ${targetWords(draft.to)} ready for ${name}` : `${day} [update]: sent the ${name} update to ${targetWords(draft.to)}`);
+  }
+
+  /** Adds an audience for stakeholder updates, or edits one (by its id). */
+  async saveAudience(slug: string, draft: AudienceDraft): Promise<{ readonly id: string }> {
+    this.need(slug);
+    const parsed = AudienceDraftSchema.parse(draft);
+    const was = this.config(slug);
+    const directory = readDirectory(this.deps.root);
+    const stranger = parsed.people.find((person) => !directory.some((p) => p.slug === person));
+    if (stranger) throw new Error(`${stranger} is not in the people directory`);
+    const target = parsed.target;
+    if (target.kind === 'prep' && !was.meetings.some((m) => m.match === target.meeting)) throw new Error('Follow that meeting first: Edit… › Meetings');
+    const id = parsed.id ?? audienceIdOf(parsed.name, was.audiences.map((a) => a.id));
+    const audience = { ...parsed, id };
+    const audiences = was.audiences.some((a) => a.id === id) ? was.audiences.map((a) => (a.id === id ? audience : a)) : [...was.audiences, audience];
+    writeConfig(this.deps.root, slug, InitiativeConfigSchema.parse({ ...was, audiences }));
+    await this.commit(slug, `${slug}: audience ${id} saved`);
+    this.refresh(slug);
+    return { id };
+  }
+
+  async removeAudience(slug: string, id: string): Promise<void> {
+    this.need(slug);
+    const was = this.config(slug);
+    if (!was.audiences.some((a) => a.id === id)) throw new Error('That audience is gone');
+    writeConfig(this.deps.root, slug, InitiativeConfigSchema.parse({ ...was, audiences: was.audiences.filter((a) => a.id !== id) }));
+    await this.commit(slug, `${slug}: audience ${id} removed`);
+    this.refresh(slug);
+  }
+
+  /** The page's Draft Now: the Check-in chat drafts one audience's update into the outbox, from the facts Beluga works out. */
+  draftUpdate(slug: string, id: string): { readonly channel: string } {
+    const item = this.need(slug);
+    const audience = (item.audiences ?? []).find((a) => a.id === id);
+    if (!audience) throw new Error('That audience is gone');
+    const channel = initiativeChatChannel(slug, CHECK_IN_CHAT);
+    if (this.deps.ask(draftUpdatePrompt(item, audience, readDirectory(this.deps.root)), channel) === undefined) throw new Error('The chat could not take it now');
+    return { channel };
+  }
+
+  /** A prep sheet is never sent: Done keeps it (with the user's edits) as that meeting's update. */
+  async keepPrep(slug: string, id: number, text: string): Promise<void> {
+    const item = this.need(slug);
+    const draft = this.openDraft(item, id);
+    if (draft.to.kind !== 'prep') throw new Error('Only a prep sheet is kept this way: send the others');
+    const final = text.trim();
+    if (!final) throw new Error('The prep sheet is empty');
+    const edited = final !== draft.text.trim();
+    this.putDraft(slug, item.outbox, id, (d) => ({ ...d, state: 'sent', resolvedAt: new Date(this.now).toISOString(), ...(edited ? { sentText: final } : {}) }));
+    this.keepUpdate(slug, draft, final);
+    await this.commit(slug, `${slug}: prep sheet ${id} kept`);
+    this.refresh(slug);
+  }
+
+  /** The owner asks to keep looking for an answer (the page, or the chat on their word). */
+  async addWatch(slug: string, draft: WatchDraft): Promise<Watch> {
+    this.need(slug);
+    return this.watching.add(slug, draft);
+  }
+
+  async stopWatch(slug: string, id: number): Promise<void> {
+    this.need(slug);
+    await this.watching.stop(slug, id);
+  }
+
+  lookNow(slug: string, id: number): { readonly channel: string } {
+    this.need(slug);
+    return this.watching.look(slug, id);
+  }
+
+  async readNews(slug: string, id?: number): Promise<void> {
+    this.need(slug);
+    await this.watching.markRead(slug, id);
+  }
+
+  /** The owner adds, changes or closes a risk on the page; the check-ins keep their edit. */
+  async saveRisk(slug: string, draft: RiskDraft): Promise<{ readonly id: number }> {
+    this.need(slug);
+    const risk = this.risks.save(slug, draft, new Date(this.now).toISOString(), dayOf(this.now));
+    await this.commit(slug, `${slug}: risk ${risk.id} ${draft.id === undefined ? 'added' : 'changed'}`);
+    this.refresh(slug);
+    return { id: risk.id };
   }
 
   /** Keeps a file a worktree made: copied into artifacts/, or, too big for the repo, noted where it is. */
@@ -492,6 +718,8 @@ export class Initiatives {
     const id = item.artifacts.reduce((n, a) => Math.max(n, a.id), 0) + 1;
     const name = path.basename(report.file);
     const kept = bytes <= ARTIFACT_KEEP_MAX;
+    const demo = item.discovery?.demo?.task;
+    const about = report.about ?? (demo && report.ticket?.toUpperCase() === demo ? 'demo' : undefined);
     const artifact = ArtifactSchema.parse({
       id,
       title: report.title.trim(),
@@ -503,6 +731,7 @@ export class Initiatives {
       worktree: report.worktree,
       project: report.project,
       from: report.from,
+      ...(about ? { about } : {}),
       createdAt: new Date(this.now).toISOString(),
     });
     writeArtifacts(this.deps.root, slug, [...item.artifacts, artifact]);
@@ -566,6 +795,15 @@ export class Initiatives {
     });
   }
 
+  /** Every initiative chat outside `loaded`, from disk, with where it is: search reads them. */
+  savedChats(loaded: ReadonlySet<string>): Array<{ readonly channel: string; readonly place: string; readonly items: readonly LogItem[] }> {
+    const items = this.deps.store.getState().initiatives.items;
+    return listSlugs(this.deps.root).flatMap((slug) => {
+      const name = items.find((i) => i.slug === slug)?.name ?? slug;
+      return this.chats.savedChats(slug, loaded).map((chat) => ({ ...chat, place: initiativeChatPlace(name, chat.channel, chat.items) }));
+    });
+  }
+
   chatRun(channel: string, from: string): InitiativeChatRun | undefined {
     const of = initiativeChatOf(channel);
     if (!of || !this.known(of.slug)) return undefined;
@@ -575,17 +813,83 @@ export class Initiatives {
     const brief = readFolder(this.deps.root, of.slug).brief;
     return {
       place,
-      brief: initiativeBrief(item, brief, this.repos(item), of.chat),
+      brief: initiativeBrief(item, brief, this.repos(item), of.chat, readDirectory(this.deps.root), this.now) + this.success.brief(item, of.chat === CHECK_IN_CHAT),
       vetTool: (toolName, input) => this.vetSend(of.slug, toolName, input),
       preApproved: (toolName, input) => this.preApproved(of.slug, toolName, input),
     };
+  }
+
+  private refreshPeople(): void {
+    if (this.stopped) return;
+    this.deps.store.dispatch({ type: 'initiatives_people', people: readDirectory(this.deps.root) });
+  }
+
+  /** Adds or edits a person in the directory (people/<slug>.json), shared by every initiative; a slug it doesn't have yet makes that entry. */
+  async savePerson(draft: PersonDraft): Promise<{ readonly slug: string }> {
+    const slug = writePerson(this.deps.root, draft);
+    await this.commit(PEOPLE_DIR, `people: ${slug} saved`);
+    this.refreshPeople();
+    return { slug };
+  }
+
+  /** Takes a person out of the directory; only once no initiative names them. */
+  async removePerson(person: string): Promise<void> {
+    const on = listSlugs(this.deps.root).filter((slug) => readFolder(this.deps.root, slug).config?.people.some((p) => p.person === person));
+    if (on.length) throw new Error(`Take them off ${on.map((slug) => this.view(slug).name).join(', ')} first`);
+    removePersonFile(this.deps.root, person);
+    await this.commit(PEOPLE_DIR, `people: ${person} removed`);
+    this.refreshPeople();
+  }
+
+  /** Puts a directory person on an initiative with a role, changes it, or (role null) takes them off. */
+  async setPerson(slug: string, person: string, role: string | null): Promise<InitiativeView> {
+    const was = this.config(slug).people;
+    if (role === null) return this.update(slug, { people: was.filter((p) => p.person !== person) });
+    if (!readDirectory(this.deps.root).some((p) => p.slug === person)) throw new Error('That person is not in the directory');
+    const entry = { person, ...(role.trim() ? { role: role.trim() } : {}) };
+    const people = was.some((p) => p.person === person) ? was.map((p) => (p.person === person ? entry : p)) : [...was, entry];
+    return this.update(slug, { people });
+  }
+
+  /** The one-time pass: the Check-in chat proposes people.md's people as one suggestion. */
+  proposePeople(slug: string): { readonly channel: string } {
+    this.need(slug);
+    const channel = initiativeChatChannel(slug, CHECK_IN_CHAT);
+    if (this.deps.ask(PEOPLE_PASS, channel) === undefined) throw new Error('The chat could not take it now');
+    return { channel };
+  }
+
+  /** An approved people suggestion: each one into the directory and onto the initiative with their role. */
+  private async keepPeople(slug: string, id: number): Promise<{ readonly channel?: string }> {
+    const folder = readFolder(this.deps.root, slug);
+    const suggestion = folder.suggestions.find((s) => s.id === id);
+    const proposals = suggestion?.people ?? [];
+    const kept = proposals.map((proposal) => ({ person: keepProposal(this.deps.root, proposal), role: proposal.role }));
+    const was = this.config(slug).people;
+    const people = [...was.filter((p) => !kept.some((k) => k.person === p.person)), ...kept.map((k) => ({ person: k.person, ...(k.role ? { role: k.role } : {}) }))];
+    writeConfig(this.deps.root, slug, InitiativeConfigSchema.parse({ ...this.config(slug), people }));
+    const outcome = `Added ${kept.length} ${kept.length === 1 ? 'person' : 'people'} to the directory and this initiative.`;
+    writeSuggestions(this.deps.root, slug, folder.suggestions.map((s) => (s.id === id ? { ...s, outcome } : s)));
+    addTimeline(this.deps.root, slug, `${dayOf(this.now)} [event]: ${outcome.charAt(0).toLowerCase()}${outcome.slice(1, -1)}`);
+    await this.commit(PEOPLE_DIR, `people: from ${slug}`);
+    await this.commit(slug, `${slug}: suggestion ${id} approved`);
+    this.refreshPeople();
+    this.refresh(slug);
+    return {};
   }
 
   private onAction(action: Action): void {
     if (action.type !== 'agent_event' || !FINAL_EVENTS.has(action.event)) return;
     const of = initiativeChatOf(action.channel);
     if (!of || !this.known(of.slug)) return;
-    const message = of.chat === CHECK_IN_CHAT ? `${of.slug}: check-in ${dayOf(this.now)}` : `${of.slug}: chat ${dayOf(this.now)}`;
-    void this.commit(of.slug, message).then(() => this.refresh(of.slug));
+    if (of.chat === WATCH_CHAT) this.watching.turnEnded(of.slug);
+    this.risks.settle(of.slug, new Date(this.now).toISOString(), dayOf(this.now));
+    const message = of.chat === CHECK_IN_CHAT ? `${of.slug}: check-in ${dayOf(this.now)}` : of.chat === WATCH_CHAT ? `${of.slug}: follow-ups ${dayOf(this.now)}` : `${of.slug}: chat ${dayOf(this.now)}`;
+    void this.keepSizing(of.slug)
+      .catch(() => undefined)
+      .then(() => this.commit(of.slug, message))
+      .then(() => this.refresh(of.slug))
+      .then(() => this.watching.sync(of.slug))
+      .catch(() => undefined);
   }
 }

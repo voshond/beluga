@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import type { DecisionNotes } from './decisions.js';
+import { type Audience, AudiencesSchema } from './audience.js';
+import type { Person, WaitingQuestion } from './people.js';
+import type { UpdateRecord } from './updates.js';
+import type { Watch } from './watches.js';
+import type { Risk } from './risks.js';
+import { ARTIFACT_ABOUT, type Discovery } from './discovery-model.js';
 
 export const INITIATIVE_SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const INITIATIVE_CHAT_ID = /^[a-z0-9]{1,24}$/;
@@ -6,18 +13,29 @@ export const INITIATIVE_CHAT_PREFIX = 'initiative:';
 export const FIRST_INITIATIVE_CHAT = 'main';
 export const CHECK_IN_CHAT = 'checkin';
 export const CHECK_IN_TITLE = 'Check-in';
+export const WATCH_CHAT = 'watch';
+export const WATCH_TITLE = 'Follow-ups';
 export const DEFAULT_INITIATIVES_DIR = 'Documents/GitHub/initiatives';
 
 export const EPIC_KEY = /^[A-Z][A-Z0-9_]{0,19}-\d{1,7}$/;
 
-export const INITIATIVE_STATUSES = ['active', 'paused', 'shipped', 'archived'] as const;
+export const INITIATIVE_STATUSES = ['discovery', 'active', 'paused', 'shipped', 'archived'] as const;
 export const InitiativeStatusSchema = z.enum(INITIATIVE_STATUSES);
 export type InitiativeStatus = z.infer<typeof InitiativeStatusSchema>;
 
-export const PersonSchema = z.object({
-  name: z.string().min(1).max(120),
-  role: z.string().max(200).optional(),
-});
+/** Someone on an initiative: a directory entry (`person`, its slug) with their role here. The old `{ name, role }` reads as the slug of its name. */
+export const PersonSchema = z
+  .object({
+    person: z.string().regex(INITIATIVE_SLUG).optional(),
+    name: z.string().trim().min(1).max(120).optional(),
+    role: z.string().max(200).optional(),
+  })
+  .refine((entry) => Boolean(entry.person || entry.name), { message: 'needs a person or a name' })
+  .transform((entry): { person: string; name?: string; role?: string } => ({
+    person: entry.person ?? slugOf(entry.name ?? ''),
+    ...(entry.name ? { name: entry.name } : {}),
+    ...(entry.role?.trim() ? { role: entry.role.trim() } : {}),
+  }));
 export type InitiativePerson = z.infer<typeof PersonSchema>;
 
 export const GOAL_MAX = 12_000;
@@ -104,6 +122,7 @@ export const InitiativeConfigSchema = z
     calendarMatch: z.string().max(500).optional(),
     docs: docRefs.default([]),
     repos: z.array(z.string().min(1).max(120)).max(30).default([]),
+    audiences: AudiencesSchema.default([]),
     createdAt: z.string().max(40).optional(),
   })
   .transform(({ slackChannels, calendarMatch, slack, meetings, ...rest }) => ({
@@ -126,6 +145,7 @@ export const InitiativeDraftSchema = z.object({
   docs: docRefs.optional(),
   repos: z.array(z.string().min(1).max(120)).max(30).optional(),
   meetings: meetingRefs.optional(),
+  status: z.enum(['discovery', 'active']).optional(),
 });
 export type InitiativeDraft = z.input<typeof InitiativeDraftSchema>;
 
@@ -211,6 +231,28 @@ export const TicketPrSchema = z.object({
 });
 export type TicketPr = z.infer<typeof TicketPrSchema>;
 
+export const TICKET_LINK_TYPES = ['blocks', 'blockedBy'] as const;
+export type TicketLinkType = (typeof TICKET_LINK_TYPES)[number];
+
+/** A Jira "Blocks" link as either side says it; any other link type reads as none. */
+export const ticketLinkTypeOf = (said: string): TicketLinkType | undefined => {
+  const word = squashed(said);
+  if (word === 'blockedby' || word === 'isblockedby') return 'blockedBy';
+  return word === 'blocks' ? 'blocks' : undefined;
+};
+
+export const TicketLinkSchema = z.object({
+  type: z.string().max(40).transform(ticketLinkTypeOf),
+  key: z.string().min(1).max(40),
+  summary: maybe(500),
+  status: maybe(80),
+  statusCategory: z.string().max(40).default('todo').transform(ticketCategoryOf),
+  url: maybe(500),
+});
+export type TicketLink = Omit<z.infer<typeof TicketLinkSchema>, 'type'> & { readonly type: TicketLinkType };
+
+const isTicketLink = (link: z.infer<typeof TicketLinkSchema>): link is TicketLink => link.type !== undefined;
+
 export const TicketSchema = z.object({
   key: z.string().min(1).max(40),
   url: maybe(500),
@@ -222,6 +264,11 @@ export const TicketSchema = z.object({
   epic: maybe(40),
   parent: maybe(40),
   prs: z.array(TicketPrSchema).max(30).default([]),
+  links: z
+    .array(TicketLinkSchema)
+    .max(50)
+    .transform((links) => links.filter(isTicketLink))
+    .optional(),
 });
 export type Ticket = z.infer<typeof TicketSchema>;
 
@@ -284,11 +331,29 @@ export const SuggestionProofSchema = z.object({
 });
 export type SuggestionProof = z.infer<typeof SuggestionProofSchema>;
 
+/** A directory entry the agent proposes from people.md (`person`: the entry it is, when one exists); approving writes it. */
+export const PersonProposalSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  person: maybe(40),
+  role: maybe(200),
+  cares: maybe(2000),
+  slack: maybe(120),
+  jira: maybe(120),
+  notes: maybe(4000),
+});
+export type PersonProposal = z.infer<typeof PersonProposalSchema>;
+
 export const SuggestionSchema = z.object({
   id: z.number().int().min(1),
   text: z.string().min(1).max(2000),
   why: z.string().max(2000).optional(),
-  kind: z.enum(['jira', 'slack', 'calendar', 'task', 'doc', 'decision', 'other']).default('other'),
+  kind: z.preprocess((kind) => (kind === 'people' ? 'other' : kind), z.enum(['jira', 'slack', 'calendar', 'task', 'doc', 'decision', 'other'])).default('other'),
+  /** Who it waits on (a person's slug or name): they owe the user. */
+  waitingOn: z.string().trim().max(120).nullish(),
+  /** Who waits on the user for it (a person's slug or name): the user owes them. */
+  askedBy: z.string().trim().max(120).nullish(),
+  /** People to add to the directory and this initiative, from the one-time people.md pass. */
+  people: z.array(PersonProposalSchema).max(100).optional(),
   /** A decision's answers to pick from; Other… lets the user write their own. */
   options: z.array(z.string().min(1).max(200)).max(6).optional(),
   /** What the user decided, once they did. */
@@ -319,6 +384,7 @@ export const ArtifactSchema = z.object({
   worktree: maybe(200),
   project: maybe(200),
   from: maybe(120),
+  about: z.enum(ARTIFACT_ABOUT).optional().catch(undefined),
   createdAt: z.string().max(40),
 });
 export type Artifact = z.infer<typeof ArtifactSchema>;
@@ -368,12 +434,26 @@ export type OutboxState = (typeof OUTBOX_STATES)[number];
 
 const JIRA_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 
-/** Where a draft goes: a Slack channel, DM or thread (by its ids), or a comment on a Jira ticket. */
+const PAGE_ID = /^\d{1,20}$/;
+
+/** Where a draft goes: a Slack channel, DM or thread (by its ids), a comment on a Jira ticket, one section of a Confluence page (by page id and heading), a file of the folder as a whole Confluence page (new in a space, or over a page), or a prep sheet for a meeting, which is never sent. */
 export const OutboxTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('slack'), channel: z.string().min(1).max(80), thread: z.string().max(40).optional(), label: z.string().max(200).optional() }),
   z.object({ kind: z.literal('jira'), issue: z.string().regex(JIRA_KEY), label: z.string().max(200).optional() }),
+  z.object({ kind: z.literal('confluence'), page: z.string().regex(/^\d{1,20}$/), section: z.string().trim().min(1).max(200), label: z.string().max(200).optional() }),
+  z.object({ kind: z.literal('prep'), meeting: z.string().trim().min(1).max(500), label: z.string().max(200).optional() }),
+  z.object({ kind: z.literal('confluence-page'), file: z.string().min(1).max(400), title: z.string().trim().min(1).max(255), space: z.string().max(80).optional(), page: z.string().regex(PAGE_ID).optional(), parent: z.string().regex(PAGE_ID).optional(), label: z.string().max(200).optional() }),
 ]);
 export type OutboxTarget = z.infer<typeof OutboxTargetSchema>;
+
+/** A Slack message or Jira comment; a Confluence section or a prep sheet has room for the detailed tone. */
+export const MESSAGE_MAX = 5000;
+export const PAGE_MAX = 20_000;
+
+export const textMaxOf = (to: Pick<OutboxTarget, 'kind'>): number => (to.kind === 'slack' || to.kind === 'jira' ? MESSAGE_MAX : PAGE_MAX);
+
+/** What it is, in a few words: "Slack message", "Confluence update". */
+export const DRAFT_KIND_WORDS: Readonly<Record<OutboxTarget['kind'], string>> = { slack: 'Slack message', jira: 'Jira comment', confluence: 'Confluence update', 'confluence-page': 'Confluence page', prep: 'Prep sheet' };
 
 /**
  * A message the agent prepared and the user sends (or discards) from the chat (outbox.json).
@@ -382,11 +462,13 @@ export type OutboxTarget = z.infer<typeof OutboxTargetSchema>;
 export const OutboxDraftSchema = z.object({
   id: z.number().int().min(1),
   to: OutboxTargetSchema,
-  text: z.string().min(1).max(5000),
+  text: z.string().min(1).max(PAGE_MAX),
   why: z.string().max(2000).optional(),
   suggestion: z.number().int().min(1).optional(),
+  /** The audience (initiative.json's `audiences`) this is the stakeholder update for. */
+  audience: z.string().max(40).optional(),
   state: z.enum(OUTBOX_STATES).default('draft'),
-  sentText: z.string().max(5000).optional(),
+  sentText: z.string().max(PAGE_MAX).optional(),
   createdAt: z.string().max(40).optional(),
   resolvedAt: z.string().max(40).optional(),
 });
@@ -417,15 +499,26 @@ export type InitiativeView = {
   readonly repos: readonly string[];
   readonly meetings: readonly MeetingRef[];
   readonly people: readonly InitiativePerson[];
+  /** Who gets a stakeholder update, how and when (initiative.json). */
+  readonly audiences?: readonly Audience[];
+  /** The updates sent (or prep sheets kept), oldest first (updates.json). */
+  readonly updates?: readonly UpdateRecord[];
   readonly progress?: EpicStatus;
   readonly tickets?: EpicTickets;
   readonly tasks?: InitiativeTasks;
   readonly suggestions: readonly Suggestion[];
   readonly outbox: readonly OutboxDraft[];
+  readonly watches?: readonly Watch[];
   readonly artifacts: readonly Artifact[];
+  readonly risks?: readonly Risk[];
+  readonly discovery?: Discovery;
   readonly timeline: readonly TimelineEntry[];
+  readonly decisions?: DecisionNotes;
+  /** decisions.md's open questions marked "(waiting on: …)". */
+  readonly waitingQuestions?: readonly WaitingQuestion[];
   readonly files: readonly string[];
   readonly checkIn?: string;
+  readonly success?: import('./success.js').SuccessFile;
   readonly chats: InitiativeChats;
   readonly trouble?: string;
 };
@@ -439,6 +532,8 @@ export type InitiativesState = {
   readonly enabled: boolean;
   readonly root: string;
   readonly items: readonly InitiativeView[];
+  /** The people directory (people/<slug>.json at the repo's root), shared by every initiative. */
+  readonly people?: readonly Person[];
   readonly backup?: BackupTrouble;
 };
 
@@ -455,6 +550,7 @@ export type InitiativesAction =
   | { type: 'initiative_put'; item: InitiativeView }
   | { type: 'initiative_remove'; slug: string }
   | { type: 'initiatives_backup'; backup?: BackupTrouble }
+  | { type: 'initiatives_people'; people: readonly Person[] }
   | { type: 'initiatives_off' };
 
 export const reduceInitiatives = (state: InitiativesSlice, action: InitiativesAction): InitiativesSlice => {
@@ -465,6 +561,7 @@ export const reduceInitiatives = (state: InitiativesSlice, action: InitiativesAc
     return { initiatives: action.backup ? { ...rest, backup: action.backup } : rest };
   }
   if (action.type === 'initiatives_off') return { initiatives: NO_INITIATIVES };
+  if (action.type === 'initiatives_people') return { initiatives: { ...current, people: action.people } };
   if (action.type === 'initiative_remove') return { initiatives: { ...current, items: current.items.filter((i) => i.slug !== action.slug) } };
   const at = current.items.findIndex((i) => i.slug === action.item.slug);
   const items = at >= 0 ? current.items.map((i, n) => (n === at ? action.item : i)) : [...current.items, action.item];
@@ -492,6 +589,7 @@ type TitleLog = ReadonlyArray<{ readonly channel: string; readonly type: string;
 
 export const initiativeChatTitle = (channel: string, log: TitleLog, max = 40): string => {
   if (initiativeChatOf(channel)?.chat === CHECK_IN_CHAT) return CHECK_IN_TITLE;
+  if (initiativeChatOf(channel)?.chat === WATCH_CHAT) return WATCH_TITLE;
   const first = log.find((l) => l.channel === channel && l.type === 'chat' && !l.byAgent && l.text?.trim());
   const line = (first?.text ?? '').split('\n').map((l) => l.trim()).find(Boolean) ?? '';
   if (!line) return 'New chat';
@@ -531,7 +629,7 @@ const bullet = (line: string): string | undefined => {
   return match?.[1];
 };
 
-export const TIMELINE_KINDS = ['check-in', 'decision', 'message', 'ticket', 'said', 'doc', 'meeting', 'artifact', 'created', 'event'] as const;
+export const TIMELINE_KINDS = ['check-in', 'decision', 'message', 'ticket', 'said', 'doc', 'meeting', 'artifact', 'created', 'update', 'follow-up', 'risk', 'event'] as const;
 export type TimelineKind = (typeof TIMELINE_KINDS)[number];
 
 /** One bullet of timeline.md: "- 2026-11-25 [check-in]: …", the kind and even the day optional. */
@@ -581,10 +679,18 @@ const OUTBOX_TOOL_LIST: readonly OutboxTool[] = [
   { name: 'slack_send_message', kind: 'slack', field: 'message' },
   { name: 'conversations_add_message', kind: 'slack', field: 'text' },
   { name: 'jira_add_comment', kind: 'jira', field: 'body' },
+  { name: 'confluence_update_page_section', kind: 'confluence', field: 'new_content' },
+  { name: 'confluence_create_page', kind: 'confluence-page', field: 'content' },
+  { name: 'confluence_update_page', kind: 'confluence-page', field: 'content' },
 ];
 
+/** A draft that goes out (a prep sheet never does). */
+export type SentTarget = Exclude<OutboxTarget, { kind: 'prep' }>;
+
+export const isSentTarget = (to: OutboxTarget): to is SentTarget => to.kind !== 'prep';
+
 /** The tool the chat is first told to post a draft with. */
-export const OUTBOX_TOOLS: Readonly<Record<OutboxTarget['kind'], string>> = { slack: 'slack_send_message', jira: 'jira_add_comment' };
+export const OUTBOX_TOOLS: Readonly<Record<SentTarget['kind'], string>> = { slack: 'slack_send_message', jira: 'jira_add_comment', confluence: 'confluence_update_page_section', 'confluence-page': 'confluence_create_page' };
 
 const nameIs = (toolName: string, name: string): boolean => toolName === name || toolName.endsWith(`__${name}`);
 
@@ -599,23 +705,50 @@ const same = (a: unknown, b: string | undefined): boolean => (typeof a === 'stri
 export const matchesDraft = (to: OutboxTarget, text: string, toolName: string, input: Record<string, unknown>): boolean => {
   const tool = OUTBOX_TOOL_LIST.find((t) => t.kind === to.kind && nameIs(toolName, t.name));
   if (!tool || input.blocks !== undefined) return false;
-  const where = to.kind === 'slack' ? same(input.channel_id, to.channel) && same(input.thread_ts, to.thread) : same(input.issue_key, to.issue);
-  return where && same(input[tool.field], text);
+  return whereMatches(to, toolName, input) && same(input[tool.field], text);
+};
+
+const whereMatches = (to: OutboxTarget, toolName: string, input: Record<string, unknown>): boolean => {
+  if (to.kind === 'slack') return same(input.channel_id, to.channel) && same(input.thread_ts, to.thread);
+  if (to.kind === 'jira') return same(input.issue_key, to.issue);
+  if (to.kind === 'confluence') return same(input.page_id, to.page) && input.heading_text === to.section && (input.content_format === undefined || input.content_format === 'markdown');
+  if (to.kind === 'confluence-page') return pageMatches(to, toolName, input);
+  return false;
+};
+
+const pageMatches = (to: Extract<OutboxTarget, { kind: 'confluence-page' }>, toolName: string, input: Record<string, unknown>): boolean => {
+  if (!same(input.title, to.title)) return false;
+  if (to.page) return nameIs(toolName, 'confluence_update_page') && same(input.page_id, to.page);
+  return nameIs(toolName, 'confluence_create_page') && same(input.space_key, to.space) && same(input.parent_id, to.parent);
 };
 
 export const targetWords = (to: OutboxTarget): string => {
+  if (to.kind === 'confluence-page') return to.label ?? `“${to.title}”${to.space ? ` in ${to.space}` : ''}`;
   if (to.kind === 'jira') return to.label ? `${to.issue}: ${to.label}` : `a comment on ${to.issue}`;
+  if (to.kind === 'confluence') return `${to.label ?? `Confluence page ${to.page}`} › ${to.section}`;
+  if (to.kind === 'prep') return to.label ?? to.meeting;
   const where = to.label ?? to.channel;
   return to.thread ? `${where} (in a thread)` : where;
 };
 
 /** What the chat is told when the user sends a draft: the call to make, word for word. */
-export const sendDraftMessage = (draft: Pick<OutboxDraft, 'id' | 'to'>, text: string): string => {
+export const sendDraftMessage = (draft: Pick<OutboxDraft, 'id'> & { readonly to: SentTarget }, text: string): string => {
+  const to = draft.to;
+  if (to.kind === 'confluence-page') return confluencePageMessage(draft.id, to);
+  if (to.kind === 'confluence')
+    return `Send draft ${draft.id} from the outbox now: ${OUTBOX_TOOLS.confluence} with page_id ${to.page}, heading_text exactly "${to.section}", content_format markdown, and new_content exactly as below (the section's body, without its heading), nothing added or changed.\n\n${text}`;
   const call =
-    draft.to.kind === 'slack'
-      ? `${OUTBOX_TOOLS.slack} (or conversations_add_message, with the message as text and no blocks) with channel_id ${draft.to.channel}${draft.to.thread ? ` and thread_ts ${draft.to.thread}` : ''}`
-      : `${OUTBOX_TOOLS.jira} with issue_key ${draft.to.issue}`;
-  return `Send draft ${draft.id} from the outbox now: ${call}, and the ${draft.to.kind === 'slack' ? 'message' : 'body'} exactly as below, nothing added or changed.\n\n${text}`;
+    to.kind === 'slack'
+      ? `${OUTBOX_TOOLS.slack} (or conversations_add_message, with the message as text and no blocks) with channel_id ${to.channel}${to.thread ? ` and thread_ts ${to.thread}` : ''}`
+      : `${OUTBOX_TOOLS.jira} with issue_key ${to.issue}`;
+  return `Send draft ${draft.id} from the outbox now: ${call}, and the ${to.kind === 'slack' ? 'message' : 'body'} exactly as below, nothing added or changed.\n\n${text}`;
+};
+
+const confluencePageMessage = (id: number, to: Extract<OutboxTarget, { kind: 'confluence-page' }>): string => {
+  const call = to.page
+    ? `confluence_update_page with page_id ${to.page}`
+    : `confluence_create_page with space_key ${to.space ?? '(ask me which space first)'}${to.parent ? ` and parent_id ${to.parent}` : ''}`;
+  return `Send draft ${id} from the outbox now: ${call}, title “${to.title}”, content_format markdown, and as content exactly the text of ${to.file} as it is now, nothing added or changed.`;
 };
 
 /** A suggestion the user answers instead of approving: a decision kind, or one with answers to pick. */

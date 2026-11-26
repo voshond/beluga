@@ -1,0 +1,23 @@
+.bar {
+  display: flex;
+  width: 28px;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  overflow: hidden;
+}
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+.fill[data-part='inProgress'] {
+  background: var(--info);
+}
+
+.quiet {
+  color: var(--text-3);
+}
+.quiet .bar {
+  opacity: 0.5;
+}

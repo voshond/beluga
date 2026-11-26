@@ -1,4 +1,4 @@
-import { type InitiativeView, type OutboxDraft, type Suggestion, linkOf, targetWords, ticketUrlOf } from './model.js';
+import { DRAFT_KIND_WORDS, type InitiativeView, type OutboxDraft, type Suggestion, linkOf, targetWords, ticketUrlOf } from './model.js';
 
 export type LogState = 'open' | 'approved' | 'decided' | 'dismissed';
 
@@ -19,7 +19,7 @@ export const suggestionHistory = (item: Pick<InitiativeView, 'suggestions'>): Su
   item.suggestions.filter((s) => s.state !== 'open').sort((a, b) => (b.resolvedAt ?? '').localeCompare(a.resolvedAt ?? ''));
 
 const sentProof = (draft: OutboxDraft): LogProof => ({
-  label: `${draft.to.kind === 'slack' ? 'Slack message' : 'Jira comment'} sent to ${targetWords(draft.to)}`,
+  label: `${DRAFT_KIND_WORDS[draft.to.kind]} sent to ${targetWords(draft.to)}`,
   from: 'outbox',
 });
 

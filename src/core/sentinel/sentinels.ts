@@ -1911,6 +1911,11 @@ export class Sentinels {
       .join('\n');
   }
 
+  /** A source run once, read-only, as your Claude would run it (an initiative's success, BLG-141): its preview, first rows included. */
+  async previewSource(source: Source, project?: string): Promise<SourcePreview> {
+    return (await this.checkSource(source, this.projectIdOf(project), true, 'try', 'The source', undefined, TRY_ROWS)).preview;
+  }
+
   /** A metric's points since then (the whole file: two years at most), oldest first. */
   metricRead(sentinel: string, name: string, since?: number): { readonly metric: MetricSeries; readonly lines: MetricLine[] } {
     const s = this.need(sentinel);

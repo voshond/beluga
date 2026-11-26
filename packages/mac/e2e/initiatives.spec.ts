@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { SocketClient } from '../../../src/ipc/socket-client.js';
 import { expect, test, type Page } from './fixtures.js';
 
 const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Sidebar' });
@@ -10,23 +11,25 @@ const shot = async (page: Page, name: string): Promise<void> => {
 const openInitiative = async (page: Page, name: string): Promise<void> => {
   await page.goto('/');
   await expect(sidebar(page)).toBeVisible();
-  await sidebar(page).getByRole('button', { name: /Initiatives/ }).first().click();
+  await sidebar(page).getByRole('button', { name: 'All Initiatives' }).click();
   await page.getByRole('button', { name: `Open ${name}` }).click();
-  await expect(page.getByRole('heading', { name })).toBeVisible();
+  await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
 };
 
 test('an initiative’s page shows the epic’s tickets, open first, with their pull requests', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
   const tickets = page.getByRole('region', { name: 'Tickets' });
-  await expect(tickets.getByRole('listitem')).toHaveCount(4);
-  await expect(tickets.getByRole('listitem').first()).toHaveAttribute('data-category', 'inProgress');
-  await expect(tickets.getByRole('listitem').last()).toHaveAttribute('data-ticket', 'SHOP-133');
+  const topLevel = tickets.locator('[role="listitem"][data-sub-task="false"]');
+  await expect(topLevel).toHaveCount(4);
+  await expect(tickets.locator('[data-sub-task="true"]')).toHaveCount(2);
+  await expect(topLevel.first()).toHaveAttribute('data-category', 'inProgress');
+  await expect(topLevel.last()).toHaveAttribute('data-ticket', 'SHOP-133');
   await expect(tickets.getByRole('button', { name: 'Open SHOP-150 in Jira: 3DS challenge fails on Safari' })).toBeVisible();
   await expect(tickets.locator('[data-ticket="SHOP-141"]')).toContainText('Ana Ruiz');
   await expect(tickets.locator('[data-ticket="SHOP-141"]')).toContainText('Blocked');
   await expect(tickets.getByRole('button', { name: /Open pull request #412 in example\/shop: Open/ })).toBeVisible();
   await expect(tickets.getByRole('button', { name: /Open pull request #398 in example\/shop: Merged/ })).toBeVisible();
-  await expect(tickets.getByText(/4 tickets · 1 done · 1 open pull request/)).toBeVisible();
+  await expect(tickets.getByText(/4 tickets · 1 done · 2 sub-tasks, 1 done · 1 open pull request/)).toBeVisible();
   await expect(tickets.getByRole('button', { name: 'Refresh the tickets from Jira' })).toBeEnabled();
   await expect(page.getByRole('region', { name: 'Goal' }).getByRole('heading', { name: 'Scope' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Slack conversations' }).getByRole('button', { name: 'Open 3DS on Safari in Slack' })).toBeVisible();
@@ -47,9 +50,35 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
   expect((await bar.locator('[data-part="done"]').boundingBox())!.width).toBeGreaterThan(100);
   expect((await bar.locator('[data-part="inProgress"]').boundingBox())!.width).toBeGreaterThan(30);
   await page.setViewportSize({ width: 2300, height: 1000 });
-  await expect(tickets.getByText('Ana Ruiz')).toBeVisible();
+  await expect(tickets.locator('[data-ticket="SHOP-141"]').getByText(/Ana Ruiz/).first()).toBeVisible();
   await shot(page, '01b-initiative-page-wide.png');
   if (shots) await tickets.screenshot({ path: path.join(shots, '08-tickets-dark-wide.png') });
+});
+
+test('the Suggestions section lists decisions.md’s open questions and adds its settled notes to the decision log', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  const section = page.getByRole('region', { name: 'Suggestions' });
+  await expect(section.getByText('Waiting on others · 3')).toBeVisible();
+  const open = section.getByRole('list', { name: 'Open questions' });
+  await expect(open.getByRole('listitem')).toHaveCount(3);
+  await expect(open.getByRole('listitem').first()).toContainText('Does finance have the final NO tax table?');
+  const log = section.getByRole('listbox', { name: 'Decision log' });
+  const note = log.getByRole('option').filter({ hasText: 'Google Pay waits for v2.1.' });
+  await expect(note).toContainText('Why: one SDK update fewer before the freeze.');
+  await expect(note).toContainText('Decided');
+  await expect(log.getByText('Apple Pay ships after launch.')).toHaveCount(0);
+  await expect(log.getByRole('option').filter({ hasText: 'Is Apple Pay in scope for launch?' })).toHaveCount(1);
+  await section.scrollIntoViewIfNeeded();
+  if (shots) await section.screenshot({ path: path.join(shots, '09-decisions.png') });
+});
+
+test('what was said in a meeting shows as a decision, a task to make and a no-notes line', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  await expect(page.getByRole('listbox', { name: 'Decision log' })).toContainText('Does the address form keep the manual-entry fallback?');
+  await expect(page.getByRole('listbox', { name: 'Open suggestions' })).toContainText('Create a task: send the address form copy to legal by Friday');
+  await expect(page.getByRole('region', { name: 'Timeline' })).toContainText('Checkout standup held, no notes found');
+  await page.getByRole('listbox', { name: 'Decision log' }).scrollIntoViewIfNeeded();
+  await shot(page, '01d-initiative-meeting-notes.png');
 });
 
 test('several epics group the tickets by epic', async ({ page }) => {
@@ -151,4 +180,256 @@ test('an initiative’s page shows its tasks, ticks one off through the chat, li
   await expect(days.getByRole('button', { name: 'Fri' })).toHaveAttribute('aria-pressed', 'false');
   await days.scrollIntoViewIfNeeded();
   await shot(page, '08-initiative-check-in-time.png');
+});
+
+test('an initiative’s page lists its people with what is open both ways, and People shows them across initiatives', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  const people = page.getByRole('region', { name: 'People' });
+  const rows = people.locator('[data-person]');
+  await expect(rows).toHaveCount(2);
+  const ana = people.locator('[data-person="ana-ruiz"]');
+  await expect(ana).toContainText('Payments engineer');
+  await expect(ana.getByRole('list', { name: 'Waiting on them' }).getByRole('listitem')).toHaveCount(2);
+  const kai = people.locator('[data-person="kai-jensen"]');
+  await expect(kai.getByRole('list', { name: 'They wait on you' })).toContainText('go/no-go agenda');
+  await expect(kai).toContainText('Last talked: Yesterday');
+  await people.scrollIntoViewIfNeeded();
+  await shot(page, '09-initiative-people.png');
+  await kai.getByRole('button', { name: 'Edit Kai Jensen' }).click();
+  const sheet = page.getByRole('dialog');
+  await sheet.getByLabel('Role in Checkout v2').fill('Finance lead');
+  await sheet.getByRole('button', { name: 'Save' }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(kai).toContainText('Finance lead');
+  await people.getByRole('button', { name: 'Add a person' }).click();
+  await page.getByRole('menuitem', { name: 'New Person…' }).click();
+  await page.getByRole('dialog').getByLabel('Name').fill('Mia Chen');
+  await page.getByRole('dialog').getByLabel('Role in Checkout v2').fill('Design');
+  await page.getByRole('dialog').getByRole('button', { name: 'Add Person' }).click();
+  await expect(rows).toHaveCount(3);
+  await people.getByRole('button', { name: 'Take Mia Chen off' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Take Off' }).click();
+  await expect(rows).toHaveCount(2);
+  await page.getByRole('button', { name: 'More for Checkout v2' }).click();
+  await page.getByRole('menuitem', { name: 'People Across Initiatives' }).click();
+  const all = page.getByRole('list', { name: 'People', exact: true });
+  await expect(all.locator('[data-person]')).toHaveCount(3);
+  await expect(all.locator('[data-person]').first()).toHaveAttribute('data-person', 'ana-ruiz');
+  await expect(all.locator('[data-person="mia-chen"]').getByRole('button', { name: 'Remove Mia Chen' })).toBeVisible();
+  await shot(page, '10-people-across.png');
+});
+
+test('a fresh initiative offers the people.md pass', async ({ page }) => {
+  await openInitiative(page, 'Mobile Onboarding');
+  const people = page.getByRole('region', { name: 'People' });
+  await expect(people.getByRole('status')).toContainText('Nobody yet');
+  await expect(people.getByRole('button', { name: 'Propose people from people.md' })).toBeVisible();
+});
+
+test('Updates shows each audience with last sent and next due, its draft to send, and a prep sheet that is only kept', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  const updates = page.getByRole('region', { name: 'Updates' });
+  const rows = updates.locator('[data-audience]');
+  await expect(rows).toHaveCount(3);
+  const leadership = updates.locator('[data-audience="leadership"]');
+  await expect(leadership).toContainText('Short');
+  await expect(leadership).toContainText('#leadership');
+  await expect(leadership).toContainText('For Kai Jensen');
+  await expect(leadership).toContainText('Nothing sent yet');
+  await expect(leadership.locator('[data-outbox="3"]').getByRole('button', { name: 'Send' })).toBeVisible();
+  await expect(leadership.getByRole('button', { name: 'Draft Now' })).toHaveCount(0);
+  const team = updates.locator('[data-audience="payments-team"]');
+  await expect(team).toHaveAttribute('data-due', 'true');
+  await expect(team).toContainText('Checkout v2 spec › Status');
+  await expect(team).toContainText('Last sent');
+  await expect(team).toContainText('Due now');
+  await expect(team.getByRole('button', { name: 'Draft Now' })).toBeVisible();
+  const prep = updates.locator('[data-audience="go-no-go"]');
+  const sheet = prep.locator('[data-outbox="4"]');
+  await expect(sheet.getByRole('button', { name: 'Copy as Markdown' })).toBeVisible();
+  await expect(sheet.getByRole('button', { name: 'Send' })).toHaveCount(0);
+  await updates.scrollIntoViewIfNeeded();
+  await shot(page, '11-initiative-updates.png');
+  await sheet.getByRole('button', { name: 'Done' }).click();
+  await expect(prep.locator('[data-outbox]')).toHaveCount(0);
+  await expect(prep).toContainText('Last kept');
+  await expect(page.getByRole('region', { name: 'Timeline' })).toContainText('prep sheet for Thursday ready for Go/no-go');
+  await updates.getByRole('button', { name: 'New audience' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Name').fill('Ops');
+  await dialog.getByRole('group', { name: 'People in this audience' }).getByRole('button', { name: 'Ana Ruiz' }).click();
+  await dialog.getByLabel('Channel or thread').fill('https://acme.slack.com/archives/C0OPS/p1763990000000100');
+  await dialog.getByRole('button', { name: 'Add Audience' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(rows).toHaveCount(4);
+  await expect(updates.locator('[data-audience="ops"]')).toContainText('C0OPS (in a thread)');
+  await updates.getByRole('button', { name: 'Remove Ops' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Remove' }).click();
+  await expect(rows).toHaveCount(3);
+});
+
+test('an initiative’s page shows what it waits for and what came in, and adds and stops a follow-up', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  const fresh = page.getByRole('region', { name: 'New since you asked' });
+  await expect(fresh.locator('[data-news="2"]')).toContainText('Ana Ruiz: Finance signed off the new table');
+  await expect(fresh.locator('[data-news="2"]')).toContainText('About: Finance’s final Norway tax table');
+  const waiting = page.getByRole('region', { name: 'Waiting for' });
+  await expect(waiting.getByRole('listitem')).toHaveCount(1);
+  const row = waiting.locator('[data-watch="1"]');
+  await expect(row).toContainText('Who picks up SHOP-150 now that Ana is out');
+  await expect(row).toContainText('Jonas');
+  await expect(row).toContainText(/looked 2 h ago · next/);
+  await expect(row.getByRole('button', { name: /Look now/ })).toBeVisible();
+  await waiting.scrollIntoViewIfNeeded();
+  await shot(page, '09-initiative-follow-ups.png');
+  await fresh.getByRole('button', { name: /Mark read/ }).click();
+  await expect(fresh).toHaveCount(0);
+  await waiting.getByRole('button', { name: 'Watch for an Answer…' }).click();
+  await page.getByLabel('What it waits for').fill('Jonas on the address lookup fallback');
+  await page.getByLabel('Where to look').fill('SHOP-152');
+  await page.getByRole('textbox', { name: 'Waiting on', exact: true }).fill('Jonas');
+  await page.getByRole('button', { name: 'Watch', exact: true }).click();
+  const added = waiting.locator('[data-watch="3"]');
+  await expect(added).toContainText('Jonas on the address lookup fallback');
+  await expect(added).toContainText('a comment on SHOP-152');
+  await expect(added).toContainText('not looked yet');
+  await added.getByRole('button', { name: /Stop watching/ }).click();
+  await expect(added).toHaveCount(0);
+});
+
+test('an initiative’s page lists its risks by severity, keeps closed ones aside, and shows what blocks a ticket', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  const risks = page.getByRole('region', { name: 'Risks' });
+  const open = risks.getByRole('list', { name: 'Open risks' });
+  await expect(open.getByRole('listitem')).toHaveCount(3);
+  await expect(open.getByRole('listitem').first()).toHaveAttribute('data-risk', '1');
+  await expect(open.getByRole('listitem').last()).toHaveAttribute('data-severity', 'low');
+  await expect(open.locator('[data-risk="3"]')).toContainText('Edited by you');
+  await expect(risks.getByRole('list', { name: 'Closed risks' })).toHaveCount(0);
+  await risks.getByRole('button', { name: 'Show Closed · 1' }).click();
+  await expect(risks.getByRole('list', { name: 'Closed risks' }).getByRole('listitem')).toHaveCount(1);
+  const tickets = page.getByRole('region', { name: 'Tickets' });
+  await expect(tickets.locator('[data-ticket="SHOP-141"]').getByRole('button', { name: 'Blocked by FIN-88 (outside the initiative): In Progress' })).toBeVisible();
+  await expect(tickets.locator('[data-ticket="SHOP-152"]').getByRole('button', { name: 'Blocked by SHOP-150: In Review' })).toBeVisible();
+  await risks.scrollIntoViewIfNeeded();
+  await shot(page, '09-initiative-risks.png');
+  await risks.getByRole('button', { name: 'Add Risk' }).click();
+  const sheet = page.getByRole('dialog');
+  await sheet.getByLabel('Risk', { exact: true }).fill('Legal has not read the Norway terms');
+  await sheet.getByLabel('Owner', { exact: true }).fill('Mia Chen');
+  await sheet.getByRole('button', { name: 'Add Risk' }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(open.getByRole('listitem')).toHaveCount(4);
+  await expect(open.locator('[data-risk="5"]')).toContainText('Owner: Mia Chen');
+  await open.getByRole('button', { name: 'Close risk 2' }).click();
+  await expect(open.getByRole('listitem')).toHaveCount(3);
+  await expect(risks.getByRole('list', { name: 'Closed risks' }).getByRole('listitem')).toHaveCount(2);
+  await shot(page, '10-initiative-risk-closed.png');
+});
+
+const sectionTitles = (page: Page): Promise<string[]> => sidebar(page).locator('button[aria-expanded]').evaluateAll((buttons) => buttons.map((b) => (b.textContent ?? '').replace(/\d+/g, '').trim()));
+
+test('the sidebar’s Initiatives section sits between Chats and Projects, opens each initiative and folds', async ({ page, demo }) => {
+  await page.goto('/');
+  await expect(sidebar(page)).toBeVisible();
+  const titles = await sectionTitles(page);
+  expect(titles.indexOf('Initiatives')).toBe(titles.indexOf('Chats') + 1);
+  expect(titles.indexOf('Projects')).toBe(titles.indexOf('Initiatives') + 1);
+  const row = sidebar(page).locator('[data-initiative-row="checkout-v2"]');
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('Checkout v2');
+  await row.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Checkout v2' })).toBeVisible();
+  await expect(row).toHaveAttribute('aria-current', 'page');
+  await shot(page, '09-sidebar-section.png');
+  const title = sidebar(page).getByRole('button', { name: /^Initiatives/ });
+  await title.click();
+  await expect(title).toHaveAttribute('aria-expanded', 'false');
+  await expect(row).toBeVisible();
+  await expect(sidebar(page).locator('[data-initiative-row="mobile-onboarding"]')).toHaveCount(0);
+  await page.reload();
+  await expect(sidebar(page).getByRole('button', { name: /^Initiatives/ })).toHaveAttribute('aria-expanded', 'false');
+  await sidebar(page).getByRole('button', { name: /^Initiatives/ }).click();
+  await sidebar(page).getByRole('button', { name: 'All Initiatives' }).click();
+  await expect(page.getByRole('heading', { name: 'Initiatives', exact: true })).toBeVisible();
+  await expect(sidebar(page).getByRole('button', { name: 'All Initiatives' })).toHaveAttribute('aria-current', 'page');
+  await sidebar(page).getByRole('button', { name: 'New Initiative' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+  const client = await SocketClient.connect({ url: demo.endpoint.url, token: demo.endpoint.token, kind: 'test', version: 'e2e' });
+  await client.api.session.setPrefs({ chatCategories: true });
+  await expect.poll(() => sectionTitles(page)).toContain('Inbox');
+  const categoryTitles = await sectionTitles(page);
+  expect(categoryTitles.indexOf('Projects')).toBe(categoryTitles.indexOf('Initiatives') + 1);
+  expect(categoryTitles.indexOf('Initiatives')).toBeGreaterThan(categoryTitles.indexOf('Inbox'));
+  await shot(page, '10-sidebar-section-categories.png');
+  await client.api.session.setPrefs({ chatCategories: false });
+  client.close();
+});
+
+test('Define Success proposes metrics with their first rows, and Accept keeps them with a dashboard', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  const defined = page.getByRole('region', { name: 'Success' });
+  await expect(defined.locator('[data-success-metric="conversion"]')).toContainText('Checkout conversion');
+  await expect(defined.getByRole('button', { name: 'Open Dashboard' })).toBeVisible();
+  await openInitiative(page, 'Mobile Onboarding');
+  const success = page.getByRole('region', { name: 'Success' });
+  await expect(success.getByText('Not defined yet')).toBeVisible();
+  await success.getByRole('button', { name: 'Define success with your agent' }).click();
+  await expect(success.getByRole('status')).toContainText('BigQuery schema');
+  const draft = success.getByLabel('The agent’s proposal of what success means');
+  await expect(draft.locator('[data-success-metric]')).toHaveCount(2);
+  const first = draft.getByLabel('Metric Checkout conversion');
+  await expect(first.getByRole('table', { name: 'First rows' })).toContainText('value');
+  await first.getByRole('textbox', { name: 'Target', exact: true }).fill('70');
+  await shot(page, '09-success-proposal.png');
+  await draft.getByRole('button', { name: 'Reject' }).click();
+  await expect(draft).toHaveCount(0);
+  await success.getByRole('button', { name: 'Define success with your agent' }).click();
+  await success.getByLabel('The agent’s proposal of what success means').getByRole('button', { name: 'Accept' }).click();
+  await expect(success.locator('[data-success="defined"] [data-success-metric]')).toHaveCount(2);
+  await expect(success.getByRole('button', { name: /Open its sentinel, paused/ })).toBeVisible();
+  await success.scrollIntoViewIfNeeded();
+  await shot(page, '10-success-defined.png');
+  await success.getByRole('button', { name: 'Open Dashboard' }).click();
+  await expect(page.getByText('Mobile Onboarding outcome').first()).toBeVisible();
+});
+
+test('an initiative in discovery leads with the problem, evidence, sizing, PRD and demo instead of progress and tickets', async ({ page }) => {
+  await openInitiative(page, 'Self-serve Returns');
+  await expect(page.getByRole('button', { name: 'Status: Discovery' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Tickets' })).toHaveCount(0);
+  await expect(page.getByRole('progressbar')).toHaveCount(0);
+  const regions = await page.locator('section[aria-label]').evaluateAll((all) => all.map((el) => el.getAttribute('aria-label')));
+  expect(regions.slice(0, 7)).toEqual(['Goal', 'Problem', 'Evidence', 'Sizing', 'PRD', 'Demo', 'Delivery']);
+  await expect(page.getByRole('region', { name: 'Problem' })).toContainText('Customers who want to return an item');
+  await expect(page.getByRole('region', { name: 'PRD' }).getByRole('heading', { name: 'Goals', exact: true })).toBeVisible();
+  const sizing = page.getByRole('region', { name: 'Sizing' });
+  await sizing.getByRole('listitem', { name: /How many orders ask for a return by email/ }).click();
+  await expect(page.getByText('SELECT COUNT(DISTINCT t.order_id)', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Done' }).click();
+  const demo = page.getByRole('region', { name: 'Demo' });
+  await expect(demo.locator('[data-demo="WEB-12"]')).toContainText('Being built');
+  await expect(demo.getByRole('list', { name: 'Demo proof' }).getByRole('listitem')).toHaveCount(1);
+  const delivery = page.getByRole('region', { name: 'Delivery' });
+  await expect(delivery.locator('[data-proposed-epic="RET-1"]')).toContainText('Returns in the account page');
+  await expect(delivery.getByText('Not in Jira yet')).toBeVisible();
+  await expect(delivery.getByRole('button', { name: 'Move to Delivery' })).toBeEnabled();
+  await shot(page, '09-initiative-discovery.png');
+  await sizing.getByLabel('Sizing question').fill('How many returns are refunded late?');
+  await sizing.getByRole('button', { name: 'Size It' }).click();
+  await expect(sizing.getByLabel('Sizing question')).toHaveValue('');
+});
+
+test('a new initiative can start in discovery', async ({ page }) => {
+  await page.goto('/');
+  await sidebar(page).getByRole('button', { name: 'All Initiatives' }).click();
+  await page.getByRole('button', { name: 'New Initiative' }).first().click();
+  await page.getByLabel('Name').fill('Loyalty Idea');
+  await page.getByRole('radio', { name: 'Discovery' }).click();
+  await page.getByRole('button', { name: 'Make Initiative' }).click();
+  await expect(page.getByRole('heading', { name: 'Loyalty Idea' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Problem' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Delivery' }).getByRole('button', { name: 'Move to Delivery' })).toBeDisabled();
 });

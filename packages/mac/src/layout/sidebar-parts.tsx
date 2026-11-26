@@ -8,8 +8,8 @@ import m from './signal.module.css';
 
 /** The sidebar's building blocks: a foldable section and a row (used by Sidebar and the friends' sections). */
 
-/** `count`: how many rows it holds. `keep`: what still shows while it's folded (the chat you're in). */
-export function Section({ id, title, children, action, count, keep }: { id: string; title: string; children: ReactNode; action?: ReactNode; count?: number; keep?: ReactNode }) {
+/** `count`: how many rows it holds. `badge`: what waits in it, beside the title. `keep`: what still shows while it's folded (the chat you're in). */
+export function Section({ id, title, children, action, count, badge, keep }: { id: string; title: string; children: ReactNode; action?: ReactNode; count?: number; badge?: ReactNode; keep?: ReactNode }) {
   const prefs = usePrefs();
   const folded = prefs.folded.includes(id);
   return (
@@ -18,6 +18,7 @@ export function Section({ id, title, children, action, count, keep }: { id: stri
         <button type="button" className={s.sectionTitle} onClick={() => setPrefs({ folded: folded ? prefs.folded.filter((f) => f !== id) : [...prefs.folded, id] })} aria-expanded={!folded}>
           {title}
           {count === undefined ? null : <span className={s.sectionCount}>{count}</span>}
+          {badge}
           <Icon name={folded ? 'chevronRight' : 'chevronDown'} size={10} className={s.sectionChevron} />
         </button>
         <span className={s.sectionAction}>{action}</span>

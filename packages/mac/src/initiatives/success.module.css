@@ -1,0 +1,73 @@
+.definition {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--bg-raised);
+}
+.metricHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.metricName {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+.now {
+  font-size: 18px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.verdict {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.metric[data-verdict='met'] .verdict,
+.metric[data-verdict='better'] .verdict {
+  color: var(--ok);
+}
+.metric[data-verdict='worse'] .verdict {
+  color: var(--error);
+}
+.rows {
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.rows table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.rows th,
+.rows td {
+  padding: 4px 8px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--hairline);
+  font-variant-numeric: tabular-nums;
+}
+.rows th {
+  color: var(--text-3);
+  font-weight: 600;
+}

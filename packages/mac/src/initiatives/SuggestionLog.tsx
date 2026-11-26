@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { type InitiativeView, type Suggestion, openSuggestions, pendingDrafts } from '@beluga/core/initiatives/model.js';
-import { dayOfIso, proofOf, suggestionHistory } from '@beluga/core/initiatives/log.js';
+import { decisionLog } from '@beluga/core/initiatives/decisions.js';
+import { dayOfIso, proofOf } from '@beluga/core/initiatives/log.js';
+import { NoteRow, OpenQuestions } from './DecisionNotes.js';
 import { Section } from './InitiativeParts.js';
 import { KindChip, StateBadge } from './SuggestionRecord.js';
 import s from './initiatives.module.css';
@@ -48,7 +50,7 @@ type SuggestionsProps = { readonly item: InitiativeView; readonly pickedId: numb
 
 export const Suggestions = ({ item, pickedId, onPick }: SuggestionsProps) => {
   const open = openSuggestions(item);
-  const history = suggestionHistory(item);
+  const history = decisionLog(item);
   const waiting = pendingDrafts(item).length;
   return (
     <Section title="Suggestions">
@@ -64,12 +66,17 @@ export const Suggestions = ({ item, pickedId, onPick }: SuggestionsProps) => {
         ) : (
           <span className={`${s.quiet} ${s.logEmpty}`}>Nothing to approve or decide. The next check-in may suggest something.</span>
         )}
+        <OpenQuestions item={item} />
         <span className={s.logTitle}>Decision log · {history.length}</span>
         {history.length ? (
           <div role="listbox" aria-label="Decision log" className={s.logOpen}>
-            {history.map((x) => (
-              <HistoryRow key={x.id} item={item} suggestion={x} selected={x.id === pickedId} onSelect={onPick} />
-            ))}
+            {history.map((x, i) =>
+              x.kind === 'suggestion' ? (
+                <HistoryRow key={x.suggestion.id} item={item} suggestion={x.suggestion} selected={x.suggestion.id === pickedId} onSelect={onPick} />
+              ) : (
+                <NoteRow key={`note:${i}`} note={x.note} item={item} chip="Note" badge="Decided" inListbox />
+              ),
+            )}
           </div>
         ) : (
           <span className={`${s.quiet} ${s.logEmpty}`}>What you approve, decide or dismiss is kept here.</span>

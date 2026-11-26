@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { channelOf } from '@beluga/core/store.js';
-import { CHECK_IN_CHAT, type InitiativeView, initiativeChatOf, initiativeChatTitle } from '@beluga/core/initiatives/model.js';
+import { CHECK_IN_CHAT, WATCH_CHAT, type InitiativeView, initiativeChatOf, initiativeChatTitle } from '@beluga/core/initiatives/model.js';
 import { activityOf } from '@beluga/ui/workspace-models.js';
 import { Attention } from '../chat/Attention.js';
 import { ChatLog } from '../chat/ChatLog.js';
@@ -63,7 +63,7 @@ export const InitiativeChat = ({ item }: { item: InitiativeView }) => {
   return (
     <div className={chat.chatTab} data-initiative-chat={id}>
       <div className={chat.chatBar}>
-        <PickMenu<string> label="Chats" choices={item.chats.chats.map((c, i) => ({ value: c.id, label: names[i] ?? 'New chat', mark: <Icon name={c.id === CHECK_IN_CHAT ? 'calendar' : 'chat'} size={13} /> }))} chosen={[id]} onPick={handleOpen} actions={[{ label: 'New Chat', icon: 'plus', onSelect: () => void handleNew() }]}>
+        <PickMenu<string> label="Chats" choices={item.chats.chats.map((c, i) => ({ value: c.id, label: names[i] ?? 'New chat', mark: <Icon name={c.id === CHECK_IN_CHAT ? 'calendar' : c.id === WATCH_CHAT ? 'eye' : 'chat'} size={13} /> }))} chosen={[id]} onPick={handleOpen} actions={[{ label: 'New Chat', icon: 'plus', onSelect: () => void handleNew() }]}>
           <button type="button" className={chat.chatName} aria-label={`Chat: ${name}`}>
             <Icon name="chat" size={13} />
             <span>{name}</span>

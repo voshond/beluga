@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { resolveChat } from '../src/core/chat-links/resolve.js';
+import { chatToolsOf } from '../src/core/chat-links/transcript.js';
 import { type CheckInHost, Initiatives, OUTBOX_DENIED } from '../src/core/initiatives/initiatives.js';
 import { CHECK_IN_CHAT, type GoalRefine, initiativeChatChannel } from '../src/core/initiatives/model.js';
 import { CHECK_IN_PROMPT, TASKS_PROMPT, TICKETS_PROMPT } from '../src/core/initiatives/prompt.js';
@@ -42,7 +43,7 @@ const fakeHost = (): Host => {
   };
 };
 
-const setup = async (opts: { readonly commit?: boolean; readonly now?: () => number; readonly refine?: (input: GoalRefine) => Promise<string | undefined> } = {}) => {
+const setup = async (opts: { readonly dir?: string; readonly commit?: boolean; readonly now?: () => number; readonly refine?: (input: GoalRefine) => Promise<string | undefined> } = {}) => {
   const store = new Store(initialState('room', 'auto'));
   store.dispatch({ type: 'identity', selfId: SELF, isHost: true, home: '/Users/k' });
   const root = path.join(tmp(), 'initiatives');
@@ -51,7 +52,7 @@ const setup = async (opts: { readonly commit?: boolean; readonly now?: () => num
   const service = new Initiatives({
     store,
     root,
-    dir: tmp(),
+    dir: opts.dir ?? tmp(),
     selfId: () => SELF,
     ask: (prompt, channel) => {
       asked.push({ prompt, channel });
@@ -230,10 +231,11 @@ describe('Initiatives', () => {
     expect(brief).toContain('prep notes before it and follow-ups after it');
     expect(CHECK_IN_PROMPT).toContain('slack_read_thread');
     expect(CHECK_IN_PROMPT).toContain('prep notes');
-    expect(CHECK_IN_PROMPT).toContain('follow-ups');
+    expect(CHECK_IN_PROMPT).toContain('call_notes_search');
     expect(CHECK_IN_PROMPT).toContain('sources/meetings/');
     const none = await service.create({ name: 'B' });
     expect(service.chatRun(initiativeChatChannel(none.slug, 'main'), SELF)!.brief).toContain('Slack conversations it follows: none yet');
+    expect(service.chatRun(initiativeChatChannel(none.slug, 'main'), SELF)!.brief).toContain('No meetings followed yet');
   });
 
   it('names every doc source in the brief, how to read it and where its snapshot goes', async () => {
@@ -398,11 +400,46 @@ describe('Initiatives', () => {
     expect(gitLog(root)[0]).toMatch(/^tracked: check-in \d{4}-\d{2}-\d{2}$/);
   });
 
-  it('seeds the demo’s two initiatives', async () => {
+  it('lets search_chats find what was said in a chat that isn’t loaded, from its saved history', async () => {
+    const dir = tmp();
+    const { store, service } = await setup({ dir });
+    const { slug } = await service.create({ name: 'Checkout v2' });
+    const channel = initiativeChatChannel(slug, 'main');
+    const saved = [{ id: 'm1', type: 'chat', channel, from: SELF, name: 'me', text: 'who owns the Safari payment bug?', ts: 1000, byAgent: false }];
+    mkdirSync(path.join(dir, slug, 'chats', 'main'), { recursive: true });
+    writeFileSync(path.join(dir, slug, 'chats', 'main', 'history.json'), JSON.stringify(saved));
+    expect(store.getState().log.some((l) => l.channel === channel)).toBe(false);
+    expect(service.savedChats(new Set([channel])).map((c) => c.channel)).toEqual([initiativeChatChannel(slug, CHECK_IN_CHAT)]);
+    const sources = service.savedChats(new Set()).filter((c) => c.items.length);
+    expect(sources).toMatchObject([{ channel, place: 'Checkout v2 › who owns the Safari payment bug?' }]);
+    const tools = chatToolsOf({ state: () => store.getState(), requester: SELF, chain: () => ({ chainId: 'c', hop: 0 }), sources: () => sources });
+    const found = tools.search('safari payment', {});
+    expect(found).toContain(`${SELF}/${channel}`);
+    expect(found).toContain('who owns the Safari payment bug?');
+    service.chats.loadSaved(channel);
+    expect(store.getState().log.filter((l) => l.channel === channel).map((l) => l.id)).toEqual(['m1']);
+  });
+
+  it('shows decisions.md’s open questions and settled notes, and nothing for a file in another shape', async () => {
+    const { store, root, service } = await setup();
+    const { slug } = await service.create({ name: 'Checkout v2' });
+    const item = () => store.getState().initiatives.items.find((i) => i.slug === slug)!;
+    expect(item().decisions).toEqual({ open: [], decided: [] });
+    writeFileSync(path.join(root, slug, 'decisions.md'), '# Decisions\n\n## Open\n\n- 2026-11-25: Does finance have the NO tax table? Asked Priya.\n\n## Decided\n\n- 2026-11-24: Google Pay waits. Why: one SDK update fewer.\n');
+    service.refresh(slug);
+    expect(item().decisions).toEqual({ open: [{ day: '2026-11-25', text: 'Does finance have the NO tax table? Asked Priya.' }], decided: [{ day: '2026-11-24', text: 'Google Pay waits.', why: 'one SDK update fewer.' }] });
+    writeFileSync(path.join(root, slug, 'decisions.md'), 'we picked Postgres, and that is that\n');
+    service.refresh(slug);
+    expect(item().decisions).toBeUndefined();
+    expect(item().trouble).toBeUndefined();
+    expect(item().files).toContain('decisions.md');
+  });
+
+  it('seeds the demo’s initiatives', async () => {
     const { root, store, service } = await setup();
     await seedDemoInitiatives(service, root, Date.parse('2026-11-24T10:00:00Z'));
     const items = store.getState().initiatives.items;
-    expect(items.map((i) => i.name)).toEqual(['Checkout v2', 'Mobile Onboarding']);
+    expect(items.map((i) => i.name)).toEqual(['Checkout v2', 'Mobile Onboarding', 'Self-serve Returns']);
     expect(items[0]).toMatchObject({ progress: { total: 34, done: 21 } });
     expect(items.every((i) => i.suggestions.length > 0 && !i.trouble)).toBe(true);
   });

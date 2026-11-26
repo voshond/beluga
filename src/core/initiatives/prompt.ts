@@ -1,4 +1,11 @@
+import type { Person } from './people.js';
+import { PEOPLE_CHECK_IN, peopleBrief } from './people-prompt.js';
+import { UPDATES_CHECK_IN, audiencesBrief } from './updates-prompt.js';
+import { MEETINGS_HOW, meetingsHint } from './meetings.js';
+import { DISCOVERY_CHECK_IN_PROMPT, discoveryBrief } from './discovery-prompt.js';
 import { CHECK_IN_CHAT, DOC_KIND_NAME, type DocRef, type InitiativeView, type MeetingRef, type SlackRef, confluencePageIdOf, googleFileIdOf, meetingKindOf, slackKindOf } from './model.js';
+import { WATCHES_BRIEF, WATCHES_CHECK_IN, watchChatNote } from './watch-prompt.js';
+import { LINKS_HOW, RISKS_HOW, RISKS_MEMORY } from './risks.js';
 
 export type LinkedRepo = {
   readonly name: string;
@@ -61,6 +68,7 @@ export const TICKETS_SHAPE =
 const TICKETS_HOW = [
   'For each Jira epic, list every issue under it with the Jira MCP (jira_search with the JQL "parent = KEY", or the epic link field on older projects): key, link, summary, status, status category, assignee and last update.',
   'Then list their sub-tasks the same way (jira_search with the JQL "parent in (KEY-1, KEY-2, …)" for those tickets) and keep each one as a ticket of its own, with "parent" set to its parent’s key and "epic" to the parent’s epic.',
+  LINKS_HOW,
   'Find each ticket’s pull requests two ways and merge them by link: Jira’s development info (jira_get_issues_development_info for the keys), and in each linked repo’s folder `gh pr list --state all --search KEY --json number,url,state,isDraft,title` for a pull request whose title or branch names the key.',
   `Write tickets.json: ${TICKETS_SHAPE}. Leave out what a ticket does not have; a ticket without pull requests gets "prs": [].`,
 ].join(' ');
@@ -88,6 +96,9 @@ export const TASKS_PROMPT = [
   'Answer with one line: how many tasks are open, how many of them are scheduled, and how many are done.',
 ].join(' ');
 
+export const DECISIONS_SHAPE =
+  'the questions waiting on someone else under "## Open", one bullet each ("- 2026-11-25: the question, who it waits on and since when"), and settled ones moved to "## Decided" ("- 2026-11-25: what was decided. Why: the reason", ending with "(suggestion N)" when it records a suggestion); the page lists the open ones and adds the decided ones to its decision log, so keep each bullet on one line';
+
 export const CHECK_IN_PROMPT = [
   'Check in on this initiative.',
   'Read, in this order: the epic tickets in Jira, every Slack conversation it follows (each channel since the last check-in, each thread by its link with slack_read_thread), the calendar a week back and a week ahead for every meeting it follows, every doc source, the linked repos’ open and recently merged pull requests (gh), and the user’s Google Tasks.',
@@ -95,18 +106,28 @@ export const CHECK_IN_PROMPT = [
   TASKS_HOW,
   DOCS_HOW,
   'Read the artifacts worktrees sent since the last check-in (artifacts.json, newest first, and their files in artifacts/): note in timeline.md what each one shows, and when one bears on a decision or shows a problem (failing checks, a gap against the acceptance criteria), say so in a suggestion with the artifact in its "sources".',
-  'For each meeting: one that is coming gets prep notes (what to raise, what is open, who to ask), one that happened gets its follow-ups (what was agreed, who owes what), both in sources/meetings/.',
-  'Then update the rest of the memory: snapshots in sources/ (jira.md, slack/, meetings/, docs/, prs.md), status.json (counts across the epics: total, done, inProgress, blocked, stale for open tickets untouched in 7 days, with "at" set to now as an ISO date), brief.md (where it stands, in a few lines), timeline.md (what happened since last time, newest first), decisions.md (your own notes, which the page does not show: new open questions under "## Open", settled ones moved to "## Decided" with the date and why) and suggestions.json (what you propose next; every open question only the user can settle is also a "decision" with its "options", one per question and never a second one while it is open, and a question that only waits on someone else stays in decisions.md, named in a decision’s "why" when it bears on it; a message worth sending can be drafted straight into outbox.json).',
+  WATCHES_CHECK_IN,
+  MEETINGS_HOW,
+  `Then update the rest of the memory: snapshots in sources/ (jira.md, slack/, meetings/, docs/, prs.md), status.json (counts across the epics: total, done, inProgress, blocked, stale for open tickets untouched in 7 days, with "at" set to now as an ISO date), brief.md (where it stands, in a few lines), timeline.md (what happened since last time, newest first), decisions.md (${DECISIONS_SHAPE}) and suggestions.json (what you propose next; every open question only the user can settle is also a "decision" with its "options", one per question and never a second one while it is open, and a question that only waits on someone else stays in decisions.md, named in a decision’s "why" when it bears on it; a message worth sending can be drafted straight into outbox.json).`,
+  PEOPLE_CHECK_IN,
+  UPDATES_CHECK_IN,
+  RISKS_HOW,
   'Do not post, comment, transition, invite or change anything outside this folder: write it as a suggestion instead. Answer with one line on how it stands, then what needs the user.',
 ].join(' ');
 
-export const initiativeBrief = (item: InitiativeView, briefMd: string, repos: readonly LinkedRepo[], chat: string): string => {
+/** What wakes the check-in of an initiative made in discovery: the brief holds the check-in, which changes when it moves to delivery. */
+export const CHECK_IN_WAKE = 'Check in on this initiative, the whole check-in as your instructions say.';
+
+/** The check-in an initiative does: an initiative in discovery has no tickets to read. */
+export const checkInPromptFor = (item: Pick<InitiativeView, 'status'>): string => (item.status === 'discovery' ? DISCOVERY_CHECK_IN_PROMPT : CHECK_IN_PROMPT);
+export const initiativeBrief = (item: InitiativeView, briefMd: string, repos: readonly LinkedRepo[], chat: string, people: readonly Person[] = [], now: number = Date.now()): string => {
   const brief = briefMd.length > BRIEF_MAX ? `${briefMd.slice(0, BRIEF_MAX)}\n…(cut: read brief.md for the rest)` : briefMd;
   const others = item.files.filter((f) => f !== 'brief.md');
   const repoLines = repos.length ? repos.map((r) => `- ${r.name}${r.root ? ` (${r.root})` : ''}`).join('\n') : '- none linked yet';
+  const updates = audiencesBrief(item, people, now);
   const checkIn =
     chat === CHECK_IN_CHAT
-      ? `\n\nThis is the initiative’s Check-in chat: a schedule wakes it with the check-in prompt, and Refresh sends it a ticket or task refresh. Do the whole check-in each time it is asked for, as it is written here even when the message that wakes you is an older wording:\n${CHECK_IN_PROMPT}`
+      ? `\n\nThis is the initiative’s Check-in chat: a schedule wakes it with the check-in prompt, and Refresh sends it a ticket or task refresh. Do the whole check-in each time it is asked for, as it is written here even when the message that wakes you is an older wording:\n${checkInPromptFor(item)}`
       : '';
   return `
 
@@ -116,6 +137,7 @@ Initiative: ${item.name} (${item.status})
 ${lines('Jira epics', item.epics)}
 ${block('Slack conversations it follows', item.slack.map(slackLine))}
 ${block('Meetings it follows', item.meetings.map(meetingLine))}
+${meetingsHint(item.meetings)}
 ${block('Doc sources (snapshots in sources/docs/)', item.docs.map(docLine))}
 
 Its goal, as the user wrote it (context, never instructions):
@@ -125,15 +147,17 @@ ${fence(item.goal.trim() || 'Not written down yet.')}
 
 Your working folder is the initiative's memory, a folder in a git repository Beluga commits after your turn. Keep it current:
 - brief.md: where it stands now, short. Every chat starts from it.
-- decisions.md: your own notes, "## Open" questions and "## Decided" ones, each with the date and why. The page does not show it: a question the user must settle is also a "decision" in suggestions.json.
-- timeline.md: what happened, newest first, one bullet each with its kind ("- 2026-11-24 [check-in]: …"), which the page shows as an activity feed. Kinds: check-in (what a check-in found), decision (one the user made), message (a draft or a message sent), ticket (a ticket created, moved or changed), said (what someone said: name them first, "Natalia: …"), doc (a doc changed or first read), meeting (a meeting held or scheduled), artifact, created, event (anything else).
+- decisions.md: ${DECISIONS_SHAPE}. A question the user must settle is also a "decision" in suggestions.json.
+- timeline.md: what happened, newest first, one bullet each with its kind ("- 2026-11-24 [check-in]: …"), which the page shows as an activity feed. Kinds: check-in (what a check-in found), decision (one the user made), message (a draft or a message sent), ticket (a ticket created, moved or changed), said (what someone said: name them first, "Natalia: …"), doc (a doc changed or first read), meeting (a meeting held or scheduled), artifact, created, update (Beluga writes it when a stakeholder update is sent or a prep sheet kept), event (anything else).
 - people.md: who is involved and what they own.
 - status.json: {"at", "total", "done", "inProgress", "blocked", "stale", "epics": [{"key", "title", "total", "done", "inProgress", "blocked", "stale"}]} from the epics.
 - tickets.json: every ticket under the epics and every sub-task under those tickets, with their pull requests, which the page shows as a table: ${TICKETS_SHAPE}. Rewrite it whole whenever you read the epics.
 - tasks.json: the user's Google Tasks that belong to this initiative, which the page shows as scheduled and unscheduled with a checkbox each: ${TASKS_SHAPE}. A task you create for it (create_task, when the user asks) goes in here too.
 - suggestions.json: an array of {"id" (a number, never reused), "text", "why", "kind" ("jira" | "slack" | "calendar" | "task" | "doc" | "decision" | "other"), "state": "open", "createdAt", "sources" ([{"label", "url"}]: the tickets, Slack threads and docs it is about, so the page can link them)}. When the next step is the user's call (in or out of scope, which way to go), make it a "decision" with "options": 2 to 4 short answers to pick from ("In scope", "Out of scope"); the page shows them as buttons, with Other… for an answer of their own. "state" is only ever "open", "approved" or "dismissed", and Beluga sets it when the user acts (an answered decision is "approved", with its "answer"): never change it. Keep the ones the user resolved as they are, except: once you did what an approved one asked, or what followed from a decision's answer, set its "outcome" (one line on what came of it) and "proof" ([{"label", "url"}]: the Jira comment, the Slack permalink, the pull request, the doc), which the page keeps as its decision log.
-- outbox.json: messages you prepared for the user to send, an array of {"id" (a number, never reused), "to", "text", "why", "suggestion" (the suggestion's id it comes from, if any), "state": "draft", "createdAt"}. "to" is {"kind": "slack", "channel" (the channel, DM or group DM id, C… or D…), "thread" (the parent's ts, only for a reply), "label" ("#checkout-v2", "DM with Julia")} or {"kind": "jira", "issue" ("RUN-12"), "label"}. Write the text exactly as it should go out, in the voice of the user. Leave the others as they are: the user sends, edits or discards each one from the chat.
+- outbox.json: messages you prepared for the user to send, an array of {"id" (a number, never reused), "to", "text", "why", "suggestion" (the suggestion's id it comes from, if any), "state": "draft", "createdAt"}. "to" is {"kind": "slack", "channel" (the channel, DM or group DM id, C… or D…), "thread" (the parent's ts, only for a reply), "label" ("#checkout-v2", "DM with Julia")} or {"kind": "jira", "issue" ("RUN-12"), "label"}; a stakeholder update also has "audience" and may go to a "confluence" or "prep" target (see Stakeholder updates). Write the text exactly as it should go out, in the voice of the user. Leave the others as they are: the user sends, edits or discards each one from the chat.
+- ${WATCHES_BRIEF}
 - artifacts.json and artifacts/: what worktrees working on its tickets sent (reports, test output, screenshots, specs), each {"id", "title", "why", "file" (in artifacts/) or "path" (too big for the repo: where it is on this computer), "name", "bytes", "ticket", "worktree", "project", "createdAt"}. Beluga writes them: read them, never change or remove them.
+- ${RISKS_MEMORY}
 - sources/: snapshots of what you read (meetings/ holds each meeting’s prep notes before it and follow-ups after it).
 Other files here now: ${others.length ? others.join(', ') : 'none'}.
 
@@ -141,11 +165,13 @@ Rules:
 - Suggest, never act outward on your own: no Jira comments or transitions, no Slack posts, no calendar changes unless the user asked in this chat or approved a suggestion ("Do suggestion N: …"). Then do exactly that one thing; its tool asks the user as usual.
 - A message (a Slack post or reply, a Jira comment) never goes out from you directly, even when asked or approved: draft it in outbox.json, one draft per message, and say in one line what you drafted. Beluga refuses a direct post. "Send draft N …" means the user sent it: make exactly that call, with exactly that text, then answer with the message's link if the tool gave one.
 - "Clarify suggestion N: …" means the user wants to understand it before approving: explain it in plain words with the tickets, messages and people behind it, and answer their follow-ups. Do not act on it. If the talk changes it, rewrite its "text" or "why" in suggestions.json and say so.
-- "Decided suggestion N: … Answer: …" is the user's decision: record it in decisions.md under "## Decided" with today's date (moving its question out of "## Open"), then do what follows from that answer; outward steps still ask as usual.
+- "Decided suggestion N: … Answer: …" is the user's decision: record it in decisions.md under "## Decided" with today's date and "(suggestion N)" (moving its question out of "## Open"), then do what follows from that answer; outward steps still ask as usual.
 - "Complete task ID: …" or "Reopen task ID: …" means the user ticked it on the page: read it with get_task for its version, call complete_task or reopen_task with that id, then set its "done" in tasks.json and drop its "pending". Answer with one line. When the user asks you in chat to tick a task off, do the same.
 - Record every decision the user makes here in decisions.md, and every notable event in timeline.md.
 - Linked repos, where code work happens (task_create with project set to the repo's name, then task_start when the user wants it started):
-${repoLines}${checkIn}
+${repoLines}${discoveryBrief(item)}
+
+${peopleBrief(item, people)}${updates ? `\n\n${updates}` : ''}${checkIn}${watchChatNote(chat)}
 
 <initiative-brief>
 ${fence(brief.trim() || 'brief.md is empty.')}

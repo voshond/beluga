@@ -21,7 +21,7 @@ const TOOL = 'mcp__beluga_initiatives__report_to_initiative';
 export const linkedInitiative = (items: readonly InitiativeView[], ws: ReportingWorktree): Linked | undefined => {
   const keys = [ws.ticket, ticketKeyIn(ws.branch), ticketKeyIn(ws.name)].filter((k): k is string => Boolean(k));
   for (const ticket of keys) {
-    const item = initiativeOfTicket(items, ticket);
+    const item = initiativeOfTicket(items, ticket) ?? items.find((i) => i.discovery?.demo?.task === ticket.toUpperCase());
     if (item) return { item, ticket: ticket.toUpperCase() };
   }
   return undefined;
