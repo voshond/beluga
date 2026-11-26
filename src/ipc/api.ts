@@ -147,6 +147,8 @@ export const PrefsPatch = z
     reflectionModel: z.string().trim().min(1).max(REFLECTION_MODEL_MAX),
     reflectionSkills: bool,
     reflectionSkillModel: z.string().trim().min(1).max(REFLECTION_MODEL_MAX),
+    initiativeModel: z.string().trim().max(REFLECTION_MODEL_MAX),
+    sentinelModel: z.string().trim().max(REFLECTION_MODEL_MAX),
     subagents: z.enum(['full', 'compact', 'hidden']),
     hiddenButtons: z.array(z.string().max(40)).max(40),
     friendWorktrees: z.enum(['ask', 'off']),
