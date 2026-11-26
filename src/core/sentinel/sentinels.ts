@@ -6,6 +6,7 @@ import type { DashboardTools, SentinelTools, ToolTile } from '../../agent/types.
 import { type Row, type Source, SourceSchema } from '../../shared/view-spec.js';
 import type { NoticeEvent } from '../notify.js';
 import type { Action, Store } from '../store.js';
+import { chosenAgent } from '../settings.js';
 import { filterIssues, isOpen } from '../board/model.js';
 import { describeList } from '../board/prompt.js';
 import { planTitle } from '../plans/model.js';
@@ -287,6 +288,10 @@ export class Sentinels {
       ...(deps.fetchSource ? { fetchSource: deps.fetchSource } : {}),
       ...(deps.serviceEnv ? { serviceEnv: deps.serviceEnv } : {}),
       keep: (active, measured) => this.keepNumbers(active.sentinel, active.run.id, measured),
+      stepModel: () => {
+        const prefs = deps.store.getState().prefs;
+        return chosenAgent(prefs).runtime === 'claude' ? prefs.sentinelModel || undefined : undefined;
+      },
       // A step's model's effort levels, as its runtime lists them (Claude's: Claude Code's own); your default's aren't known here.
       efforts: (agent) => {
         if (!agent) return undefined;

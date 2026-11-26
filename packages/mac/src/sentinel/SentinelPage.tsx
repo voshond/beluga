@@ -348,7 +348,8 @@ function History({ item }: { item: Sentinel }) {
 function Properties({ item, save }: { item: Sentinel; save: (patch: SentinelPatch) => void }) {
   const a = useSentinelActions();
   const all = useApp((st) => st.projects);
-  const agents = useAgentEntries();
+  const sentinelModel = useApp((st) => st.prefs.sentinelModel);
+  const agents = useAgentEntries(sentinelModel);
   const projects = all.filter((p) => p.root && !p.error);
   const agent = sharedAgent(item.steps);
   const claudeSteps = item.steps.some((x) => x.kind === 'claude');

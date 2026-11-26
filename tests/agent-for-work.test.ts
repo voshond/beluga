@@ -144,6 +144,8 @@ describe('Sentinel’s Ask Your Agent step picks its agent and model (BLG-497)',
       ],
     });
     expect(made.steps[0]).toMatchObject({ runtime: 'codex', model: 'gpt-5.5' });
+    // No sentinel model in Settings: a step without an agent follows your default (sentinel-effort.test.ts has the model).
+    s.store.dispatch({ type: 'prefs', prefs: { sentinelModel: '' } });
     const run = s.sentinels.start(made.id, 'you');
     await until(() => !['queued', 'running'].includes(s.sentinels.runGet(run.id).run.state));
     // One chat for both (the project place is shared), its agent set before each ask.

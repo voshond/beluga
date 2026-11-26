@@ -206,6 +206,7 @@ function TimelineStep({ run, step, index, now, worktree, gone, open }: { run: St
         <div className={s.tTop}>
           <span className={s.tName}>{step?.name ?? `Step ${index + 1}`}</span>
           {kind ? <span className={s.tTook}>{STEP_INFO[kind].label}</span> : null}
+          {run.model ? <span className={s.tTook}>· {run.model}</span> : null}
           {took ? <span className={s.tTook}>· {took}{run.state === 'running' ? ' so far' : ''}</span> : null}
           <span className={t.grow} />
           {run.channel && chatPlaceOf(run.channel) && kind !== 'claude' && !gone ? (
