@@ -49,4 +49,6 @@ export const INITIATIVES_HANDLERS = {
   'initiatives.saveRisk': (s, slug, draft) => needInitiatives(s).saveRisk(slug, draft),
   'initiatives.defineSuccess': (s, slug) => needInitiatives(s).defineSuccess(slug),
   'initiatives.acceptSuccess': (s, slug, proposal) => needInitiatives(s).acceptSuccess(slug, proposal),
+  'initiatives.discoveryStep': (s, slug, step) => needInitiatives(s).discoveryStep(slug, step),
+  'initiatives.promote': (s, slug) => needInitiatives(s).promote(slug),
 } satisfies InitiativesHandlers;

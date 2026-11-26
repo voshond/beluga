@@ -7,7 +7,7 @@ import { copyText } from '../lib/copy.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import s from './initiatives.module.css';
 
-const KIND_ICON: Readonly<Record<OutboxDraft['to']['kind'], IconName>> = { slack: 'chat', jira: 'issue', confluence: 'fileText', prep: 'calendar' };
+const KIND_ICON: Readonly<Record<OutboxDraft['to']['kind'], IconName>> = { slack: 'chat', jira: 'issue', confluence: 'fileText', 'confluence-page': 'fileText', prep: 'calendar' };
 
 type CardProps = {
   readonly slug: string;
@@ -38,7 +38,13 @@ export const OutboxCard = ({ slug, draft, place, onLater }: CardProps) => {
         {place ? <span className={s.quiet}>{place}</span> : null}
       </div>
       {draft.why ? <span className={s.why}>{draft.why}</span> : null}
-      <TextArea value={text} onChange={setText} rows={prep ? 8 : 5} maxLength={max} aria-label={`${DRAFT_KIND_WORDS[draft.to.kind]} to ${targetWords(draft.to)}`} />
+      {draft.to.kind === 'confluence-page' ? (
+        <span className={s.why}>
+          {draft.text} Sends {draft.to.file} as it is now{draft.to.page ? `, over page ${draft.to.page}` : ''}.
+        </span>
+      ) : (
+        <TextArea value={text} onChange={setText} rows={prep ? 8 : 5} maxLength={max} aria-label={`${DRAFT_KIND_WORDS[draft.to.kind]} to ${targetWords(draft.to)}`} />
+      )}
       {sending ? <span className={s.why}>Sent to the chat to post. If it didn’t go out, send it again.</span> : null}
       {prep ? <span className={s.why}>Never sent: take it into the meeting, then mark it Done.</span> : null}
       <span className={s.answers}>

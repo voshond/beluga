@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { AgentPlace } from '../../agent/types.js';
 import type { ScheduleTrigger, SentinelDraft } from '../sentinel/model.js';
@@ -11,6 +11,9 @@ import { InitiativeChats } from './chats.js';
 import { keepProposal, readDirectory, removePersonFile, writePerson } from './directory.js';
 import { PEOPLE_DIR, type PersonDraft } from './people.js';
 import { PEOPLE_PASS } from './people-prompt.js';
+import { findingTitle, readDiscovery, sizingFiles } from './discovery.js';
+import { type ArtifactAbout, type DiscoveryStep, DiscoveryStepSchema, proposedEpicKeys } from './discovery-model.js';
+import { discoveryStepPrompt } from './discovery-prompt.js';
 import { addTimeline, artifactPath, folderOf, keepArtifactFile, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeArtifacts, writeConfig, writeOutbox, writeSuggestions, writeTasks, writeText, writeUpdates } from './files.js';
 import {
   ARTIFACT_KEEP_MAX,
@@ -50,7 +53,7 @@ import {
   taskMessage,
   uniqueSlug,
 } from './model.js';
-import { CHECK_IN_PROMPT, type LinkedRepo, TASKS_PROMPT, TICKETS_PROMPT, initiativeBrief } from './prompt.js';
+import { CHECK_IN_PROMPT, CHECK_IN_WAKE, type LinkedRepo, checkInPromptFor, TASKS_PROMPT, TICKETS_PROMPT, initiativeBrief } from './prompt.js';
 import { type PushResult, commitFolder, dayOf, ensureRepo, pushIfTracked, unpushedCount } from './repo.js';
 import { UPDATES_DIR, UpdateRecordSchema, audienceIdOf, ticketMarks } from './updates.js';
 import { draftUpdatePrompt } from './updates-prompt.js';
@@ -101,6 +104,8 @@ export type InitiativeChatRun = {
 /** A draft the user sent: the one call it allows, kept here, never in a file the agent can write. */
 type Send = { readonly slug: string; readonly id: number; readonly to: OutboxTarget; readonly text: string };
 
+const SENT_WORDS: Readonly<Record<OutboxTarget['kind'], string>> = { slack: 'a Slack message', jira: 'a Jira comment', confluence: 'a Confluence update', 'confluence-page': 'a Confluence page', prep: 'a prep sheet' };
+
 export const OUTBOX_DENIED = 'In an initiative, messages go out through its outbox: write this as a draft in outbox.json, and the user sends it from the chat.';
 
 /** A file a worktree's agent sends an initiative (report_to_initiative), with where it came from. */
@@ -112,6 +117,7 @@ export type ArtifactReport = {
   readonly worktree?: string;
   readonly project?: string;
   readonly from?: string;
+  readonly about?: ArtifactAbout;
 };
 
 const IMAGE_READ_MAX = 15 * 1024 * 1024;
@@ -232,6 +238,7 @@ export class Initiatives {
     const chats = this.chats.load(slug);
     const checkIn = this.local(slug).checkIn;
     const success = this.success.read(slug);
+    const discovery = readDiscovery(folder.folder, config?.status ?? 'active');
     return {
       slug,
       folder: folder.folder,
@@ -254,6 +261,7 @@ export class Initiatives {
       watches: folder.watches,
       artifacts: folder.artifacts,
       risks: folder.risks,
+      ...(discovery ? { discovery } : {}),
       timeline: folder.timeline,
       ...(folder.decisions ? { decisions: folder.decisions } : {}),
       ...(folder.waitingQuestions.length ? { waitingQuestions: folder.waitingQuestions } : {}),
@@ -301,21 +309,21 @@ export class Initiatives {
     if (result) this.pushed(result);
   }
 
-  private checkInDraft(slug: string, name: string): SentinelDraft {
+  private checkInDraft(slug: string, name: string, status: InitiativeStatus): SentinelDraft {
     return {
       name: `${name} check-in`.slice(0, 80),
       icon: 'calendar',
       projectId: null,
       trigger: CHECK_IN_TRIGGER,
-      steps: [{ kind: 'chat', to: `${this.deps.selfId()}/${initiativeChatChannel(slug, CHECK_IN_CHAT)}`, text: CHECK_IN_PROMPT }],
+      steps: [{ kind: 'chat', to: `${this.deps.selfId()}/${initiativeChatChannel(slug, CHECK_IN_CHAT)}`, text: status === 'discovery' ? CHECK_IN_WAKE : CHECK_IN_PROMPT }],
       access: 'look',
     };
   }
 
-  private makeCheckIn(slug: string, name: string): string | undefined {
+  private makeCheckIn(slug: string, name: string, status: InitiativeStatus): string | undefined {
     const host = this.deps.checkIns?.();
     if (!host) return undefined;
-    const made = host.create(this.checkInDraft(slug, name));
+    const made = host.create(this.checkInDraft(slug, name, status));
     this.saveLocal(slug, { ...this.local(slug), checkIn: made.id });
     return made.id;
   }
@@ -368,11 +376,11 @@ export class Initiatives {
   async create(draft: InitiativeDraft, opts: { readonly quiet?: boolean } = {}): Promise<{ readonly slug: string }> {
     const parsed = InitiativeDraftSchema.parse(draft);
     const slug = uniqueSlug(parsed.name, new Set([...listSlugs(this.deps.root), PEOPLE_DIR]));
-    const config = InitiativeConfigSchema.parse({ ...parsed, status: 'active', createdAt: new Date(this.now).toISOString() });
+    const config = InitiativeConfigSchema.parse({ ...parsed, status: parsed.status ?? 'active', createdAt: new Date(this.now).toISOString() });
     scaffoldFolder(this.deps.root, slug, config, dayOf(this.now));
     this.chats.load(slug);
     try {
-      this.makeCheckIn(slug, config.name);
+      this.makeCheckIn(slug, config.name, config.status);
     } catch {
       this.saveLocal(slug, {});
     }
@@ -436,7 +444,7 @@ export class Initiatives {
   private checkInHost(item: InitiativeView): { readonly host: CheckInHost; readonly id: string | undefined } {
     const host = this.deps.checkIns?.();
     if (!host) throw new Error('Check-ins need the Beluga app (its Sentinel)');
-    return { host, id: item.checkIn && host.exists(item.checkIn) ? item.checkIn : this.makeCheckIn(item.slug, item.name) };
+    return { host, id: item.checkIn && host.exists(item.checkIn) ? item.checkIn : this.makeCheckIn(item.slug, item.name, item.status) };
   }
 
   setCheckIn(slug: string, on: boolean): void {
@@ -461,8 +469,37 @@ export class Initiatives {
       host.runNow(item.checkIn);
       return { channel };
     }
-    if (this.deps.ask(CHECK_IN_PROMPT, channel) === undefined) throw new Error('The check-in could not start');
+    if (this.deps.ask(checkInPromptFor(item), channel) === undefined) throw new Error('The check-in could not start');
     return { channel };
+  }
+
+  /** A discovery step from the page (Size It, Draft PRD, Start Demo…): its prompt goes into the work chat, which does it and asks for anything outward. */
+  discoveryStep(slug: string, input: DiscoveryStep): { readonly channel: string } {
+    const step = DiscoveryStepSchema.parse(input);
+    const item = this.need(slug);
+    if (item.status !== 'discovery') throw new Error('That step is for an initiative in discovery');
+    if (step.step === 'demo' && !item.repos.includes(step.repo)) throw new Error(`Link ${step.repo} first: Repos › +`);
+    const channel = this.workChannel(item);
+    if (this.deps.ask(discoveryStepPrompt(step), channel) === undefined) throw new Error('The chat could not take it now');
+    return { channel };
+  }
+
+  /** Discovery is over: the epics the agent created (proposal.json) are linked and the initiative is active. */
+  async promote(slug: string): Promise<InitiativeView> {
+    const item = this.need(slug);
+    if (item.status !== 'discovery') throw new Error('Only an initiative in discovery moves to delivery');
+    const epics = [...new Set([...item.epics, ...proposedEpicKeys(item.discovery?.proposal)])].slice(0, 20);
+    if (!epics.length) throw new Error('No epics yet: Propose Epics, approve creating them, then move it to delivery');
+    addTimeline(this.deps.root, slug, `${dayOf(this.now)} [decision]: moved from discovery to delivery with ${epics.join(', ')}`);
+    return this.update(slug, { status: 'active', epics });
+  }
+
+  /** Each finding the agent left in sizing/ becomes an artifact, moved out of there. */
+  private async keepSizing(slug: string): Promise<void> {
+    for (const file of sizingFiles(folderOf(this.deps.root, slug))) {
+      await this.reportArtifact(slug, { file, title: findingTitle(file), why: 'A sizing finding, with its query', from: 'Size It', about: 'sizing' });
+      rmSync(file, { force: true });
+    }
   }
 
   /** Approve or dismiss a suggestion; `answer` is what the user decided, for a decision. */
@@ -507,7 +544,8 @@ export class Initiatives {
     const final = text.trim();
     if (!final) throw new Error('Write the message first');
     if (final.length > textMaxOf(to)) throw new Error(`That is ${final.length} characters: a ${DRAFT_KIND_WORDS[to.kind]} takes ${textMaxOf(to)} at most`);
-    this.sends.set(`${slug}:${id}`, { slug, id, to: draft.to, text: final });
+    const allowed = draft.to.kind === 'confluence-page' ? this.readFile(slug, draft.to.file).text : final;
+    this.sends.set(`${slug}:${id}`, { slug, id, to: draft.to, text: allowed });
     const edited = final !== draft.text.trim();
     this.putDraft(slug, item.outbox, id, (d) => {
       const { sentText: _sent, ...rest } = d;
@@ -568,7 +606,7 @@ export class Initiatives {
     if (!draft) return;
     this.putDraft(send.slug, folder.outbox, send.id, (d) => ({ ...d, state: 'sent', resolvedAt: new Date(this.now).toISOString() }));
     if (draft.audience) this.keepUpdate(send.slug, draft, send.text);
-    else addTimeline(this.deps.root, send.slug, `${dayOf(this.now)} [message]: sent ${send.to.kind === 'slack' ? 'a Slack message' : 'a Jira comment'} to ${targetWords(send.to)}`);
+    else addTimeline(this.deps.root, send.slug, `${dayOf(this.now)} [message]: sent ${SENT_WORDS[send.to.kind]} to ${targetWords(send.to)}`);
     const sent = readFolder(this.deps.root, send.slug).outbox.find((d) => d.id === send.id);
     if (sent) this.watching.fromDraft(send.slug, sent);
     this.refresh(send.slug);
@@ -680,6 +718,8 @@ export class Initiatives {
     const id = item.artifacts.reduce((n, a) => Math.max(n, a.id), 0) + 1;
     const name = path.basename(report.file);
     const kept = bytes <= ARTIFACT_KEEP_MAX;
+    const demo = item.discovery?.demo?.task;
+    const about = report.about ?? (demo && report.ticket?.toUpperCase() === demo ? 'demo' : undefined);
     const artifact = ArtifactSchema.parse({
       id,
       title: report.title.trim(),
@@ -691,6 +731,7 @@ export class Initiatives {
       worktree: report.worktree,
       project: report.project,
       from: report.from,
+      ...(about ? { about } : {}),
       createdAt: new Date(this.now).toISOString(),
     });
     writeArtifacts(this.deps.root, slug, [...item.artifacts, artifact]);
@@ -844,7 +885,9 @@ export class Initiatives {
     if (of.chat === WATCH_CHAT) this.watching.turnEnded(of.slug);
     this.risks.settle(of.slug, new Date(this.now).toISOString(), dayOf(this.now));
     const message = of.chat === CHECK_IN_CHAT ? `${of.slug}: check-in ${dayOf(this.now)}` : of.chat === WATCH_CHAT ? `${of.slug}: follow-ups ${dayOf(this.now)}` : `${of.slug}: chat ${dayOf(this.now)}`;
-    void this.commit(of.slug, message)
+    void this.keepSizing(of.slug)
+      .catch(() => undefined)
+      .then(() => this.commit(of.slug, message))
       .then(() => this.refresh(of.slug))
       .then(() => this.watching.sync(of.slug))
       .catch(() => undefined);

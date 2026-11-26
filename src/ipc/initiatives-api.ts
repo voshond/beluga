@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DiscoveryStepSchema } from '../core/initiatives/discovery-model.js';
 import { SuccessProposalSchema } from '../core/initiatives/success.js';
 import { RiskDraftSchema } from '../core/initiatives/risks.js';
 import { AUDIENCE_ID, AudienceDraftSchema } from '../core/initiatives/audience.js';
@@ -46,4 +47,6 @@ export const INITIATIVES_API = {
   'initiatives.saveRisk': { args: z.tuple([slug, RiskDraftSchema]) },
   'initiatives.defineSuccess': { args: z.tuple([slug]) },
   'initiatives.acceptSuccess': { args: z.tuple([slug, SuccessProposalSchema]) },
+  'initiatives.discoveryStep': { args: z.tuple([slug, DiscoveryStepSchema]) },
+  'initiatives.promote': { args: z.tuple([slug]) },
 } as const;

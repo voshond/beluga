@@ -2,7 +2,8 @@ import path from 'node:path';
 import { writeText } from './files.js';
 import type { Initiatives } from './initiatives.js';
 import { noNotesLine } from './meetings.js';
-import type { EpicStatus, EpicTickets, InitiativeDraft, InitiativeTasks, OutboxDraft, Suggestion } from './model.js';
+import { DISCOVERY_DEMO } from './discovery-demo.js';
+import type { Artifact, EpicStatus, EpicTickets, InitiativeDraft, InitiativeTasks, OutboxDraft, Suggestion } from './model.js';
 import type { AudienceDraft } from './audience.js';
 import type { PersonDraft } from './people.js';
 import { dayOf } from './repo.js';
@@ -10,10 +11,10 @@ import { type Watch, WatchesSchema } from './watches.js';
 import { type Risk, RisksSchema } from './risks.js';
 import { demoSuccessProposal } from './demo-success.js';
 
-type DemoInitiative = {
+export type DemoInitiative = {
   readonly draft: InitiativeDraft;
-  readonly status: EpicStatus;
-  readonly tickets: EpicTickets;
+  readonly status?: EpicStatus;
+  readonly tickets?: EpicTickets;
   readonly tasks?: InitiativeTasks;
   readonly brief: string;
   readonly decisions: string;
@@ -21,6 +22,8 @@ type DemoInitiative = {
   readonly suggestions: readonly Suggestion[];
   readonly outbox?: readonly OutboxDraft[];
   readonly risks?: readonly Risk[];
+  readonly files?: Readonly<Record<string, string>>;
+  readonly artifacts?: readonly Artifact[];
 };
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -123,6 +126,7 @@ const demos = (now: number): DemoInitiative[] => {
       timeline: [`${day(3)} [check-in]: sample lists stalled`, `${day(9)} [meeting]: kickoff`],
       suggestions: [{ id: 1, text: 'Create a task in the app repo to prototype the sample-list picker', why: 'APP-91 has had no movement for a week', kind: 'task', state: 'open', createdAt: iso }],
     },
+    DISCOVERY_DEMO(now),
   ];
 };
 
@@ -139,8 +143,8 @@ export const seedDemoInitiatives = async (initiatives: Initiatives, root: string
   for (const demo of demos(now)) {
     const { slug } = await initiatives.create(demo.draft, { quiet: true });
     const folder = path.join(root, slug);
-    writeText(path.join(folder, 'status.json'), `${JSON.stringify(demo.status, null, 2)}\n`);
-    writeText(path.join(folder, 'tickets.json'), `${JSON.stringify(demo.tickets, null, 2)}\n`);
+    if (demo.status) writeText(path.join(folder, 'status.json'), `${JSON.stringify(demo.status, null, 2)}\n`);
+    if (demo.tickets) writeText(path.join(folder, 'tickets.json'), `${JSON.stringify(demo.tickets, null, 2)}\n`);
     writeText(path.join(folder, 'brief.md'), demo.brief);
     writeText(path.join(folder, 'decisions.md'), demo.decisions);
     writeText(path.join(folder, 'timeline.md'), `# Timeline\n\nNewest first.\n\n${demo.timeline.map((t) => `- ${t}`).join('\n')}\n`);
@@ -153,9 +157,11 @@ export const seedDemoInitiatives = async (initiatives: Initiatives, root: string
       writeText(path.join(folder, 'watches.json'), `${JSON.stringify(demoWatches(now), null, 2)}\n`);
       writeText(path.join(folder, 'artifacts.json'), `${JSON.stringify([{ id: 1, title: '3DS on Safari: retry check', why: 'Shows the retry fixes the Safari challenge before SHOP-150 merges.', file: 'artifacts/1-3ds-safari-retry.md', name: '3ds-safari-retry.md', bytes: 140, ticket: 'SHOP-150', worktree: 'shop-150-3ds-retry', project: 'shop', createdAt: new Date(now - 3_600_000).toISOString() }], null, 2)}\n`);
     }
+    for (const [name, text] of Object.entries(demo.files ?? {})) writeText(path.join(folder, name), text);
+    if (demo.artifacts) writeText(path.join(folder, 'artifacts.json'), `${JSON.stringify(demo.artifacts, null, 2)}\n`);
     // Checkout v2 has its success defined (BLG-141): its sentinel, paused, and its dashboard; Mobile Onboarding has none yet.
     if (slug === 'checkout-v2') await initiatives.acceptSuccess(slug, demoSuccessProposal(demo.draft.name)).catch((err: Error) => console.warn(`[initiatives] demo success: ${err.message}`));
-    writeText(path.join(folder, 'sources', 'jira.md'), `# Jira\n\n${demo.status.epics.map((e) => `- ${e.key} ${e.title ?? ''}: ${e.done}/${e.total} done`).join('\n')}\n`);
+    if (demo.status) writeText(path.join(folder, 'sources', 'jira.md'), `# Jira\n\n${demo.status.epics.map((e) => `- ${e.key} ${e.title ?? ''}: ${e.done}/${e.total} done`).join('\n')}\n`);
     initiatives.refresh(slug);
   }
   for (const person of DEMO_PEOPLE) {

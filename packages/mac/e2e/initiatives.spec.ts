@@ -13,7 +13,7 @@ const openInitiative = async (page: Page, name: string): Promise<void> => {
   await expect(sidebar(page)).toBeVisible();
   await sidebar(page).getByRole('button', { name: 'All Initiatives' }).click();
   await page.getByRole('button', { name: `Open ${name}` }).click();
-  await expect(page.getByRole('heading', { name })).toBeVisible();
+  await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
 };
 
 test('an initiative’s page shows the epic’s tickets, open first, with their pull requests', async ({ page }) => {
@@ -394,4 +394,42 @@ test('Define Success proposes metrics with their first rows, and Accept keeps th
   await shot(page, '10-success-defined.png');
   await success.getByRole('button', { name: 'Open Dashboard' }).click();
   await expect(page.getByText('Mobile Onboarding outcome').first()).toBeVisible();
+});
+
+test('an initiative in discovery leads with the problem, evidence, sizing, PRD and demo instead of progress and tickets', async ({ page }) => {
+  await openInitiative(page, 'Self-serve Returns');
+  await expect(page.getByRole('button', { name: 'Status: Discovery' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Tickets' })).toHaveCount(0);
+  await expect(page.getByRole('progressbar')).toHaveCount(0);
+  const regions = await page.locator('section[aria-label]').evaluateAll((all) => all.map((el) => el.getAttribute('aria-label')));
+  expect(regions.slice(0, 7)).toEqual(['Goal', 'Problem', 'Evidence', 'Sizing', 'PRD', 'Demo', 'Delivery']);
+  await expect(page.getByRole('region', { name: 'Problem' })).toContainText('Customers who want to return an item');
+  await expect(page.getByRole('region', { name: 'PRD' }).getByRole('heading', { name: 'Goals', exact: true })).toBeVisible();
+  const sizing = page.getByRole('region', { name: 'Sizing' });
+  await sizing.getByRole('listitem', { name: /How many orders ask for a return by email/ }).click();
+  await expect(page.getByText('SELECT COUNT(DISTINCT t.order_id)', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Done' }).click();
+  const demo = page.getByRole('region', { name: 'Demo' });
+  await expect(demo.locator('[data-demo="WEB-12"]')).toContainText('Being built');
+  await expect(demo.getByRole('list', { name: 'Demo proof' }).getByRole('listitem')).toHaveCount(1);
+  const delivery = page.getByRole('region', { name: 'Delivery' });
+  await expect(delivery.locator('[data-proposed-epic="RET-1"]')).toContainText('Returns in the account page');
+  await expect(delivery.getByText('Not in Jira yet')).toBeVisible();
+  await expect(delivery.getByRole('button', { name: 'Move to Delivery' })).toBeEnabled();
+  await shot(page, '09-initiative-discovery.png');
+  await sizing.getByLabel('Sizing question').fill('How many returns are refunded late?');
+  await sizing.getByRole('button', { name: 'Size It' }).click();
+  await expect(sizing.getByLabel('Sizing question')).toHaveValue('');
+});
+
+test('a new initiative can start in discovery', async ({ page }) => {
+  await page.goto('/');
+  await sidebar(page).getByRole('button', { name: 'All Initiatives' }).click();
+  await page.getByRole('button', { name: 'New Initiative' }).first().click();
+  await page.getByLabel('Name').fill('Loyalty Idea');
+  await page.getByRole('radio', { name: 'Discovery' }).click();
+  await page.getByRole('button', { name: 'Make Initiative' }).click();
+  await expect(page.getByRole('heading', { name: 'Loyalty Idea' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Problem' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Delivery' }).getByRole('button', { name: 'Move to Delivery' })).toBeDisabled();
 });

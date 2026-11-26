@@ -525,6 +525,8 @@ export const MACHINE: Record<Method, MachineSide> = {
   'initiatives.saveRisk': 'drive',
   'initiatives.defineSuccess': 'drive',
   'initiatives.acceptSuccess': 'drive',
+  'initiatives.discoveryStep': 'drive',
+  'initiatives.promote': 'drive',
   // ---- dashboard
   'dashboard.create': 'drive',
   'dashboard.update': 'drive',

@@ -11,7 +11,7 @@ const whenOf = (iso: string, now: number): string => {
   return Number.isFinite(at) ? ago(at, now) : '';
 };
 
-const ArtifactRow = ({ artifact, now, onOpen }: { artifact: Artifact; now: number; onOpen: (id: number) => void }) => {
+export const ArtifactRow = ({ artifact, now, onOpen }: { artifact: Artifact; now: number; onOpen: (id: number) => void }) => {
   const handleClick = (): void => onOpen(artifact.id);
   const meta = [artifact.ticket, artifact.worktree, formatBytes(artifact.bytes), whenOf(artifact.createdAt, now)].filter(Boolean).join(' · ');
   return (

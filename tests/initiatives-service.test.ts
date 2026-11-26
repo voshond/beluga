@@ -435,11 +435,11 @@ describe('Initiatives', () => {
     expect(item().files).toContain('decisions.md');
   });
 
-  it('seeds the demo’s two initiatives', async () => {
+  it('seeds the demo’s initiatives', async () => {
     const { root, store, service } = await setup();
     await seedDemoInitiatives(service, root, Date.parse('2026-11-24T10:00:00Z'));
     const items = store.getState().initiatives.items;
-    expect(items.map((i) => i.name)).toEqual(['Checkout v2', 'Mobile Onboarding']);
+    expect(items.map((i) => i.name)).toEqual(['Checkout v2', 'Mobile Onboarding', 'Self-serve Returns']);
     expect(items[0]).toMatchObject({ progress: { total: 34, done: 21 } });
     expect(items.every((i) => i.suggestions.length > 0 && !i.trouble)).toBe(true);
   });

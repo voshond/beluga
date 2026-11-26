@@ -453,6 +453,8 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'initiatives.saveRisk': INITIATIVES,
   'initiatives.defineSuccess': INITIATIVES,
   'initiatives.acceptSuccess': INITIATIVES,
+  'initiatives.discoveryStep': INITIATIVES,
+  'initiatives.promote': INITIATIVES,
   'dashboard.create': 'covered',
   'dashboard.update': 'covered',
   'dashboard.remove': 'covered',
