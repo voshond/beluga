@@ -230,10 +230,11 @@ describe('Initiatives', () => {
     expect(brief).toContain('prep notes before it and follow-ups after it');
     expect(CHECK_IN_PROMPT).toContain('slack_read_thread');
     expect(CHECK_IN_PROMPT).toContain('prep notes');
-    expect(CHECK_IN_PROMPT).toContain('follow-ups');
+    expect(CHECK_IN_PROMPT).toContain('call_notes_search');
     expect(CHECK_IN_PROMPT).toContain('sources/meetings/');
     const none = await service.create({ name: 'B' });
     expect(service.chatRun(initiativeChatChannel(none.slug, 'main'), SELF)!.brief).toContain('Slack conversations it follows: none yet');
+    expect(service.chatRun(initiativeChatChannel(none.slug, 'main'), SELF)!.brief).toContain('No meetings followed yet');
   });
 
   it('names every doc source in the brief, how to read it and where its snapshot goes', async () => {
