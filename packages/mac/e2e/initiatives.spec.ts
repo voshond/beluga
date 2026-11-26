@@ -367,3 +367,31 @@ test('the sidebar’s Initiatives section sits between Chats and Projects, opens
   await client.api.session.setPrefs({ chatCategories: false });
   client.close();
 });
+
+test('Define Success proposes metrics with their first rows, and Accept keeps them with a dashboard', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  const defined = page.getByRole('region', { name: 'Success' });
+  await expect(defined.locator('[data-success-metric="conversion"]')).toContainText('Checkout conversion');
+  await expect(defined.getByRole('button', { name: 'Open Dashboard' })).toBeVisible();
+  await openInitiative(page, 'Mobile Onboarding');
+  const success = page.getByRole('region', { name: 'Success' });
+  await expect(success.getByText('Not defined yet')).toBeVisible();
+  await success.getByRole('button', { name: 'Define success with your agent' }).click();
+  await expect(success.getByRole('status')).toContainText('BigQuery schema');
+  const draft = success.getByLabel('The agent’s proposal of what success means');
+  await expect(draft.locator('[data-success-metric]')).toHaveCount(2);
+  const first = draft.getByLabel('Metric Checkout conversion');
+  await expect(first.getByRole('table', { name: 'First rows' })).toContainText('value');
+  await first.getByRole('textbox', { name: 'Target', exact: true }).fill('70');
+  await shot(page, '09-success-proposal.png');
+  await draft.getByRole('button', { name: 'Reject' }).click();
+  await expect(draft).toHaveCount(0);
+  await success.getByRole('button', { name: 'Define success with your agent' }).click();
+  await success.getByLabel('The agent’s proposal of what success means').getByRole('button', { name: 'Accept' }).click();
+  await expect(success.locator('[data-success="defined"] [data-success-metric]')).toHaveCount(2);
+  await expect(success.getByRole('button', { name: /Open its sentinel, paused/ })).toBeVisible();
+  await success.scrollIntoViewIfNeeded();
+  await shot(page, '10-success-defined.png');
+  await success.getByRole('button', { name: 'Open Dashboard' }).click();
+  await expect(page.getByText('Mobile Onboarding outcome').first()).toBeVisible();
+});

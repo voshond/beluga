@@ -16,6 +16,7 @@ import { NewInitiativeSheet } from './NewInitiativeSheet.js';
 import { PeopleSection } from './PeopleSection.js';
 import { RisksSection } from './RisksSection.js';
 import { Suggestions } from './SuggestionLog.js';
+import { SuccessSection } from './SuccessSection.js';
 import { TasksSection } from './TasksSection.js';
 import { TicketsTable } from './TicketsTable.js';
 import { UpdatesSection } from './UpdatesSection.js';
@@ -112,6 +113,7 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
             <Facts item={item} />
           </div>
           <RisksSection item={item} />
+          <SuccessSection item={item} />
           <TicketsTable item={item} />
           <CheckInRow item={item} />
           <Suggestions item={item} pickedId={picked?.id} onPick={handlePick} />

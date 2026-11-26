@@ -29,6 +29,7 @@ import {
   InitiativeDraftSchema,
   type InitiativePatch,
   InitiativePatchSchema,
+  type InitiativeStatus,
   type InitiativeView,
   INITIATIVE_SLUG,
   initiativeChatChannel,
@@ -57,6 +58,9 @@ import { InitiativeWatches, type WatchHost } from './watching.js';
 import { WATCH_CHAT, type Watch, type WatchDraft } from './watches.js';
 import { RiskKeeper } from './risk-keeper.js';
 import type { RiskDraft } from './risks.js';
+import type { SuccessDefineRequest } from '../../agent/success-definer.js';
+import type { SuccessDefinition, SuccessDraft, SuccessProposal, SuccessProposalInput } from './success.js';
+import { InitiativeSuccess, type SuccessHost } from './success-service.js';
 
 export type CheckInHost = {
   readonly create: (draft: SentinelDraft) => { readonly id: string };
@@ -77,6 +81,8 @@ export type InitiativesDeps = {
   readonly ask: (prompt: string, channel: string) => string | undefined;
   readonly checkIns?: () => CheckInHost | undefined;
   readonly refine?: (input: GoalRefine) => Promise<string | undefined>;
+  readonly successHost?: () => SuccessHost | undefined;
+  readonly defineSuccess?: (req: SuccessDefineRequest) => Promise<SuccessProposal | undefined>;
   readonly commit?: boolean;
   readonly now?: () => number;
   readonly claudeDir?: string;
@@ -125,6 +131,7 @@ export class Initiatives {
   readonly chats: InitiativeChats;
   readonly watching: InitiativeWatches;
   private readonly risks: RiskKeeper;
+  readonly success: InitiativeSuccess;
   private readonly locals = new Map<string, Local>();
   private readonly sends = new Map<string, Send>();
   private cleared: Send[] = [];
@@ -161,6 +168,7 @@ export class Initiatives {
       },
     });
     this.risks = new RiskKeeper(deps.root, deps.dir);
+    this.success = new InitiativeSuccess({ root: deps.root, host: () => deps.successHost?.(), ...(deps.defineSuccess ? { propose: deps.defineSuccess } : {}), now: () => this.now });
     this.offAction = deps.store.onAction((action) => this.onAction(action));
   }
 
@@ -223,6 +231,7 @@ export class Initiatives {
     const config = folder.config;
     const chats = this.chats.load(slug);
     const checkIn = this.local(slug).checkIn;
+    const success = this.success.read(slug);
     return {
       slug,
       folder: folder.folder,
@@ -250,6 +259,7 @@ export class Initiatives {
       ...(folder.waitingQuestions.length ? { waitingQuestions: folder.waitingQuestions } : {}),
       files: folder.files,
       ...(checkIn ? { checkIn } : {}),
+      ...(success.definition || success.shippedAt ? { success } : {}),
       chats,
       ...(folder.trouble ? { trouble: folder.trouble } : {}),
     };
@@ -378,11 +388,37 @@ export class Initiatives {
     const was = this.config(slug);
     const next = InitiativeConfigSchema.parse({ ...was, ...parsed });
     writeConfig(this.deps.root, slug, next);
+    if (was.status !== next.status) this.statusChanged(slug, was.status, next.status);
     await this.commit(slug, `${slug}: updated`);
     this.refresh(slug);
     if (next.epics.length && !sameKeys(was.epics, next.epics)) this.fetchTickets(slug);
     if (was.status !== next.status) await this.watching.sync(slug).catch(() => undefined);
     return this.view(slug);
+  }
+
+  /** Shipped: the ship date is noted and the check-in goes weekly (an outcome review); back to work, it goes back to weekdays. */
+  private statusChanged(slug: string, was: InitiativeStatus, next: InitiativeStatus): void {
+    this.success.statusChanged(slug, was, next);
+    const weekly = next === 'shipped';
+    if (weekly === (was === 'shipped') || next === 'archived') return;
+    const host = this.deps.checkIns?.();
+    const id = this.local(slug).checkIn;
+    if (!host || !id || !host.exists(id)) return;
+    host.reschedule(id, weekly ? { ...CHECK_IN_TRIGGER, days: [1] } : CHECK_IN_TRIGGER);
+  }
+
+  /** Your agent's proposal of what success means, with each query's first rows (nothing is saved yet). */
+  async defineSuccess(slug: string): Promise<SuccessDraft> {
+    const item = this.need(slug);
+    return this.success.draft(item, this.repos(item));
+  }
+
+  /** The owner accepts a definition: kept in success.json, with its sentinel (paused when new) and its dashboard. */
+  async acceptSuccess(slug: string, proposal: SuccessProposalInput): Promise<SuccessDefinition> {
+    const definition = await this.success.accept(this.need(slug), proposal);
+    await this.commit(slug, `${slug}: success defined`);
+    this.refresh(slug);
+    return definition;
   }
 
   async archive(slug: string): Promise<void> {
@@ -736,7 +772,7 @@ export class Initiatives {
     const brief = readFolder(this.deps.root, of.slug).brief;
     return {
       place,
-      brief: initiativeBrief(item, brief, this.repos(item), of.chat, readDirectory(this.deps.root), this.now),
+      brief: initiativeBrief(item, brief, this.repos(item), of.chat, readDirectory(this.deps.root), this.now) + this.success.brief(item, of.chat === CHECK_IN_CHAT),
       vetTool: (toolName, input) => this.vetSend(of.slug, toolName, input),
       preApproved: (toolName, input) => this.preApproved(of.slug, toolName, input),
     };

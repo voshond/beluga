@@ -1053,6 +1053,8 @@ export const NOT_EXPOSED: Readonly<Record<string, 'chat_only' | 'checker_only'>>
   honcho_ask: 'chat_only',
   // Initiatives are the person's own section: your own worktree runs send them artifacts; external agents never do.
   report_to_initiative: 'chat_only',
+  // An initiative's Define Success pass tries its queries read-only (BLG-141): external agents use sentinel_try_source.
+  try_source: 'chat_only',
   // The chat tools act on your own chats (chat links). External agents are refused them.
   list_chats: 'chat_only',
   read_chat: 'chat_only',

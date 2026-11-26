@@ -8,6 +8,7 @@ import type { PersonDraft } from './people.js';
 import { dayOf } from './repo.js';
 import { type Watch, WatchesSchema } from './watches.js';
 import { type Risk, RisksSchema } from './risks.js';
+import { demoSuccessProposal } from './demo-success.js';
 
 type DemoInitiative = {
   readonly draft: InitiativeDraft;
@@ -152,6 +153,8 @@ export const seedDemoInitiatives = async (initiatives: Initiatives, root: string
       writeText(path.join(folder, 'watches.json'), `${JSON.stringify(demoWatches(now), null, 2)}\n`);
       writeText(path.join(folder, 'artifacts.json'), `${JSON.stringify([{ id: 1, title: '3DS on Safari: retry check', why: 'Shows the retry fixes the Safari challenge before SHOP-150 merges.', file: 'artifacts/1-3ds-safari-retry.md', name: '3ds-safari-retry.md', bytes: 140, ticket: 'SHOP-150', worktree: 'shop-150-3ds-retry', project: 'shop', createdAt: new Date(now - 3_600_000).toISOString() }], null, 2)}\n`);
     }
+    // Checkout v2 has its success defined (BLG-141): its sentinel, paused, and its dashboard; Mobile Onboarding has none yet.
+    if (slug === 'checkout-v2') await initiatives.acceptSuccess(slug, demoSuccessProposal(demo.draft.name)).catch((err: Error) => console.warn(`[initiatives] demo success: ${err.message}`));
     writeText(path.join(folder, 'sources', 'jira.md'), `# Jira\n\n${demo.status.epics.map((e) => `- ${e.key} ${e.title ?? ''}: ${e.done}/${e.total} done`).join('\n')}\n`);
     initiatives.refresh(slug);
   }

@@ -523,6 +523,8 @@ export const MACHINE: Record<Method, MachineSide> = {
   'initiatives.lookNow': 'drive',
   'initiatives.readNews': 'drive',
   'initiatives.saveRisk': 'drive',
+  'initiatives.defineSuccess': 'drive',
+  'initiatives.acceptSuccess': 'drive',
   // ---- dashboard
   'dashboard.create': 'drive',
   'dashboard.update': 'drive',

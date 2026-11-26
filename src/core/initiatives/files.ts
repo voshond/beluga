@@ -8,7 +8,7 @@ import { type Artifact, ArtifactsSchema, type EpicStatus, EpicStatusSchema, type
 import { type Watch, WatchesSchema } from './watches.js';
 import { type Risk, RisksSchema } from './risks.js';
 
-export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json', 'watches.json', 'artifacts.json', 'updates.json', 'risks.json'] as const;
+export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json', 'watches.json', 'artifacts.json', 'updates.json', 'risks.json', 'success.json'] as const;
 
 const MAX_FILES = 200;
 const MAX_READ = 512 * 1024;

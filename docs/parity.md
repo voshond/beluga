@@ -701,6 +701,8 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `initiatives.lookNow` | ✓ an initiative's page › Waiting for › a row's Look Now (its Follow-ups chat looks at that one place at once) |
 | `initiatives.readNews` | ✓ an initiative's page › New since you asked › Mark Read (one item, or Mark All Read) |
 | `initiatives.saveRisk` | ✓ an initiative's page › Risks › Add Risk, a risk's Edit… and Close (kept in `risks.json` as the owner's edit, which the check-ins keep; a line in `timeline.md`) |
+| `initiatives.defineSuccess` | ✓ an initiative's page › Success › Define Success (your agent reads the goal, the tickets, the linked repos' data model and the BigQuery schema, read-only, and proposes up to three metrics; each query and its baseline run once and show their first rows; nothing is saved) |
+| `initiatives.acceptSuccess` | ✓ an initiative's page › Success › the proposal › Accept (after any change to a label, query, filter, baseline, target or direction; every query runs again and nothing is saved when one fails; writes `success.json`, makes its sentinel, paused, or updates the one it has, and fills its dashboard) · Reject (drops the proposal) |
 | `toolbox.list` | ✓ Project › Toolbox: all tools (personal + team) for the project, first on Project Home: each tool's name with its {{params}} and the last line it printed; the phone lists them read-only (BLG-75) |
 | `toolbox.create` | ✓ Project Settings › Toolbox › New Tool: name, command with {{params}}, personal or Share with team (saves to beluga.json) · Mac only |
 | `toolbox.update` | ✓ Project Settings › Toolbox › a tool's pencil: change its name, command, params or source · Mac only |

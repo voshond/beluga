@@ -511,6 +511,7 @@ export type InitiativeView = {
   readonly waitingQuestions?: readonly WaitingQuestion[];
   readonly files: readonly string[];
   readonly checkIn?: string;
+  readonly success?: import('./success.js').SuccessFile;
   readonly chats: InitiativeChats;
   readonly trouble?: string;
 };

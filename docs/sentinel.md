@@ -344,6 +344,10 @@ The phone's Sentinel screen has the same three parts: the sentinels, the dashboa
 
 `beluga_dashboard`, your own runs only: `dashboard_list`, `dashboard_create(name)`, `dashboard_update(dashboard, name?, compare?)`, `dashboard_remove(dashboard)` (asks you first), `dashboard_add_tile(dashboard, tile)`, `dashboard_update_tile`, `dashboard_move_tile`, `dashboard_remove_tile`, `metric_list`, `metric_read(sentinel, name, since)`, and `sentinel_measure` inside a run. A tile is given by kind with a sentinel and a metric (`number`, `series`, `table`, `output`), a sentinel and a step (`output`), or a sentinel (`text`).
 
+### An initiative's success (BLG-141)
+
+Accepting an initiative's success definition (docs/initiatives.md §13) makes a sentinel and a dashboard for it through `src/core/initiatives/launch.ts`'s `successHostOf`: Beluga builds them itself, never the initiative's chat. The sentinel has only Keep the numbers steps from bigquery or postgres sources (no script, service call or Claude step), starts paused, and keeps each metric with its baseline and target beside it. Before that, the success pass and Accept run its queries read-only through `Sentinels.previewSource` (what `sentinel_try_source` runs). The initiative only references the sentinel and the dashboard by id: archiving it pauses the sentinel, and its numbers and dashboard stay.
+
 ### How it's built
 
 The pure part is `metrics.ts` (reading an output, `pickPath`, `measureFrom` for every kind, `baselineOf` / `deltaOf`, the words, `prunePoints`) and `dashboard-model.ts` (tile kinds and sizes, their state, what an output is, `layoutTiles` / `placeTile` / `gridSpot` (each tile at its own column and row), the first dashboard, Markdown), both browser-safe; the files are `metric-files.ts` and `dashboards.ts`. A `measure` step from a source counts as a guarded step: added or changed inside a sentinel run or by an external agent, it pauses the sentinel (§3 Rules). A Call a service step also gets the project's Earnings key as `$STRIPE_EARNINGS_KEY`, redacted from what comes back like any `$VAR`. A deleted sentinel's numbers go with it; its tiles stay and say "gone" until you remove them.

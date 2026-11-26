@@ -819,6 +819,8 @@ export const PHONE: Record<Method, Side> = {
   'initiatives.lookNow': 'mac',
   'initiatives.readNews': 'mac',
   'initiatives.saveRisk': 'mac',
+  'initiatives.defineSuccess': 'mac',
+  'initiatives.acceptSuccess': 'mac',
 
   // ---- project Toolbox (BLG-75): the phone lists tools and can run them; create/edit/delete are Mac-only
   'toolbox.list': 'phone',
