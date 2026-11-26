@@ -147,7 +147,7 @@ export const openWithWhom = (item: Pick<InitiativeView, 'suggestions' | 'waiting
 /** A new audience's id from its name. */
 export const audienceIdOf = (name: string, taken: readonly string[]): string => uniqueSlug(name, new Set(taken));
 
-const SLACK_LINK = /\/archives\/([A-Z0-9]{6,})(?:\/p(\d{10})(\d{6}))?/;
+const SLACK_LINK = /\/archives\/([A-Z0-9]{2,})(?:\/p(\d{10})(\d{6}))?/;
 
 /** A Slack target from what was pasted: a message link (its channel and thread), a channel id, or a #name the agent resolves. */
 export const slackTargetOf = (said: string, label?: string): Extract<AudienceTarget, { kind: 'slack' }> => {
@@ -164,5 +164,5 @@ export const slackTargetOf = (said: string, label?: string): Extract<AudienceTar
 export const audienceTargetWords = (target: AudienceTarget): string => {
   if (target.kind === 'slack') return `${target.label ?? target.channel}${target.thread ? ' (in a thread)' : ''}`;
   if (target.kind === 'confluence') return `${target.label ?? `Confluence page ${target.page}`} › ${target.section}`;
-  return `prep sheet for ${target.label ?? target.meeting}`;
+  return `Prep sheet for ${target.label ?? target.meeting}`;
 };

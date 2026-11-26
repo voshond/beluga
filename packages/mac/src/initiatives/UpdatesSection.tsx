@@ -46,7 +46,7 @@ const AudienceRow = ({ item, audience, now, onEdit }: RowProps) => {
       confirm: 'Remove',
       run: () => void a.act(() => a.api.removeAudience(item.slug, audience.id)),
     });
-  const nextWords = next === undefined ? 'On request' : due ? 'Due now' : `Next due ${whenWords(next)}`;
+  const nextWords = next === undefined ? 'On request' : next <= now ? 'Due now' : `Next due ${whenWords(next)}`;
   return (
     <div role="listitem" className={p.person} data-audience={audience.id} data-due={due || undefined}>
       <span className={p.personHead}>
