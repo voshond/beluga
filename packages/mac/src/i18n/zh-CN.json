@@ -13034,5 +13034,11 @@
   "Save as Image…": "存储为图片…",
   "Copied the graph as a picture": "已将图表拷贝为图片",
   "Couldn’t copy the picture: {0}": "无法拷贝图片：{0}",
-  "Couldn’t save the picture: {0}": "无法存储图片：{0}"
+  "Couldn’t save the picture: {0}": "无法存储图片：{0}",
+  "Keep in Initiative": "保存到举措",
+  "Attach to Jira Ticket…": "附加到 Jira 工单…",
+  "Kept “{0}” in {1}": "已将“{0}”保存到 {1}",
+  "Couldn’t keep the graph: {0}": "无法保存图表：{0}",
+  "Open a chat to attach it from": "请先打开一个聊天再附加",
+  "Couldn’t draw the picture: {0}": "无法绘制图片：{0}"
 }

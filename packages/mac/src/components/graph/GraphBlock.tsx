@@ -12,6 +12,7 @@ import { cachedLayout } from './layout-cache.js';
 import { GraphGlyph } from './marks.js';
 import { GraphPicture } from './GraphPicture.js';
 import { pictureName } from './graph-picture.js';
+import { useGraphShare } from './graph-share.js';
 import g from './graph.module.css';
 
 /**
@@ -99,11 +100,13 @@ function GraphCard({ graph, code, warnings, localImages, shapeKey }: { graph: Gr
   const height = laid ? fittedHeight(laid, width) : inlineHeight(graph, width);
   const parts = graph.nodes.filter((n) => n.type !== 'group').length;
   const copy = (): void => void copyText(JSON.stringify(JSON.parse(code), null, 2)).then(() => toast(client, 'Copied the graph as JSON', 'success'));
+  const share = useGraphShare({ graph, code, picture: () => picture('inline') });
   const items: ActionItem[] = [
     { label: 'Open in Full Window', icon: 'expand', onSelect: () => setFull(true) },
     { label: 'Copy as Image', icon: 'image', onSelect: () => copyImage('inline') },
     { label: 'Save as Image…', icon: 'download', onSelect: () => saveImage('inline') },
     { label: 'Copy as JSON', icon: 'copy', onSelect: copy },
+    ...share,
   ];
   const meta = [`${parts} ${parts === 1 ? 'part' : 'parts'}`, graph.steps.length ? `${graph.steps.length} ${graph.steps.length === 1 ? 'step' : 'steps'}` : ''].filter(Boolean).join(' · ');
   return (
