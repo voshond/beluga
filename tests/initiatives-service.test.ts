@@ -43,10 +43,10 @@ const fakeHost = (): Host => {
   };
 };
 
-const setup = async (opts: { readonly dir?: string; readonly commit?: boolean; readonly now?: () => number; readonly refine?: (input: GoalRefine) => Promise<string | undefined> } = {}) => {
+const setup = async (opts: { readonly root?: string; readonly dir?: string; readonly commit?: boolean; readonly now?: () => number; readonly refine?: (input: GoalRefine) => Promise<string | undefined> } = {}) => {
   const store = new Store(initialState('room', 'auto'));
   store.dispatch({ type: 'identity', selfId: SELF, isHost: true, home: '/Users/k' });
-  const root = path.join(tmp(), 'initiatives');
+  const root = opts.root ?? path.join(tmp(), 'initiatives');
   const host = fakeHost();
   const asked: Array<{ readonly prompt: string; readonly channel: string }> = [];
   const service = new Initiatives({
@@ -399,6 +399,56 @@ describe('Initiatives', () => {
     const other = (await service.create({ name: 'B' })).slug;
     await service.sendDraft(slug, 1, 'x').catch(() => undefined);
     expect(service.chatRun(initiativeChatChannel(other, 'main'), SELF)!.vetTool('mcp__plugin_slack_slack__slack_send_message', post('x'))).toBe(OUTBOX_DENIED);
+  });
+
+  it('takes the slack-user MCP’s worded receipt as a delivery, so the draft leaves the outbox', async () => {
+    const { root, service } = await setup();
+    const { slug } = await service.create({ name: 'A' });
+    writeFileSync(path.join(root, slug, 'outbox.json'), JSON.stringify([{ id: 1, to: { kind: 'slack', channel: 'C042' }, text: 'Who owns SHOP-150 now?' }]));
+    service.refresh(slug);
+    const tool = 'mcp__slack-user__conversations_add_message';
+    const input = { channel_id: 'C042', text: 'Who owns SHOP-150 now?' };
+    const send = async (output: string): Promise<void> => {
+      await service.sendDraft(slug, 1, 'Who owns SHOP-150 now?');
+      const run = service.chatRun(initiativeChatChannel(slug, 'main'), SELF)!;
+      expect(run.vetTool(tool, input)).toBeUndefined();
+      run.onStep({ id: 'send', kind: 'tool', title: 'Send', tool, status: 'done', startedAt: 1, input, output });
+    };
+    await send('Successfully posted message to channel C999 (ts=1795722999.566919)');
+    expect(service.view(slug).outbox[0]).toMatchObject({ state: 'approved', sendError: expect.stringContaining('different destination') });
+    await send('Posted something, probably');
+    expect(service.view(slug).outbox[0]).toMatchObject({ state: 'approved', sendError: expect.stringContaining('did not confirm') });
+    await send('Successfully posted message to channel C042 (ts=1795722999.566919)');
+    expect(service.view(slug).outbox[0]).toMatchObject({ state: 'sent', deliveryChannel: 'C042', deliveryThread: '1795722999.566919', source: 'https://app.slack.com/archives/C042/p1795722999566919' });
+    expect(service.view(slug).outbox[0]?.sendError).toBeUndefined();
+  });
+
+  it('sends a draft from the chat the user is in, and from the first chat when that one is woken afresh', async () => {
+    const { root, asked, service } = await setup();
+    const { slug } = await service.create({ name: 'A' });
+    const drafts = [1, 2, 3, 4].map((id) => ({ id, to: { kind: 'jira', issue: `SHOP-${id}` }, text: 'Blocked on Safari.' }));
+    writeFileSync(path.join(root, slug, 'outbox.json'), JSON.stringify(drafts));
+    service.refresh(slug);
+    const side = service.chatNew(slug);
+    service.chatOpen(slug, 'main');
+    expect(await service.sendDraft(slug, 1, 'x', undefined, side.id)).toEqual({ channel: side.channel });
+    expect(asked.at(-1)!.channel).toBe(side.channel);
+    expect(await service.sendDraft(slug, 2, 'x', undefined, CHECK_IN_CHAT)).toEqual({ channel: initiativeChatChannel(slug, 'main') });
+    expect(await service.sendDraft(slug, 3, 'x', undefined, 'gone')).toEqual({ channel: initiativeChatChannel(slug, 'main') });
+    service.chatOpen(slug, side.id);
+    expect(await service.sendDraft(slug, 4, 'x')).toEqual({ channel: side.channel });
+  });
+
+  it('marks a send the daemon lost on a restart as failed, so its card can be sent again', async () => {
+    const { root, service } = await setup();
+    const { slug } = await service.create({ name: 'A' });
+    writeFileSync(path.join(root, slug, 'outbox.json'), JSON.stringify([{ id: 1, to: { kind: 'jira', issue: 'SHOP-150' }, text: 'Blocked on Safari.' }]));
+    service.refresh(slug);
+    await service.sendDraft(slug, 1, 'Blocked on Safari.');
+    expect(service.view(slug).outbox[0]?.sendError).toBeUndefined();
+    service.stop();
+    const again = await setup({ root });
+    expect(again.service.view(slug).outbox[0]).toMatchObject({ state: 'approved', sendError: expect.stringContaining('restarted') });
   });
 
   it('shows a bad initiative.json as trouble and keeps the rest going', async () => {

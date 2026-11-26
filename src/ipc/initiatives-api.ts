@@ -30,7 +30,7 @@ export const INITIATIVES_API = {
   'initiatives.chatDelete': { args: z.tuple([slug, chat]) },
   'initiatives.resolveSuggestion': { args: z.tuple([slug, z.number().int().min(1), z.enum(['approve', 'dismiss']), z.string().trim().min(1).max(2000).optional()]) },
   'initiatives.clarifySuggestion': { args: z.tuple([slug, z.number().int().min(1)]) },
-  'initiatives.sendDraft': { args: z.tuple([slug, z.number().int().min(1), z.string().trim().min(1).max(PAGE_MAX), z.boolean().optional()]) },
+  'initiatives.sendDraft': { args: z.tuple([slug, z.number().int().min(1), z.string().trim().min(1).max(PAGE_MAX), z.boolean().optional(), chat.optional()]) },
   'initiatives.discardDraft': { args: z.tuple([slug, z.number().int().min(1)]) },
   'initiatives.readFile': { args: z.tuple([slug, z.string().min(1).max(400)]) },
   'initiatives.readArtifact': { args: z.tuple([slug, z.number().int().min(1)]) },

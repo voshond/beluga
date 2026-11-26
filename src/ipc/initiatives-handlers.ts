@@ -30,7 +30,7 @@ export const INITIATIVES_HANDLERS = {
   },
   'initiatives.resolveSuggestion': (s, slug, id, decision, answer) => needInitiatives(s).resolveSuggestion(slug, id, decision, answer),
   'initiatives.clarifySuggestion': (s, slug, id) => needInitiatives(s).clarifySuggestion(slug, id),
-  'initiatives.sendDraft': (s, slug, id, text, expectsReply) => needInitiatives(s).sendDraft(slug, id, text, expectsReply),
+  'initiatives.sendDraft': (s, slug, id, text, expectsReply, chat) => needInitiatives(s).sendDraft(slug, id, text, expectsReply, chat),
   'initiatives.discardDraft': (s, slug, id) => needInitiatives(s).discardDraft(slug, id),
   'initiatives.readFile': (s, slug, rel) => needInitiatives(s).readFile(slug, rel),
   'initiatives.readArtifact': (s, slug, id) => needInitiatives(s).readArtifact(slug, id),

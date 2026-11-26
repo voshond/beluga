@@ -120,6 +120,8 @@ export type InitiativeChatRun = {
 /** A draft the user sent: the one call it allows, kept here, never in a file the agent can write. */
 type Send = { readonly slug: string; readonly id: number; readonly to: OutboxTarget; readonly text: string; readonly channel: string; requestId?: string };
 
+const SEND_LOST = 'Beluga restarted before this was confirmed. Check the destination before sending again.';
+
 const SENT_WORDS: Readonly<Record<OutboxTarget['kind'], string>> = { slack: 'a Slack message', jira: 'a Jira comment', confluence: 'a Confluence update', 'confluence-page': 'a Confluence page', prep: 'a prep sheet' };
 
 export const OUTBOX_DENIED = 'In an initiative, messages go out through its outbox: write this as a draft in outbox.json, and the user sends it from the chat.';
@@ -217,6 +219,7 @@ export class Initiatives {
     if (this.deps.commit) await ensureRepo(this.deps.root).catch(() => mkdirSync(this.deps.root, { recursive: true }));
     else mkdirSync(this.deps.root, { recursive: true });
     if (this.stopped) return;
+    for (const slug of listSlugs(this.deps.root)) this.failLostSends(slug);
     const items = listSlugs(this.deps.root).map((slug) => this.view(slug));
     const people = readDirectory(this.deps.root);
     this.deps.store.dispatch({ type: 'initiatives_init', state: { enabled: true, root: this.deps.root, items, people, enrichment: this.enricher.view, avatars: this.avatars.shas(people) } });
@@ -579,8 +582,8 @@ export class Initiatives {
     return { channel };
   }
 
-  /** The user sends a draft (edited or not): the chat is asked to post it, and only that call is allowed. */
-  async sendDraft(slug: string, id: number, text: string, expectsReply?: boolean): Promise<{ readonly channel: string }> {
+  /** The user sends a draft (edited or not): the chat they are in is asked to post it, and only that call is allowed. */
+  async sendDraft(slug: string, id: number, text: string, expectsReply?: boolean, chat?: string): Promise<{ readonly channel: string }> {
     const item = this.need(slug);
     const draft = this.openDraft(item, id);
     const to = draft.to;
@@ -591,7 +594,7 @@ export class Initiatives {
     const allowed = draft.to.kind === 'confluence-page' ? this.readFile(slug, draft.to.file).text : final;
     const key = `${slug}:${id}`;
     if (this.sending.has(key)) throw new Error('This draft is already on its way');
-    const channel = this.workChannel(item);
+    const channel = this.workChannel(item, chat);
     const send: Send = { slug, id, to: draft.to, text: allowed, channel };
     this.sends.set(key, send);
     const edited = final !== draft.text.trim();
@@ -631,9 +634,17 @@ export class Initiatives {
     writeOutbox(this.deps.root, slug, outbox.map((d) => (d.id === id ? change(d) : d)));
   }
 
-  private workChannel(item: InitiativeView): string {
-    const chat = item.chats.active;
+  /** The chat that does the work: the one asked for when the initiative has it, else the open one; never a chat a sentinel wakes afresh. */
+  private workChannel(item: InitiativeView, asked?: string): string {
+    const chat = asked !== undefined && item.chats.chats.some((c) => c.id === asked) ? asked : item.chats.active;
     return initiativeChatChannel(item.slug, chat === CHECK_IN_CHAT || chat === WATCH_CHAT ? FIRST_INITIATIVE_CHAT : chat);
+  }
+
+  /** A draft sent before the daemon stopped has no send left to wait for: say so, instead of sending forever. */
+  private failLostSends(slug: string): void {
+    const outbox = readFolder(this.deps.root, slug).outbox;
+    if (!outbox.some((draft) => draft.state === 'approved' && !draft.sendError)) return;
+    writeOutbox(this.deps.root, slug, outbox.map((draft) => (draft.state === 'approved' && !draft.sendError ? { ...draft, sendError: SEND_LOST } : draft)));
   }
 
   private recordSendError(send: Send, error: string): void {
