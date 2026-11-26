@@ -6,6 +6,7 @@ import { Button, Empty, IconButton } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
 import { openSheet } from '../lib/sheets.js';
 import { sameDeep } from '../lib/stable.js';
+import { DiscoverySections } from './DiscoverySections.js';
 import { GoalSection } from './GoalRefine.js';
 import { Follows } from './InitiativeFollows.js';
 import { EpicLink, ProgressBar } from './InitiativeParts.js';
@@ -20,7 +21,7 @@ import { useInitiativeActions } from './use-initiatives.js';
 import home from '../sentinel/home.module.css';
 import s from './initiatives.module.css';
 
-const STATUS_LABEL: Readonly<Record<InitiativeStatus, string>> = { active: 'Active', paused: 'Paused', shipped: 'Shipped', archived: 'Archived' };
+const STATUS_LABEL: Readonly<Record<InitiativeStatus, string>> = { discovery: 'Discovery', active: 'Active', paused: 'Paused', shipped: 'Shipped', archived: 'Archived' };
 
 const Header = ({ item, onEdit }: { item: InitiativeView; onEdit: () => void }) => {
   const a = useInitiativeActions();
@@ -33,7 +34,7 @@ const Header = ({ item, onEdit }: { item: InitiativeView; onEdit: () => void }) 
       confirm: 'Archive',
       run: () => void a.act(() => a.api.archive(item.slug), `Archived ${item.name}`),
     });
-  const statuses: ActionItem[] = INITIATIVE_STATUSES.filter((x) => x !== 'archived').map((x) => ({ label: STATUS_LABEL[x], checked: item.status === x, onSelect: () => handleStatus(x) }));
+  const statuses: ActionItem[] = INITIATIVE_STATUSES.filter((x) => x !== 'archived' && (x !== 'discovery' || item.status === 'discovery')).map((x) => ({ label: STATUS_LABEL[x], checked: item.status === x, onSelect: () => handleStatus(x) }));
   const more: ActionItem[] = [
     { label: 'Edit…', icon: 'pencil', onSelect: onEdit },
     { label: 'Back to All Initiatives', icon: 'back', onSelect: a.openList },
@@ -102,11 +103,17 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
             </div>
           ) : null}
           <GoalSection item={item} />
-          <div className={s.section}>
-            <ProgressBar progress={item.progress} />
-            <Facts item={item} />
-          </div>
-          <TicketsTable item={item} />
+          {item.status === 'discovery' ? (
+            <DiscoverySections item={item} />
+          ) : (
+            <>
+              <div className={s.section}>
+                <ProgressBar progress={item.progress} />
+                <Facts item={item} />
+              </div>
+              <TicketsTable item={item} />
+            </>
+          )}
           <CheckInRow item={item} />
           <Suggestions item={item} pickedId={picked?.id} onPick={handlePick} />
           <TasksSection item={item} />

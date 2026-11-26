@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { type InitiativeView, type OutboxDraft, pendingDrafts, targetWords } from '@beluga/core/initiatives/model.js';
 import { TextArea } from '../components/FormSheet.js';
-import { Icon } from '../components/Icon.js';
+import { Icon, type IconName } from '../components/Icon.js';
 import { Button } from '../components/ui.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import s from './initiatives.module.css';
 
-const KIND_WORDS: Readonly<Record<OutboxDraft['to']['kind'], string>> = { slack: 'Slack', jira: 'Jira comment' };
+const KIND_WORDS: Readonly<Record<OutboxDraft['to']['kind'], string>> = { slack: 'Slack', jira: 'Jira comment', confluence: 'Confluence page' };
+
+const KIND_ICON: Readonly<Record<OutboxDraft['to']['kind'], IconName>> = { slack: 'chat', jira: 'issue', confluence: 'fileText' };
 
 type CardProps = {
   readonly slug: string;
@@ -24,7 +26,7 @@ const OutboxCard = ({ slug, draft, place, onLater }: CardProps) => {
   return (
     <div className={s.outboxCard} data-outbox={draft.id} data-state={draft.state} aria-label={`Draft to ${targetWords(draft.to)}`}>
       <div className={s.outboxHead}>
-        <Icon name={draft.to.kind === 'slack' ? 'chat' : 'issue'} size={13} />
+        <Icon name={KIND_ICON[draft.to.kind]} size={13} />
         <span className={s.outboxTo}>
           {KIND_WORDS[draft.to.kind]} · {targetWords(draft.to)}
         </span>
@@ -32,7 +34,13 @@ const OutboxCard = ({ slug, draft, place, onLater }: CardProps) => {
         <span className={s.quiet}>{place}</span>
       </div>
       {draft.why ? <span className={s.why}>{draft.why}</span> : null}
-      <TextArea value={text} onChange={setText} rows={5} maxLength={5000} aria-label={`Message to ${targetWords(draft.to)}`} />
+      {draft.to.kind === 'confluence' ? (
+        <span className={s.why}>
+          {draft.text} Sends {draft.to.file} as it is now{draft.to.page ? `, over page ${draft.to.page}` : ''}.
+        </span>
+      ) : (
+        <TextArea value={text} onChange={setText} rows={5} maxLength={5000} aria-label={`Message to ${targetWords(draft.to)}`} />
+      )}
       {sending ? <span className={s.why}>Sent to the chat to post. If it didn’t go out, send it again.</span> : null}
       <span className={s.answers}>
         <Button size="small" variant="primary" icon="send" onClick={handleSend} disabled={!text.trim()}>

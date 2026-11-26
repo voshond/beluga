@@ -36,7 +36,7 @@ const InitiativeCard = ({ item, now }: { item: InitiativeView; now: number }) =>
           {item.trouble}
         </span>
       ) : null}
-      <ProgressBar progress={item.progress} />
+      {item.status === 'discovery' ? null : <ProgressBar progress={item.progress} />}
       <span className={s.cardLine}>
         {item.epics.length ? <span>{item.epics.join(', ')}</span> : null}
         <span>{lastCheckInWords(item, (at) => ago(at, now))}</span>

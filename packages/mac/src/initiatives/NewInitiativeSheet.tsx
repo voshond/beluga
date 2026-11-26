@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { EPIC_KEY, GOAL_MAX, type InitiativeView } from '@beluga/core/initiatives/model.js';
 import { Field, FormSheet, TextArea, TextInput } from '../components/FormSheet.js';
 import { Icon } from '../components/Icon.js';
-import { Button } from '../components/ui.js';
+import { Button, Segmented } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
 import { PickMenu } from '../tasks/PickMenu.js';
 import { GoalDraft, RefineButton, useGoalRefine } from './GoalRefine.js';
@@ -10,6 +10,13 @@ import { type RefRow, docEntries, docRows, epicKeys, meetingEntries, meetingRows
 import { RefList } from './RefList.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import s from './initiatives.module.css';
+
+type Stage = 'active' | 'discovery';
+
+const STAGES: ReadonlyArray<{ value: Stage; label: string }> = [
+  { value: 'active', label: 'Delivery' },
+  { value: 'discovery', label: 'Discovery' },
+];
 
 type SheetProps = {
   readonly editing?: InitiativeView;
@@ -27,6 +34,7 @@ export const NewInitiativeSheet = ({ editing, close }: SheetProps) => {
   const [docs, setDocs] = useState<readonly RefRow[]>(() => docRows(editing?.docs ?? []));
   const [meetings, setMeetings] = useState<readonly RefRow[]>(() => meetingRows(editing?.meetings ?? []));
   const [repos, setRepos] = useState<readonly string[]>(editing?.repos ?? []);
+  const [stage, setStage] = useState<Stage>('active');
   const badEpics = epicKeys(epics).filter((key) => !EPIC_KEY.test(key));
   const fields = { name: name.trim(), goal: goal.trim(), epics: epicKeys(epics), slack: slackEntries(slack), docs: docEntries(docs), meetings: meetingEntries(meetings), repos: [...repos] };
   const goodEpics = fields.epics.filter((key) => EPIC_KEY.test(key));
@@ -42,7 +50,7 @@ export const NewInitiativeSheet = ({ editing, close }: SheetProps) => {
       if (!saved) return 'Couldn’t save it: see the message above';
       return close();
     }
-    const made = await a.create(fields);
+    const made = await a.create({ ...fields, status: stage });
     if (!made) return 'Couldn’t make it: see the message above';
     close();
     a.open({ slug: made.slug, chats: { chats: [], active: 'main' } });
@@ -62,6 +70,11 @@ export const NewInitiativeSheet = ({ editing, close }: SheetProps) => {
       <Field label="Name" htmlFor="initiative-name">
         <TextInput id="initiative-name" value={name} onChange={setName} maxLength={120} placeholder="Checkout v2" data-autofocus />
       </Field>
+      {editing ? null : (
+        <Field label="Stage" hint={stage === 'discovery' ? 'An idea first: work out the problem, size it, draft the PRD and get a demo built, then move it to delivery with its epics.' : 'Delivery: its epics are known and it ships.'}>
+          <Segmented value={stage} options={STAGES} onChange={setStage} label="Stage" radio />
+        </Field>
+      )}
       <Field label="Goal" htmlFor="initiative-goal" hint="What shipped looks like. Markdown works; your agent can shape it from a few words and the epic.">
         <div className={s.stack}>
           <TextArea id="initiative-goal" value={goal} onChange={setGoal} rows={goal.length > 300 ? 9 : 3} maxLength={GOAL_MAX} placeholder="Ship the one-page checkout to every market before the holiday freeze" />
