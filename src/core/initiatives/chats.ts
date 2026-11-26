@@ -246,19 +246,24 @@ export class InitiativeChats {
     this.save(slug, { chats, active });
   }
 
-  place(channel: string, from: string): AgentPlace | undefined {
+  /** A chat something wakes (Check-in, Follow-ups) is listed before it's woken: a sentinel only wakes a chat it can find. False: not one of those. */
+  ensure(slug: string, id: string): boolean {
+    if (!ON_WAKE.includes(id)) return this.has(slug, id);
+    const list = this.need(slug);
+    if (!this.has(slug, id)) this.save(slug, { ...list, chats: [...list.chats, { id, createdAt: this.now }] });
+    return true;
+  }
+
+  /** `fresh`: a new session, not the saved one (a check-in or a follow-up look starts from the folder, not the last run). */
+  place(channel: string, from: string, opts: { readonly fresh?: boolean } = {}): AgentPlace | undefined {
     const of = initiativeChatOf(channel);
     if (!of || from !== this.deps.selfId()) return undefined;
     const cwd = this.deps.folderOf(of.slug);
-    if (!cwd) return undefined;
-    const list = this.need(of.slug);
-    if (!this.has(of.slug, of.chat)) {
-      if (!ON_WAKE.includes(of.chat)) return undefined;
-      this.save(of.slug, { ...list, chats: [...list.chats, { id: of.chat, createdAt: this.now }] });
-    }
+    if (!cwd || !this.ensure(of.slug, of.chat)) return undefined;
     const agent = chosenAgent(this.deps.store.getState().prefs);
-    const was = this.sessions.get(channel);
+    const was = opts.fresh ? undefined : this.sessions.get(channel);
     const resume = (was?.runtime ?? 'claude') === agent.runtime ? was?.sessionId : undefined;
+    if (opts.fresh) this.deps.store.dispatch({ type: 'context_reset', channel });
     return {
       cwd,
       additionalDirectories: [],

@@ -129,7 +129,7 @@ export const initiativeBrief = (item: InitiativeView, briefMd: string, repos: re
     .map((question) => `- ${question.id}: ${question.text.replace(/\s+/g, ' ').slice(0, 200)}`).join('\n');
   const checkIn =
     chat === CHECK_IN_CHAT
-      ? `\n\nThis is the initiative’s Check-in chat: a schedule wakes it with the check-in prompt, and Refresh sends it a ticket or task refresh. Do the whole check-in each time it is asked for, as it is written here even when the message that wakes you is an older wording:\n${checkInPromptFor(item)}`
+      ? `\n\nThis is the initiative’s Check-in chat: a schedule wakes it with the check-in prompt, and Refresh sends it a ticket or task refresh. Do the whole check-in each time it is asked for, as it is written here even when the message that wakes you is an older wording. Each scheduled check-in starts a new conversation that remembers nothing of the last one: what the next check-in needs (what you read up to, what changed, what waits on whom) goes into the files here, never only into your answer:\n${checkInPromptFor(item)}`
       : '';
   return `
 
