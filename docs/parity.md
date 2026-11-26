@@ -688,6 +688,8 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `initiatives.discardDraft` | ✓ an initiative's chat › Outbox card › Discard (kept as discarded, with a line in timeline.md) |
 | `initiatives.readFile` | ✓ an initiative's page › Memory: a file opens in a sheet (Markdown drawn, JSON as code) |
 | `initiatives.readArtifact` | ✓ an initiative's page › the right panel's Artifacts tab: a row opens in a sheet (text and Markdown drawn, a picture shown, any other file by its path on the daemon's computer) |
+| `initiatives.discoveryStep` | ✓ an initiative's page in discovery › Problem › Work It Out, Sizing › Size It, PRD › Draft PRD and Send to Confluence…, Demo › Start Demo, Delivery › Propose Epics (each sends its step into the work chat and opens it; docs/initiatives.md, Discovery) |
+| `initiatives.promote` | ✓ an initiative's page in discovery › Delivery › Move to Delivery (confirms; links the proposed epics that have keys and sets it Active) |
 | `toolbox.list` | ✓ Project › Toolbox: all tools (personal + team) for the project, first on Project Home: each tool's name with its {{params}} and the last line it printed; the phone lists them read-only (BLG-75) |
 | `toolbox.create` | ✓ Project Settings › Toolbox › New Tool: name, command with {{params}}, personal or Share with team (saves to beluga.json) · Mac only |
 | `toolbox.update` | ✓ Project Settings › Toolbox › a tool's pencil: change its name, command, params or source · Mac only |
