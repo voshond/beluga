@@ -1,9 +1,11 @@
 import { assistantChatOf } from '../../shared/assistant.js';
 import { secretIn } from '../../shared/secret-text.js';
+import { initiativeChatFound } from '../initiatives/chat-ref.js';
+import { initiativeChatName, initiativeChatOf } from '../initiatives/model.js';
 import type { Action, DomainState } from '../store.js';
 import { HONCHO_USER_PEER, type PeerRole, agentPeerId, sessionIdOf } from './mapping.js';
 
-export type ConversationKind = 'worktree' | 'chat' | 'main' | 'your-mac';
+export type ConversationKind = 'worktree' | 'chat' | 'main' | 'your-mac' | 'initiative';
 
 export type Conversation = {
   readonly channel: string;
@@ -45,6 +47,10 @@ export const cleanText = (text: string): string | undefined => {
 
 export const conversationOf = (state: DomainState, channel: string): Conversation | undefined => {
   if (assistantChatOf(channel) !== undefined) return { channel, session: sessionIdOf(channel), kind: 'your-mac' };
+  if (initiativeChatOf(channel)) {
+    const name = initiativeChatFound(state, channel) ? initiativeChatName(state.initiatives, channel) : undefined;
+    return name ? { channel, session: sessionIdOf(channel), kind: 'initiative', title: name } : undefined;
+  }
   if (!channel.startsWith('ws:')) return undefined;
   const id = channel.slice(3);
   for (const p of state.projects) {

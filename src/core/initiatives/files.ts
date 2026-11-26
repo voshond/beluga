@@ -1,6 +1,7 @@
 import { type Dirent, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { z } from 'zod';
+import { type DecisionNotes, decisionsOf } from './decisions.js';
 import { type Artifact, ArtifactsSchema, type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, type InitiativeTasks, TasksSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type OutboxDraft, OutboxSchema, type Suggestion, SuggestionsSchema, type TimelineEntry, timelineOf } from './model.js';
 
 export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json', 'artifacts.json'] as const;
@@ -20,6 +21,7 @@ export type InitiativeFolder = {
   readonly outbox: readonly OutboxDraft[];
   readonly artifacts: readonly Artifact[];
   readonly timeline: readonly TimelineEntry[];
+  readonly decisions?: DecisionNotes;
   readonly files: readonly string[];
   readonly trouble?: string;
 };
@@ -103,6 +105,7 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
   const suggestions = parseJson(file('suggestions.json'), SuggestionsSchema, 'suggestions.json');
   const outbox = parseJson(file('outbox.json'), OutboxSchema, 'outbox.json');
   const artifacts = parseJson(file('artifacts.json'), ArtifactsSchema, 'artifacts.json');
+  const decisions = decisionsOf(file('decisions.md') ?? '');
   const missing = config.value || config.trouble ? undefined : 'initiative.json is missing';
   const troubles = [config.trouble ?? missing, status.trouble, tickets.trouble, tasks.trouble, suggestions.trouble, outbox.trouble, artifacts.trouble].filter((t): t is string => Boolean(t));
   return {
@@ -117,6 +120,7 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
     outbox: outbox.value ?? [],
     artifacts: artifacts.value ?? [],
     timeline: timelineOf(file('timeline.md') ?? ''),
+    ...(decisions ? { decisions } : {}),
     files: memoryFiles(folder),
     ...(troubles.length ? { trouble: troubles.join('; ') } : {}),
   };

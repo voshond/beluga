@@ -37,7 +37,7 @@ const KIND: Readonly<Record<TimelineKind, { readonly icon?: IconName; readonly l
 
 const LINK_ICON: Readonly<Record<LinkKind, IconName | undefined>> = { ticket: undefined, doc: 'fileText', slack: 'chat', link: 'external' };
 
-const EntryText = ({ text, item }: { text: string; item: SourceContext }) => (
+export const EntryText = ({ text, item }: { text: string; item: SourceContext }) => (
   <span className={s.feedText}>
     {linkParts(text, item).map((part, i) => {
       if (!part.kind) return <span key={i}>{part.text}</span>;

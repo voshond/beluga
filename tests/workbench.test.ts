@@ -9,6 +9,9 @@ import { attachAssistant } from '../src/core/assistant/registry.js';
 import { pretendSystem } from '../src/core/gateway/demo-system.js';
 import { Session } from '../src/core/session.js';
 import { ShareService } from '../src/core/shares.js';
+import { Initiatives } from '../src/core/initiatives/initiatives.js';
+import { initiativeChatChannel } from '../src/core/initiatives/model.js';
+import { attachInitiatives } from '../src/core/initiatives/registry.js';
 import { sentinelChatChannel } from '../src/core/sentinel/model.js';
 import { Store, initialState } from '../src/core/store.js';
 import type { PullRequest } from '../src/core/work-store.js';
@@ -668,6 +671,29 @@ describe('models, usage, space and search', () => {
     kay.bench.openHit(0);
     expect(kay.screen.getState().view).toEqual({ kind: 'assistant', chat });
     mac.stop();
+  });
+
+  it('finds an initiative chat’s saved words, names where they are and opens that chat on its page', async () => {
+    hub = await startHub({ keys });
+    const kay = await solo(repo());
+    const dir = path.join(base, 'initiatives-local');
+    const initiatives = new Initiatives({ store: kay.store, root: path.join(base, 'initiatives'), dir, selfId: () => kay.state().selfId, ask: () => undefined, checkIns: () => undefined, commit: false });
+    await initiatives.start();
+    attachInitiatives(kay.session, initiatives);
+    const { slug } = await initiatives.create({ name: 'Checkout v2' });
+    const channel = initiativeChatChannel(slug, 'main');
+    mkdirSync(path.join(dir, slug, 'chats', 'main'), { recursive: true });
+    writeFileSync(path.join(dir, slug, 'chats', 'main', 'history.json'), JSON.stringify([{ id: 'i', type: 'chat', channel, from: 'me', name: 'kay', text: 'a persimmon question', ts: 9, byAgent: false }]));
+
+    kay.bench.search('persimmon');
+    expect(kay.state().search.hits.map((h) => [h.channel, h.place])).toEqual([[channel, 'Checkout v2 › a persimmon question']]);
+    kay.bench.openHit(0);
+    expect(kay.screen.getState().view).toEqual({ kind: 'initiative_page', slug, chat: 'main' });
+    expect(kay.state().log.some((l) => l.channel === channel && l.id === 'i')).toBe(true);
+
+    kay.bench.search('persimmon');
+    expect(kay.state().search.hits.map((h) => h.place)).toEqual(['Checkout v2 › a persimmon question']);
+    initiatives.stop();
   });
 
   it('routes a hit in a Sentinel chat, and leaves the view alone for a channel it cannot open', async () => {

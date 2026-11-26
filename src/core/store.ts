@@ -192,8 +192,8 @@ export interface MergedMark {
 /** A merged divider's words, where it's drawn as plain text (the phone, a log). */
 export const mergedText = (m: MergedMark): string => `Above this line was merged into ${m.into}${m.number !== undefined ? ` in PR #${m.number}` : ''}.`;
 
-/** What wrote a message Beluga sent as yours (BLG-111): a task starting, a sentinel running. */
-export type WrittenBy = 'task' | 'sentinel';
+/** What wrote a message Beluga sent as yours (BLG-111): a task starting, a sentinel running, an initiative's page asking its chat. */
+export type WrittenBy = 'task' | 'sentinel' | 'initiative';
 
 /** Where a dialogue shows in a conversation: its header card (a system line) and its turns (chat lines). */
 export interface DialogueMark {

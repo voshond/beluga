@@ -9,6 +9,7 @@ import { type FilterContext, type Outgoing, cleanText, conversationOf, pickOutgo
 import { HONCHO_USER_PEER, agentPeerId, honchoId, sessionIdOf } from '../src/core/honcho/mapping.js';
 import { HonchoQueue } from '../src/core/honcho/queue.js';
 import { loadHonchoQueue, saveHonchoQueue } from '../src/core/honcho/queue-file.js';
+import type { InitiativeView } from '../src/core/initiatives/model.js';
 import { type Action, Store, initialState } from '../src/core/store.js';
 import { parseArgs } from '../src/ipc/api.js';
 import type { Project, Workspace } from '../src/workspaces/types.js';
@@ -93,6 +94,18 @@ describe('the filter', () => {
     expect(pickOutgoing(mine('none', { channel: undefined }), ctx)).toBeUndefined();
     expect(pickOutgoing(mine('shared', { channel: 'ws:shared' }), ctx)).toBeUndefined();
     expect(pickOutgoing(mine('thread', { channel: 'ws:t' }), ctx)).toBeUndefined();
+  });
+
+  it('takes what you write in an initiative’s chat, but not what its page writes for you or a chat that is gone', () => {
+    const store = storeWith();
+    const chats = { chats: [{ id: 'main', channel: 'initiative:checkout:main', createdAt: NOW }], active: 'main' };
+    store.dispatch({ type: 'initiatives_init', state: { enabled: true, root: '/i', items: [{ slug: 'checkout', name: 'Checkout v2', chats } as unknown as InitiativeView] } });
+    const ctx = ctxOf(store);
+    expect(pickOutgoing(mine('who owns SHOP-150?', { channel: 'initiative:checkout:main' }), ctx)).toMatchObject({ conversation: { kind: 'initiative', session: 'beluga-initiative_checkout_main', title: 'Checkout v2' } });
+    expect(pickOutgoing(answer('Ana does', { channel: 'initiative:checkout:main' }), ctx)).toMatchObject({ conversation: { kind: 'initiative' } });
+    expect(pickOutgoing(mine('Do suggestion 3: …', { channel: 'initiative:checkout:main', written: 'initiative' }), ctx)).toBeUndefined();
+    expect(pickOutgoing(mine('hi', { channel: 'initiative:checkout:gone' }), ctx)).toBeUndefined();
+    expect(pickOutgoing(mine('hi', { channel: 'initiative:elsewhere:main' }), ctx)).toBeUndefined();
   });
 
   it('sends only finished answers, never tool steps', () => {

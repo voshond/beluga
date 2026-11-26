@@ -16,7 +16,7 @@ Only runs you asked for, in a chat nobody else sees (`HostChatLinks.toolsFor`). 
 
 ## Searching past conversations
 
-`search_chats` lets your agent look up how something went before ("how did we fix the tunnel last time") instead of you pasting it in. It reads what the Search page reads (`Workbench.searchSources`): open, saved and archived worktrees and chats, Your Mac's saved chats and chats shared with you. It matches words the way the Search page does (any order, any case, a word inside a longer one), with no index; the ranking is `src/core/chat-links/recall.ts`.
+`search_chats` lets your agent look up how something went before ("how did we fix the tunnel last time") instead of you pasting it in. It reads what the Search page reads (`Workbench.searchSources`): open, saved and archived worktrees and chats, Your Mac's saved chats, every initiative's chats (saved ones from `~/.beluga/initiatives/<slug>/chats/`) and chats shared with you. It matches words the way the Search page does (any order, any case, a word inside a longer one), with no index; the ranking is `src/core/chat-links/recall.ts`.
 
 Each search also shows under the answer of the run that made it (BLG-102): a chip reading "Searched past chats for “…”" with the words it searched, on the Mac and, read-only, on the phone. It is kept on the run's card, so it comes back with the conversation.
 

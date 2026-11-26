@@ -44,6 +44,8 @@ import type { WorkspaceController } from './workspace-controller.js';
 import type { Intent } from './intents.js';
 import { agentName } from '../shared/agent-label.js';
 import { sentinelChatOf } from './sentinel/model.js';
+import { initiativeChatFound, initiativeChatPlace } from './initiatives/chat-ref.js';
+import { initiativeChatName, initiativeChatOf } from './initiatives/model.js';
 import { ASSISTANT_TITLE, assistantChatOf, assistantChatTitle, isAssistant, THE_COMPUTER, THIS_COMPUTER } from '../shared/assistant.js';
 import { type AgentRef, defaultAgentOf } from '../protocol.js';
 import type { RuntimeChoice } from '../shared/agent-runtimes.js';
@@ -61,10 +63,12 @@ export interface WorkbenchDeps {
   readonly intend: (intent: Intent) => void;
   /** Ask your Claude in a workspace conversation. */
   readonly askClaude: (prompt: string, channel: string) => void;
-  /** What Your Mac's chats outside `loaded` said, read from disk for a search (unset: there is no Your Mac). */
-  readonly savedChats?: (loaded: ReadonlySet<string>) => ReadonlyArray<{ readonly channel: string; readonly items: readonly LogItem[] }>;
+  /** What Your Mac's and the initiatives' chats outside `loaded` said, read from disk for a search (`place`: where an initiative's is). */
+  readonly savedChats?: (loaded: ReadonlySet<string>) => ReadonlyArray<{ readonly channel: string; readonly place?: string; readonly items: readonly LogItem[] }>;
   /** Bring a Your Mac chat with nothing in the log back from disk, before opening it. */
   readonly loadSavedChat?: (id: string) => void;
+  /** The same for an initiative's chat, by its channel. */
+  readonly loadInitiativeChat?: (channel: string) => void;
   /** Pick a Your Mac chat's own agent, or its model on the agent it runs on (false: no such chat). */
   readonly setChatAgent?: (channel: string, agent: AgentRef | undefined) => boolean;
   readonly setChatModel?: (channel: string, model: string) => boolean;
@@ -2234,8 +2238,12 @@ export class Workbench {
       const shared = channel.startsWith('ws:') ? state.shared.find((w) => w.id === channel.slice(3)) : undefined;
       // A workspace that's gone (deleted, its project removed): nothing to open, so nothing to find.
       if (channel.startsWith('ws:') && !ws && !shared) continue;
+      // An initiative's chat whose initiative or chat is gone: nothing to open either.
+      const initiative = initiativeChatOf(channel) && initiativeChatFound(state, channel) ? initiativeChatName(state.initiatives, channel) : undefined;
+      if (initiativeChatOf(channel) && !initiative) continue;
       const items = state.log.filter((l) => l.channel === channel);
-      sources.push({ channel, place: ws ? placeOf(ws) : shared ? shared.name : channel === 'room' ? 'Group chat' : isAssistant(channel) ? macChatPlace(channel, items) : channel, items, archived: ws?.archived });
+      const place = ws ? placeOf(ws) : shared ? shared.name : channel === 'room' ? 'Group chat' : isAssistant(channel) ? macChatPlace(channel, items) : initiative ? initiativeChatPlace(initiative, channel, items) : channel;
+      sources.push({ channel, place, items, archived: ws?.archived });
     }
     for (const ws of this.manager.list.flatMap((p) => p.workspaces)) {
       const channel = `ws:${ws.id}`;
@@ -2243,8 +2251,8 @@ export class Workbench {
       const items = this.manager.loadHistory<LogItem>(ws.id);
       if (items.length) sources.push({ channel, place: placeOf(ws), items, archived: ws.archived });
     }
-    for (const { channel, items } of this.deps.savedChats?.(loaded) ?? []) {
-      if (items.length) sources.push({ channel, place: macChatPlace(channel, items), items });
+    for (const { channel, place, items } of this.deps.savedChats?.(loaded) ?? []) {
+      if (items.length) sources.push({ channel, place: place ?? macChatPlace(channel, items), items });
     }
     return sources;
   }
@@ -2262,6 +2270,12 @@ export class Workbench {
     if (chat) {
       this.deps.loadSavedChat?.(chat);
       this.deps.intend({ type: 'navigate', view: { kind: 'assistant', chat } });
+      return;
+    }
+    const initiativeChat = initiativeChatOf(hit.channel);
+    if (initiativeChat) {
+      this.deps.loadInitiativeChat?.(hit.channel);
+      this.deps.intend({ type: 'navigate', view: { kind: 'initiative_page', slug: initiativeChat.slug, chat: initiativeChat.chat } });
       return;
     }
     const sentinelChat = sentinelChatOf(hit.channel);

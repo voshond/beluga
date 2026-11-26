@@ -130,6 +130,23 @@ export class InitiativeChats {
     return this.state(slug);
   }
 
+  /** What the chats outside `loaded` said, from disk (a search reads them; the log stays as it is). */
+  savedChats(slug: string, loaded: ReadonlySet<string>): Array<{ readonly channel: string; readonly items: readonly LogItem[] }> {
+    const list = this.lists.get(slug) ?? this.read(slug);
+    return list.chats.flatMap((c) => {
+      const channel = initiativeChatChannel(slug, c.id);
+      const dir = this.chatDir(slug, c.id);
+      if (loaded.has(channel) || !dir) return [];
+      return [{ channel, items: readJson<LogItem[]>(path.join(dir, 'history.json'), []).map((l) => ({ ...l, channel })) }];
+    });
+  }
+
+  /** Bring a chat's saved messages back into the log when it has none there (a search hit opens it). */
+  loadSaved(channel: string): void {
+    const of = initiativeChatOf(channel);
+    if (of && this.has(of.slug, of.chat) && !this.deps.store.getState().log.some((l) => l.channel === channel)) this.loadHistory(of.slug, of.chat);
+  }
+
   forget(slug: string): void {
     const list = this.lists.get(slug);
     if (!list) return;

@@ -35,9 +35,9 @@ Only while the switch is on, and only from the moment it was turned on (nothing 
 
 | Sent | Not sent |
 |---|---|
-| Messages you type in your own chats, worktrees and Your Mac chats | Anything in the room, direct messages or group chats with friends |
+| Messages you type in your own chats, worktrees, Your Mac chats and initiative chats (not what Beluga writes there for you: a sentinel's prompt, an initiative page's check-in or "Do suggestion N") | Anything in the room, direct messages or group chats with friends |
 | Your own agents' final answers to you, with the runtime and model | Friends' messages, and every run done for a friend |
-| The conversation's project name, its title, its kind (chat, worktree, Your Mac) and its channel id | Chats or worktrees shared with someone else |
+| The conversation's project name, its title, its kind (chat, worktree, Your Mac, initiative) and its channel id | Chats or worktrees shared with someone else |
 | When each message was said | Agent threads (chats one agent started for another) and messages an agent or an app wrote for you |
 | | Tool calls and their output, and `console` or `beluga-*` blocks inside an answer (shown as `[…]`) |
 | | Any message that looks like it holds a secret (an API key, a token, a password in a connection string, a private key): left out whole |
@@ -51,7 +51,7 @@ In Honcho, everything goes to one workspace (default `beluga`). You are one peer
 
 ## Which conversation is sent
 
-A conversation whose messages go to Honcho shows a quiet "Honcho" sign in the box you type in, beside your MCP servers (BLG-102); a click opens Settings › Advanced › Honcho. It asks `honcho.sends` with the same rule the feed sends by (`allowedConversation` in `src/core/honcho/filter.ts`): Honcho is on, the conversation is a worktree, a project chat, a main folder's chat or Your Mac's, it isn't a thread, it isn't shared with anyone, and its project isn't left out. Anywhere else there is no sign. The phone doesn't show it.
+A conversation whose messages go to Honcho shows a quiet "Honcho" sign in the box you type in, beside your MCP servers (BLG-102); a click opens Settings › Advanced › Honcho. It asks `honcho.sends` with the same rule the feed sends by (`allowedConversation` in `src/core/honcho/filter.ts`): Honcho is on, the conversation is a worktree, a project chat, a main folder's chat, Your Mac's or an initiative's, it isn't a thread, it isn't shared with anyone, and its project isn't left out. Anywhere else there is no sign. The phone doesn't show it.
 
 ## Never in the way
 
