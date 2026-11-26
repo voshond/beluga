@@ -108,7 +108,7 @@ export const CHECK_IN_PROMPT = [
   'Read the artifacts worktrees sent since the last check-in (artifacts.json, newest first, and their files in artifacts/): note in timeline.md what each one shows, and when one bears on a decision or shows a problem (failing checks, a gap against the acceptance criteria), say so in a suggestion with the artifact in its "sources".',
   WATCHES_CHECK_IN,
   MEETINGS_HOW,
-  `Then update the rest of the memory: snapshots in sources/ (jira.md, slack/, meetings/, docs/, prs.md), status.json (counts across the epics: total, done, inProgress, blocked, stale for open tickets untouched in 7 days, with "at" set to now as an ISO date), brief.md (where it stands, in a few lines), timeline.md (what happened since last time, newest first), decisions.md (${DECISIONS_SHAPE}) and suggestions.json (what you propose next; every open question only the user can settle is also a "decision" with its "options", one per question and never a second one while it is open, and a question that only waits on someone else stays in decisions.md, named in a decision’s "why" when it bears on it; a message worth sending can be drafted straight into outbox.json).`,
+  `Then update the rest of the memory: snapshots in sources/ (jira.md, slack/, meetings/, docs/, prs.md), status.json (counts across the epics: total, done, inProgress, blocked, stale for open tickets untouched in 7 days, with "at" set to now as an ISO date), brief.md (where it stands, in a few lines), timeline.md (what happened since last time, newest first), decisions.md (${DECISIONS_SHAPE}) and suggestions.json (what you propose next; every open question only the user can settle is also a "decision" with its "options", one per question and never a second one while it is open, and an external question that needs outreach or a reply belongs in track_question, and can be named in a decision’s "why" when it bears on it; a message worth sending can be drafted straight into outbox.json).`,
   PEOPLE_CHECK_IN,
   UPDATES_CHECK_IN,
   RISKS_HOW,
@@ -125,6 +125,8 @@ export const initiativeBrief = (item: InitiativeView, briefMd: string, repos: re
   const others = item.files.filter((f) => f !== 'brief.md');
   const repoLines = repos.length ? repos.map((r) => `- ${r.name}${r.root ? ` (${r.root})` : ''}`).join('\n') : '- none linked yet';
   const updates = audiencesBrief(item, people, now);
+  const openQuestions = (item.questions ?? []).filter((question) => !question.answer).slice(0, 20)
+    .map((question) => `- ${question.id}: ${question.text.replace(/\s+/g, ' ').slice(0, 200)}`).join('\n');
   const checkIn =
     chat === CHECK_IN_CHAT
       ? `\n\nThis is the initiative’s Check-in chat: a schedule wakes it with the check-in prompt, and Refresh sends it a ticket or task refresh. Do the whole check-in each time it is asked for, as it is written here even when the message that wakes you is an older wording:\n${checkInPromptFor(item)}`
@@ -148,6 +150,7 @@ ${fence(item.goal.trim() || 'Not written down yet.')}
 Your working folder is the initiative's memory, a folder in a git repository Beluga commits after your turn. Keep it current:
 - brief.md: where it stands now, short. Every chat starts from it.
 - decisions.md: ${DECISIONS_SHAPE}. A question the user must settle is also a "decision" in suggestions.json.
+- questions.json: editable external questions and their settled answers. Read it and reuse an existing question before making another. Use the Beluga initiatives track_question tool to adopt an older question by its ID below or record a new external question. Beluga owns this file. Do not add another decisions.md entry for a question it already tracks, including a record merged into another question. Put "question": "<id>" returned by the tool on Slack or Jira outreach drafts for that question. Beluga starts the watch when the destination confirms delivery.
 - timeline.md: what happened, newest first, one bullet each with its kind ("- 2026-11-24 [check-in]: …"), which the page shows as an activity feed. Kinds: check-in (what a check-in found), decision (one the user made), message (a draft or a message sent), ticket (a ticket created, moved or changed), said (what someone said: name them first, "Natalia: …"), doc (a doc changed or first read), meeting (a meeting held or scheduled), artifact, created, update (Beluga writes it when a stakeholder update is sent or a prep sheet kept), event (anything else).
 - people.md: who is involved and what they own.
 - status.json: {"at", "total", "done", "inProgress", "blocked", "stale", "epics": [{"key", "title", "total", "done", "inProgress", "blocked", "stale"}]} from the epics.
@@ -159,7 +162,7 @@ Your working folder is the initiative's memory, a folder in a git repository Bel
 - artifacts.json and artifacts/: what worktrees working on its tickets sent (reports, test output, screenshots, specs), each {"id", "title", "why", "file" (in artifacts/) or "path" (too big for the repo: where it is on this computer), "name", "bytes", "ticket", "worktree", "project", "createdAt"}. Beluga writes them: read them, never change or remove them.
 - ${RISKS_MEMORY}
 - sources/: snapshots of what you read (meetings/ holds each meeting’s prep notes before it and follow-ups after it).
-Other files here now: ${others.length ? others.join(', ') : 'none'}.
+Other files here now: ${others.length ? others.join(', ') : 'none'}.${openQuestions ? `\n\nKnown open questions (use their IDs):\n${openQuestions}` : ''}
 
 Rules:
 - Suggest, never act outward on your own: no Jira comments or transitions, no Slack posts, no calendar changes unless the user asked in this chat or approved a suggestion ("Do suggestion N: …"). Then do exactly that one thing; its tool asks the user as usual.

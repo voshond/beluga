@@ -30,7 +30,7 @@ const PROPOSE_HOW = [
 
 const STEP_PROMPT: { readonly [K in DiscoveryStep['step']]: (step: Extract<DiscoveryStep, { step: K }>) => string } = {
   problem: () =>
-    'Work out the problem with me. Write problem.md (who has it, how it shows, what it costs, why now) and evidence.md (what we know, each point with its source: a doc, a thread, a ticket, a number), from the goal, the doc sources and the threads it follows. Then ask me, a few at a time, what you could not find; put what stays open in decisions.md under "## Open".',
+    'Work out the problem with me. Write problem.md (who has it, how it shows, what it costs, why now) and evidence.md (what we know, each point with its source: a doc, a thread, a ticket, a number), from the goal, the doc sources and the threads it follows. Then ask me, a few at a time, what you could not find; record external questions with track_question; keep the questions for me in decisions.md under "## Open".',
   size: (step) => `Size it: ${step.question}\n\n${SIZE_HOW}`,
   prd: () =>
     'Draft the PRD in prd.md from the goal, problem.md, evidence.md and the sizing artifacts: Problem, Goals and non-goals, Who it is for, What we know (with the numbers and their sources), The solution (flows, not screens), Success (how we will know), Risks and open questions. Write it for stakeholders, plainly. Rewrite it whole when it exists, keeping what the user changed. Answer with what is still thin.',

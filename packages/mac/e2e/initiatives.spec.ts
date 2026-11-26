@@ -70,10 +70,15 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
 test('the Suggestions section lists decisions.md’s open questions and adds its settled notes to the decision log', async ({ page }) => {
   await openInitiative(page, 'Checkout v2');
   const section = page.getByRole('region', { name: 'Suggestions' });
-  await expect(section.getByText('Waiting on others · 3')).toBeVisible();
+  await expect(section.getByText('Open questions · 3')).toBeVisible();
   const open = section.getByRole('list', { name: 'Open questions' });
   await expect(open.getByRole('listitem')).toHaveCount(3);
   await expect(open.getByRole('listitem').first()).toContainText('Does finance have the final NO tax table?');
+  await open.getByRole('listitem').first().getByRole('button', { name: 'Edit question' }).click();
+  const editor = page.getByRole('dialog', { name: 'Edit question' });
+  await editor.getByLabel('Question', { exact: true }).fill('Does Finance have the final tax table for Norway?');
+  await editor.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(open.getByText('Does Finance have the final tax table for Norway?')).toBeVisible();
   const log = page.getByRole('listbox', { name: 'Decision log' });
   const note = log.getByRole('option').filter({ hasText: 'Google Pay waits for v2.1.' });
   await expect(note).toContainText('Why: one SDK update fewer before the freeze.');

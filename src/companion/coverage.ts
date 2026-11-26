@@ -818,6 +818,8 @@ export const PHONE: Record<Method, Side> = {
   'initiatives.removeAudience': 'mac',
   'initiatives.draftUpdate': 'mac',
   'initiatives.keepPrep': 'mac',
+  'initiatives.saveQuestion': 'mac',
+  'initiatives.draftQuestion': 'mac',
   'initiatives.addWatch': 'mac',
   'initiatives.stopWatch': 'mac',
   'initiatives.lookNow': 'mac',

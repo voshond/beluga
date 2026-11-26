@@ -5,6 +5,7 @@ import { RiskDraftSchema } from '../core/initiatives/risks.js';
 import { AUDIENCE_ID, AudienceDraftSchema } from '../core/initiatives/audience.js';
 import { ENRICH_FIELDS } from '../core/initiatives/enrichment.js';
 import { PersonDraftSchema } from '../core/initiatives/people.js';
+import { QuestionDraftSchema, QuestionIdSchema } from '../core/initiatives/questions.js';
 import { WatchDraftSchema } from '../core/initiatives/watches.js';
 import { CheckInScheduleSchema, GoalRefineSchema, INITIATIVE_CHAT_ID, INITIATIVE_SLUG, InitiativeDraftSchema, InitiativePatchSchema, PAGE_MAX } from '../core/initiatives/model.js';
 
@@ -45,6 +46,8 @@ export const INITIATIVES_API = {
   'initiatives.removeAudience': { args: z.tuple([slug, audience]) },
   'initiatives.draftUpdate': { args: z.tuple([slug, audience]) },
   'initiatives.keepPrep': { args: z.tuple([slug, z.number().int().min(1), z.string().trim().min(1).max(PAGE_MAX)]) },
+  'initiatives.saveQuestion': { args: z.tuple([slug, QuestionDraftSchema]) },
+  'initiatives.draftQuestion': { args: z.tuple([slug, QuestionIdSchema]) },
   'initiatives.addWatch': { args: z.tuple([slug, WatchDraftSchema]) },
   'initiatives.stopWatch': { args: z.tuple([slug, z.number().int().min(1)]) },
   'initiatives.lookNow': { args: z.tuple([slug, z.number().int().min(1)]) },

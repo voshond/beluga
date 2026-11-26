@@ -107,7 +107,7 @@ export interface AgentHostDeps {
   readonly initiativeChat?: (
     channel: string,
     from: string,
-  ) => { readonly place: AgentPlace; readonly brief: string; readonly vetTool: (toolName: string, input: Record<string, unknown>) => string | undefined; readonly preApproved: (toolName: string, input: Record<string, unknown>) => boolean } | undefined;
+  ) => import('./initiatives/initiatives.js').InitiativeChatRun | undefined;
   /** What a tool that always asks you (policy ALWAYS_ASK_YOU: deleting a sentinel or a dashboard) says on its card, in words. */
   readonly confirmTool?: (toolName: string, input: Record<string, unknown>) => { readonly title: string; readonly detail: string } | undefined;
   /** Sentinels (your own runs): their tools, and a sentinel run's brief in its Claude step's conversation (core/sentinel). */
@@ -236,6 +236,7 @@ interface Lane {
   runAgent?: string;
   /** The current run has the plan's tools (BLG-773): one started before the conversation had a plan never takes your messages in. */
   runPlanTools?: boolean;
+  onInitiativeStep?: (step: StepRecord) => void;
   routedModel?: string;
   /** Set while the run has answered but waits on background agents: messages go straight in. */
   followUps?: (followUp: FollowUp) => boolean;
@@ -1250,7 +1251,10 @@ export class AgentHost {
       model: this.followUpModel(lane, body.channel),
       context: this.recentChat(body.channel),
       onEvent: (kind, text) => emit(kind, text),
-      onStep: (record) => this.steps.put(runKey(body.requestId), record),
+      onStep: (record) => {
+        lane.onInitiativeStep?.(record);
+        this.steps.put(runKey(body.requestId), record);
+      },
       // Sent close behind another, Claude Code may answer both in one turn.
       onFolded: () => emit('done', STEERED_IN),
       onDone: (final) => {
@@ -1569,6 +1573,7 @@ export class AgentHost {
     // The Sentinel chat: its own folder and session (your runs only).
     const sentinelChat = root || mac ? undefined : this.deps.sentinelChat?.(body.channel, from);
     const initiative = root || mac || sentinelChat ? undefined : this.deps.initiativeChat?.(body.channel, from);
+    lane.onInitiativeStep = initiative?.onStep;
     // A friend's worktree, your own agent asked there: it works here and reads theirs from afar.
     const guest = root || mac || sentinelChat || initiative ? undefined : this.deps.guestRun?.(body.channel, from);
     const place = root ? { cwd: root, additionalDirectories: [], autoEdit: false, onSession: () => undefined, askOnly: { project: body.project ?? '' } } : (mac?.place ?? sentinelChat ?? initiative?.place ?? guest?.place ?? this.deps.workspaces?.place(body.channel));
@@ -1695,7 +1700,7 @@ export class AgentHost {
         ...(threads ? { threadTools: threads } : {}),
         ...(mac ? { macTools: mac.tools, macBrief: mac.brief } : {}),
         ...(guest ? { sharedBrief: guest.brief } : {}),
-        ...(initiative ? { initiativeBrief: initiative.brief } : {}),
+        ...(initiative ? { initiativeBrief: initiative.brief, ...(!external && initiative.questions ? { initiativeQuestions: initiative.questions } : {}) } : {}),
         ...(phone ? { phoneTools: phone.tools, phoneBrief: phone.brief } : {}),
         ...(callNotes ? { callNotesTools: callNotes } : {}),
         ...(mcpTools ? { mcpTools } : {}),
@@ -1722,6 +1727,7 @@ export class AgentHost {
           this.emitAgent(body.requestId, from, kind, text, body.channel);
         },
         onStep: (record) => {
+          initiative?.onStep(record);
           if (worktree && record.tool === 'Bash' && mayLeaveProcesses(record.input?.command, record.input?.run_in_background)) {
             this.testRuns.add(worktree);
             if (keepsRunning(record.input?.command)) kept.add(String(record.input?.command).slice(0, 120));
@@ -1800,6 +1806,7 @@ export class AgentHost {
       if (failure && failure.kind !== 'stopped' && lane.waiting.some((w) => !w.compact)) lane.held = true;
       this.emitAgent(body.requestId, from, 'error', reason, body.channel);
     } finally {
+      initiative?.finish();
       ended = true;
       this.remoteRequests.delete(body.requestId);
       if (lane.current === controller) {
@@ -1810,6 +1817,7 @@ export class AgentHost {
         lane.steer = undefined;
         lane.runFrom = undefined;
         lane.runPlanTools = undefined;
+        lane.onInitiativeStep = undefined;
       }
       lane.interruptedBy = undefined; // never carry an interrupt label into the next run
       lane.interruptNote = undefined;

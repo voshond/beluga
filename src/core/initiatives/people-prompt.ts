@@ -15,7 +15,7 @@ export const PEOPLE_PASS = [
 /** What the check-in does about people, on top of the rest. */
 export const PEOPLE_CHECK_IN = [
   'People: on every open suggestion that waits on someone’s answer or work, set "waitingOn" to that person (their directory slug, or their name); on one someone is waiting on the user for, set "askedBy" to them.',
-  'An open question in decisions.md that waits on someone ends with "(waiting on: <their name>)".',
+  'Use track_question for an external question and set waitingOn to the people who can answer. Use the directory names. An older decisions.md entry can still use "(waiting on: <their name>)".',
   `When initiative.json has no people yet and suggestions.json has no suggestion with "people", also do this once: ${PEOPLE_PASS.replace(/ Answer with one line: .*$/, '')}`,
 ].join(' ');
 
@@ -31,5 +31,5 @@ export const peopleBrief = (item: Pick<InitiativeView, 'people'>, people: readon
 ${on}
 ${others.length ? `Others in the directory:\n${others.map((p) => `- ${personLine(p)}`).join('\n')}` : 'Nobody else is in the directory yet.'}
 ${members.length ? `Directory entries of the people here:\n${members.flatMap((m) => (m.person ? [`- ${personLine(m.person)}`] : [])).join('\n') || '- none yet'}` : ''}
-Name people by their slug in a suggestion's "waitingOn" (what waits on their answer or work) and "askedBy" (who waits on the user for it); the page derives what is open with each person from those and from "(waiting on: <name>)" at the end of an open question in decisions.md. Never write the people/ folder or initiative.json's people: propose a change as a suggestion with "people" ([{"name", "role", "cares", "slack", "jira", "notes", "person"}]), which the user approves.`;
+Name people by their slug in a suggestion's "waitingOn" (what waits on their answer or work) and "askedBy" (who waits on the user for it); the page derives what is open with each person from those and from an editable question that is watching for their reply. Never write the people/ folder or initiative.json's people: propose a change as a suggestion with "people" ([{"name", "role", "cares", "slack", "jira", "notes", "person"}]), which the user approves.`;
 };

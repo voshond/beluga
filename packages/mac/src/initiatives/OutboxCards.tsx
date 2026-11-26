@@ -45,7 +45,8 @@ export const OutboxCard = ({ slug, draft, place, onLater }: CardProps) => {
       ) : (
         <TextArea value={text} onChange={setText} rows={prep ? 8 : 5} maxLength={max} aria-label={`${DRAFT_KIND_WORDS[draft.to.kind]} to ${targetWords(draft.to)}`} />
       )}
-      {sending ? <span className={s.why}>Sent to the chat to post. If it didn’t go out, send it again.</span> : null}
+      {draft.sendError ? <span role="alert" className={s.why}>{draft.sendError}</span> : null}
+      {sending && !draft.sendError ? <span className={s.why}>Delivery is pending. Check the destination before sending again.</span> : null}
       {prep ? <span className={s.why}>Never sent: take it into the meeting, then mark it Done.</span> : null}
       <span className={s.answers}>
         {prep ? (

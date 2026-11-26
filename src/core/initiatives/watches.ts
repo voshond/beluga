@@ -4,6 +4,8 @@ import { type OutboxDraft, type OutboxTarget, WATCH_CHAT, initiativeChatOf, targ
 /** The chat a watch run wakes (model.ts): its own, so the Check-in chat's history stays readable. */
 export { WATCH_CHAT, WATCH_TITLE } from './model.js';
 
+import { QuestionAnswerSchema, QuestionIdSchema, QuestionSourceSchema } from './questions.js';
+
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
@@ -56,6 +58,11 @@ export const WatchSchema = z.object({
   /** The suggestion (or decision) it belongs to, and the outbox draft that started it. */
   suggestion: z.number().int().min(1).optional(),
   draft: z.number().int().min(1).optional(),
+  question: QuestionIdSchema.optional(),
+  source: QuestionSourceSchema.optional(),
+  answer: QuestionAnswerSchema.optional(),
+  checkedAt: z.string().datetime({ offset: true }).optional(),
+  checkFailed: z.boolean().optional(),
   since: z.string().max(40),
   /** Hours between looks; none: it backs off (hourly the first day, every four hours, daily after three days). */
   every: z.number().int().min(1).max(168).optional(),
@@ -126,7 +133,7 @@ export const dueWatches = (watches: readonly Watch[], now: number): Watch[] => w
 /** Waited WATCH_NUDGE_DAYS with nothing back, and not nudged yet. */
 export const needsNudge = (watch: Watch, now: number): boolean => isWatching(watch) && !watch.nudgedAt && !watch.news.length && now - (timeOf(watch.since) ?? now) >= WATCH_NUDGE_DAYS * DAY;
 
-export const isExpired = (watch: Watch, now: number): boolean => isWatching(watch) && now >= givesUpAt(watch);
+export const isExpired = (watch: Watch, now: number): boolean => isWatching(watch) && (!watch.question || Boolean(watch.until)) && now >= givesUpAt(watch);
 
 /** The earliest moment a watch is due (on working hours), or undefined with nothing to watch. */
 export const nextWakeAt = (watches: readonly Watch[], now: number): number | undefined => {
@@ -156,6 +163,7 @@ export const watchPlaceLink = (where: WatchPlace): string | undefined => {
 };
 
 const SLACK_LINK = /\/archives\/([A-Z0-9]+)(?:\/p(\d{10})(\d{6}))?/;
+const JIRA_LINK = /^https?:\/\/[^/]+\/browse\/([A-Z][A-Z0-9_]+-\d+)(?:[/?#]|$)/i;
 const PR_LINK = /^https?:\/\/[^/]+\/[^/]+\/[^/]+\/pull\/\d+/i;
 
 /** Where to look, from what the owner pasted: a Jira key, a Slack link, a pull request or any other link. */
@@ -164,7 +172,9 @@ export const watchPlaceOf = (ref: string, label?: string): WatchPlace | undefine
   const named = label?.trim() ? { label: label.trim() } : {};
   if (!text) return undefined;
   if (JIRA_KEY.test(text.toUpperCase())) return { kind: 'jira', issue: text.toUpperCase(), ...named };
-  const slack = /slack\.com/i.test(text) ? SLACK_LINK.exec(text) : null;
+  const jira = JIRA_LINK.exec(text)?.[1];
+  if (jira) return { kind: 'jira', issue: jira.toUpperCase(), ...named };
+  const slack = /^https?:\/\/(?:[^/.]+\.)*slack\.com\//i.test(text) ? SLACK_LINK.exec(text) : null;
   if (slack) {
     const thread = /[?&]thread_ts=(\d+\.\d+)/.exec(text)?.[1] ?? (slack[2] ? `${slack[2]}.${slack[3]}` : undefined);
     return { kind: 'slack', channel: slack[1]!, ...(thread ? { thread } : {}), ...named };
@@ -179,15 +189,21 @@ const firstWords = (text: string, max = 80): string => {
 };
 
 /** The watch a sent draft starts: an answer where it went. */
-export const watchOfDraft = (draft: Pick<OutboxDraft, 'id' | 'to' | 'text' | 'sentText' | 'suggestion'>, id: number, now: number): Watch => {
+export const slackMessageTime = (timestamp: string): number | undefined => {
+  if (!/^\d{10}\.\d{6}$/.test(timestamp)) return undefined;
+  return Math.floor(Number(timestamp) * 1000);
+};
+
+export const watchOfDraft = (draft: Pick<OutboxDraft, 'id' | 'to' | 'text' | 'sentText' | 'suggestion' | 'deliveryChannel' | 'deliveryThread' | 'source' | 'resolvedAt'>, id: number, now: number): Watch => {
   const to: OutboxTarget = draft.to;
   return WatchSchema.parse({
     id,
     what: `An answer to “${firstWords(draft.sentText ?? draft.text)}”`,
-    where: to,
+    where: to.kind === 'slack' ? { ...to, channel: draft.deliveryChannel ?? to.channel, thread: draft.deliveryThread ?? to.thread } : to,
+    source: draft.source,
     ...(draft.suggestion ? { suggestion: draft.suggestion } : {}),
     draft: draft.id,
-    since: new Date(now).toISOString(),
+    since: draft.resolvedAt ?? new Date(now).toISOString(),
   });
 };
 

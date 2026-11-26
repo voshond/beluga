@@ -4,6 +4,7 @@ import { type Audience, AudiencesSchema } from './audience.js';
 import type { Enrichment } from './enrichment.js';
 import type { Person, WaitingQuestion } from './people.js';
 import type { UpdateRecord } from './updates.js';
+import { QuestionIdSchema, QuestionSourceSchema, type Question } from './questions.js';
 import type { Watch } from './watches.js';
 import type { Risk } from './risks.js';
 import { ARTIFACT_ABOUT, type Discovery } from './discovery-model.js';
@@ -466,6 +467,12 @@ export const OutboxDraftSchema = z.object({
   text: z.string().min(1).max(PAGE_MAX),
   why: z.string().max(2000).optional(),
   suggestion: z.number().int().min(1).optional(),
+  question: QuestionIdSchema.optional(),
+  reminderFor: z.number().int().positive().optional(),
+  source: QuestionSourceSchema.optional(),
+  deliveryChannel: z.string().max(80).optional(),
+  deliveryThread: z.string().max(40).optional(),
+  sendError: z.string().max(300).optional(),
   /** The audience (initiative.json's `audiences`) this is the stakeholder update for. */
   audience: z.string().max(40).optional(),
   state: z.enum(OUTBOX_STATES).default('draft'),
@@ -516,6 +523,7 @@ export type InitiativeView = {
   readonly timeline: readonly TimelineEntry[];
   readonly decisions?: DecisionNotes;
   /** decisions.md's open questions marked "(waiting on: …)". */
+  readonly questions?: readonly Question[];
   readonly waitingQuestions?: readonly WaitingQuestion[];
   readonly files: readonly string[];
   readonly checkIn?: string;
@@ -701,7 +709,7 @@ export const isSentTarget = (to: OutboxTarget): to is SentTarget => to.kind !== 
 /** The tool the chat is first told to post a draft with. */
 export const OUTBOX_TOOLS: Readonly<Record<SentTarget['kind'], string>> = { slack: 'slack_send_message', jira: 'jira_add_comment', confluence: 'confluence_update_page_section', 'confluence-page': 'confluence_create_page' };
 
-const nameIs = (toolName: string, name: string): boolean => toolName === name || toolName.endsWith(`__${name}`);
+const nameIs = (toolName: string, name: string): boolean => toolName === name || toolName.endsWith(`__${name}`) || (name === 'slack_send_message' && toolName === 'mcp__codex_apps__slack_slack_send_message');
 
 /** Tools that send a message outward, which an initiative's chat only uses for a draft the user sent. */
 const SENDING_TOOLS: readonly string[] = [...OUTBOX_TOOL_LIST.map((t) => t.name), 'slack_schedule_message'];
@@ -718,7 +726,7 @@ export const matchesDraft = (to: OutboxTarget, text: string, toolName: string, i
 };
 
 const whereMatches = (to: OutboxTarget, toolName: string, input: Record<string, unknown>): boolean => {
-  if (to.kind === 'slack') return same(input.channel_id, to.channel) && same(input.thread_ts, to.thread);
+  if (to.kind === 'slack') return same(input.channel_id, to.channel) && same(input.thread_ts, to.thread) && input.reply_broadcast !== true && input.draft_id === undefined;
   if (to.kind === 'jira') return same(input.issue_key, to.issue);
   if (to.kind === 'confluence') return same(input.page_id, to.page) && input.heading_text === to.section && (input.content_format === undefined || input.content_format === 'markdown');
   if (to.kind === 'confluence-page') return pageMatches(to, toolName, input);

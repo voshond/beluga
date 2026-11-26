@@ -450,6 +450,8 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'initiatives.removeAudience': INITIATIVES,
   'initiatives.draftUpdate': INITIATIVES,
   'initiatives.keepPrep': INITIATIVES,
+  'initiatives.saveQuestion': INITIATIVES,
+  'initiatives.draftQuestion': INITIATIVES,
   'initiatives.addWatch': INITIATIVES,
   'initiatives.stopWatch': INITIATIVES,
   'initiatives.lookNow': INITIATIVES,

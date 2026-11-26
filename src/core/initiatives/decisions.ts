@@ -6,6 +6,8 @@ export type DecisionNote = {
   readonly day: string;
   readonly text: string;
   readonly why?: string;
+  readonly source?: string;
+  readonly question?: true;
   /** The suggestion it records ("(suggestion 3)"), when it names one. */
   readonly suggestion?: number;
   /** The plain line above it in its section ("Waiting on stakeholders:"), if any. */
@@ -133,8 +135,9 @@ export const recordedNotes = (notes: readonly DecisionNote[], suggestions: reado
 /** The Decided notes the decision log adds: those that aren't a suggestion it already shows. */
 export const settledNotes = (item: Pick<InitiativeView, 'suggestions' | 'decisions'>): DecisionNote[] => {
   const notes = item.decisions?.decided ?? [];
-  const recorded = recordedNotes(notes, item.suggestions);
-  return notes.filter((_, i) => !recorded.has(i));
+  const legacy = notes.filter((note) => !note.question);
+  const recorded = recordedNotes(legacy, item.suggestions);
+  return [...legacy.filter((_, i) => !recorded.has(i)), ...notes.filter((note) => note.question)];
 };
 
 export type LogEntry = { readonly kind: 'suggestion'; readonly suggestion: Suggestion; readonly day: string } | { readonly kind: 'note'; readonly note: DecisionNote; readonly day: string };
