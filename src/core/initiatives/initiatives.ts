@@ -6,6 +6,9 @@ import { formatBytes } from '../../shared/format.js';
 import { isSecretPath } from '../shares.js';
 import type { Action, Store } from '../store.js';
 import { InitiativeChats } from './chats.js';
+import { keepProposal, readDirectory, removePersonFile, writePerson } from './directory.js';
+import { PEOPLE_DIR, type PersonDraft } from './people.js';
+import { PEOPLE_PASS } from './people-prompt.js';
 import { addTimeline, artifactPath, folderOf, keepArtifactFile, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeArtifacts, writeConfig, writeOutbox, writeSuggestions, writeTasks, writeText } from './files.js';
 import {
   ARTIFACT_KEEP_MAX,
@@ -135,7 +138,7 @@ export class Initiatives {
     else mkdirSync(this.deps.root, { recursive: true });
     if (this.stopped) return;
     const items = listSlugs(this.deps.root).map((slug) => this.view(slug));
-    this.deps.store.dispatch({ type: 'initiatives_init', state: { enabled: true, root: this.deps.root, items } });
+    this.deps.store.dispatch({ type: 'initiatives_init', state: { enabled: true, root: this.deps.root, items, people: readDirectory(this.deps.root) } });
     await this.pushPending().catch(() => undefined);
   }
 
@@ -203,6 +206,7 @@ export class Initiatives {
       outbox: folder.outbox,
       artifacts: folder.artifacts,
       timeline: folder.timeline,
+      ...(folder.waitingQuestions.length ? { waitingQuestions: folder.waitingQuestions } : {}),
       files: folder.files,
       ...(checkIn ? { checkIn } : {}),
       chats,
@@ -312,7 +316,7 @@ export class Initiatives {
 
   async create(draft: InitiativeDraft, opts: { readonly quiet?: boolean } = {}): Promise<{ readonly slug: string }> {
     const parsed = InitiativeDraftSchema.parse(draft);
-    const slug = uniqueSlug(parsed.name, new Set(listSlugs(this.deps.root)));
+    const slug = uniqueSlug(parsed.name, new Set([...listSlugs(this.deps.root), PEOPLE_DIR]));
     const config = InitiativeConfigSchema.parse({ ...parsed, status: 'active', createdAt: new Date(this.now).toISOString() });
     scaffoldFolder(this.deps.root, slug, config, dayOf(this.now));
     this.chats.load(slug);
@@ -393,6 +397,7 @@ export class Initiatives {
     const state = decision === 'approve' ? 'approved' : 'dismissed';
     const decided = decision === 'approve' && answer ? answer.trim() : undefined;
     writeSuggestions(this.deps.root, slug, item.suggestions.map((s) => (s.id === id ? { ...s, state, resolvedAt, ...(decided ? { answer: decided } : {}) } : s)));
+    if (decision === 'approve' && suggestion.people?.length) return this.keepPeople(slug, id);
     await this.commit(slug, `${slug}: suggestion ${id} ${decided ? 'decided' : state}`);
     this.refresh(slug);
     if (decision === 'dismiss') return {};
@@ -575,10 +580,69 @@ export class Initiatives {
     const brief = readFolder(this.deps.root, of.slug).brief;
     return {
       place,
-      brief: initiativeBrief(item, brief, this.repos(item), of.chat),
+      brief: initiativeBrief(item, brief, this.repos(item), of.chat, readDirectory(this.deps.root)),
       vetTool: (toolName, input) => this.vetSend(of.slug, toolName, input),
       preApproved: (toolName, input) => this.preApproved(of.slug, toolName, input),
     };
+  }
+
+  private refreshPeople(): void {
+    if (this.stopped) return;
+    this.deps.store.dispatch({ type: 'initiatives_people', people: readDirectory(this.deps.root) });
+  }
+
+  /** Adds or edits a person in the directory (people/<slug>.json), shared by every initiative; a slug it doesn't have yet makes that entry. */
+  async savePerson(draft: PersonDraft): Promise<{ readonly slug: string }> {
+    const slug = writePerson(this.deps.root, draft);
+    await this.commit(PEOPLE_DIR, `people: ${slug} saved`);
+    this.refreshPeople();
+    return { slug };
+  }
+
+  /** Takes a person out of the directory; only once no initiative names them. */
+  async removePerson(person: string): Promise<void> {
+    const on = listSlugs(this.deps.root).filter((slug) => readFolder(this.deps.root, slug).config?.people.some((p) => p.person === person));
+    if (on.length) throw new Error(`Take them off ${on.map((slug) => this.view(slug).name).join(', ')} first`);
+    removePersonFile(this.deps.root, person);
+    await this.commit(PEOPLE_DIR, `people: ${person} removed`);
+    this.refreshPeople();
+  }
+
+  /** Puts a directory person on an initiative with a role, changes it, or (role null) takes them off. */
+  async setPerson(slug: string, person: string, role: string | null): Promise<InitiativeView> {
+    const was = this.config(slug).people;
+    if (role === null) return this.update(slug, { people: was.filter((p) => p.person !== person) });
+    if (!readDirectory(this.deps.root).some((p) => p.slug === person)) throw new Error('That person is not in the directory');
+    const entry = { person, ...(role.trim() ? { role: role.trim() } : {}) };
+    const people = was.some((p) => p.person === person) ? was.map((p) => (p.person === person ? entry : p)) : [...was, entry];
+    return this.update(slug, { people });
+  }
+
+  /** The one-time pass: the Check-in chat proposes people.md's people as one suggestion. */
+  proposePeople(slug: string): { readonly channel: string } {
+    this.need(slug);
+    const channel = initiativeChatChannel(slug, CHECK_IN_CHAT);
+    if (this.deps.ask(PEOPLE_PASS, channel) === undefined) throw new Error('The chat could not take it now');
+    return { channel };
+  }
+
+  /** An approved people suggestion: each one into the directory and onto the initiative with their role. */
+  private async keepPeople(slug: string, id: number): Promise<{ readonly channel?: string }> {
+    const folder = readFolder(this.deps.root, slug);
+    const suggestion = folder.suggestions.find((s) => s.id === id);
+    const proposals = suggestion?.people ?? [];
+    const kept = proposals.map((proposal) => ({ person: keepProposal(this.deps.root, proposal), role: proposal.role }));
+    const was = this.config(slug).people;
+    const people = [...was.filter((p) => !kept.some((k) => k.person === p.person)), ...kept.map((k) => ({ person: k.person, ...(k.role ? { role: k.role } : {}) }))];
+    writeConfig(this.deps.root, slug, InitiativeConfigSchema.parse({ ...this.config(slug), people }));
+    const outcome = `Added ${kept.length} ${kept.length === 1 ? 'person' : 'people'} to the directory and this initiative.`;
+    writeSuggestions(this.deps.root, slug, folder.suggestions.map((s) => (s.id === id ? { ...s, outcome } : s)));
+    addTimeline(this.deps.root, slug, `${dayOf(this.now)} [event]: ${outcome.charAt(0).toLowerCase()}${outcome.slice(1, -1)}`);
+    await this.commit(PEOPLE_DIR, `people: from ${slug}`);
+    await this.commit(slug, `${slug}: suggestion ${id} approved`);
+    this.refreshPeople();
+    this.refresh(slug);
+    return {};
   }
 
   private onAction(action: Action): void {

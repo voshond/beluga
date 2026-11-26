@@ -1,3 +1,5 @@
+import type { Person } from './people.js';
+import { PEOPLE_CHECK_IN, peopleBrief } from './people-prompt.js';
 import { CHECK_IN_CHAT, DOC_KIND_NAME, type DocRef, type InitiativeView, type MeetingRef, type SlackRef, confluencePageIdOf, googleFileIdOf, meetingKindOf, slackKindOf } from './model.js';
 
 export type LinkedRepo = {
@@ -97,10 +99,11 @@ export const CHECK_IN_PROMPT = [
   'Read the artifacts worktrees sent since the last check-in (artifacts.json, newest first, and their files in artifacts/): note in timeline.md what each one shows, and when one bears on a decision or shows a problem (failing checks, a gap against the acceptance criteria), say so in a suggestion with the artifact in its "sources".',
   'For each meeting: one that is coming gets prep notes (what to raise, what is open, who to ask), one that happened gets its follow-ups (what was agreed, who owes what), both in sources/meetings/.',
   'Then update the rest of the memory: snapshots in sources/ (jira.md, slack/, meetings/, docs/, prs.md), status.json (counts across the epics: total, done, inProgress, blocked, stale for open tickets untouched in 7 days, with "at" set to now as an ISO date), brief.md (where it stands, in a few lines), timeline.md (what happened since last time, newest first), decisions.md (your own notes, which the page does not show: new open questions under "## Open", settled ones moved to "## Decided" with the date and why) and suggestions.json (what you propose next; every open question only the user can settle is also a "decision" with its "options", one per question and never a second one while it is open, and a question that only waits on someone else stays in decisions.md, named in a decision’s "why" when it bears on it; a message worth sending can be drafted straight into outbox.json).',
+  PEOPLE_CHECK_IN,
   'Do not post, comment, transition, invite or change anything outside this folder: write it as a suggestion instead. Answer with one line on how it stands, then what needs the user.',
 ].join(' ');
 
-export const initiativeBrief = (item: InitiativeView, briefMd: string, repos: readonly LinkedRepo[], chat: string): string => {
+export const initiativeBrief = (item: InitiativeView, briefMd: string, repos: readonly LinkedRepo[], chat: string, people: readonly Person[] = []): string => {
   const brief = briefMd.length > BRIEF_MAX ? `${briefMd.slice(0, BRIEF_MAX)}\n…(cut: read brief.md for the rest)` : briefMd;
   const others = item.files.filter((f) => f !== 'brief.md');
   const repoLines = repos.length ? repos.map((r) => `- ${r.name}${r.root ? ` (${r.root})` : ''}`).join('\n') : '- none linked yet';
@@ -145,7 +148,9 @@ Rules:
 - "Complete task ID: …" or "Reopen task ID: …" means the user ticked it on the page: read it with get_task for its version, call complete_task or reopen_task with that id, then set its "done" in tasks.json and drop its "pending". Answer with one line. When the user asks you in chat to tick a task off, do the same.
 - Record every decision the user makes here in decisions.md, and every notable event in timeline.md.
 - Linked repos, where code work happens (task_create with project set to the repo's name, then task_start when the user wants it started):
-${repoLines}${checkIn}
+${repoLines}
+
+${peopleBrief(item, people)}${checkIn}
 
 <initiative-brief>
 ${fence(brief.trim() || 'brief.md is empty.')}

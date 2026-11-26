@@ -80,6 +80,7 @@ const KNOWN = {
   initiatives_backup: true,
   initiatives_init: true,
   initiatives_off: true,
+  initiatives_people: true,
   invite: true,
   knock: true,
   link_remove: true,

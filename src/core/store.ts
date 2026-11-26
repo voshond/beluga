@@ -565,6 +565,8 @@ export type View =
   | { readonly kind: 'sentinel_chat'; readonly chat?: string; readonly about?: string }
   | { readonly kind: 'initiatives' }
   | { readonly kind: 'initiative_page'; readonly slug: string; readonly chat?: string }
+  /** The people directory across initiatives (docs/initiatives.md §9). */
+  | { readonly kind: 'initiative_people' }
   /**
    * A page on one of your computers (BLG-784, Mac app): the app draws `view` itself, with that
    * computer's state and calls (its screen over /machine/<id>). Only this window's screen has it;
@@ -1638,6 +1640,7 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
     case 'initiative_remove':
     case 'initiatives_backup':
     case 'initiatives_off':
+    case 'initiatives_people':
       return { ...state, ...reduceInitiatives(state, action) };
     case 'plans_init':
     case 'plan_put':
