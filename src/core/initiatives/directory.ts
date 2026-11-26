@@ -7,7 +7,7 @@ import { DirectoryPersonSchema, PEOPLE_DIR, type Person, type PersonDraft, Perso
 
 const README = `# People
 
-One file per person, shared by every initiative: \`<slug>.json\` with \`name\`, \`cares\` (what they care about), \`slack\`, \`jira\` and \`notes\`. An initiative's \`initiative.json\` names them in \`people\` as \`{ "person": "<slug>", "role": "…" }\`.
+One file per person, shared by every initiative: \`<slug>.json\` with \`name\`, \`cares\` (what they care about), \`slack\`, \`jira\` and \`notes\`, and when known \`slackId\` (U…), \`jiraId\` (the accountId), \`github\`, \`email\`, \`title\` and \`avatar\` (a picture's https link). An initiative's \`initiative.json\` names them in \`people\` as \`{ "person": "<slug>", "role": "…" }\`.
 `;
 
 const folderOf = (root: string): string => path.join(root, PEOPLE_DIR);
@@ -58,7 +58,7 @@ export const keepProposal = (root: string, proposal: z.input<typeof PersonPropos
   const known = (proposal.person ? people.find((p) => p.slug === proposal.person) : undefined) ?? personOf(people, proposal.name);
   const fill = (was: string | undefined, next: string | null | undefined): string => (was?.trim() ? was : (next?.trim() ?? ''));
   return writePerson(root, {
-    ...(known ? { slug: known.slug } : {}),
+    ...known,
     name: known?.name ?? proposal.name,
     cares: fill(known?.cares, proposal.cares),
     slack: fill(known?.slack, proposal.slack),

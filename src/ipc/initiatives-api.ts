@@ -3,6 +3,7 @@ import { DiscoveryStepSchema } from '../core/initiatives/discovery-model.js';
 import { SuccessProposalSchema } from '../core/initiatives/success.js';
 import { RiskDraftSchema } from '../core/initiatives/risks.js';
 import { AUDIENCE_ID, AudienceDraftSchema } from '../core/initiatives/audience.js';
+import { ENRICH_FIELDS } from '../core/initiatives/enrichment.js';
 import { PersonDraftSchema } from '../core/initiatives/people.js';
 import { WatchDraftSchema } from '../core/initiatives/watches.js';
 import { CheckInScheduleSchema, GoalRefineSchema, INITIATIVE_CHAT_ID, INITIATIVE_SLUG, InitiativeDraftSchema, InitiativePatchSchema, PAGE_MAX } from '../core/initiatives/model.js';
@@ -36,6 +37,10 @@ export const INITIATIVES_API = {
   'initiatives.removePerson': { args: z.tuple([slug]) },
   'initiatives.setPerson': { args: z.tuple([slug, slug, z.string().max(200).nullish()]) },
   'initiatives.proposePeople': { args: z.tuple([slug]) },
+  'initiatives.enrichPeople': { args: z.tuple([z.array(slug).max(500).optional()]) },
+  'initiatives.keepEnrichment': { args: z.tuple([slug, z.enum(ENRICH_FIELDS).nullish()]) },
+  'initiatives.dropEnrichment': { args: z.tuple([slug, z.enum(ENRICH_FIELDS).nullish()]) },
+  'initiatives.personAvatar': { args: z.tuple([z.string().regex(/^[0-9a-f]{64}$/)]) },
   'initiatives.saveAudience': { args: z.tuple([slug, AudienceDraftSchema]) },
   'initiatives.removeAudience': { args: z.tuple([slug, audience]) },
   'initiatives.draftUpdate': { args: z.tuple([slug, audience]) },

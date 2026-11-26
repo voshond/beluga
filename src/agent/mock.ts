@@ -1,4 +1,5 @@
 import type { AgentBackend, AgentRunInput, FollowUp, RoomBridge, ThreadTools } from './types.js';
+import { demoEnrichment } from '../core/initiatives/demo-enrichment.js';
 import { demoSuccessProposal } from '../core/initiatives/demo-success.js';
 import type { McpServerRow } from '../shared/mcp.js';
 import { demoAnswerFromPrompt } from '../core/chat/demo-answers.js';
@@ -968,6 +969,10 @@ export function createMockBackend(bridge: RoomBridge, pace = 1): AgentBackend {
     defineSuccess: async (req) => {
       await new Promise((r) => setTimeout(r, 2500 * pace));
       return demoSuccessProposal(req.name);
+    },
+    enrichPeople: async (req) => {
+      await new Promise((r) => setTimeout(r, 2500 * pace));
+      return demoEnrichment(req.people);
     },
     describeProject: async (_dir, project) => {
       await new Promise((r) => setTimeout(r, 4000 * pace));

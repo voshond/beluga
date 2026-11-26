@@ -1101,6 +1101,11 @@ export class Session {
     return routeSideCall(this.sideRoute(), (on) => on.defineSuccess?.(req), undefined);
   }
 
+  /** The people directory completed by your agent from your Slack, Jira, Google directory and GitHub (undefined without an agent, or on trouble). */
+  async enrichPeople(req: import('../agent/people-enricher.js').PeopleEnrichRequest): Promise<import('./initiatives/enrichment.js').EnrichProposal[] | undefined> {
+    return routeSideCall(this.sideRoute(), (on) => on.enrichPeople?.(req), undefined);
+  }
+
   /** A pull request reviewed before a sentinel merges it (undefined without an agent to ask, or on trouble). */
   async reviewPr(input: import('../agent/pr-reviewer.js').PrReviewInput): Promise<import('../agent/pr-reviewer.js').PrReview | undefined> {
     return routeSideCall(this.sideRoute(), (on) => on.reviewPr?.(input), undefined);

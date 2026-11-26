@@ -673,6 +673,8 @@ export interface AgentBackend {
   refineGoal?(req: import('./goal-refiner.js').GoalRefineRequest): Promise<string | undefined>;
   /** What success means for an initiative, proposed from its goal, tickets, the linked repos and BigQuery (read-only; BLG-141). */
   defineSuccess?(req: import('./success-definer.js').SuccessDefineRequest): Promise<import('../core/initiatives/success.js').SuccessProposal | undefined>;
+  /** The people directory completed from your own Slack, Jira, Google directory and GitHub: what it found for each person (read-only). */
+  enrichPeople?(req: import('./people-enricher.js').PeopleEnrichRequest): Promise<import('../core/initiatives/enrichment.js').EnrichProposal[] | undefined>;
   /** Models this Claude Code offers, for the model picker. */
   listModels?(): Promise<ReadonlyArray<{ value: string; label: string; description: string; efforts?: readonly string[] }> | undefined>;
   /**

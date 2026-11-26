@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { DecisionNotes } from './decisions.js';
 import { type Audience, AudiencesSchema } from './audience.js';
+import type { Enrichment } from './enrichment.js';
 import type { Person, WaitingQuestion } from './people.js';
 import type { UpdateRecord } from './updates.js';
 import type { Watch } from './watches.js';
@@ -534,6 +535,10 @@ export type InitiativesState = {
   readonly items: readonly InitiativeView[];
   /** The people directory (people/<slug>.json at the repo's root), shared by every initiative. */
   readonly people?: readonly Person[];
+  /** Enrich People: running, or what it found for the owner to take or dismiss (enricher.ts). */
+  readonly enrichment?: Enrichment;
+  /** Each directory person's kept picture by checksum (people-avatars.ts), fetched with initiatives.personAvatar. */
+  readonly avatars?: Readonly<Record<string, string>>;
   readonly backup?: BackupTrouble;
 };
 
@@ -551,6 +556,8 @@ export type InitiativesAction =
   | { type: 'initiative_remove'; slug: string }
   | { type: 'initiatives_backup'; backup?: BackupTrouble }
   | { type: 'initiatives_people'; people: readonly Person[] }
+  | { type: 'initiatives_enrichment'; enrichment: Enrichment }
+  | { type: 'initiatives_avatars'; avatars: Readonly<Record<string, string>> }
   | { type: 'initiatives_off' };
 
 export const reduceInitiatives = (state: InitiativesSlice, action: InitiativesAction): InitiativesSlice => {
@@ -562,6 +569,8 @@ export const reduceInitiatives = (state: InitiativesSlice, action: InitiativesAc
   }
   if (action.type === 'initiatives_off') return { initiatives: NO_INITIATIVES };
   if (action.type === 'initiatives_people') return { initiatives: { ...current, people: action.people } };
+  if (action.type === 'initiatives_enrichment') return { initiatives: { ...current, enrichment: action.enrichment } };
+  if (action.type === 'initiatives_avatars') return { initiatives: { ...current, avatars: action.avatars } };
   if (action.type === 'initiative_remove') return { initiatives: { ...current, items: current.items.filter((i) => i.slug !== action.slug) } };
   const at = current.items.findIndex((i) => i.slug === action.item.slug);
   const items = at >= 0 ? current.items.map((i, n) => (n === at ? action.item : i)) : [...current.items, action.item];

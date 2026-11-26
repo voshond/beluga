@@ -1,3 +1,7 @@
+import type { PeopleEnrichRequest } from '../../agent/people-enricher.js';
+import { PeopleEnricher } from './enricher.js';
+import type { EnrichField, EnrichProposal } from './enrichment.js';
+import { type Fetcher, PeopleAvatars } from './people-avatars.js';
 import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { AgentPlace } from '../../agent/types.js';
@@ -9,7 +13,7 @@ import { initiativeChatPlace } from './chat-ref.js';
 import { type AudienceDraft, AudienceDraftSchema } from './audience.js';
 import { InitiativeChats } from './chats.js';
 import { keepProposal, readDirectory, removePersonFile, writePerson } from './directory.js';
-import { PEOPLE_DIR, type PersonDraft } from './people.js';
+import { PEOPLE_DIR, type Person, type PersonDraft } from './people.js';
 import { PEOPLE_PASS } from './people-prompt.js';
 import { findingTitle, readDiscovery, sizingFiles } from './discovery.js';
 import { type ArtifactAbout, type DiscoveryStep, DiscoveryStepSchema, proposedEpicKeys } from './discovery-model.js';
@@ -86,6 +90,9 @@ export type InitiativesDeps = {
   readonly refine?: (input: GoalRefine) => Promise<string | undefined>;
   readonly successHost?: () => SuccessHost | undefined;
   readonly defineSuccess?: (req: SuccessDefineRequest) => Promise<SuccessProposal | undefined>;
+  readonly enrichPeople?: (req: PeopleEnrichRequest) => Promise<EnrichProposal[] | undefined>;
+  /** Fetches a person's picture (tests hand in their own). */
+  readonly fetcher?: Fetcher;
   readonly commit?: boolean;
   readonly now?: () => number;
   readonly claudeDir?: string;
@@ -138,6 +145,8 @@ export class Initiatives {
   readonly watching: InitiativeWatches;
   private readonly risks: RiskKeeper;
   readonly success: InitiativeSuccess;
+  private readonly enricher: PeopleEnricher;
+  private readonly avatars: PeopleAvatars;
   private readonly locals = new Map<string, Local>();
   private readonly sends = new Map<string, Send>();
   private cleared: Send[] = [];
@@ -175,6 +184,18 @@ export class Initiatives {
     });
     this.risks = new RiskKeeper(deps.root, deps.dir);
     this.success = new InitiativeSuccess({ root: deps.root, host: () => deps.successHost?.(), ...(deps.defineSuccess ? { propose: deps.defineSuccess } : {}), now: () => this.now });
+    this.enricher = new PeopleEnricher({
+      dir: deps.dir,
+      people: () => readDirectory(deps.root),
+      projects: () => [...new Set(listSlugs(deps.root).flatMap((slug) => (readFolder(deps.root, slug).config?.epics ?? []).map((epic) => epic.split('-')[0]!)))],
+      ...(deps.enrichPeople ? { enrich: deps.enrichPeople } : {}),
+      save: (draft) => this.savePerson(draft),
+      publish: (enrichment) => {
+        if (!this.stopped) deps.store.dispatch({ type: 'initiatives_enrichment', enrichment });
+      },
+      now: () => this.now,
+    });
+    this.avatars = new PeopleAvatars(deps.dir ? path.join(deps.dir, 'avatars') : null, deps.fetcher);
     this.offAction = deps.store.onAction((action) => this.onAction(action));
   }
 
@@ -187,7 +208,9 @@ export class Initiatives {
     else mkdirSync(this.deps.root, { recursive: true });
     if (this.stopped) return;
     const items = listSlugs(this.deps.root).map((slug) => this.view(slug));
-    this.deps.store.dispatch({ type: 'initiatives_init', state: { enabled: true, root: this.deps.root, items, people: readDirectory(this.deps.root) } });
+    const people = readDirectory(this.deps.root);
+    this.deps.store.dispatch({ type: 'initiatives_init', state: { enabled: true, root: this.deps.root, items, people, enrichment: this.enricher.view, avatars: this.avatars.shas(people) } });
+    void this.syncAvatars(people);
     await this.pushPending().catch(() => undefined);
     for (const item of items) await this.watching.sync(item.slug).catch(() => undefined);
   }
@@ -821,7 +844,36 @@ export class Initiatives {
 
   private refreshPeople(): void {
     if (this.stopped) return;
-    this.deps.store.dispatch({ type: 'initiatives_people', people: readDirectory(this.deps.root) });
+    const people = readDirectory(this.deps.root);
+    this.deps.store.dispatch({ type: 'initiatives_people', people });
+    this.enricher.refresh();
+    void this.syncAvatars(people);
+  }
+
+  private async syncAvatars(people: readonly Person[]): Promise<void> {
+    const before = JSON.stringify(this.avatars.shas(people));
+    await this.avatars.sync(people).catch(() => false);
+    const avatars = this.avatars.shas(people);
+    if (!this.stopped && JSON.stringify(avatars) !== before) this.deps.store.dispatch({ type: 'initiatives_avatars', avatars });
+  }
+
+  /** Enrich People: your agent looks everyone (or these people) up; what it finds waits on the People page. */
+  enrichPeople(only?: readonly string[]): void {
+    this.enricher.start(only);
+  }
+
+  /** Takes what Enrich People found for someone (or one field of theirs) into their entry. */
+  keepEnrichment(person: string, field?: EnrichField | null): Promise<void> {
+    return this.enricher.keep(person, field ?? undefined);
+  }
+
+  dropEnrichment(person: string, field?: EnrichField | null): void {
+    this.enricher.drop(person, field ?? undefined);
+  }
+
+  /** A directory person's kept picture, by its checksum. */
+  personAvatar(sha: string): { readonly mime: string; readonly b64: string } | undefined {
+    return this.avatars.read(sha);
   }
 
   /** Adds or edits a person in the directory (people/<slug>.json), shared by every initiative; a slug it doesn't have yet makes that entry. */

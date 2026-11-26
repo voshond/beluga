@@ -458,3 +458,24 @@ test('a new initiative can start in discovery', async ({ page }) => {
   await expect(page.getByRole('region', { name: 'Problem' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Delivery' }).getByRole('button', { name: 'Move to Delivery' })).toBeDisabled();
 });
+
+test('Enrich People finds handles for each person to take or dismiss one by one', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  await page.getByRole('button', { name: 'More for Checkout v2' }).click();
+  await page.getByRole('menuitem', { name: 'People Across Initiatives' }).click();
+  await page.getByRole('button', { name: 'Enrich People' }).click();
+  await expect(page.getByRole('button', { name: 'Looking Them Up…' })).toBeDisabled();
+  const ana = page.locator('[data-person="ana-ruiz"]');
+  const found = ana.getByRole('list', { name: 'Found for Ana Ruiz' });
+  await expect(found.getByRole('listitem')).toHaveCount(5, { timeout: 15_000 });
+  await expect(found.locator('[data-found="slack"]')).toContainText('@ana → ana.ruiz');
+  await shot(page, '11-people-enrich.png');
+  await found.getByRole('button', { name: 'Take GitHub for Ana Ruiz' }).click();
+  await expect(ana).toContainText('GitHub: ana-ruiz');
+  await found.getByRole('button', { name: 'Dismiss Slack for Ana Ruiz' }).click();
+  await expect(found.getByRole('listitem')).toHaveCount(3);
+  await expect(ana).toContainText('Slack: @ana');
+  await ana.getByRole('button', { name: 'Take All' }).click();
+  await expect(ana.getByRole('list', { name: 'Found for Ana Ruiz' })).toHaveCount(0);
+  await expect(ana).toContainText('ana.ruiz@example.com');
+});

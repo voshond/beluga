@@ -1641,6 +1641,8 @@ export function reduceDomain(state: DomainState, action: Action): DomainState {
     case 'initiatives_backup':
     case 'initiatives_off':
     case 'initiatives_people':
+    case 'initiatives_enrichment':
+    case 'initiatives_avatars':
       return { ...state, ...reduceInitiatives(state, action) };
     case 'plans_init':
     case 'plan_put':

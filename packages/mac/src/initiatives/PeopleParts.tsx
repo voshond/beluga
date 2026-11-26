@@ -1,7 +1,9 @@
 import type { OpenWith, Person } from '@beluga/core/initiatives/people.js';
+import { Avatar } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
 import { sameDeep } from '../lib/stable.js';
 import { timelineDayLabel } from './initiatives-model.js';
+import { usePersonPicture } from './person-avatars.js';
 import p from './people.module.css';
 
 const NO_PEOPLE: readonly Person[] = [];
@@ -37,11 +39,19 @@ export const OpenList = ({ title, items, showWhere }: OpenListProps) => {
 };
 
 export const Handles = ({ person }: { person: Person | undefined }) => {
-  if (!person || !(person.slack || person.jira)) return null;
+  if (!person) return null;
   return (
     <>
       {person.slack ? <span>Slack: {person.slack}</span> : null}
       {person.jira ? <span>Jira: {person.jira}</span> : null}
+      {person.github ? <span>GitHub: {person.github}</span> : null}
+      {person.email ? <span>{person.email}</span> : null}
     </>
   );
+};
+
+/** Their picture when Beluga keeps one, else their initial. */
+export const PersonPicture = ({ slug, name, size = 18 }: { slug: string; name: string; size?: number }) => {
+  const picture = usePersonPicture(slug);
+  return <Avatar name={name} id={slug} size={size} picture={picture} />;
 };

@@ -11,12 +11,31 @@ const text = (max: number) =>
     .nullish()
     .transform((value) => value?.trim() ?? '');
 
+/** A field most entries don't have: left out of the file when empty. */
+const extra = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .nullish()
+    .transform((value) => value?.trim() || undefined)
+    .optional();
+
 /** One person, stored once (people/<slug>.json): who they are, what they care about, how to reach them. */
 export const DirectoryPersonSchema = z.object({
   name: z.string().trim().min(1).max(120),
   cares: text(2000),
   slack: text(120),
+  /** Slack's own id for them (U…): stable when they rename. */
+  slackId: extra(40),
   jira: text(120),
+  /** Jira's accountId: what JQL and mentions take. */
+  jiraId: extra(128),
+  github: extra(80),
+  email: extra(200),
+  /** Their job title, as Slack or the directory has it. */
+  title: extra(200),
+  /** Where their picture comes from (https); Beluga keeps a copy (avatars.ts). */
+  avatar: extra(1000),
   notes: text(4000),
 });
 export type DirectoryPerson = z.infer<typeof DirectoryPersonSchema>;
@@ -56,10 +75,10 @@ export const waitingQuestionsOf = (markdown: string): WaitingQuestion[] => {
 const squash = (value: string): string => value.trim().toLowerCase().replace(/^@/, '');
 
 /** Whether a name, slug or handle the agent wrote means this person. */
-export const isPerson = (ref: string | null | undefined, person: Pick<Person, 'slug' | 'name' | 'slack' | 'jira'>): boolean => {
+export const isPerson = (ref: string | null | undefined, person: Pick<Person, 'slug' | 'name' | 'slack' | 'jira'> & Partial<Pick<Person, 'slackId' | 'jiraId' | 'github' | 'email'>>): boolean => {
   if (!ref?.trim()) return false;
   const said = squash(ref);
-  return slugOf(ref) === person.slug || said === squash(person.name) || [person.slack, person.jira].some((handle) => Boolean(handle) && squash(handle) === said);
+  return slugOf(ref) === person.slug || said === squash(person.name) || [person.slack, person.slackId, person.jira, person.jiraId, person.github, person.email].some((handle) => Boolean(handle) && squash(handle!) === said);
 };
 
 /** The directory entry a reference means, if any. */
