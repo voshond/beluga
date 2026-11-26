@@ -443,9 +443,8 @@ button.card:hover {
   display: grid;
   grid-auto-flow: column;
   grid-template-rows: 14px repeat(7, auto);
-  grid-template-columns: auto repeat(var(--weeks), minmax(10px, 1fr));
-  gap: 3px;
-  overflow-x: auto;
+  grid-template-columns: var(--labels) repeat(var(--weeks), minmax(0, 1fr));
+  gap: var(--gap);
   padding-bottom: 2px;
 }
 .gridDays,
@@ -454,7 +453,6 @@ button.card:hover {
 }
 .gridDays > span {
   align-self: center;
-  padding-right: 4px;
   font-size: 9px;
   line-height: 10px;
   color: var(--text-3);
