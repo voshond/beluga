@@ -171,6 +171,7 @@ describe('stakeholder updates', () => {
     expect(readFileSync(path.join(root, slug, 'updates/2026-11-26-team-1.md'), 'utf8')).toContain('Edited text');
     expect(sent.timeline[0]).toMatchObject({ kind: 'update', text: 'sent the Team update to Confluence page 2201 › Status' });
     expect(sent.files).toContain('updates.json');
+    expect(sent.watches ?? []).toEqual([]);
     writeFileSync(path.join(root, slug, 'tickets.json'), JSON.stringify({ at: new Date(NOW).toISOString(), tickets: [{ key: 'A-1', status: 'Done', statusCategory: 'done' }] }));
     service.refresh(slug);
     expect(draftUpdatePrompt(item(), item().audiences![0]!, [])).toContain('done: A-1');

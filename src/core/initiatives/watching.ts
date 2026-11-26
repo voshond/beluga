@@ -64,8 +64,9 @@ export class InitiativeWatches {
     return watch;
   }
 
-  /** A sent draft: watch its place for the answer (written now; the chat turn's end commits it). */
+  /** A sent Slack message or Jira comment: watch its place for the answer (written now; the chat turn's end commits it). A Confluence section gets none. */
   fromDraft(slug: string, draft: OutboxDraft): void {
+    if (draft.to.kind !== 'slack' && draft.to.kind !== 'jira') return;
     const watches = this.read(slug);
     if (watches.some((w) => w.draft === draft.id)) return;
     writeWatches(this.deps.root, slug, [...watches, watchOfDraft(draft, nextWatchId(watches), this.deps.now())]);
