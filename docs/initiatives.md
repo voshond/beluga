@@ -11,8 +11,10 @@ One git repository, one folder per initiative. Its path is kept in `~/.beluga/in
 ```
 initiatives/
 ├── README.md
+├── people/               the people directory, shared by every initiative (§9)
+│   └── <person>.json     name, cares, slack, jira, notes
 └── <slug>/
-    ├── initiative.json   name, goal, status, epics, slack, people, meetings, docs, repos
+    ├── initiative.json   name, goal, status, epics, slack, people ({ person, role }), meetings, docs, repos
     ├── brief.md          where it stands now: every chat starts from it
     ├── decisions.md      the agent's notes: "## Open" and "## Decided", each with the date and why (not on the page)
     ├── timeline.md       what happened, newest first, one bullet each ("- 2026-11-25 [check-in]: …")
@@ -81,9 +83,9 @@ Send (`initiatives.sendDraft(slug, id, text)`) marks it `approved` (keeping the 
 
 ## 6. The API and the state
 
-`src/ipc/initiatives-api.ts` (zod only) and `initiatives-handlers.ts`: `initiatives.create(draft)` → `{ slug }`, `update(slug, patch)`, `archive(slug)` (its check-in pauses), `setRepo(slug, repo, linked)`, `setCheckIn(slug, on)`, `checkInNow(slug)`, `refreshTickets(slug)`, `refineGoal(input)`, `chatNew(slug)`, `chatOpen(slug, id)`, `chatDelete(slug, id)`, `resolveSuggestion(slug, id, decision, answer?)`, `clarifySuggestion(slug, id)`, `sendDraft(slug, id, text)`, `discardDraft(slug, id)`, `readFile(slug, path)` (a memory file, never outside its folder). All are `mac` for the phone (`src/companion/coverage.ts`), `drive` for your other computers, and refused to external agents. Messages go through `session.submit` with the chat's channel.
+`src/ipc/initiatives-api.ts` (zod only) and `initiatives-handlers.ts`: `initiatives.create(draft)` → `{ slug }`, `update(slug, patch)`, `archive(slug)` (its check-in pauses), `setRepo(slug, repo, linked)`, `setCheckIn(slug, on)`, `checkInNow(slug)`, `refreshTickets(slug)`, `refineGoal(input)`, `chatNew(slug)`, `chatOpen(slug, id)`, `chatDelete(slug, id)`, `resolveSuggestion(slug, id, decision, answer?)`, `clarifySuggestion(slug, id)`, `sendDraft(slug, id, text)`, `discardDraft(slug, id)`, `readFile(slug, path)` (a memory file, never outside its folder), and for people (§9) `savePerson(draft)` → `{ slug }`, `removePerson(person)`, `setPerson(slug, person, role | null)` and `proposePeople(slug)` → `{ channel }`. All are `mac` for the phone (`src/companion/coverage.ts`), `drive` for your other computers, and refused to external agents. Messages go through `session.submit` with the chat's channel.
 
-The state's `initiatives` slice (`InitiativesState`: `enabled`, `root`, `items`, and `backup` while pushes fail) changes through `initiatives_init`, `initiative_put`, `initiative_remove`, `initiatives_backup` and `initiatives_off`. Each item is an `InitiativeView`: the config's fields (`slack`, `meetings` among them), `progress`, `tickets`, `tasks`, `suggestions`, `outbox`, `timeline` (`timeline.md`'s bullets parsed as `{ day, kind, text }`, up to 500), `files`, `checkIn` (its sentinel's id), `chats` and `trouble`. The views are `initiatives` (the list) and `initiative_page` (`slug`, and `chat`: its channel is the page's conversation).
+The state's `initiatives` slice (`InitiativesState`: `enabled`, `root`, `items`, and `backup` while pushes fail) and `people`, the directory) changes through `initiatives_init`, `initiative_put`, `initiative_remove`, `initiatives_backup`, `initiatives_people` and `initiatives_off`. Each item is an `InitiativeView`: the config's fields (`slack`, `meetings` among them), `progress`, `tickets`, `tasks`, `suggestions`, `outbox`, `timeline` (`timeline.md`'s bullets parsed as `{ day, kind, text }`, up to 500), `waitingQuestions` (§9), `files`, `checkIn` (its sentinel's id), `chats` and `trouble`. The views are `initiatives` (the list), `initiative_page` (`slug`, and `chat`: its channel is the page's conversation) and `initiative_people` (People across initiatives, §9).
 
 ## 7. The window (`packages/mac/src/initiatives/`)
 
@@ -103,9 +105,21 @@ Worktrees send the initiative what their work made: a report, test or validation
 
 ## 8. Code, demo and tests
 
-- `src/core/initiatives/`: `model.ts` (browser-safe: types, zod schemas, channel helpers, the reducer), `files.ts` (folders), `repo.ts` (git), `chats.ts`, `prompt.ts`, `initiatives.ts` (the service), `chat-ref.ts` (how a ref resolves), `report.ts` (report_to_initiative for a worktree), `launch.ts`, `registry.ts`, `demo.ts`.
-- The demo (`npm run dev`) seeds two initiatives with progress, decisions and suggestions in a throwaway folder under the system's temp folder, removed when the daemon stops; nothing is committed there.
-- `tests/initiatives-model.test.ts`, `initiatives-files.test.ts`, `initiatives-service.test.ts`, `initiatives-artifacts.test.ts`, `goal-refiner.test.ts`, and `packages/mac/e2e/initiatives.spec.ts` (the page, the table, Refine and the list editor against the demo).
+- `src/core/initiatives/`: `model.ts` (browser-safe: types, zod schemas, channel helpers, the reducer), `files.ts` (folders), `repo.ts` (git), `chats.ts`, `prompt.ts`, `initiatives.ts` (the service), `chat-ref.ts` (how a ref resolves), `people.ts` (browser-safe: the directory's schema and what is open with whom), `directory.ts` (`people/` on disk), `people-prompt.ts`, `report.ts` (report_to_initiative for a worktree), `launch.ts`, `registry.ts`, `demo.ts`.
+- The demo (`npm run dev`) seeds two initiatives with progress, decisions, suggestions and two people on Checkout v2 (one waiting on, one waited on, a question marked waiting on) in a throwaway folder under the system's temp folder, removed when the daemon stops; nothing is committed there.
+- `tests/initiatives-model.test.ts`, `initiatives-files.test.ts`, `initiatives-people.test.ts`, `initiatives-service.test.ts`, `initiatives-artifacts.test.ts`, `goal-refiner.test.ts`, and `packages/mac/e2e/initiatives.spec.ts` (the page, the table, Refine and the list editor against the demo).
+
+## 9. People
+
+Stakeholders are kept once for every initiative, so the same Ops lead never exists three times. They are people outside Beluga (not friends), and the tool stays single-player.
+
+- **The directory.** `people/<slug>.json` at the repo's root (`directory.ts`): `{ name, cares, slack, jira, notes }` (`DirectoryPersonSchema`, `people.ts`), with a `README.md`. The slug comes from the name (`Ömer Kaya` → `omer-kaya`, `-2` when taken). `people` is never an initiative's folder: `listSlugs` skips it and a new initiative named People gets `people-2`. Changes commit as `people: <slug> saved`, `people: <slug> removed`, `people: from <initiative>`.
+- **On an initiative.** `initiative.json`'s `people` is `[{ person, role? }]`: a directory slug and their role there. An old `{ name, role }` still reads, as the slug of its name (`PersonSchema`, `model.ts`); the page shows it as Not in the directory until it is edited, which makes its entry under that slug.
+- **What is open with someone** is derived, never typed: an open suggestion's `waitingOn` (a slug, a name or a handle: it waits on them, they owe you) and `askedBy` (they wait on you), and an open question in `decisions.md`'s "## Open" that ends with `(waiting on: <name>)` (`waitingQuestionsOf`, on the view as `waitingQuestions`). **Last contact** is the latest `said`, `message` or `meeting` line in `timeline.md` that names them (their full name, a first name of three letters or more, or a handle).
+- **The agent.** The brief lists the initiative's people with their roles and the rest of the directory (`peopleBrief`, `people-prompt.ts`), and tells it to set `waitingOn` and `askedBy`, mark open questions, and never write `people/` or `initiative.json`'s people itself: a change is a suggestion with `people`. The check-in prompt (`PEOPLE_CHECK_IN`) says the same.
+- **The one-time pass.** `PEOPLE_PASS` asks the Check-in chat to read `people.md` and write one suggestion with `people: [{ name, role, cares, slack, jira, notes, person? }]` (`kind` "other"; an agent's "people" reads as other). The page's People › From people.md sends it (`initiatives.proposePeople`) while the initiative has nobody and no people suggestion yet, and a check-in does it once then too. Nothing is written until you approve it: approving folds each one into the directory (an entry with the same name or `person` keeps what it has and gains what was empty) and onto the initiative with their role, sets its outcome and a timeline line, and sends nothing to the chat. `people.md` stays the agent's free notes.
+- **The page.** People (`PeopleSection.tsx`), under Suggestions: one row each with their role, last contact, Slack and Jira, Waiting on them and They wait on you; + picks someone from the directory or New Person…, the pencil edits them and their role (`PersonSheet.tsx`), × takes them off. A suggestion's record shows Waiting on, They wait on you and the people it proposes (`SuggestionPeople.tsx`).
+- **People across initiatives** (`PeoplePage.tsx`, the list's People button, or ⋯ › People Across Initiatives): everyone in the directory, those with the most open first, each with their roles per initiative, what they care about, last contact, and everything open with them across the initiatives that aren't archived (`peopleAcross`); New Person, edit, and remove (refused while an initiative names them).
 
 ## 10. Not yet
 
