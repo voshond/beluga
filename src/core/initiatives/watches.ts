@@ -20,7 +20,8 @@ const maybe = (max: number) =>
     .string()
     .max(max)
     .nullish()
-    .transform((value) => value?.trim() || undefined);
+    .transform((value) => value?.trim() || undefined)
+    .optional();
 
 const JIRA_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
 

@@ -127,8 +127,17 @@ export class InitiativeWatches {
     this.arm(slug);
   }
 
-  /** The watch sentinel fires once, at the next due moment, naming the watches due then; with nothing to watch it pauses. */
+  /** Arms the watch sentinel; Sentinel refusing (no chats to wake here) leaves the watches as they are. */
   private arm(slug: string): void {
+    try {
+      this.armSentinel(slug);
+    } catch {
+      return;
+    }
+  }
+
+  /** The watch sentinel fires once, at the next due moment, naming the watches due then; with nothing to watch it pauses. */
+  private armSentinel(slug: string): void {
     const host = this.deps.host();
     if (!host) return;
     const about = this.deps.about(slug);
