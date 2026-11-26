@@ -21,7 +21,8 @@ const RiskRow = ({ slug, risk, onEdit }: RiskRowProps) => {
   const closed = risk.state === 'closed';
   const handleEdit = (): void => onEdit(risk);
   const handleState = (): void => void a.act(() => a.api.saveRisk(slug, draftOf(risk, closed ? 'open' : 'closed')), closed ? `Reopened risk ${risk.id}` : `Closed risk ${risk.id}`);
-  const meta = [
+  const parts = [
+    { label: 'Why', text: risk.why },
     { label: 'Owner', text: risk.owner },
     { label: 'Mitigation', text: risk.mitigation },
   ].filter((line) => line.text);
@@ -42,19 +43,22 @@ const RiskRow = ({ slug, risk, onEdit }: RiskRowProps) => {
           <IconButton size="small" icon={closed ? 'refresh' : 'check'} label={`${closed ? 'Reopen' : 'Close'} risk ${risk.id}`} onClick={handleState} />
         </span>
       </span>
-      {risk.why ? <span className={s.riskLine}>{risk.why}</span> : null}
-      {meta.map((line) => (
-        <span key={line.label} className={s.riskLine}>
-          <span className={s.riskLabel}>{line.label}</span> {line.text}
+      {parts.map((part) => (
+        <span key={part.label} className={s.riskPart}>
+          <span className={s.riskLabel}>{part.label}</span>
+          <span className={s.riskLine}>{part.text}</span>
         </span>
       ))}
       {links.length ? (
-        <span className={s.riskLinks}>
-          {links.map((source) => (
-            <button key={source.label} type="button" className={s.proofLink} onClick={() => void openExternal(source.url ?? '')} aria-label={`Open ${source.label}`}>
-              {source.label}
-            </button>
-          ))}
+        <span className={s.riskPart}>
+          <span className={s.riskLabel}>Sources</span>
+          <span className={s.riskLinks}>
+            {links.map((source) => (
+              <button key={source.label} type="button" className={s.riskSource} onClick={() => void openExternal(source.url ?? '')} aria-label={`Open ${source.label}`}>
+                {source.label}
+              </button>
+            ))}
+          </span>
         </span>
       ) : null}
     </div>
