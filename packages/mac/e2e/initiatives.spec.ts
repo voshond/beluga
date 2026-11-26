@@ -58,6 +58,8 @@ test('what was said in a meeting shows as a decision, a task to make and a no-no
   await expect(page.getByRole('listbox', { name: 'Decision log' })).toContainText('Does the address form keep the manual-entry fallback?');
   await expect(page.getByRole('listbox', { name: 'Open suggestions' })).toContainText('Create a task: send the address form copy to legal by Friday');
   await expect(page.getByRole('region', { name: 'Timeline' })).toContainText('Checkout standup held, no notes found');
+  await page.getByRole('listbox', { name: 'Decision log' }).scrollIntoViewIfNeeded();
+  await shot(page, '01d-initiative-meeting-notes.png');
 });
 
 test('several epics group the tickets by epic', async ({ page }) => {
