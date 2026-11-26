@@ -53,6 +53,13 @@ test('an initiative’s page shows the epic’s tickets, open first, with their 
   if (shots) await tickets.screenshot({ path: path.join(shots, '08-tickets-dark-wide.png') });
 });
 
+test('what was said in a meeting shows as a decision, a task to make and a no-notes line', async ({ page }) => {
+  await openInitiative(page, 'Checkout v2');
+  await expect(page.getByRole('listbox', { name: 'Decision log' })).toContainText('Does the address form keep the manual-entry fallback?');
+  await expect(page.getByRole('listbox', { name: 'Open suggestions' })).toContainText('Create a task: send the address form copy to legal by Friday');
+  await expect(page.getByRole('region', { name: 'Timeline' })).toContainText('Checkout standup held, no notes found');
+});
+
 test('several epics group the tickets by epic', async ({ page }) => {
   await openInitiative(page, 'Mobile Onboarding');
   const tickets = page.getByRole('region', { name: 'Tickets' });
