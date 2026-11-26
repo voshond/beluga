@@ -5,6 +5,7 @@ import type { EpicStatus, EpicTickets, InitiativeDraft, InitiativeTasks, OutboxD
 import type { AudienceDraft } from './audience.js';
 import type { PersonDraft } from './people.js';
 import { dayOf } from './repo.js';
+import { type Watch, WatchesSchema } from './watches.js';
 
 type DemoInitiative = {
   readonly draft: InitiativeDraft;
@@ -113,6 +114,15 @@ const demos = (now: number): DemoInitiative[] => {
   ];
 };
 
+/** Two follow-ups for Checkout v2: one still waiting, one with news not read yet. */
+const demoWatches = (now: number): Watch[] => {
+  const at = (hours: number): string => new Date(now - hours * 3_600_000).toISOString();
+  return WatchesSchema.parse([
+    { id: 1, what: 'Who picks up SHOP-150 now that Ana is out', where: { kind: 'slack', channel: 'C0CHECKOUT', thread: '1763990000.000100', label: '#checkout-v2' }, waitingOn: 'Jonas', suggestion: 1, since: at(30), lastLook: at(2), state: 'watching', news: [] },
+    { id: 2, what: 'Finance’s final Norway tax table', where: { kind: 'jira', issue: 'SHOP-141', label: 'Tax rates for Norway' }, waitingOn: 'Ana', suggestion: 3, since: at(50), lastLook: at(1), state: 'answered', news: [{ at: at(1), from: 'Ana Ruiz', text: 'Finance signed off the new table on SHOP-141: the old one can go, so launching in Norway no longer waits.', read: false }] },
+  ]);
+};
+
 export const seedDemoInitiatives = async (initiatives: Initiatives, root: string, now: number = Date.now()): Promise<void> => {
   for (const demo of demos(now)) {
     const { slug } = await initiatives.create(demo.draft, { quiet: true });
@@ -127,6 +137,7 @@ export const seedDemoInitiatives = async (initiatives: Initiatives, root: string
     if (demo.outbox) writeText(path.join(folder, 'outbox.json'), `${JSON.stringify(demo.outbox, null, 2)}\n`);
     if (slug === 'checkout-v2') {
       writeText(path.join(folder, 'artifacts', '1-3ds-safari-retry.md'), '# 3DS on Safari: retry check\n\n- 40 test payments on Safari 18, 3DS challenge forced\n- 38 passed on the first frame, 2 after one retry, none failed\n');
+      writeText(path.join(folder, 'watches.json'), `${JSON.stringify(demoWatches(now), null, 2)}\n`);
       writeText(path.join(folder, 'artifacts.json'), `${JSON.stringify([{ id: 1, title: '3DS on Safari: retry check', why: 'Shows the retry fixes the Safari challenge before SHOP-150 merges.', file: 'artifacts/1-3ds-safari-retry.md', name: '3ds-safari-retry.md', bytes: 140, ticket: 'SHOP-150', worktree: 'shop-150-3ds-retry', project: 'shop', createdAt: new Date(now - 3_600_000).toISOString() }], null, 2)}\n`);
     }
     writeText(path.join(folder, 'sources', 'jira.md'), `# Jira\n\n${demo.status.epics.map((e) => `- ${e.key} ${e.title ?? ''}: ${e.done}/${e.total} done`).join('\n')}\n`);

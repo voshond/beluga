@@ -19,6 +19,7 @@ import { TasksSection } from './TasksSection.js';
 import { TicketsTable } from './TicketsTable.js';
 import { UpdatesSection } from './UpdatesSection.js';
 import { useInitiativeActions } from './use-initiatives.js';
+import { WatchesSection } from './WatchesSection.js';
 import home from '../sentinel/home.module.css';
 import s from './initiatives.module.css';
 
@@ -112,8 +113,9 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
           <TicketsTable item={item} />
           <CheckInRow item={item} />
           <Suggestions item={item} pickedId={picked?.id} onPick={handlePick} />
-          <PeopleSection item={item} />
+          <WatchesSection item={item} />
           <UpdatesSection item={item} />
+          <PeopleSection item={item} />
           <TasksSection item={item} />
           <Timeline item={item} />
           <Follows item={item} />

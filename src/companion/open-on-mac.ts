@@ -2,6 +2,7 @@ import type { DomainState, View } from '../core/store.js';
 import { FIRST_CHAT, assistantChatOf } from '../shared/assistant.js';
 import { viewFor } from '../client/screen.js';
 import { sentinelChatOf } from '../core/sentinel/model.js';
+import { initiativeChatOf } from '../core/initiatives/model.js';
 
 /**
  * "Open on your Mac" from the phone (BLG-40): what the Mac app's window shows for something the
@@ -32,6 +33,8 @@ export function macViewFor(state: DomainState, target: OpenTarget): View | undef
       }
       const sentinelChat = sentinelChatOf(channel);
       if (sentinelChat) return { kind: 'sentinel_chat', chat: sentinelChat };
+      const initiative = initiativeChatOf(channel);
+      if (initiative) return state.initiatives.items.some((i) => i.slug === initiative.slug) ? { kind: 'initiative_page', ...initiative } : undefined;
       if (channel.startsWith('task:')) return { kind: 'requests' };
       if (channel.startsWith('ws:')) {
         const id = channel.slice(3);

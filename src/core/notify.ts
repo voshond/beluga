@@ -13,6 +13,8 @@ import { type AgentRef, defaultAgentOf } from '../protocol.js';
 import { isExternalRequester } from './trust.js';
 import { agentLabel, agentName } from '../shared/agent-label.js';
 import { laterUntil } from './triage/facts.js';
+import { followUpNews } from './initiatives/watch-notices.js';
+import { isWatchChat } from './initiatives/watches.js';
 
 /** The groups you can switch on or off in Settings → Notifications. */
 export type NoticeKind = 'done' | 'needsYou' | 'problems' | 'people' | 'pr' | 'mentions' | 'background';
@@ -252,6 +254,8 @@ function finishedRuns(prev: DomainState, next: DomainState): NoticeEvent[] {
     if (item.type !== 'agent' || !isFinal(item.status)) continue;
     // The Sentinel chat is quiet: you're looking at it when you use it (docs/sentinel.md §12).
     if (isSentinelChat(item.channel)) continue;
+    // A follow-up look is quiet: its news is told on its own (followUpNews).
+    if (isWatchChat(item.channel)) continue;
     const old = before.get(item.id);
     if (!old || isFinal(old.status)) continue;
     const mine = item.owner === selfId;
@@ -450,7 +454,7 @@ function dialogueNews(prev: DomainState, next: DomainState): NoticeEvent[] {
  * stopped, needs an answer or approval, a merge conflict, someone joined or invited you.
  */
 export function detectNotices(prev: DomainState, next: DomainState, now = Date.now()): NoticeEvent[] {
-  const out = [...finishedRuns(prev, next), ...finishedSetups(prev, next), ...messagesForYou(prev, next), ...taskMentions(prev, next, now), ...networkMessages(prev, next, now), ...planNews(prev, next), ...dialogueNews(prev, next), ...toolboxNews(prev, next), ...skillNews(prev, next), ...memoryNews(prev, next)];
+  const out = [...finishedRuns(prev, next), ...finishedSetups(prev, next), ...messagesForYou(prev, next), ...taskMentions(prev, next, now), ...networkMessages(prev, next, now), ...planNews(prev, next), ...dialogueNews(prev, next), ...toolboxNews(prev, next), ...skillNews(prev, next), ...memoryNews(prev, next), ...followUpNews(prev, next)];
   if (prev.approvals !== next.approvals) {
     const seen = new Set(prev.approvals.map((a) => a.id));
     // Someone else's request waits for you either way; on Do Not Disturb it just doesn't make a sound.

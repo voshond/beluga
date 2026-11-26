@@ -696,6 +696,10 @@ Columns: **Core** is the API method or intent it uses; **Mac** is where you find
 | `initiatives.removeAudience` | ✓ an initiative's page › Updates › an audience's × (confirms; its sent updates stay in `updates/`) |
 | `initiatives.draftUpdate` | ✓ an initiative's page › Updates › an audience's Draft Now (its Check-in chat drafts the update into the outbox from the facts Beluga works out; due ones are drafted by the next check-in) |
 | `initiatives.keepPrep` | ✓ an initiative's page › Updates › a prep sheet's card › Done (never sent: kept in `updates/` with your edits, logged on the timeline as an update), beside Copy as Markdown · Discard; the chat's Outbox card shows the same |
+| `initiatives.addWatch` | ✓ an initiative's page › Waiting for › Watch for an Answer… (what, where: a Slack link, a Jira key, a doc or pull request link, and who it waits on); sending an outbox draft adds one by itself, and the chat adds one on your word |
+| `initiatives.stopWatch` | ✓ an initiative's page › Waiting for › a row's Stop (it stays in watches.json as stopped) |
+| `initiatives.lookNow` | ✓ an initiative's page › Waiting for › a row's Look Now (its Follow-ups chat looks at that one place at once) |
+| `initiatives.readNews` | ✓ an initiative's page › New since you asked › Mark Read (one item, or Mark All Read) |
 | `toolbox.list` | ✓ Project › Toolbox: all tools (personal + team) for the project, first on Project Home: each tool's name with its {{params}} and the last line it printed; the phone lists them read-only (BLG-75) |
 | `toolbox.create` | ✓ Project Settings › Toolbox › New Tool: name, command with {{params}}, personal or Share with team (saves to beluga.json) · Mac only |
 | `toolbox.update` | ✓ Project Settings › Toolbox › a tool's pencil: change its name, command, params or source · Mac only |

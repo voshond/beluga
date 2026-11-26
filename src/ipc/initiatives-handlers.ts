@@ -42,4 +42,8 @@ export const INITIATIVES_HANDLERS = {
   'initiatives.removeAudience': (s, slug, id) => needInitiatives(s).removeAudience(slug, id),
   'initiatives.draftUpdate': (s, slug, id) => needInitiatives(s).draftUpdate(slug, id),
   'initiatives.keepPrep': (s, slug, id, text) => needInitiatives(s).keepPrep(slug, id, text),
+  'initiatives.addWatch': (s, slug, draft) => needInitiatives(s).addWatch(slug, draft),
+  'initiatives.stopWatch': (s, slug, id) => needInitiatives(s).stopWatch(slug, id),
+  'initiatives.lookNow': (s, slug, id) => needInitiatives(s).lookNow(slug, id),
+  'initiatives.readNews': (s, slug, id) => needInitiatives(s).readNews(slug, id),
 } satisfies InitiativesHandlers;

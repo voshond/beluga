@@ -518,6 +518,10 @@ export const MACHINE: Record<Method, MachineSide> = {
   'initiatives.removeAudience': 'drive',
   'initiatives.draftUpdate': 'drive',
   'initiatives.keepPrep': 'drive',
+  'initiatives.addWatch': 'drive',
+  'initiatives.stopWatch': 'drive',
+  'initiatives.lookNow': 'drive',
+  'initiatives.readNews': 'drive',
   // ---- dashboard
   'dashboard.create': 'drive',
   'dashboard.update': 'drive',

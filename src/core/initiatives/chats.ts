@@ -7,7 +7,7 @@ import { chatFits, chatLimitMessage } from '../../shared/chat-limit.js';
 import { HistorySaver } from '../history-saver.js';
 import { chosenAgent } from '../settings.js';
 import { type LogItem, type Store, settleRun } from '../store.js';
-import { CHECK_IN_CHAT, FIRST_INITIATIVE_CHAT, INITIATIVE_CHAT_ID, type InitiativeChats as ChatsState, initiativeChatChannel, initiativeChatOf } from './model.js';
+import { CHECK_IN_CHAT, FIRST_INITIATIVE_CHAT, WATCH_CHAT, INITIATIVE_CHAT_ID, type InitiativeChats as ChatsState, initiativeChatChannel, initiativeChatOf } from './model.js';
 
 export type InitiativeChatDeps = {
   readonly store: Store;
@@ -32,6 +32,8 @@ type ChatsFile = {
 
 const KEEP = 500;
 const BUILT_IN: readonly string[] = [FIRST_INITIATIVE_CHAT, CHECK_IN_CHAT];
+/** Chats made the first time something wakes them. */
+const ON_WAKE: readonly string[] = [...BUILT_IN, WATCH_CHAT];
 
 const readJson = <T>(file: string, fallback: T): T => {
   try {
@@ -251,7 +253,7 @@ export class InitiativeChats {
     if (!cwd) return undefined;
     const list = this.need(of.slug);
     if (!this.has(of.slug, of.chat)) {
-      if (!BUILT_IN.includes(of.chat)) return undefined;
+      if (!ON_WAKE.includes(of.chat)) return undefined;
       this.save(of.slug, { ...list, chats: [...list.chats, { id: of.chat, createdAt: this.now }] });
     }
     const agent = chosenAgent(this.deps.store.getState().prefs);

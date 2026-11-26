@@ -53,6 +53,8 @@ import { CHECK_IN_PROMPT, type LinkedRepo, TASKS_PROMPT, TICKETS_PROMPT, initiat
 import { type PushResult, commitFolder, dayOf, ensureRepo, pushIfTracked, unpushedCount } from './repo.js';
 import { UPDATES_DIR, UpdateRecordSchema, audienceIdOf, ticketMarks } from './updates.js';
 import { draftUpdatePrompt } from './updates-prompt.js';
+import { InitiativeWatches, type WatchHost } from './watching.js';
+import { WATCH_CHAT, type Watch, type WatchDraft } from './watches.js';
 
 export type CheckInHost = {
   readonly create: (draft: SentinelDraft) => { readonly id: string };
@@ -61,6 +63,8 @@ export type CheckInHost = {
   readonly runNow: (id: string) => void;
   readonly reschedule: (id: string, trigger: ScheduleTrigger) => void;
   readonly remove: (id: string) => void;
+  /** Rewrites a sentinel's trigger and steps (the watch sentinel, re-armed for its next look). */
+  readonly rewrite?: WatchHost['rewrite'];
 };
 
 export type InitiativesDeps = {
@@ -108,6 +112,7 @@ const MEDIA_TYPES: Readonly<Record<string, string>> = { png: 'image/png', jpg: '
 
 type Local = {
   readonly checkIn?: string;
+  readonly watch?: string;
 };
 
 const FINAL_EVENTS: ReadonlySet<string> = new Set(['done', 'error', 'denied']);
@@ -116,6 +121,7 @@ const CHECK_IN_TRIGGER: ScheduleTrigger = { kind: 'schedule', every: 'week', at:
 
 export class Initiatives {
   readonly chats: InitiativeChats;
+  readonly watching: InitiativeWatches;
   private readonly locals = new Map<string, Local>();
   private readonly sends = new Map<string, Send>();
   private cleared: Send[] = [];
@@ -133,6 +139,24 @@ export class Initiatives {
       ...(deps.claudeDir ? { claudeDir: deps.claudeDir } : {}),
       ...(deps.codexDir ? { codexDir: deps.codexDir } : {}),
     });
+    this.watching = new InitiativeWatches({
+      root: deps.root,
+      now: () => this.now,
+      selfId: deps.selfId,
+      ask: deps.ask,
+      host: () => {
+        const host = deps.checkIns?.();
+        return host?.rewrite ? { ...host, rewrite: host.rewrite } : undefined;
+      },
+      sentinel: (slug) => this.local(slug).watch,
+      keepSentinel: (slug, id) => this.saveLocal(slug, { ...this.local(slug), watch: id }),
+      commit: (slug, message) => this.commit(slug, message),
+      refresh: (slug) => this.refresh(slug),
+      about: (slug) => {
+        const config = readFolder(deps.root, slug).config;
+        return { name: config?.name ?? slug, active: Boolean(config) && config?.status !== 'archived' };
+      },
+    });
     this.offAction = deps.store.onAction((action) => this.onAction(action));
   }
 
@@ -147,6 +171,7 @@ export class Initiatives {
     const items = listSlugs(this.deps.root).map((slug) => this.view(slug));
     this.deps.store.dispatch({ type: 'initiatives_init', state: { enabled: true, root: this.deps.root, items, people: readDirectory(this.deps.root) } });
     await this.pushPending().catch(() => undefined);
+    for (const item of items) await this.watching.sync(item.slug).catch(() => undefined);
   }
 
   stop(): void {
@@ -174,8 +199,8 @@ export class Initiatives {
     const file = this.localFile(slug);
     let read: Local = {};
     try {
-      const raw: { checkIn?: string } = file ? JSON.parse(readFileSync(file, 'utf8')) : {};
-      read = typeof raw.checkIn === 'string' ? { checkIn: raw.checkIn } : {};
+      const raw: { checkIn?: string; watch?: string } = file ? JSON.parse(readFileSync(file, 'utf8')) : {};
+      read = { ...(typeof raw.checkIn === 'string' ? { checkIn: raw.checkIn } : {}), ...(typeof raw.watch === 'string' ? { watch: raw.watch } : {}) };
     } catch {
       read = {};
     }
@@ -213,6 +238,7 @@ export class Initiatives {
       ...(folder.tasks ? { tasks: folder.tasks } : {}),
       suggestions: folder.suggestions,
       outbox: folder.outbox,
+      watches: folder.watches,
       artifacts: folder.artifacts,
       timeline: folder.timeline,
       ...(folder.decisions ? { decisions: folder.decisions } : {}),
@@ -350,6 +376,7 @@ export class Initiatives {
     await this.commit(slug, `${slug}: updated`);
     this.refresh(slug);
     if (next.epics.length && !sameKeys(was.epics, next.epics)) this.fetchTickets(slug);
+    if (was.status !== next.status) await this.watching.sync(slug).catch(() => undefined);
     return this.view(slug);
   }
 
@@ -501,6 +528,8 @@ export class Initiatives {
     this.putDraft(send.slug, folder.outbox, send.id, (d) => ({ ...d, state: 'sent', resolvedAt: new Date(this.now).toISOString() }));
     if (draft.audience) this.keepUpdate(send.slug, draft, send.text);
     else addTimeline(this.deps.root, send.slug, `${dayOf(this.now)} [message]: sent ${send.to.kind === 'slack' ? 'a Slack message' : 'a Jira comment'} to ${targetWords(send.to)}`);
+    const sent = readFolder(this.deps.root, send.slug).outbox.find((d) => d.id === send.id);
+    if (sent) this.watching.fromDraft(send.slug, sent);
     this.refresh(send.slug);
   }
 
@@ -570,6 +599,27 @@ export class Initiatives {
     this.keepUpdate(slug, draft, final);
     await this.commit(slug, `${slug}: prep sheet ${id} kept`);
     this.refresh(slug);
+  }
+
+  /** The owner asks to keep looking for an answer (the page, or the chat on their word). */
+  async addWatch(slug: string, draft: WatchDraft): Promise<Watch> {
+    this.need(slug);
+    return this.watching.add(slug, draft);
+  }
+
+  async stopWatch(slug: string, id: number): Promise<void> {
+    this.need(slug);
+    await this.watching.stop(slug, id);
+  }
+
+  lookNow(slug: string, id: number): { readonly channel: string } {
+    this.need(slug);
+    return this.watching.look(slug, id);
+  }
+
+  async readNews(slug: string, id?: number): Promise<void> {
+    this.need(slug);
+    await this.watching.markRead(slug, id);
   }
 
   /** Keeps a file a worktree made: copied into artifacts/, or, too big for the repo, noted where it is. */
@@ -741,7 +791,11 @@ export class Initiatives {
     if (action.type !== 'agent_event' || !FINAL_EVENTS.has(action.event)) return;
     const of = initiativeChatOf(action.channel);
     if (!of || !this.known(of.slug)) return;
-    const message = of.chat === CHECK_IN_CHAT ? `${of.slug}: check-in ${dayOf(this.now)}` : `${of.slug}: chat ${dayOf(this.now)}`;
-    void this.commit(of.slug, message).then(() => this.refresh(of.slug));
+    if (of.chat === WATCH_CHAT) this.watching.turnEnded(of.slug);
+    const message = of.chat === CHECK_IN_CHAT ? `${of.slug}: check-in ${dayOf(this.now)}` : of.chat === WATCH_CHAT ? `${of.slug}: follow-ups ${dayOf(this.now)}` : `${of.slug}: chat ${dayOf(this.now)}`;
+    void this.commit(of.slug, message)
+      .then(() => this.refresh(of.slug))
+      .then(() => this.watching.sync(of.slug))
+      .catch(() => undefined);
   }
 }

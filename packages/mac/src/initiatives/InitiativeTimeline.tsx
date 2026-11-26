@@ -34,6 +34,7 @@ const KIND: Readonly<Record<TimelineKind, { readonly icon?: IconName; readonly l
   created: { icon: 'flag', label: 'Created' },
   update: { icon: 'bell', label: 'Update' },
   event: { label: '' },
+  'follow-up': { icon: 'eye', label: 'Follow-up' },
 };
 
 const LINK_ICON: Readonly<Record<LinkKind, IconName | undefined>> = { ticket: undefined, doc: 'fileText', slack: 'chat', link: 'external' };
