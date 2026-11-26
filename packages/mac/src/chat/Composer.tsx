@@ -55,6 +55,7 @@ import { useSuggestions } from './Suggestions.js';
 import { useChatMentions, useMentionWorld, worktreeOf } from './Mention.js';
 import { useSkills } from './use-skills.js';
 import { caretAfterDraw, useDraftChips } from './draft-chips.js';
+import { useComposeWith } from './compose-with.js';
 import { MentionedChats, MentionedTasks } from './MentionedTasks.js';
 import { DictationStrip, MicButton } from './Dictation.js';
 import { dictatingInto, useDictation, useDictationTarget } from '../lib/dictation.js';
@@ -443,6 +444,14 @@ export function Composer({ autoFocus = true }: { autoFocus?: boolean }) {
     if (text) drafts.set(boxKey, text);
     else drafts.delete(boxKey);
   }, [boxKey, buffer]);
+  // A graph's picture handed to the box (Attach to Jira Ticket…): it waits with words for you to finish.
+  useComposeWith(ref, ({ files, words }) => {
+    void att.attach(files);
+    const text = ui.get().buffer.replace(/\s*$/, ' ');
+    const next = `${text.trimStart()}${words}`;
+    ui.patch({ buffer: next, cursor: next.length });
+    caretAfterDraw(ref, next.length);
+  });
   useEffect(() => {
     const focus = (): void => ref.current?.focus();
     document.addEventListener('beluga:focus-composer', focus);

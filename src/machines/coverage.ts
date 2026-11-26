@@ -511,6 +511,7 @@ export const MACHINE: Record<Method, MachineSide> = {
   'initiatives.discardDraft': 'drive',
   'initiatives.readFile': 'drive',
   'initiatives.readArtifact': 'drive',
+  'initiatives.keepGraph': 'drive',
   'initiatives.savePerson': 'drive',
   'initiatives.removePerson': 'drive',
   'initiatives.setPerson': 'drive',

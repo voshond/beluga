@@ -36,6 +36,7 @@ export const REMOTE_APP_PATHS = {
   chatFiles: 'web',
   files: 'web',
   saveText: 'web',
+  saveImage: 'app',
   taskFiles: 'web',
   taskDrop: 'web',
   sidebarDrop: 'web',
@@ -103,6 +104,7 @@ export const CLIENT_COMMANDS = [
   'window_control',
   'clipboard_image_types',
   'clipboard_image',
+  'save_image',
 ] as const;
 
 export type ClientCommand = (typeof CLIENT_COMMANDS)[number];

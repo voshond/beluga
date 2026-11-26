@@ -64,6 +64,37 @@ test('draws what Claude visualizes, and you can explore it', async ({ page }) =>
   await expect(full.locator('.react-flow__minimap')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(full).toBeHidden();
+
+  // Its picture: the whole graph on its background, drawn in this window (a browser downloads it).
+  await graph.click({ button: 'right', position: { x: 12, y: 12 } });
+  const download = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: 'Save as Image…' }).click();
+  const saved = await download;
+  expect(saved.suggestedFilename()).toBe('How a payment goes through.png');
+  const png = await saved.createReadStream().then(async (stream) => Buffer.concat(await stream.toArray()));
+  expect(png.subarray(1, 4).toString()).toBe('PNG');
+  // RGBA: outside its round corners the picture is see-through.
+  expect(png[25]).toBe(6);
+  if (process.env.GRAPH_PICTURE_TO) await saved.saveAs(process.env.GRAPH_PICTURE_TO);
+  await expect(page.locator('.react-flow__viewport')).toHaveCount(1);
+
+  // Its picture waits in the message box to go to a Jira ticket: nothing is sent until you send it.
+  await graph.click({ button: 'right', position: { x: 12, y: 12 } });
+  await page.getByRole('menuitem', { name: 'Attach to Jira Ticket…' }).click();
+  await expect(composer(page)).toHaveValue(/^\[[^\]]+\] Attach this picture of “How a payment goes through” to the Jira ticket $/);
+  await composer(page).fill('');
+
+  // Kept in an initiative, where it's drawn live.
+  await graph.click({ button: 'right', position: { x: 12, y: 12 } });
+  await page.getByRole('menuitem', { name: 'Keep in Initiative' }).hover();
+  await page.getByRole('menuitem', { name: 'Checkout v2' }).click();
+  await expect(page.getByText('Kept “How a payment goes through” in Checkout v2')).toBeVisible();
+  await sidebar(page).getByRole('button', { name: 'All Initiatives' }).click();
+  await page.getByRole('button', { name: 'Open Checkout v2' }).click();
+  await page.getByRole('tab', { name: /Artifacts/ }).click();
+  await page.getByRole('listitem', { name: /How a payment goes through/ }).click();
+  const kept = page.getByRole('dialog').getByRole('figure', { name: 'Graph: How a payment goes through' });
+  await expect(kept.locator('[data-ready="true"]')).toBeVisible({ timeout: 20_000 });
 });
 
 test('a broken graph says what is wrong and shows its JSON', async ({ page }) => {

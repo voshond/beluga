@@ -438,6 +438,7 @@ export const EXTERNAL_ACCESS: Record<Method, ExternalAccess> = {
   'initiatives.discardDraft': INITIATIVES,
   'initiatives.readFile': INITIATIVES,
   'initiatives.readArtifact': INITIATIVES,
+  'initiatives.keepGraph': INITIATIVES,
   'initiatives.savePerson': INITIATIVES,
   'initiatives.removePerson': INITIATIVES,
   'initiatives.setPerson': INITIATIVES,

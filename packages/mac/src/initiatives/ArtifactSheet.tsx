@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import type { Artifact, ArtifactRead } from '@beluga/core/initiatives/model.js';
+import { type Artifact, type ArtifactRead, isGraphArtifact } from '@beluga/core/initiatives/model.js';
 import { Markdown } from '../chat/Markdown.js';
 import { FormSheet } from '../components/FormSheet.js';
+import { GraphBlock } from '../components/graph/GraphBlock.js';
 import { Button } from '../components/ui.js';
 import { useApi } from '../lib/beluga.js';
 import { copyText } from '../lib/copy.js';
@@ -27,6 +28,8 @@ const PathBody = ({ path }: { path: string }) => {
 const ArtifactBody = ({ read }: { read: ArtifactRead }) => {
   if (read.kind === 'other') return <PathBody path={read.path} />;
   if (read.kind === 'image') return <img className={s.artifactImage} src={`data:${read.mediaType};base64,${read.data}`} alt={read.name} />;
+  // A graph kept as its JSON is drawn live, with its picture and the rest of its menu.
+  if (isGraphArtifact(read.name) && !read.cut) return <GraphBlock code={read.text} />;
   return (
     <>
       {read.name.toLowerCase().endsWith('.md') ? <Markdown text={read.text} /> : <pre className={s.code}>{read.text}</pre>}

@@ -34,6 +34,7 @@ export const INITIATIVES_HANDLERS = {
   'initiatives.discardDraft': (s, slug, id) => needInitiatives(s).discardDraft(slug, id),
   'initiatives.readFile': (s, slug, rel) => needInitiatives(s).readFile(slug, rel),
   'initiatives.readArtifact': (s, slug, id) => needInitiatives(s).readArtifact(slug, id),
+  'initiatives.keepGraph': (s, slug, code) => needInitiatives(s).keepGraph(slug, code),
   'initiatives.savePerson': (s, draft) => needInitiatives(s).savePerson(draft),
   'initiatives.removePerson': (s, person) => needInitiatives(s).removePerson(person),
   'initiatives.setPerson': (s, slug, person, role) => needInitiatives(s).setPerson(slug, person, role ?? null),

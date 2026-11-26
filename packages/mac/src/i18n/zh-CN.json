@@ -13029,5 +13029,16 @@
   "Delete this question?": "删除此问题？",
   "Its follow-up stops and unsent drafts for it are dropped. Questions you resolve go to the decision log instead.": "其跟进将停止，未发送的草稿将被丢弃。已解决的问题会进入决策记录。",
   "Question deleted": "问题已删除",
-  "Edit question: {0}": "编辑问题：{0}"
+  "Edit question: {0}": "编辑问题：{0}",
+  "Copy as Image": "拷贝为图片",
+  "Save as Image…": "存储为图片…",
+  "Copied the graph as a picture": "已将图表拷贝为图片",
+  "Couldn’t copy the picture: {0}": "无法拷贝图片：{0}",
+  "Couldn’t save the picture: {0}": "无法存储图片：{0}",
+  "Keep in Initiative": "保存到举措",
+  "Attach to Jira Ticket…": "附加到 Jira 工单…",
+  "Kept “{0}” in {1}": "已将“{0}”保存到 {1}",
+  "Couldn’t keep the graph: {0}": "无法保存图表：{0}",
+  "Open a chat to attach it from": "请先打开一个聊天再附加",
+  "Couldn’t draw the picture: {0}": "无法绘制图片：{0}"
 }

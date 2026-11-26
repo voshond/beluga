@@ -807,6 +807,7 @@ export const PHONE: Record<Method, Side> = {
   'initiatives.discardDraft': 'mac',
   'initiatives.readFile': 'mac',
   'initiatives.readArtifact': 'mac',
+  'initiatives.keepGraph': 'mac',
   'initiatives.savePerson': 'mac',
   'initiatives.removePerson': 'mac',
   'initiatives.setPerson': 'mac',

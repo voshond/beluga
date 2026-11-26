@@ -1409,6 +1409,19 @@
   background: var(--graph-bg);
 }
 
+/* The graph drawn again for its picture (GraphPicture): whole, hidden behind the window (one off screen draws blank). */
+.pictureHost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: -1;
+  opacity: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--graph-bg);
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .status[data-status='active'] .statusMark,
   .drawing,

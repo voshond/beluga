@@ -17,7 +17,10 @@ Your agent can draw. When a picture explains better than prose, it adds a fenced
 - **Turn the layout** between left-to-right and top-to-bottom.
 - **Drag** nodes around. Their lines follow.
 - **Open in Full Window:** room to explore, a minimap, zoom buttons, two-finger scroll to pan, pinch to zoom. Esc closes.
+- **Copy as Image**, and in the right-click menu **Save as Image…**: a PNG of the whole graph at twice its size, whatever part of it the card shows, on its dotted background with 32px all round what's drawn (`drawnBox`: nodes, lines and labels, not ELK's size) and 12px round corners, see-through outside them. The window draws it again off screen (`GraphPicture.tsx`, `graph-picture.ts` with html-to-image), so the picture is made on the computer you sit at: the app as a client of a Beluga server copies to its own clipboard and saves with its own Save panel (`save_image`), never the server's.
 - **Copy as JSON** (also in the right-click menu).
+- **Keep in Initiative ▸** (right-click): the graph's JSON is kept as one of that initiative's artifacts and drawn live there (docs/initiatives.md, Artifacts).
+- **Attach to Jira Ticket…** (right-click): its picture waits in the message box on screen with "Attach this picture of “…” to the Jira ticket". Add the key and send: your agent attaches it with its Jira tools. Nothing goes until you send it. With no chat open it says so.
 
 In a conversation, scrolling still scrolls the conversation: pinch to zoom, drag to pan. A graph is laid out the way that reads biggest in its frame: as the agent drew it if it fits, else turned top-to-bottom, and a very long chain wraps onto more rows. The card's height follows the graph.
 

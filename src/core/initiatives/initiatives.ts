@@ -7,6 +7,7 @@ import type { EnrichField, EnrichProposal } from './enrichment.js';
 import { type Fetcher, PeopleAvatars } from './people-avatars.js';
 import { mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { parseGraph } from '../../shared/graph-spec.js';
 import type { AgentPlace, InitiativeQuestionTools } from '../../agent/types.js';
 import type { ScheduleTrigger, SentinelDraft } from '../sentinel/model.js';
 import { formatBytes } from '../../shared/format.js';
@@ -21,12 +22,14 @@ import { PEOPLE_PASS } from './people-prompt.js';
 import { findingTitle, readDiscovery, sizingFiles } from './discovery.js';
 import { type ArtifactAbout, type DiscoveryStep, DiscoveryStepSchema, proposedEpicKeys } from './discovery-model.js';
 import { discoveryStepPrompt } from './discovery-prompt.js';
-import { addTimeline, artifactPath, folderOf, keepArtifactFile, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeArtifacts, writeConfig, writeOutbox, writeSuggestions, writeTasks, writeText, writeUpdates } from './files.js';
+import { addTimeline, artifactPath, folderOf, keepArtifactFile, listSlugs, readFolder, readMemoryFile, scaffoldFolder, writeArtifacts, writeConfig, writeOutbox, writeSuggestions, writeArtifactFile, writeTasks, writeText, writeUpdates } from './files.js';
 import {
   ARTIFACT_KEEP_MAX,
   type ArtifactRead,
+  type Artifact,
   ArtifactSchema,
   artifactKindOf,
+  GRAPH_ARTIFACT_EXT,
   CHECK_IN_CHAT,
   type CheckInSchedule,
   CheckInScheduleSchema,
@@ -884,19 +887,37 @@ Ask: ${question.waitingOn}` : ''}`;
 
   /** Keeps a file a worktree made: copied into artifacts/, or, too big for the repo, noted where it is. */
   async reportArtifact(slug: string, report: ArtifactReport): Promise<string> {
-    const item = this.need(slug);
     if (isSecretPath(report.file)) throw new Error('That file holds secrets: it stays where it is.');
     const bytes = this.fileSize(report.file);
-    const id = item.artifacts.reduce((n, a) => Math.max(n, a.id), 0) + 1;
-    const name = path.basename(report.file);
     const kept = bytes <= ARTIFACT_KEEP_MAX;
+    const artifact = await this.addArtifact(slug, report, path.basename(report.file), bytes, (id) => (kept ? { file: keepArtifactFile(this.deps.root, slug, id, report.file) } : { path: report.file }));
+    const item = this.need(slug);
+    if (artifact.file) return `Kept as artifact #${artifact.id} of ${item.name} (${artifact.file}). It shows on the initiative's page, and its next check-in reads it.`;
+    return `${artifact.name} is ${formatBytes(bytes)}, too big for the initiatives repo: artifact #${artifact.id} of ${item.name} points at ${report.file}, so leave the file there.`;
+  }
+
+  /** A graph from a chat or a report, kept as its JSON (`<title>.graph.json`): the page draws it live, and the check-in reads it. */
+  async keepGraph(slug: string, code: string): Promise<void> {
+    const parsed = parseGraph(code);
+    if (!parsed.ok) throw new Error(`That graph can’t be drawn: ${parsed.error}`);
+    const title = parsed.graph.title ?? 'Graph';
+    const name = `${title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Graph'}${GRAPH_ARTIFACT_EXT}`;
+    const text = `${JSON.stringify(JSON.parse(code), null, 2)}\n`;
+    const report = { title, from: 'a graph you kept', ...(parsed.graph.summary ? { why: parsed.graph.summary } : {}) };
+    await this.addArtifact(slug, report, name, Buffer.byteLength(text), (id) => ({ file: writeArtifactFile(this.deps.root, slug, id, name, text) }));
+  }
+
+  /** An artifact added to artifacts.json, on top of the timeline, and committed; `place` puts its file (→ where it is). */
+  private async addArtifact(slug: string, report: Omit<ArtifactReport, 'file'>, name: string, bytes: number, place: (id: number) => { readonly file: string } | { readonly path: string }): Promise<Artifact> {
+    const item = this.need(slug);
+    const id = item.artifacts.reduce((n, a) => Math.max(n, a.id), 0) + 1;
     const demo = item.discovery?.demo?.task;
     const about = report.about ?? (demo && report.ticket?.toUpperCase() === demo ? 'demo' : undefined);
     const artifact = ArtifactSchema.parse({
       id,
       title: report.title.trim(),
       why: report.why,
-      ...(kept ? { file: keepArtifactFile(this.deps.root, slug, id, report.file) } : { path: report.file }),
+      ...place(id),
       name,
       bytes,
       ticket: report.ticket,
@@ -910,8 +931,7 @@ Ask: ${question.waitingOn}` : ''}`;
     addTimeline(this.deps.root, slug, `${dayOf(this.now)} [artifact]: artifact #${id} “${artifact.title}”${artifact.ticket ? ` from ${artifact.ticket}` : ''}`);
     await this.commit(slug, `${slug}: artifact ${id}`);
     this.refresh(slug);
-    if (kept) return `Kept as artifact #${id} of ${item.name} (${artifact.file}). It shows on the initiative's page, and its next check-in reads it.`;
-    return `${name} is ${formatBytes(bytes)}, too big for the initiatives repo: artifact #${id} of ${item.name} points at ${report.file}, so leave the file there.`;
+    return artifact;
   }
 
   private fileSize(file: string): number {

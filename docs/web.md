@@ -147,7 +147,7 @@ to set one up, and what the server's agents may ask of it (device reach): [docs/
 | --- | --- | --- | --- |
 | `main.tsx`, `popup/main.tsx`: `data-app="tauri"` | the window's own look (vibrancy, title bar) | a plain page (`data-web="true"`) | `look` the app's: the window's own look |
 | `lib/boot.ts` `endpoint()` | asks Tauri for the daemon's port and token | `/__beluga/endpoint` says `{ web: true }`; the socket is this origin's `/ws`, its session cookie lets it in | `endpoint` the browser's: `/__beluga/endpoint` on the server, its session cookie |
-| `lib/boot.ts` `copyText` cap, `lib/copy.ts` | the app's clipboard | `navigator.clipboard` (needs https or localhost) | `clipboard` the app's clipboard |
+| `lib/boot.ts` `copyText` cap, `lib/copy.ts` | the app's clipboard | `navigator.clipboard` (needs https or localhost) | `clipboard` the app's clipboard, pictures too (a graph's Copy as Image is drawn in the client's window and lands on its clipboard) |
 | `lib/term-clipboard.ts` a terminal's paste | the app's clipboard | `navigator.clipboard.readText()`; over plain http Ctrl+Shift+V is left to the browser, whose own paste reaches the terminal (right-click › Paste is off there), and an OSC 52 copy from a program only lands over https | `terminalPaste` the app's (copies through the app's clipboard) |
 | `lib/boot.ts` `notify` cap | macOS banners with actions, the pop-up for requests | Web Notifications (asked once; needs https or localhost), clicking one goes to its chat or request; a friend's message is the in-window banner as in the app | `notify` the app's banners (sounds as in the app); requests show in the window, not the pop-up |
 | `layout/NotificationCenter.tsx` the bell's list | a popover under the toolbar bell | the same; in a window too narrow to show the bell (a phone's browser) it opens as the Notifications page instead (`layout/NotificationsView.tsx`) | `noticeList` the same |
@@ -163,6 +163,7 @@ to set one up, and what the server's agents may ask of it (device reach): [docs/
 | `network/ChatFiles.tsx` Open, Show in Finder, Save As… | open, reveal, the Save panel | Download (a one-time `/download/<token>` link, `web.download`) | `chatFiles` the browser's: Download |
 | `lib/files.ts` `revealInFinder`, `openWithDefaultApp`, `saveFile` | Finder, the default app, the Save panel | a file is downloaded; a folder's path is copied and said | `files` the browser's: downloaded from the server |
 | `lib/save-text.ts` Save As… (tables) | the Save panel | a browser download | `saveText` the browser's: a download |
+| `lib/save-image.ts` a graph's Save as Image… | the Save panel | a browser download | `saveImage` the app's: the Save panel on the computer you sit at (`save_image`); a client app from before it downloads |
 | `tasks/TaskSections.tsx` Add Files, Proof › Picture or File… | the Open panel | the browser's file picker, uploaded | `taskFiles` the browser's: uploaded |
 | `tasks/use-task-drop.tsx` | Finder drops on a task, its card or row | the browser's drop on the same places, uploaded | `taskDrop` the browser's: uploaded |
 | `layout/Sidebar.tsx` folder drop | folders dropped on the sidebar become projects | not offered (as Add Project) | `sidebarDrop` the browser's: not offered |
