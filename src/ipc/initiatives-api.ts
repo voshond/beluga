@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PersonDraftSchema } from '../core/initiatives/people.js';
 import { CheckInScheduleSchema, GoalRefineSchema, INITIATIVE_CHAT_ID, INITIATIVE_SLUG, InitiativeDraftSchema, InitiativePatchSchema } from '../core/initiatives/model.js';
 
 const slug = z.string().regex(INITIATIVE_SLUG);
@@ -25,4 +26,8 @@ export const INITIATIVES_API = {
   'initiatives.discardDraft': { args: z.tuple([slug, z.number().int().min(1)]) },
   'initiatives.readFile': { args: z.tuple([slug, z.string().min(1).max(400)]) },
   'initiatives.readArtifact': { args: z.tuple([slug, z.number().int().min(1)]) },
+  'initiatives.savePerson': { args: z.tuple([PersonDraftSchema]) },
+  'initiatives.removePerson': { args: z.tuple([slug]) },
+  'initiatives.setPerson': { args: z.tuple([slug, slug, z.string().max(200).nullish()]) },
+  'initiatives.proposePeople': { args: z.tuple([slug]) },
 } as const;

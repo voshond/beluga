@@ -1,6 +1,6 @@
 import { type DocRef, type EpicStatus, type EpicTickets, type InitiativeTask, type InitiativeTasks, type InitiativeView, type MeetingRef, type PrState, type SlackRef, type Ticket, type TicketCategory, type TimelineEntry, docKindOf, isSubTask, lastCheckInAt, openSuggestions, progressShare } from '../../../../src/core/initiatives/model.js';
 
-export const INITIATIVE_VIEWS: ReadonlySet<string> = new Set(['initiatives', 'initiative_page']);
+export const INITIATIVE_VIEWS: ReadonlySet<string> = new Set(['initiatives', 'initiative_page', 'initiative_people']);
 
 export const isInitiativeView = (kind: string): boolean => INITIATIVE_VIEWS.has(kind);
 

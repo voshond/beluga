@@ -5,6 +5,7 @@ import { Button } from '../components/ui.js';
 import { copyText } from '../lib/copy.js';
 import { openExternal } from '../lib/system.js';
 import { DecisionAnswers } from './DecisionRow.js';
+import { SuggestionPeople } from './SuggestionPeople.js';
 import { useInitiativeActions } from './use-initiatives.js';
 import s from './initiatives.module.css';
 
@@ -61,7 +62,7 @@ const Part = ({ title, children }: { title: string; children: ReactNode }) => (
 
 const OpenActions = ({ item, suggestion, onChat }: RecordProps) => {
   const a = useInitiativeActions();
-  const handleApprove = (): void => void a.act(() => a.api.resolveSuggestion(item.slug, suggestion.id, 'approve'), 'Sent to the chat');
+  const handleApprove = (): void => void a.act(() => a.api.resolveSuggestion(item.slug, suggestion.id, 'approve'), suggestion.people?.length ? 'Added to the people directory' : 'Sent to the chat');
   const handleDismiss = (): void => void a.act(() => a.api.resolveSuggestion(item.slug, suggestion.id, 'dismiss'));
   const handleClarify = (): void =>
     void a.act(() => a.api.clarifySuggestion(item.slug, suggestion.id), 'Asked in the chat').then((done) => {
@@ -113,6 +114,7 @@ export const SuggestionRecord = ({ item, suggestion, onChat }: RecordProps) => {
       </span>
       <h3 className={s.recordTitle}>{suggestion.text}</h3>
       {suggestion.why ? <Part title="Context">{suggestion.why}</Part> : null}
+      <SuggestionPeople suggestion={suggestion} />
       {sources.length ? (
         <Part title="Sources">
           <LinkList links={sources} />

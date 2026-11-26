@@ -2,6 +2,7 @@ import path from 'node:path';
 import { writeText } from './files.js';
 import type { Initiatives } from './initiatives.js';
 import type { EpicStatus, EpicTickets, InitiativeDraft, InitiativeTasks, OutboxDraft, Suggestion } from './model.js';
+import type { PersonDraft } from './people.js';
 import { dayOf } from './repo.js';
 
 type DemoInitiative = {
@@ -17,6 +18,11 @@ type DemoInitiative = {
 };
 
 const DAY = 24 * 60 * 60 * 1000;
+
+const DEMO_PEOPLE: ReadonlyArray<{ readonly entry: PersonDraft; readonly role: string }> = [
+  { entry: { name: 'Ana Ruiz', cares: 'A clean Safari fix before the freeze', slack: '@ana', jira: 'Ana Ruiz', notes: 'Out this week' }, role: 'Payments engineer, owns SHOP-141 and SHOP-150' },
+  { entry: { name: 'Kai Jensen', cares: 'Correct VAT in every market', slack: '@kai', jira: '', notes: '' }, role: 'Finance lead, signs off the Norway tax table' },
+];
 
 const demos = (now: number): DemoInitiative[] => {
   const iso = new Date(now - 2 * 60 * 60 * 1000).toISOString();
@@ -48,11 +54,11 @@ const demos = (now: number): DemoInitiative[] => {
       },
       status: { at: iso, total: 34, done: 21, inProgress: 7, blocked: 2, stale: 3, epics: [{ key: 'SHOP-120', title: 'One-page checkout', total: 34, done: 21, inProgress: 7, blocked: 2, stale: 3 }] },
       brief: '# Checkout v2\n\nOn track for the freeze, with two blockers.\n\n## Where it stands\n\n- 21 of 34 tickets done; payments and address lookup are in review.\n- Blocked: SHOP-141 (tax rates for NO) and SHOP-150 (3DS on Safari).\n- Next: the go/no-go on Thursday.\n',
-      decisions: `# Decisions\n\n## Open\n\n- ${day(1)}: Does finance have the final NO tax table? Asked Priya in #finance-ops, no answer yet.\n- ${day(3)}: Keep guest checkout behind a flag for the first week? Waiting on Ana's load test.\n\n## Decided\n\n- ${day(0)}: Apple Pay ships after launch. Why: design had it in the mockups, the epic does not. (suggestion 5)\n- ${day(6)}: Google Pay waits for v2.1. Why: one SDK update fewer before the freeze.\n`,
-      timeline: [`${day(0)} [check-in]: 3 tickets done, SHOP-150 blocked on Safari`, `${day(2)} [meeting]: design review signed off the address form`, `${day(6)} [decision]: Apple Pay first`],
+      decisions: `# Decisions\n\n## Open\n\n- ${day(1)}: Does finance have the final NO tax table? Asked Priya in #finance-ops, no answer yet.\n- ${day(3)}: Keep guest checkout behind a flag for the first week? Ana's load test decides. (waiting on: Ana Ruiz)\n\n## Decided\n\n- ${day(0)}: Apple Pay ships after launch. Why: design had it in the mockups, the epic does not. (suggestion 5)\n- ${day(6)}: Google Pay waits for v2.1. Why: one SDK update fewer before the freeze.\n`,
+      timeline: [`${day(0)} [check-in]: 3 tickets done, SHOP-150 blocked on Safari`, `${day(1)} [said]: Kai Jensen: the final Norway tax table lands on Friday`, `${day(2)} [meeting]: design review signed off the address form`, `${day(6)} [decision]: Apple Pay first`],
       suggestions: [
-        { id: 1, text: 'Ask in #checkout-v2 who owns SHOP-150 now that Ana is out', why: 'It has been blocked for 4 days with nobody assigned', kind: 'slack', state: 'open', createdAt: iso },
-        { id: 2, text: 'Add the Norway tax question to Thursday’s go/no-go agenda', why: 'It is the last open decision before launch', kind: 'calendar', state: 'open', createdAt: iso },
+        { id: 1, text: 'Ask in #checkout-v2 who owns SHOP-150 now that Ana is out', why: 'It has been blocked for 4 days with nobody assigned', kind: 'slack', waitingOn: 'ana-ruiz', state: 'open', createdAt: iso },
+        { id: 2, text: 'Add the Norway tax question to Thursday’s go/no-go agenda', why: 'It is the last open decision before launch', kind: 'calendar', askedBy: 'kai-jensen', state: 'open', createdAt: iso },
         { id: 3, text: 'Launch in Norway with the old tax table, or wait for SHOP-141?', why: 'Finance answered both ways; the freeze is in 9 days', kind: 'decision', options: ['Launch with the old table', 'Wait for SHOP-141'], state: 'open', createdAt: iso },
         { id: 4, text: 'Move SHOP-133 and SHOP-134 out of the launch epic', why: 'Both are polish; the team agreed they can ship after launch', kind: 'jira', state: 'approved', createdAt: iso, resolvedAt: iso, outcome: 'Both moved to the post-launch epic; the launch count dropped by two.', proof: [{ label: 'SHOP-133 moved to SHOP-200', url: 'https://example.atlassian.net/browse/SHOP-133' }, { label: 'SHOP-134 moved to SHOP-200', url: 'https://example.atlassian.net/browse/SHOP-134' }] },
         { id: 5, text: 'Is Apple Pay in scope for launch?', why: 'Design has it in the mockups, the epic does not', kind: 'decision', options: ['In scope', 'After launch'], answer: 'After launch', state: 'approved', createdAt: iso, resolvedAt: iso, outcome: 'Recorded in decisions.md and posted to #checkout-v2.' },
@@ -101,5 +107,9 @@ export const seedDemoInitiatives = async (initiatives: Initiatives, root: string
     }
     writeText(path.join(folder, 'sources', 'jira.md'), `# Jira\n\n${demo.status.epics.map((e) => `- ${e.key} ${e.title ?? ''}: ${e.done}/${e.total} done`).join('\n')}\n`);
     initiatives.refresh(slug);
+  }
+  for (const person of DEMO_PEOPLE) {
+    const { slug } = await initiatives.savePerson(person.entry);
+    await initiatives.setPerson('checkout-v2', slug, person.role);
   }
 };

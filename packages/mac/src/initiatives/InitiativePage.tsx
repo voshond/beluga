@@ -13,6 +13,7 @@ import { Timeline } from './InitiativeTimeline.js';
 import { CheckInRow, MemoryFiles, Repos } from './InitiativeSettings.js';
 import { InitiativePanel, type PanelTab } from './InitiativePanel.js';
 import { NewInitiativeSheet } from './NewInitiativeSheet.js';
+import { PeopleSection } from './PeopleSection.js';
 import { Suggestions } from './SuggestionLog.js';
 import { TasksSection } from './TasksSection.js';
 import { TicketsTable } from './TicketsTable.js';
@@ -37,6 +38,7 @@ const Header = ({ item, onEdit }: { item: InitiativeView; onEdit: () => void }) 
   const more: ActionItem[] = [
     { label: 'Edit…', icon: 'pencil', onSelect: onEdit },
     { label: 'Back to All Initiatives', icon: 'back', onSelect: a.openList },
+    { label: 'People Across Initiatives', icon: 'people', onSelect: a.openPeople },
     { label: 'Archive…', icon: 'archive', separate: true, disabled: item.status === 'archived', onSelect: handleArchive },
   ];
   return (
@@ -109,6 +111,7 @@ export const InitiativePage = ({ slug }: { slug: string }) => {
           <TicketsTable item={item} />
           <CheckInRow item={item} />
           <Suggestions item={item} pickedId={picked?.id} onPick={handlePick} />
+          <PeopleSection item={item} />
           <TasksSection item={item} />
           <Timeline item={item} />
           <Follows item={item} />

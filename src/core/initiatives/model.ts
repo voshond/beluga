@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { DecisionNotes } from './decisions.js';
+import type { Person, WaitingQuestion } from './people.js';
 
 export const INITIATIVE_SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const INITIATIVE_CHAT_ID = /^[a-z0-9]{1,24}$/;
@@ -15,10 +16,19 @@ export const INITIATIVE_STATUSES = ['active', 'paused', 'shipped', 'archived'] a
 export const InitiativeStatusSchema = z.enum(INITIATIVE_STATUSES);
 export type InitiativeStatus = z.infer<typeof InitiativeStatusSchema>;
 
-export const PersonSchema = z.object({
-  name: z.string().min(1).max(120),
-  role: z.string().max(200).optional(),
-});
+/** Someone on an initiative: a directory entry (`person`, its slug) with their role here. The old `{ name, role }` reads as the slug of its name. */
+export const PersonSchema = z
+  .object({
+    person: z.string().regex(INITIATIVE_SLUG).optional(),
+    name: z.string().trim().min(1).max(120).optional(),
+    role: z.string().max(200).optional(),
+  })
+  .refine((entry) => Boolean(entry.person || entry.name), { message: 'needs a person or a name' })
+  .transform((entry): { person: string; name?: string; role?: string } => ({
+    person: entry.person ?? slugOf(entry.name ?? ''),
+    ...(entry.name ? { name: entry.name } : {}),
+    ...(entry.role?.trim() ? { role: entry.role.trim() } : {}),
+  }));
 export type InitiativePerson = z.infer<typeof PersonSchema>;
 
 export const GOAL_MAX = 12_000;
@@ -285,11 +295,29 @@ export const SuggestionProofSchema = z.object({
 });
 export type SuggestionProof = z.infer<typeof SuggestionProofSchema>;
 
+/** A directory entry the agent proposes from people.md (`person`: the entry it is, when one exists); approving writes it. */
+export const PersonProposalSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  person: maybe(40),
+  role: maybe(200),
+  cares: maybe(2000),
+  slack: maybe(120),
+  jira: maybe(120),
+  notes: maybe(4000),
+});
+export type PersonProposal = z.infer<typeof PersonProposalSchema>;
+
 export const SuggestionSchema = z.object({
   id: z.number().int().min(1),
   text: z.string().min(1).max(2000),
   why: z.string().max(2000).optional(),
-  kind: z.enum(['jira', 'slack', 'calendar', 'task', 'doc', 'decision', 'other']).default('other'),
+  kind: z.preprocess((kind) => (kind === 'people' ? 'other' : kind), z.enum(['jira', 'slack', 'calendar', 'task', 'doc', 'decision', 'other'])).default('other'),
+  /** Who it waits on (a person's slug or name): they owe the user. */
+  waitingOn: z.string().trim().max(120).nullish(),
+  /** Who waits on the user for it (a person's slug or name): the user owes them. */
+  askedBy: z.string().trim().max(120).nullish(),
+  /** People to add to the directory and this initiative, from the one-time people.md pass. */
+  people: z.array(PersonProposalSchema).max(100).optional(),
   /** A decision's answers to pick from; Other… lets the user write their own. */
   options: z.array(z.string().min(1).max(200)).max(6).optional(),
   /** What the user decided, once they did. */
@@ -426,6 +454,8 @@ export type InitiativeView = {
   readonly artifacts: readonly Artifact[];
   readonly timeline: readonly TimelineEntry[];
   readonly decisions?: DecisionNotes;
+  /** decisions.md's open questions marked "(waiting on: …)". */
+  readonly waitingQuestions?: readonly WaitingQuestion[];
   readonly files: readonly string[];
   readonly checkIn?: string;
   readonly chats: InitiativeChats;
@@ -441,6 +471,8 @@ export type InitiativesState = {
   readonly enabled: boolean;
   readonly root: string;
   readonly items: readonly InitiativeView[];
+  /** The people directory (people/<slug>.json at the repo's root), shared by every initiative. */
+  readonly people?: readonly Person[];
   readonly backup?: BackupTrouble;
 };
 
@@ -457,6 +489,7 @@ export type InitiativesAction =
   | { type: 'initiative_put'; item: InitiativeView }
   | { type: 'initiative_remove'; slug: string }
   | { type: 'initiatives_backup'; backup?: BackupTrouble }
+  | { type: 'initiatives_people'; people: readonly Person[] }
   | { type: 'initiatives_off' };
 
 export const reduceInitiatives = (state: InitiativesSlice, action: InitiativesAction): InitiativesSlice => {
@@ -467,6 +500,7 @@ export const reduceInitiatives = (state: InitiativesSlice, action: InitiativesAc
     return { initiatives: action.backup ? { ...rest, backup: action.backup } : rest };
   }
   if (action.type === 'initiatives_off') return { initiatives: NO_INITIATIVES };
+  if (action.type === 'initiatives_people') return { initiatives: { ...current, people: action.people } };
   if (action.type === 'initiative_remove') return { initiatives: { ...current, items: current.items.filter((i) => i.slug !== action.slug) } };
   const at = current.items.findIndex((i) => i.slug === action.item.slug);
   const items = at >= 0 ? current.items.map((i, n) => (n === at ? action.item : i)) : [...current.items, action.item];

@@ -2,6 +2,7 @@ import { type Dirent, copyFileSync, existsSync, mkdirSync, readFileSync, readdir
 import path from 'node:path';
 import type { z } from 'zod';
 import { type DecisionNotes, decisionsOf } from './decisions.js';
+import { PEOPLE_DIR, type WaitingQuestion, waitingQuestionsOf } from './people.js';
 import { type Artifact, ArtifactsSchema, type EpicStatus, EpicStatusSchema, type EpicTickets, TicketsSchema, type InitiativeTasks, TasksSchema, INITIATIVE_SLUG, type InitiativeConfig, InitiativeConfigSchema, type OutboxDraft, OutboxSchema, type Suggestion, SuggestionsSchema, type TimelineEntry, timelineOf } from './model.js';
 
 export const MEMORY_FILES = ['initiative.json', 'brief.md', 'decisions.md', 'timeline.md', 'people.md', 'status.json', 'tickets.json', 'tasks.json', 'suggestions.json', 'outbox.json', 'artifacts.json'] as const;
@@ -22,6 +23,7 @@ export type InitiativeFolder = {
   readonly artifacts: readonly Artifact[];
   readonly timeline: readonly TimelineEntry[];
   readonly decisions?: DecisionNotes;
+  readonly waitingQuestions: readonly WaitingQuestion[];
   readonly files: readonly string[];
   readonly trouble?: string;
 };
@@ -65,7 +67,7 @@ const parseJson = <S extends z.ZodTypeAny>(text: string | undefined, schema: S, 
 export const listSlugs = (root: string): string[] => {
   try {
     return readdirSync(root, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && INITIATIVE_SLUG.test(d.name))
+      .filter((d) => d.isDirectory() && INITIATIVE_SLUG.test(d.name) && d.name !== PEOPLE_DIR)
       .map((d) => d.name)
       .sort();
   } catch {
@@ -121,6 +123,7 @@ export const readFolder = (root: string, slug: string): InitiativeFolder => {
     artifacts: artifacts.value ?? [],
     timeline: timelineOf(file('timeline.md') ?? ''),
     ...(decisions ? { decisions } : {}),
+    waitingQuestions: waitingQuestionsOf(file('decisions.md') ?? ''),
     files: memoryFiles(folder),
     ...(troubles.length ? { trouble: troubles.join('; ') } : {}),
   };

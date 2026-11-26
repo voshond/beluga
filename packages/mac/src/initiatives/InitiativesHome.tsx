@@ -58,6 +58,7 @@ export const InitiativesHome = () => {
   const root = useApp((st) => st.initiatives.root);
   const backup = useApp((st) => st.initiatives.backup, sameDeep);
   const now = useClock(true, 60_000);
+  const a = useInitiativeActions();
   const [making, setMaking] = useState(false);
   const handleNew = (): void => setMaking(true);
   const handleClose = (): void => setMaking(false);
@@ -69,6 +70,9 @@ export const InitiativesHome = () => {
           <div className={s.head}>
             <h1 className={s.title}>Initiatives</h1>
             <span className={s.grow} />
+            <Button icon="people" onClick={a.openPeople}>
+              People
+            </Button>
             <Button variant="primary" icon="plus" onClick={handleNew}>
               New Initiative
             </Button>
