@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { type Graph, parseGraph } from '../src/shared/graph-spec.js';
 import { MOCK_GRAPH_ANSWER } from '../src/agent/mock-graphs.js';
 import {
+  GRID,
   INLINE_MAX_HEIGHT,
   bestLayout,
   connections,
@@ -10,6 +11,8 @@ import {
   fitZoom,
   fittedHeight,
   handleSides,
+  snapToGrid,
+  tidySizes,
   inlineAspect,
   inlineHeight,
   linkGoal,
@@ -65,13 +68,75 @@ describe('graph layout request', () => {
     expect(elk.layoutOptions?.['elk.direction']).toBe('RIGHT');
     expect(elk.children?.map((c) => c.id)).toEqual(['web', 'g', 'note']);
     const group = elk.children?.find((c) => c.id === 'g');
+    // Cards alike: the widest one's width, in whole grid steps.
     expect(group?.children?.map((c) => [c.id, c.width])).toEqual([
-      ['api', 200],
-      ['db', 180],
+      ['api', 208],
+      ['db', 208],
     ]);
-    expect(elk.edges?.[0]?.labels?.[0]).toMatchObject({ text: 'POST /x', height: 20 });
+    expect(elk.edges?.[0]?.labels?.[0]).toMatchObject({ text: 'POST /x', height: 32 });
     expect(elk.layoutOptions?.['elk.layered.wrapping.strategy']).toBeUndefined();
     expect(elkGraph(small, new Map(), 'down', 2).layoutOptions).toMatchObject({ 'elk.direction': 'DOWN', 'elk.layered.wrapping.strategy': 'MULTI_EDGE', 'elk.aspectRatio': '2.00' });
+  });
+
+  it('sizes cards alike on the grid, keeping a round one, a picture and a list of steps their own', () => {
+    const g = graphOf({
+      nodes: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+        { id: 'who', type: 'actor', label: 'Customer' },
+        { id: 'pic', type: 'image', label: 'Shot', image: '/tmp/x.png' },
+        { id: 'job', label: 'Job', items: [{ label: 'build' }, { label: 'test' }] },
+        { id: 'g', type: 'group', label: 'G' },
+      ],
+    });
+    const tidy = tidySizes(g, new Map([['a', { width: 170, height: 50 }], ['b', { width: 250, height: 40 }], ['who', { width: 150, height: 44 }], ['pic', { width: 201, height: 99 }], ['job', { width: 200, height: 130 }]]));
+    expect(tidy.get('a')).toEqual({ width: 256, height: 64 });
+    expect(tidy.get('b')).toEqual({ width: 256, height: 64 });
+    expect(tidy.get('job')).toEqual({ width: 256, height: 144 });
+    expect(tidy.get('who')).toEqual({ width: 160, height: 48 });
+    expect(tidy.has('pic')).toBe(false);
+    expect(tidy.has('g')).toBe(false);
+  });
+
+  it('gives every line the same label room once any line has a label, so the gaps match', () => {
+    const g = graphOf({ nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }], edges: [{ from: 'a', to: 'b', label: 'no approval needed' }, { from: 'a', to: 'c' }] });
+    const rooms = elkGraph(g, new Map()).edges?.map((e) => e.labels?.[0]);
+    expect(rooms?.[0]).toMatchObject({ text: 'no approval needed', height: GRID * 2 });
+    expect(rooms?.[1]).toMatchObject({ width: rooms?.[0]?.width, height: GRID * 2 });
+    expect(rooms?.[0]?.width! % GRID).toBe(0);
+    expect(elkGraph(graphOf({ nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], edges: [{ from: 'a', to: 'b' }] }), new Map()).edges?.[0]?.labels).toBeUndefined();
+  });
+
+  it('snaps what ELK placed onto the grid, a column together, and keeps its lines square', () => {
+    const out = snapToGrid({
+      id: 'root',
+      width: 600,
+      height: 300,
+      children: [
+        { id: 'a', x: 340.9, y: 16, width: 256, height: 64 },
+        { id: 'b', x: 341.1, y: 160, width: 256, height: 64 },
+        { id: 'c', x: 37, y: 160, width: 256, height: 64 },
+      ],
+      edges: [
+        { id: 'ab', sources: ['a'], targets: ['b'], sections: [{ startPoint: { x: 472, y: 80 }, endPoint: { x: 472, y: 160 } }] },
+        { id: 'ac', sources: ['a'], targets: ['c'], sections: [{ startPoint: { x: 460, y: 80 }, bendPoints: [{ x: 460, y: 120 }, { x: 165, y: 120 }], endPoint: { x: 165, y: 160 } }] },
+      ],
+    });
+    expect(out.children?.map((c) => [c.id, c.x, c.y])).toEqual([
+      ['a', 336, 16],
+      ['b', 336, 160],
+      ['c', 32, 160],
+    ]);
+    const [ab, ac] = out.edges!.map((e) => e.sections![0]!);
+    // A straight line stays straight, moved with its column.
+    expect(ab!.startPoint.x).toBeCloseTo(ab!.endPoint.x, 6);
+    expect(ab!.startPoint.x).toBeCloseTo(467, 0);
+    // A bent one: its first run follows a, its last run c, its corners stay square.
+    const pts = [ac!.startPoint, ...ac!.bendPoints!, ac!.endPoint];
+    expect(pts[0]!.x).toBeCloseTo(pts[1]!.x, 6);
+    expect(pts[1]!.y).toBe(pts[2]!.y);
+    expect(pts[2]!.x).toBe(pts[3]!.x);
+    expect(pts[3]!.x).toBe(160);
   });
 
   it('makes room for labels whichever way the graph goes', () => {

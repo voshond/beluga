@@ -114,6 +114,8 @@ export interface Point {
 
 export interface ElkOutputEdge {
   readonly id: string;
+  readonly sources?: readonly string[];
+  readonly targets?: readonly string[];
   /** The group its coordinates are relative to ("root": the whole graph). */
   readonly container?: string;
   readonly sections?: ReadonlyArray<{ readonly startPoint: Point; readonly endPoint: Point; readonly bendPoints?: readonly Point[] }>;
@@ -165,6 +167,39 @@ export function backEdges(graph: Graph): Set<string> {
   return back;
 }
 
+/** The dots behind a graph are this far apart: what's laid out sits on them, and its gaps are whole steps of them. */
+export const GRID = 16;
+export const onGrid = (v: number): number => Math.ceil(v / GRID) * GRID;
+
+const isTable = (n: GraphNode): boolean => n.type === 'database' && !!n.fields?.length;
+
+/**
+ * How big each node is laid out and drawn, like a diagram drawn by hand: every card and table the
+ * width of the widest, every plain card the height of the tallest (one listing its steps keeps
+ * its own), all in whole grid steps. Then their middles line up and every gap is the same.
+ * Groups, pictures and the round ones (an actor, a person) keep their own size.
+ */
+export function tidySizes(graph: Graph, sizes: ReadonlyMap<string, Size>): Map<string, Size> {
+  const own = (n: GraphNode): boolean => n.type === 'image' || n.type === 'actor' || n.type === 'person';
+  const alike = graph.nodes.filter((n) => n.type !== 'group' && !own(n));
+  const sized = (n: GraphNode): Size => sizes.get(n.id) ?? { width: 180, height: 56 };
+  const plain = (n: GraphNode): boolean => !isTable(n) && !n.items?.length;
+  const width = onGrid(Math.max(0, ...alike.map((n) => sized(n).width)));
+  const height = onGrid(Math.max(0, ...alike.filter(plain).map((n) => sized(n).height)));
+  // A picture keeps its exact size (it doesn't stretch); the round ones grow to the next grid step.
+  const ownSize = graph.nodes.filter((n) => own(n) && n.type !== 'image').map((n) => [n.id, { width: onGrid(sized(n).width), height: onGrid(sized(n).height) }] as const);
+  return new Map([...alike.map((n) => [n.id, { width, height: plain(n) ? height : onGrid(sized(n).height) }] as const), ...ownSize]);
+}
+
+/**
+ * The room every line's label takes, in whole grid steps: the same for all, so every gap between
+ * layers is too (across, a layer of labels is as wide as its widest). Undefined when no line has one.
+ */
+const labelRoom = (graph: Graph): Size | undefined => {
+  const widths = graph.edges.flatMap((e) => (e.label ? [labelSize(e.label).width] : []));
+  return widths.length ? { width: onGrid(Math.max(...widths)), height: GRID * 2 } : undefined;
+};
+
 /**
  * The layout request: ELK's layered algorithm with groups as compound nodes, keeping the order
  * Claude wrote things in (so a pipeline reads in the order it was described). Every label gets
@@ -180,18 +215,21 @@ export function elkGraph(graph: Graph, sizes: ReadonlyMap<string, Size>, directi
     if (n.type === 'group') {
       return {
         id: n.id,
-        layoutOptions: { 'elk.padding': `[top=${GROUP_HEAD + 14},left=22,bottom=22,right=22]` },
+        layoutOptions: { 'elk.padding': `[top=${onGrid(GROUP_HEAD + 14)},left=${GRID * 2},bottom=${GRID * 2},right=${GRID * 2}]` },
         children: (inner ?? []).map(toElk),
       };
     }
-    const size = sizes.get(n.id) ?? { width: 180, height: 56 };
-    return { id: n.id, width: size.width, height: size.height };
+    const size = tidy.get(n.id) ?? sizes.get(n.id) ?? { width: 180, height: 56 };
+    // Lines leave the middle of a side, or a grid step apart around it.
+    return { id: n.id, width: size.width, height: size.height, layoutOptions: { 'elk.portAlignment.default': 'CENTER', 'elk.spacing.portPort': String(GRID * 2) } };
   };
+  const tidy = tidySizes(graph, sizes);
   const vertical = direction === 'down' || direction === 'up';
   // A labelled line takes a layer of its own for its label: the gaps on either side of it can be smaller.
   const labelled = graph.edges.some((e) => e.label);
-  const between = vertical ? (labelled ? 30 : 64) : labelled ? 44 : 84;
+  const between = vertical ? (labelled ? 16 : 64) : labelled ? 32 : 80;
   const back = backEdges(graph);
+  const room = labelRoom(graph);
   return {
     id: 'root',
     layoutOptions: {
@@ -199,8 +237,8 @@ export function elkGraph(graph: Graph, sizes: ReadonlyMap<string, Size>, directi
       'elk.direction': ELK_DIRECTION[direction],
       'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
       'elk.layered.spacing.nodeNodeBetweenLayers': String(between),
-      'elk.spacing.nodeNode': vertical ? '40' : '32',
-      'elk.layered.spacing.edgeNodeBetweenLayers': vertical ? '18' : '22',
+      'elk.spacing.nodeNode': vertical ? '48' : '32',
+      'elk.layered.spacing.edgeNodeBetweenLayers': '16',
       'elk.spacing.edgeLabel': '4',
       'elk.edgeRouting': 'ORTHOGONAL',
       'elk.edgeLabels.placement': 'CENTER',
@@ -212,16 +250,101 @@ export function elkGraph(graph: Graph, sizes: ReadonlyMap<string, Size>, directi
       'elk.layered.nodePlacement.favorStraightEdges': 'true',
       'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
       'elk.layered.crossingMinimization.forceNodeModelOrder': 'false',
-      'elk.padding': '[top=20,left=20,bottom=20,right=20]',
+      'elk.padding': `[top=${GRID},left=${GRID},bottom=${GRID},right=${GRID}]`,
+      // Each layer's nodes on one middle line (rows of cards line up across, columns down).
+      'elk.layered.nodePlacement.bk.fixedAlignment': 'BALANCED',
+      'elk.alignment': 'CENTER',
+      'elk.spacing.portPort': String(GRID * 2),
       // A long chain wraps onto more rows (or columns) to suit the frame it's shown in.
       ...(aspect ? { 'elk.layered.wrapping.strategy': 'MULTI_EDGE', 'elk.aspectRatio': aspect.toFixed(2), 'elk.layered.wrapping.additionalEdgeSpacing': '16' } : {}),
     },
     children: (kids.get(undefined) ?? []).map(toElk),
     edges: graph.edges.map((e) => {
       const [from, to] = back.has(e.id) ? [e.to, e.from] : [e.from, e.to];
-      return { id: e.id, sources: [from], targets: [to], ...(e.label ? { labels: [{ text: e.label, ...labelSize(e.label) }] } : {}) };
+      // Once any line has a label, every line gets the same room: a line without one would make its layer gap shorter.
+      return { id: e.id, sources: [from], targets: [to], ...(room ? { labels: [{ text: e.label ?? '\u00a0', ...room }] } : {}) };
     }),
   };
+}
+
+/** Positions that differ by less than this are one column (or row): they snap to the same grid line. */
+const SAME_LINE = 2;
+
+/** Each position → the grid line nearest its column's (or row's) middle, so nodes in line stay in line. */
+function gridLines(values: readonly number[]): Map<number, number> {
+  const sorted = [...new Set(values)].sort((a, b) => a - b);
+  const lines = new Map<number, number>();
+  for (let i = 0; i < sorted.length; ) {
+    let j = i;
+    while (j + 1 < sorted.length && sorted[j + 1]! - sorted[j]! < SAME_LINE) j++;
+    const run = sorted.slice(i, j + 1);
+    const line = Math.round(run.reduce((sum, v) => sum + v, 0) / run.length / GRID) * GRID;
+    for (const v of run) lines.set(v, line);
+    i = j + 1;
+  }
+  return lines;
+}
+
+/**
+ * ELK's answer with every node on the grid (ELK's balancing leaves them a few pixels off): nodes
+ * in a column or row move together to its nearest grid line, and each line's first and last runs
+ * follow the node they leave or reach, so lines stay square.
+ */
+export function snapToGrid(out: ElkOutput): ElkOutput {
+  const abs = new Map<string, Point>([[out.id, { x: 0, y: 0 }]]);
+  const walk = (n: ElkOutput, at: Point): void => {
+    for (const c of n.children ?? []) {
+      const p = { x: at.x + (c.x ?? 0), y: at.y + (c.y ?? 0) };
+      abs.set(c.id, p);
+      walk(c, p);
+    }
+  };
+  walk(out, { x: 0, y: 0 });
+  const xs = gridLines([...abs.values()].map((p) => p.x));
+  const ys = gridLines([...abs.values()].map((p) => p.y));
+  const moved = new Map([...abs].map(([id, p]) => [id, { x: (xs.get(p.x) ?? p.x) - p.x, y: (ys.get(p.y) ?? p.y) - p.y }]));
+  const by = (id: string | undefined): Point => (id === undefined || id === out.id ? { x: 0, y: 0 } : (moved.get(id) ?? { x: 0, y: 0 }));
+  const place = (n: ElkOutput, parent: Point): ElkOutput => {
+    const own = by(n.id);
+    const children = n.children?.map((c) => place(c, own));
+    return { ...n, ...(n.x !== undefined ? { x: n.x + own.x - parent.x } : {}), ...(n.y !== undefined ? { y: n.y + own.y - parent.y } : {}), ...(children ? { children } : {}), ...(n.edges ? { edges: n.edges.map(line) } : {}) };
+  };
+  // A line's points are relative to its container (which moved with its own grid line): its ends follow their nodes.
+  const line = (e: ElkOutputEdge): ElkOutputEdge => {
+    const section = e.sections?.[0];
+    if (!section) return e;
+    const frame = by(e.container);
+    const pts = [section.startPoint, ...(section.bendPoints ?? []), section.endPoint];
+    const along = (i: number, j: number): 'x' | 'y' => (Math.abs(pts[i]!.x - pts[j]!.x) < 0.5 ? 'x' : 'y');
+    /** The points of the first run from end `at` (stepping `step`), and which of their coordinates the run shares. */
+    const runFrom = (at: number, step: 1 | -1): { readonly points: Set<number>; readonly shared: 'x' | 'y' } => {
+      const next = at + step;
+      if (next < 0 || next >= pts.length) return { points: new Set([at]), shared: 'x' };
+      const shared = along(at, next);
+      const points = new Set([at]);
+      for (let i = next; i >= 0 && i < pts.length && Math.abs(pts[i]![shared] - pts[at]![shared]) < 0.5; i += step) points.add(i);
+      return { points, shared };
+    };
+    const head = runFrom(0, 1);
+    const tail = runFrom(pts.length - 1, -1);
+    const from = by(e.sources?.[0]);
+    const to = by(e.targets?.[0]);
+    const moved = pts.map((p, i) => {
+      const d = { x: 0, y: 0 };
+      // A run moves across with its node; the very end also moves along with it (the node's side moved).
+      if (head.points.has(i)) d[head.shared] = from[head.shared] - frame[head.shared];
+      if (tail.points.has(i)) d[tail.shared] = to[tail.shared] - frame[tail.shared];
+      const other = (k: 'x' | 'y'): 'x' | 'y' => (k === 'x' ? 'y' : 'x');
+      if (i === 0) d[other(head.shared)] = from[other(head.shared)] - frame[other(head.shared)];
+      if (i === pts.length - 1) d[other(tail.shared)] = to[other(tail.shared)] - frame[other(tail.shared)];
+      return { x: p.x + d.x, y: p.y + d.y };
+    });
+    const [startPoint, ...rest] = moved;
+    const endPoint = rest.pop() ?? startPoint!;
+    return { ...e, sections: [{ ...section, startPoint: startPoint!, endPoint, bendPoints: rest }] };
+  };
+  const snapped = place(out, { x: 0, y: 0 });
+  return { ...snapped, ...(out.width !== undefined ? { width: out.width + GRID } : {}), ...(out.height !== undefined ? { height: out.height + GRID } : {}) };
 }
 
 export interface Placed {

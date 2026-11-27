@@ -17,7 +17,7 @@ import {
 import type { Graph, GraphDirection, GraphNode } from '@beluga/shared/graph-spec.js';
 import { IconButton } from '../ui.js';
 import { reducedMotion, useDocTheme } from '../markdown/use-doc-theme.js';
-import { type ElkOutput, type Focus, INLINE_MAX_HEIGHT, type Placed, type Route, SIMPLEX_MAX_EDGES, type Size, backEdges, bestLayout, elkGraph, fitZoom, handleSides, inlineAspect, neighborhood, nodeBoxes, parentsFirst, placeLabels, placesOf, routesOf, stepFocus, turned } from './graph-model.js';
+import { type ElkOutput, type Focus, INLINE_MAX_HEIGHT, type Placed, type Route, SIMPLEX_MAX_EDGES, type Size, backEdges, bestLayout, elkGraph, fitZoom, handleSides, inlineAspect, neighborhood, nodeBoxes, parentsFirst, placeLabels, placesOf, routesOf, snapToGrid, stepFocus, turned } from './graph-model.js';
 import { PACK_FROM, packedLayout, startView } from './graph-pack.js';
 import { cachedLayout, rememberLayout } from './layout-cache.js';
 import { layout } from './layout.js';
@@ -115,9 +115,10 @@ function placeNodes(nodes: readonly FlowNode[], places: ReadonlyMap<string, Plac
   const sides = handleSides(direction);
   return nodes.map((n) => {
     const at = places.get(n.id);
-    const data = { ...n.data, sides };
+    const data = { ...n.data, sides, ...(at ? { sized: true } : {}) };
     if (!at) return { ...n, data };
-    const box = n.data.node.type === 'group' ? { style: { ...n.style, width: at.width, height: at.height }, width: at.width, height: at.height } : {};
+    // Drawn at the size it was laid out at (cards alike, tidySizes), so lines meet its edges.
+    const box = { style: { ...n.style, width: at.width, height: at.height }, width: at.width, height: at.height };
     return { ...n, data, position: { x: at.x, y: at.y }, ...box };
   });
 }
@@ -271,10 +272,9 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, onCopyImage, start
   }, []);
 
   /**
-   * Lay the graph out. With `choose`, it's tried both ways round, plainly and wrapped onto more
-   * rows, and the one that reads biggest in the frame wins (bestLayout); else only `start`'s way.
-   * A busy graph asked to (`pack`) is packed into the frame's shape instead of wrapped. `keep`: a
-   * live graph laid out again, the view stays where you are.
+   * Lay the graph out the way it was drawn (`start`), tidy and whole. A busy graph asked to (`pack`)
+   * is packed into the frame's shape, and with `choose` tried both ways round, the one that reads
+   * biggest winning (bestLayout). `keep`: a live graph laid out again, the view stays where you are.
    */
   const lay = useCallback(
     async (start: GraphDirection, choose: boolean, keep = false): Promise<void> => {
@@ -287,8 +287,10 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, onCopyImage, start
       const room = box && real ? { width: box.clientWidth, height: mode === 'inline' ? INLINE_MAX_HEIGHT : box.clientHeight } : undefined;
       const packed = !!pack && graph.nodes.length >= PACK_FROM;
       // A busy graph takes a while to lay out: only the way it was asked for (packed, each piece is quick).
-      const ways = choose && room && (packed || graph.edges.length <= SIMPLEX_MAX_EDGES) ? [start, turned(start)] : [start];
-      const tries = ways.flatMap((dir) => (packed ? [undefined] : [undefined, ...(aspect ? [aspect] : [])]).map((shape) => ({ dir, shape })));
+      // The way the agent drew it (turned only from the toolbar); a packed board may still turn to fit.
+      const ways = packed && choose && room ? [start, turned(start)] : [start];
+      // Laid out whole, never wrapped onto more rows: its lines would loop back across it (a wide one draws smaller here, whole in the full window).
+      const tries = ways.map((dir) => ({ dir, shape: undefined }));
       // A layout that fails (or takes too long) just isn't a choice.
       const done = await Promise.allSettled(tries.map((t) => (packed ? packedLayout(graph, sizes.current, t.dir, aspect ?? 1.6, layout) : layout(elkGraph(graph, sizes.current, t.dir, t.shape)))));
       if (mine !== run.current) return;
@@ -299,7 +301,8 @@ function Canvas({ graph, mode, localImages, onExpand, onCopy, onCopyImage, start
       const pick = room ? bestLayout(laid, room, start) : laid[0];
       // A live graph that can't be laid out again keeps the drawing it has (its new nodes show where they are).
       if (!pick) return keep ? setPending(new Set()) : setPhase('failed');
-      const out: ElkOutput = pick.out;
+      // A packed board keeps ELK's places; anything else sits on the dots behind it.
+      const out: ElkOutput = packed ? pick.out : snapToGrid(pick.out);
       const dir = pick.direction;
       if (dir !== start) setDirection(dir);
       const places = placesOf(out);
