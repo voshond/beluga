@@ -49,12 +49,14 @@ const inlinePaint = (host: HTMLElement): void => {
 export async function drawPicture(host: HTMLElement): Promise<Blob> {
   const { width, height } = host.getBoundingClientRect();
   inlinePaint(host);
+  const scale = pictureScale(width, height);
   const blob = await toBlob(host, {
-    width,
-    height,
-    pixelRatio: pictureScale(width, height),
+    width: Math.round(width * scale),
+    height: Math.round(height * scale),
+    // Sharper by zoom, not pixelRatio: WebKit draws box-shadows of a scaled SVG image at the wrong size and place.
+    pixelRatio: 1,
     // The frame is hidden behind the window: in the picture it shows, at its corner.
-    style: { position: 'relative', left: '0', top: '0', opacity: '1' },
+    style: { position: 'relative', left: '0', top: '0', opacity: '1', zoom: String(scale) },
     filter: (node) => !(node instanceof Element && leftOut.some((c) => node.classList.contains(c))),
   });
   if (!blob) throw new Error('The web view drew nothing');
