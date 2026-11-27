@@ -256,6 +256,17 @@
   /* No transform here: inside the zoomed viewport it would composite and blur the text (sharp-zoom.ts). */
   transition: box-shadow var(--dur) var(--ease-out);
 }
+/* Laid out: the card fills the size the layout gave it (every card alike), its content in the middle. */
+.card[data-sized='true'] {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 100%;
+}
 :global(.react-flow__node):hover .card,
 .nodeHot .card {
   box-shadow:

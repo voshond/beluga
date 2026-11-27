@@ -5,7 +5,7 @@ import { Linking, ScrollView, Text, View } from 'react-native';
 import { GestureDetector, usePanGesture, usePinchGesture, useSimultaneousGestures } from 'react-native-gesture-handler';
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import Svg, { Defs, G, Marker, Path, Rect, Text as SvgText } from 'react-native-svg';
-import { type ElkInput, type ElkOutput, type Graph, type GraphNode, KIND_ICON, KIND_NAME, STATUS_INFO, backEdges, connections, elkGraph, neighborhood, nodeBoxes, placeLabels, placesOf, roundedPath, routesOf, stepFocus } from '../../lib/render';
+import { type ElkInput, type ElkOutput, type Graph, type GraphNode, KIND_ICON, KIND_NAME, STATUS_INFO, backEdges, connections, elkGraph, neighborhood, nodeBoxes, placeLabels, placesOf, roundedPath, routesOf, snapToGrid, stepFocus } from '../../lib/render';
 import { color, elevation, spring, svgFont, type } from '../../lib/theme';
 import { Sheet } from '../Sheet';
 import { haptic, Pill, Press, T, type Tone, toneBg, toneInk } from '../ui';
@@ -55,7 +55,8 @@ async function layoutFor(g: Graph): Promise<Laid> {
   const sizes = new Map(g.nodes.filter((n) => n.type !== 'group').map((n) => [n.id, sizeOf(n)]));
   const turned: Graph['direction'] = g.direction === 'right' || g.direction === 'left' ? 'down' : 'right';
   const tries = await Promise.all(([g.direction, turned] as const).map((d) => e.layout(JSON.parse(JSON.stringify(elkGraph(g, sizes, d))) as ElkInput).catch(() => undefined)));
-  const laid = tries.flatMap((o, i) => (o ? [{ out: o, width: o.width ?? 300, height: o.height ?? 200, preferred: i === 0 }] : []));
+  // On the grid, as on the Mac (snapToGrid).
+  const laid = tries.flatMap((o, i) => (o ? [{ out: snapToGrid(o), preferred: i === 0 }] : [])).map((l) => ({ ...l, width: l.out.width ?? 300, height: l.out.height ?? 200 }));
   if (!laid.length) throw new Error('This graph couldn’t be laid out');
   const fit = (l: (typeof laid)[number]) => Math.min(1, PHONE_FRAME.width / l.width, PHONE_FRAME.height / l.height) * (l.preferred ? 1 : 0.9);
   return laid.sort((a, b) => fit(b) - fit(a))[0]!;

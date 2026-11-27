@@ -18,6 +18,8 @@ import g from './graph.module.css';
 export interface NodeData extends Record<string, unknown> {
   readonly node: GraphNode;
   readonly sides: { readonly source: Side; readonly target: Side };
+  /** Laid out: drawn at the size the layout gave it (cards alike), its content in the middle. */
+  readonly sized?: boolean;
   /** Pictures from this Mac (only in your own and your Claude's messages). */
   readonly localImages: boolean;
 }
@@ -79,7 +81,7 @@ function Items({ items }: { items: NonNullable<GraphNode['items']> }) {
 export const CardNode = memo(function CardNode({ data }: NodeProps<FlowNode>) {
   const { node } = data;
   return (
-    <div className={cx(g.card, g[`kind_${node.type}`], node.emphasis && g.emphasis)} data-kind={node.type}>
+    <div className={cx(g.card, g[`kind_${node.type}`], node.emphasis && g.emphasis)} data-kind={node.type} data-sized={data.sized ? 'true' : undefined}>
       <Ends sides={data.sides} />
       {node.type === 'metric' && node.value ? (
         <div className={g.metric}>
@@ -108,7 +110,7 @@ export const TableNode = memo(function TableNode({ data }: NodeProps<FlowNode>) 
   const { node } = data;
   const fields = node.fields ?? [];
   return (
-    <div className={cx(g.card, g.table, node.emphasis && g.emphasis)} data-kind="database">
+    <div className={cx(g.card, g.table, node.emphasis && g.emphasis)} data-kind="database" data-sized={data.sized ? 'true' : undefined}>
       <Ends sides={data.sides} />
       <Head node={node} />
       {fields.length ? (
