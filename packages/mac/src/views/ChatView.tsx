@@ -24,6 +24,8 @@ import { ConnectionStatus } from './room/ConnectionStatus.js';
 import { AssistantTabs } from '../chat/AssistantTabs.js';
 import { DrivingBanner } from '../agent-term/DrivingBanner.js';
 import { computerWord, yourComputer } from '../lib/os-words.js';
+import { useProjectsState } from '../lib/projects-state.js';
+import { stillLoading } from '../lib/projects-state-model.js';
 
 /** A conversation and the box to add to it: the room's group chat, a workspace, a shared workspace, a draft. */
 /** One-click ways to begin, under an empty conversation. */
@@ -31,10 +33,12 @@ function Starters() {
   const actions = useActions();
   const view = useApp((st) => st.view);
   const project = useApp((st) => st.projects.find((p) => p.root && (view.kind !== 'workspace' || p.workspaces.some((w) => w.id === view.id))));
+  // Your projects are still on their way (Beluga just started): not "Add Projects…" as the first thing to do.
+  const loading = stillLoading(useProjectsState());
   if (view.kind === 'room') {
     return (
       <EmptyActions>
-        {project ? (
+        {loading ? null : project ? (
           <Button size="small" variant="primary" icon="branch" onClick={() => actions.run({ type: 'new_worktree', projectId: project.id })}>
             New Worktree
           </Button>

@@ -43,6 +43,8 @@ import { TeamBadge, useTeamMenuItems } from '../team/Team.js';
 import side from './Sidebar.module.css';
 import s from './project-groups.module.css';
 import { shortcutKeys } from '../lib/shortcuts.js';
+import { useProjectsState } from '../lib/projects-state.js';
+import { ProjectsSkeleton } from './ProjectsSkeleton.js';
 
 /**
  * The sidebar's Projects, arranged the way you like: drag projects and groups to reorder them,
@@ -443,6 +445,8 @@ export function Projects() {
   // Each group's pulse and counts, not the whole state: the tree isn't drawn again on every streamed event (KLD-48).
   const groups = useApp((st) => Object.fromEntries(entries.flatMap((e) => (e.kind === 'group' ? [[e.name, { busy: groupWorking(st, e.projects), tally: groupTally(st, e.projects) }]] : []))), sameDeep);
   const { creating } = useGroupEdit();
+  // Before the first scan is done, no projects means "not known yet": never "Add a project…" then.
+  const known = useProjectsState();
   const { dragging, onPointerDown } = useArrangeDrag(tree, entries, arrange, s.ghost ?? '');
   const hover = dragging?.hover;
   const lifted = dragging ? ('project' in dragging.item ? `project:${dragging.item.project}` : `group:${dragging.item.group}`) : undefined;
@@ -508,7 +512,11 @@ export function Projects() {
           })}
           {newAt === entries.length ? <NewGroupRow /> : null}
           {hover?.kind === 'line' ? <div className={s.insertion} style={{ top: hover.y, left: hover.depth ? 32 : 18 }} aria-hidden="true" /> : null}
-          {entries.length || creating ? null : <Row className={side.hintRow} icon={<Icon name="plus" size={13} />} label="Add a project…" onClick={() => actions.run({ type: 'add_project' })} />}
+          {entries.length || creating ? null : known === 'loading' ? (
+            <ProjectsSkeleton />
+          ) : known === 'pending' ? null : (
+            <Row className={side.hintRow} icon={<Icon name="plus" size={13} />} label="Add a project…" onClick={() => actions.run({ type: 'add_project' })} />
+          )}
         </div>
       </ActionsContext>
       {/* Your computers' projects this Mac doesn't have (BLG-785). */}

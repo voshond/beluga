@@ -134,6 +134,10 @@
   max-width: 28rem;
   text-align: center;
 }
+.connectWhy {
+  color: var(--text-3);
+  font-size: 0.86rem;
+}
 .connectBox code {
   padding: 2px 6px;
   border-radius: 4px;

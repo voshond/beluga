@@ -24,6 +24,7 @@ import {
   labelAt,
   milestoneAnchors,
   milestoneFrame,
+  milestoneHeadWidth,
   milestoneRoute,
   placeMilestones,
   readFolds,
@@ -67,6 +68,28 @@ describe('the plan graph’s geometry', () => {
     const narrow = milestoneFrame({ width: 292, height: 170 }, [], false);
     expect(narrow.width).toBe(MILESTONE.minWidth);
     expect(narrow.shiftX).toBe((MILESTONE.minWidth - 292) / 2);
+  });
+
+  it('makes an open milestone as wide as its head needs: title, state, count, Auto and its agent at work, all on one line', () => {
+    const head = { title: '常驻对话框与画稿 v73 对齐', state: '进行中', count: '0/3', auto: '自动', live: { label: '正在处理 SHP-466' } };
+    const want = milestoneHeadWidth(head);
+    // More words want more room; each part counts.
+    expect(milestoneHeadWidth({ ...head, title: '短', auto: undefined })).toBeLessThan(milestoneHeadWidth({ ...head, title: '短' }));
+    expect(milestoneHeadWidth({ ...head, title: '短' })).toBeLessThan(want);
+    expect(milestoneHeadWidth({ ...head, live: undefined })).toBeLessThan(want);
+    expect(milestoneHeadWidth({ ...head, live: { label: '正在处理 SHP-466', sub: '运行测试' } })).toBeGreaterThan(want);
+    // One task column (ELK's 292) is no longer the box's width when its head wants more.
+    expect(want).toBeGreaterThan(MILESTONE.minWidth);
+    const f = milestoneFrame({ width: 292, height: 170 }, [], false, undefined, '', undefined, want);
+    expect(f.width).toBe(Math.ceil(want));
+    expect(f.shiftX).toBe(Math.max(0, Math.round((f.width - 292) / 2)));
+    expect(f.gate.width).toBe(f.width - 2 * MILESTONE.inset);
+    // A short head keeps the old width; a huge one stops at MILESTONE.maxWidth (its title ends in an ellipsis there).
+    expect(milestoneFrame({ width: 292, height: 170 }, [], false, undefined, '', undefined, 100).width).toBe(MILESTONE.minWidth);
+    expect(milestoneFrame({ width: 292, height: 170 }, [], false, undefined, '', undefined, 5000).width).toBe(MILESTONE.maxWidth);
+    expect(milestoneFrame({ width: 900, height: 170 }, [], false, undefined, '', undefined, want).width).toBe(900);
+    // Measured in the screen's font: whatever it says is what the head gets.
+    expect(milestoneHeadWidth({ title: 'A', state: 'B', count: 'C' }, () => 10)).toBeLessThan(milestoneHeadWidth({ title: 'A', state: 'B', count: 'C' }, () => 40));
   });
 
   it('folds a milestone into one summary row, whatever its tasks and criteria', () => {

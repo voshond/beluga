@@ -13,10 +13,12 @@ import { brandText } from './lib/brand.js';
 import { capabilities, connect, inApp, Unreachable, native } from './lib/boot.js';
 import { BelugaProvider } from './lib/beluga.js';
 import { apply, zoom } from './lib/prefs.js';
-import { watchWindow } from './lib/window-active.js';
+import { useClock, watchWindow } from './lib/window-active.js';
 import { watchPreloadErrors } from './lib/lazy-view.js';
 import { pinWindow } from './lib/scroll-within.js';
 import { Button } from './components/ui.js';
+import { DotMatrix } from './components/DotMatrix.js';
+import { connectNote, connectTitle, connectViewOf } from './lib/connect-model.js';
 import { UpdateLayer } from './dialogs/UpdateSheet.js';
 import { FolderBrowserHost } from './dialogs/FolderBrowser.js';
 import { PartBoundary } from './lib/part-boundary.js';
@@ -60,6 +62,9 @@ function Root() {
   const [unreachable, setUnreachable] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const failures = useRef(0);
+  // Since this window began trying (it opened, or Beluga went away), and whether it was ever attached.
+  const since = useRef(Date.now());
+  const wasConnected = useRef(false);
   useEffect(() => {
     let alive = true;
     // Waits longer each time in a row it fails (up to 10 s), so a broken Beluga isn't hammered.
@@ -69,15 +74,18 @@ function Root() {
       .then((c) => {
         if (!alive) return c.close();
         setError(undefined);
+        setUnreachable(false);
         // Before the first draw: names people gave things stay as they are (i18n/own.ts).
         const offWords = followOwnWords(c.store);
         setClient(c);
-        const since = Date.now();
+        wasConnected.current = true;
+        const attached = Date.now();
         c.onClose(() => {
           offWords();
+          since.current = Date.now();
           setClient(undefined);
           // Dropped right away (Beluga turned the screen away): wait before trying again.
-          if (Date.now() - since < 5000) return retry();
+          if (Date.now() - attached < 5000) return retry();
           failures.current = 0;
           setAttempt((n) => n + 1);
         });
@@ -92,14 +100,25 @@ function Root() {
       alive = false;
     };
   }, [attempt]);
+  // While waiting, the words follow how long it has been (lib/connect-model.ts): looked at again each
+  // second, and only while you're looking at the window (useClock rests otherwise, KLD-40).
+  const now = useClock(!client);
   if (!client) {
+    // An attempt that fails while Beluga starts is no problem yet: it reads as starting, and the
+    // reason and Try again come only once it has really taken long.
+    const waitedMs = Math.max(0, now - since.current);
+    // A server that can't be reached is a problem at once (a thin client), not a start that takes a while.
+    const view = unreachable && error ? 'slow' : connectViewOf({ failed: Boolean(error), waitedMs, wasConnected: wasConnected.current });
+    const note = connectNote(view, waitedMs);
     return (
       <div className={s.connecting} data-tauri-drag-region>
         <UpdateLayer connected={false} />
-        <div className={s.connectBox}>
-          <strong>{!error ? 'Starting Beluga…' : unreachable ? 'Can’t reach Beluga' : 'Beluga isn’t running yet'}</strong>
-          {error ? <span>{brandText(error)}</span> : null}
-          {error ? <Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button> : null}
+        <div className={s.connectBox} role="status">
+          {view === 'slow' ? null : <DotMatrix size={18} />}
+          <strong>{view === 'slow' && unreachable ? 'Can’t reach Beluga' : connectTitle(view, wasConnected.current)}</strong>
+          {note ? <span>{note}</span> : null}
+          {view === 'slow' && error ? <span className={s.connectWhy}>{brandText(error)}</span> : null}
+          {view === 'slow' ? <Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button> : null}
         </div>
       </div>
     );

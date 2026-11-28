@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button, Empty, EmptyActions } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
 import { toast, useApi, useApp, useBeluga } from '../lib/beluga.js';
+import { useProjectsState } from '../lib/projects-state.js';
+import { stillLoading } from '../lib/projects-state-model.js';
+import { ProjectsLoading } from '../work/NoProjects.js';
 import { ActivityCard } from './usage/ActivityCard.js';
 import { Breakdown } from './usage/Breakdown.js';
 import { CleanupCard } from './usage/CleanupCard.js';
@@ -73,6 +76,7 @@ function planLimits(state: AppState): PlanLimit[] {
 export function UsageView() {
   const actions = useActions();
   const state = useApp((st) => st);
+  const projects = useProjectsState();
   const [sort, setSort] = useSort();
   const { measuring, measure } = useMeasure();
   const got = useStats();
@@ -81,6 +85,8 @@ export function UsageView() {
   // Sizes known: the first measurement came back (or there was one from before).
   const measured = !measuring || rows.some((p) => p.rows.some((r) => r.disk !== undefined));
   if (!state.projects.some((p) => p.root) && !rows.length) {
+    // Beluga just started and is still finding your projects: say that, not "add your projects".
+    if (stillLoading(projects)) return <ProjectsLoading icon="gauge" pending={projects === 'pending'} />;
     return (
       <Empty
         icon="gauge"

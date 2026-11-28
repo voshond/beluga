@@ -670,9 +670,13 @@
   outline-offset: 1px;
 }
 .agentNowLabel {
-  flex: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+/* Its step gives way before its label. */
 .agentNowSub {
+  flex-shrink: 100;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
