@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../components/Icon.js';
 import { APP_VERSION } from '../lib/boot.js';
 import { useApp, useBeluga } from '../lib/beluga.js';
+import { useProjectsState } from '../lib/projects-state.js';
+import { stillLoading } from '../lib/projects-state-model.js';
 import { usePrefs } from '../lib/prefs.js';
 import { usePrivacyAccess } from '../lib/privacy.js';
 import { AccessStepView } from './AccessSteps.js';
@@ -110,6 +112,7 @@ export function Onboarding({ start = 'hello', fade = false, onClose, onArrive }:
   const { ui } = useBeluga();
   const prefs = usePrefs();
   const projects = useApp((st) => st.projects.filter((p) => p.root).length);
+  const loadingProjects = stillLoading(useProjectsState());
   const phones = useApp((st) => st.companion.devices.length);
   const still = (useReducedMotion() ?? false) || prefs.reduceMotion;
   const [step, setStep] = useState<Step>(start);
@@ -264,7 +267,7 @@ export function Onboarding({ start = 'hello', fade = false, onClose, onArrive }:
               {inAccess(step) ? <AccessStepView step={step} access={privacy.access} recheck={privacy.recheck} go={go} /> : null}
               {step === 'popups' ? <Popups /> : null}
               {step === 'phone' ? <PhoneStep /> : null}
-              {step === 'ready' ? <Ready projects={projects} onOpen={() => finish('finished')} onAddProject={() => finish('finished', () => ui.patch({ addProject: true }))} /> : null}
+              {step === 'ready' ? <Ready projects={projects} loading={loadingProjects} onOpen={() => finish('finished')} onAddProject={() => finish('finished', () => ui.patch({ addProject: true }))} /> : null}
             </motion.section>
           </AnimatePresence>
         </motion.main>

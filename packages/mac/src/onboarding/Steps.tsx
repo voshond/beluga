@@ -122,8 +122,9 @@ function Burst() {
 }
 
 /** The last step: what to do first (add a project, or look around), then into the app. */
-export function Ready({ projects, onAddProject, onOpen }: { readonly projects: number; readonly onAddProject: () => void; readonly onOpen: () => void }) {
-  const has = projects > 0;
+export function Ready({ projects, loading, onAddProject, onOpen }: { readonly projects: number; readonly loading?: boolean; readonly onAddProject: () => void; readonly onOpen: () => void }) {
+  // Still finding your projects (Beluga just started): into the app, not "add a project".
+  const has = projects > 0 || Boolean(loading);
   return (
     <div className={s.hello}>
       <div className={s.readyMark}>
@@ -134,7 +135,9 @@ export function Ready({ projects, onAddProject, onOpen }: { readonly projects: n
         <Words text="You’re all set." delay={0.5} />
       </h1>
       <Rise delay={0.8} className={s.heroBody}>
-        {has
+        {!projects && loading
+          ? 'Beluga is finding your projects. They show up in the sidebar in a moment.'
+          : has
           ? `Your ${projects === 1 ? 'project is' : `${projects} projects are`} here. Start a worktree from any of them, and your agent gets to work on its own branch.`
           : 'Add a project to begin. Beluga finds its branches and worktrees, and every new task gets its own.'}
       </Rise>

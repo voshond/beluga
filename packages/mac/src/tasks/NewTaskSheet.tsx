@@ -9,6 +9,9 @@ import { Icon } from '../components/Icon.js';
 import f from '../components/form.module.css';
 import { cx } from '../components/ui.js';
 import { toast, useApp, useBeluga } from '../lib/beluga.js';
+import { useProjectsState } from '../lib/projects-state.js';
+import { stillLoading } from '../lib/projects-state-model.js';
+import { LOADING_PROJECTS } from '../work/NoProjects.js';
 import { PriorityIcon } from './marks.js';
 import { useSharedWith } from './parts.js';
 import { assigneeChoices, boardChoices } from './tasks-model.js';
@@ -31,7 +34,21 @@ const SCALE: readonly Priority[] = ['none', 'low', 'medium', 'high', 'urgent'];
  * several. Start with your agent makes the worktree (in that repo) and puts your agent on it.
  * Agent (BLG-497): who works it when it starts (Codex, a local model…); your default unless you pick.
  */
-export function NewTaskSheet({ boardId, projectId, status, parent, close }: { boardId?: string; projectId?: string; status?: IssueStatus; parent?: string; close: () => void }) {
+interface NewTaskProps {
+  boardId?: string;
+  projectId?: string;
+  status?: IssueStatus;
+  parent?: string;
+  close: () => void;
+}
+
+export function NewTaskSheet(props: NewTaskProps) {
+  // Opened while Beluga is still finding your projects: wait for them, so the form starts from the ones you have.
+  if (stillLoading(useProjectsState())) return <FormSheet title="New Task" intro={LOADING_PROJECTS} submitLabel="Done" hideSubmit onSubmit={() => undefined} onCancel={props.close} />;
+  return <NewTaskForm {...props} />;
+}
+
+function NewTaskForm({ boardId, projectId, status, parent, close }: NewTaskProps) {
   const board = useBoard();
   const prefs = useTasksPrefs();
   const allProjects = useApp((s) => s.projects);

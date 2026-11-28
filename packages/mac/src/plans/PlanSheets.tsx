@@ -4,6 +4,9 @@ import { Checkbox, Field, FormSheet, Popup, TextArea } from '../components/FormS
 import { Icon, type IconName } from '../components/Icon.js';
 import { cx } from '../components/ui.js';
 import { useApp } from '../lib/beluga.js';
+import { useProjectsState } from '../lib/projects-state.js';
+import { stillLoading } from '../lib/projects-state-model.js';
+import { LOADING_PROJECTS } from '../work/NoProjects.js';
 import { RunsOnRow } from '../chat/RunsOn.js';
 import { myRuntime } from '../chat/ModelPicker.js';
 import { useMyAgent } from '../lib/agent-words.js';
@@ -25,7 +28,13 @@ const AUTONOMY_ICON: Record<Autonomy, IconName> = { step: 'hand', gated: 'flag',
  * project it's that project's (no picker). Plan Across More Projects… ticks other projects of this
  * Mac's (primary first); a group's Plan Across Group… opens it with the group's projects ticked (BLG-19).
  */
-export function NewPlanSheet({ projectId, projectIds, close }: { projectId?: string; projectIds?: readonly string[]; close: () => void }) {
+export function NewPlanSheet(props: { projectId?: string; projectIds?: readonly string[]; close: () => void }) {
+  // Opened while Beluga is still finding your projects: wait for them, so the form starts from the ones you have.
+  if (stillLoading(useProjectsState())) return <FormSheet title="New Plan" intro={LOADING_PROJECTS} submitLabel="Done" hideSubmit onSubmit={() => undefined} onCancel={props.close} />;
+  return <NewPlanForm {...props} />;
+}
+
+function NewPlanForm({ projectId, projectIds, close }: { projectId?: string; projectIds?: readonly string[]; close: () => void }) {
   const startDeps = useStartDeps();
   const prefsNow = () => startDeps.home.store.getState().prefs;
   const prefs = useTasksPrefs();

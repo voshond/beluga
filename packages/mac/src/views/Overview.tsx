@@ -6,6 +6,9 @@ import { SpecContext } from '../components/SpecMenu.js';
 import { Button, Empty, EmptyActions } from '../components/ui.js';
 import { useActions } from '../lib/actions.js';
 import { toast, useApp, useBeluga } from '../lib/beluga.js';
+import { useProjectsState } from '../lib/projects-state.js';
+import { stillLoading } from '../lib/projects-state-model.js';
+import { ProjectsLoading } from '../work/NoProjects.js';
 import { sameDeep } from '../lib/stable.js';
 import { ConversationPeek, DeleteArchivedAlert } from './overview/ConversationPeek.js';
 import type { ThreadChildren } from '@beluga/shared/threads.js';
@@ -346,6 +349,9 @@ function NothingHere({ search, filter, project, othersHere, onClearSearch, onAll
 function NothingYet() {
   const actions = useActions();
   const project = useApp((st) => st.projects.find((p) => p.root));
+  // Beluga just started and is still finding your projects: say that, not "add your projects".
+  const projects = useProjectsState();
+  if (stillLoading(projects)) return <ProjectsLoading icon="grid" pending={projects === 'pending'} />;
   return (
     <Empty
       icon="grid"

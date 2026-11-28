@@ -1,0 +1,56 @@
+/* The sidebar's projects before the first scan is done: rows in outline, as the Scratch tab's (panel/scratch.module.css). */
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  animation: appear 0.2s ease-out;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: var(--row);
+  padding: 0 6px 0 8px;
+}
+.icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+.bar {
+  height: 8px;
+  border-radius: 4px;
+}
+/* A light sweeps across them. */
+.icon,
+.bar {
+  background: linear-gradient(90deg, var(--hairline) 0%, var(--hairline-strong) 45%, var(--hairline) 90%) 0 0 / 300% 100%;
+  animation: sweep 1.6s linear infinite;
+}
+@keyframes sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .icon,
+  .bar {
+    animation: none;
+  }
+}
+:root[data-motion='reduce'] .skeleton,
+:root[data-motion='reduce'] .icon,
+:root[data-motion='reduce'] .bar {
+  animation: none;
+}
